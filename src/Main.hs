@@ -6,7 +6,7 @@ import           Control.Exception ( bracket )
 import           Control.Monad ( when )
 import           Control.Monad.IO.Class ( liftIO )
 import           Data.List ( nub )
-import           Data.Maybe ( isJust, fromJust )
+import           Data.Maybe ( isJust, fromJust, catMaybes )
 import           Data.Word ( Word32 )
 import System.Directory ( createDirectoryIfMissing
                         , createDirectory
@@ -148,15 +148,17 @@ buildProject :: Project -> B9 Bool
 buildProject p = do
   infoL "START BUILD"
   buildImgs <- createBuildImages (projectDisks p)
-  infoL "IMAGES CREATED"
+  infoL "DISK IMAGES CREATED"
   sharedDirs <- createSharedDirs (projectSharedDirectories p)
   let execEnv = ExecEnv (projectName p) buildImgs sharedDirs (projectResources p)
       script = projectBuildScript p
   execEnvType <- getExecEnvType
   success <- runInEnvironment execEnvType execEnv script
   if success
-    then do infoL "COMMANDS EXECUTED"
-            mapM_ exportImage (zip buildImgs (projectDisks p))
+    then do infoL "BUILD SCRIPT SUCCESSULLY EXECUTED IN CONTAINER"
+            exported <- mapM exportImage (zip buildImgs (projectDisks p))
+            when (not (null (catMaybes exported)))
+              (infoL $ "DISK IMAGES SUCCESSFULLY EXPORTED")
             infoL "BUILD FINISHED"
             return True
 
@@ -166,7 +168,8 @@ buildProject p = do
     exportImage ((imgI, _), (Export imgO@(Image imgOFile _) _, _)) = do
       liftIO $ createDirectoryIfMissing True $ takeDirectory imgOFile
       convert True imgI imgO
-    exportImage _ = return ()
+      return $ Just imgOFile
+    exportImage _ = return Nothing
 
 createBuildImages :: [Mounted DiskTarget] -> B9 [Mounted Image]
 createBuildImages disks = mapM create $ zip [0..] disks
