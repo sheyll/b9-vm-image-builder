@@ -1,0 +1,70 @@
+* Refactor from Prototype to Product:
+** DONE Write License Header
+** DONE Rename project to b9 (benign)
+** DONE Move every module to sub namespace Development.B9
+** DONE Add .cabal file
+*** DONE Use stackage
+** Create git repo
+** Split Main.hs:
+*** B9StartMain
+*** B9Main
+*** B9
+** Reexport everything in B9 for easy scripting
+** Rename Common to B9Monad
+** Rename BeqemuCfg to B9Config
+** Cleanup/Refactor Project and B9Config
+*** Add LibVirtLXCConfig with:
+**** virsh command path
+**** default network
+**** sudo flag
+**** connection URI
+*** Create a default Resources object
+*** Priority: Commandline > Project > B9Config > Defaults
+** Add B9Config reader:
+*** Use Data.ConfigFile http://hackage.haskell.org/package/ConfigFile-1.1.3/docs/Data-ConfigFile.html
+** Add a project file reader
+** Add a check mode that tells what would happen if a project file executed
+** Add command line handling
+*** Allow setting alternative B9Config path
+*** Allow overwriting B9Config items
+*** Allow setting of alternative Project path
+*** Allow overwriting individual Project items
+** Write a nice documentation
+** Create two executables 'b9_start' and 'b9c'
+* Add a 'beq_run' pendant
+** Add to Project projectPersistentEnvInit (Maybe Script)
+** Do not remove the build directory
+** Do not export any images
+* Add support for reusable exec environments containing pre-built images named 'ExecEnvTemplate':
+*** General:
+**** Add Image name
+**** Add Author
+**** Add build date
+**** Add Version
+**** Add (Maybe GitRepo)
+*** Runtime:
+**** Add kexec params shell file
+**** Add CPU Architecture
+**** Add login credentials
+**** Add a list of [Mounted Image]
+**** Add scripts for setup and teardown
+** Fetch ExecEnvTemplate git repositories
+*** have a configurable 'git' repo-dir, e.g. in ~/.b7/exec_env_template_git_repos/
+** Add support for local ExecEnvTemplates directories
+** Add "Legacy" base-image import
+** Add support for creating config ISO images
+*** Add 'NotMounted'
+* Add support for the beqemu repo directory layout
+** Introduce 'ExportToLiveRepo'
+*** Add Root directory parameter
+*** Use projectName as machine name
+*** Use buildId for versions?
+*** Restrict to raw images with no partitions
+*** What a 'disk' means:
+**** CloudConfig directory
+***** Generate instance id from hash of files
+**** Disk with:
+***** disk size
+***** disk index
+***** kexec infos
+***** disk version?

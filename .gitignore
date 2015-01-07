@@ -1,0 +1,8 @@
+*.hi
+*.ho
+TAGS
+*.log
+*.profile
+/BUILD-*
+/dist
+/OUT
