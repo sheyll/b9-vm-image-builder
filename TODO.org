@@ -1,17 +1,18 @@
 * Refactor from Prototype to Product:
 ** DONE Write License Header
 ** DONE Rename project to b9 (benign)
+** DONE Rename Common to B9Monad
+** DONE Rename BeqemuCfg to B9Config
 ** DONE Move every module to sub namespace Development.B9
 ** DONE Add .cabal file
 *** DONE Use stackage
-** Create git repo
+** DONE Create git repo
+** Create github repo
 ** Split Main.hs:
 *** B9StartMain
 *** B9Main
 *** B9
 ** Reexport everything in B9 for easy scripting
-** Rename Common to B9Monad
-** Rename BeqemuCfg to B9Config
 ** Cleanup/Refactor Project and B9Config
 *** Add LibVirtLXCConfig with:
 **** virsh command path
@@ -30,7 +31,6 @@
 *** Allow setting of alternative Project path
 *** Allow overwriting individual Project items
 ** Write a nice documentation
-** Create two executables 'b9_start' and 'b9c'
 * Add a 'beq_run' pendant
 ** Add to Project projectPersistentEnvInit (Maybe Script)
 ** Do not remove the build directory
