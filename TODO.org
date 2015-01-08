@@ -7,12 +7,11 @@
 ** DONE Add .cabal file
 *** DONE Use stackage
 ** DONE Create git repo
+** TODO Create B9-Library
+*** TODO Split Main.hs -> (Main.hs, B9.hs)
+*** TODO Reexport everything in B9 for easy scripting
 ** Create github repo
-** Split Main.hs:
-*** B9StartMain
-*** B9Main
-*** B9
-** Reexport everything in B9 for easy scripting
+** Create git01 repo
 ** Cleanup/Refactor Project and B9Config
 *** Add LibVirtLXCConfig with:
 **** virsh command path

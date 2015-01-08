@@ -6,3 +6,5 @@ TAGS
 /BUILD-*
 /dist
 /OUT
+/cabal.config
+
