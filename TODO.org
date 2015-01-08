@@ -7,18 +7,17 @@
 ** DONE Add .cabal file
 *** DONE Use stackage
 ** DONE Create git repo
-** TODO Create B9-Library
-*** TODO Split Main.hs -> (Main.hs, B9.hs)
-*** TODO Reexport everything in B9 for easy scripting
-** Create github repo
-** Create git01 repo
-** Cleanup/Refactor Project and B9Config
-*** Add LibVirtLXCConfig with:
-**** virsh command path
-**** default network
-**** sudo flag
-**** connection URI
-*** Create a default Resources object
+** DONE Create B9-Library
+*** DONE Split Main.hs -> (Main.hs, B9.hs)
+*** DONE Reexport everything in B9 for easy scripting
+** TODO Cleanup/Refactor Project and B9Config
+** DONE Add LibVirtLXCConfig with:
+*** DONE virsh command path
+*** DONE default network
+*** DONE sudo flag
+*** DONE connection URI
+*** DONE Read LibVirtLXC Config from .b9/libvirt_lxc.config
+** Add merging of B9Configs/Resources
 *** Priority: Commandline > Project > B9Config > Defaults
 ** Add B9Config reader:
 *** Use Data.ConfigFile http://hackage.haskell.org/package/ConfigFile-1.1.3/docs/Data-ConfigFile.html
@@ -30,6 +29,9 @@
 *** Allow setting of alternative Project path
 *** Allow overwriting individual Project items
 ** Write a nice documentation
+* Publish
+** Create github repo
+** Create git01 repo
 * Add a 'beq_run' pendant
 ** Add to Project projectPersistentEnvInit (Maybe Script)
 ** Do not remove the build directory

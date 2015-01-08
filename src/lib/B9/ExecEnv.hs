@@ -20,7 +20,6 @@ data SharedDirectory = SharedDirectory FilePath MountPoint
 data Resources = Resources { maxMemory :: RamSize
                            , cpuCount :: Int
                            , cpuArch :: CPUArch
-                           , networkId :: Maybe String
                            }
 
 data CPUArch = X86_64 | I386

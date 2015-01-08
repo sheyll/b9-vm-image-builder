@@ -5,27 +5,29 @@ module B9.B9Config ( B9Config(..)
                    , ExecEnvType (..)
                    ) where
 
+import B9.ConfigUtils
+
 data B9Config = B9Config { logConfig :: LogConfig
                          , buildDirRoot :: FilePath
                          , keepTempDirs :: Bool
                          , execEnvType :: ExecEnvType
+                         , execEnvConfigFile :: Maybe SystemPath
                          , profileFile :: Maybe FilePath
                          , envVars :: [(String, String)]
                          , uniqueBuildDirs :: Bool
-                         , useSudo :: Bool
                          }
 
-defaultB9Config = B9Config { logConfig = LogTo [ ToStdOut LogDebug
+defaultB9Config = B9Config { logConfig = LogTo [ ToStdOut LogTrace
                                                , ToFile "b9-build.log" LogTrace
                                                ]
-                             , buildDirRoot = "."
-                             , keepTempDirs = False
-                             , execEnvType = LibVirtLXC
-                             , profileFile = Just "b9-build.profile"
-                             , envVars = []
-                             , uniqueBuildDirs = True
-                             , useSudo = True
-                             }
+                           , buildDirRoot = "."
+                           , keepTempDirs = False
+                           , execEnvType = LibVirtLXC
+                           , execEnvConfigFile = Just (InB9UserDir "libvirt_lxc.cfg")
+                           , profileFile = Just "b9-build.profile"
+                           , envVars = []
+                           , uniqueBuildDirs = True
+                           }
 
 data ExecEnvType = LibVirtLXC
 

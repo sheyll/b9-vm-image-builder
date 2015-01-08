@@ -41,7 +41,6 @@ testProject1 = Project
                , projectResources = Resources { maxMemory = RamSize 8 GB
                                               , cpuCount = 4
                                               , cpuArch = I386
-                                              , networkId = Nothing
                                               }
                }
 
@@ -80,7 +79,6 @@ testProject2 = Project
                , projectResources = Resources { maxMemory = RamSize 8 GB
                                               , cpuCount = 4
                                               , cpuArch = X86_64
-                                              , networkId = (Just "host_bridge_br0")
                                               }
                }
 
@@ -104,6 +102,5 @@ testProject3 = Project
                , projectResources = Resources { maxMemory = RamSize 8 GB
                                               , cpuCount = 4
                                               , cpuArch = X86_64
-                                              , networkId = Nothing
                                               }
                }

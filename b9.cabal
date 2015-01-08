@@ -18,6 +18,7 @@ library
                    , B9.B9Monad
                    , B9.B9Config
                    , B9.Builder
+                   , B9.ConfigUtils
                    , B9.Project
                    , B9.ExecEnv
                    , B9.DiskImages

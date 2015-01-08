@@ -1,4 +1,5 @@
 module B9.Builder ( module B9.B9Monad
+                  , module B9.ConfigUtils
                   , module B9.B9Config
                   , module B9.Project
                   , module B9.ExecEnv
@@ -39,6 +40,7 @@ import           System.Random ( randomIO )
 import           Text.Printf ( printf )
 
 import           B9.B9Monad
+import           B9.ConfigUtils
 import           B9.B9Config
 import           B9.Project
 import           B9.ExecEnv
