@@ -1,13 +1,16 @@
 module Main where
 
+import System.Environment
+
 import B9
+import qualified B9.LibVirtLXC as LibVirtLXC
 
 main :: IO ()
 main = do
-  let p = testProject2
-      cfg = defaultB9Config
-      args = []
-  success <- buildProject p cfg args
+  writeInitialB9Config LibVirtLXC.setDefaultConfig
+  (cfgParser, cfg) <- readB9Config Nothing defaultB9Config
+  p <- maybeConsult (Just "B9_BUILD") emptyProject
+  success <- buildProject p cfgParser cfg []
   when (not success) $ exitWith (ExitFailure 128)
 
 testImageArchlinux64 = Image "../archlinux_x86_64_2014.12.01.raw" Raw

@@ -4,6 +4,12 @@ module B9.ConfigUtils ( allOn
                       , SystemPath (..)
                       , resolve
                       , ensureDir
+                      , readIniFile
+                      , getOptionM
+                      , getOption
+                      , getOptionOr
+                      , IniFileException(..)
+                      , module Data.ConfigFile
                       , UUID (..)
                       , randomUUID
                       , consult
@@ -25,6 +31,8 @@ import Data.Word ( Word16, Word32 )
 import System.FilePath
 import System.Directory
 import Text.Printf
+import Data.ConfigFile
+import Control.Monad.Error
 
 allOn :: (a -> Maybe Bool) -> a -> a -> Maybe Bool
 allOn getter x y = getAll <$> on mappend (fmap All . getter) x y
@@ -84,6 +92,27 @@ maybeConsultSystemPath (Just f) defaultArg = liftIO $ do
   if exists
     then do consult f'
     else return defaultArg
+
+data IniFileException = IniFileException FilePath CPError
+                      deriving (Show, Typeable)
+instance Exception IniFileException
+
+readIniFile :: MonadIO m => SystemPath -> m ConfigParser
+readIniFile cfgFile' = do
+  cfgFile <- resolve cfgFile'
+  cp' <- liftIO $ readfile emptyCP cfgFile
+  case cp' of
+     Left e -> liftIO $ throwIO (IniFileException cfgFile e)
+     Right cp -> return cp
+
+getOption :: (Get_C a, Monoid a) => ConfigParser -> SectionSpec -> OptionSpec -> a
+getOption cp sec key = either (const mempty) id $ get cp sec key
+
+getOptionM :: (Get_C a, Read a) => ConfigParser -> SectionSpec -> OptionSpec -> Maybe a
+getOptionM cp sec key = either (const Nothing) id $ get cp sec key
+
+getOptionOr :: (Get_C a, Read a) => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
+getOptionOr cp sec key dv = either (const dv) id $ get cp sec key
 
 newtype UUID = UUID (Word32, Word16, Word16, Word16, Word32, Word16)
              deriving (Read, Show, Eq, Ord)

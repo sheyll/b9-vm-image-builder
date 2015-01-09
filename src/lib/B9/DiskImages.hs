@@ -29,15 +29,15 @@ import           Text.Printf ( printf )
 import qualified B9.PartitionTable as PartitionTable
 import           B9.B9Monad
 
-data DiskSize = DiskSize Int SizeUnit deriving (Eq, Show)
+data DiskSize = DiskSize Int SizeUnit deriving (Eq, Show, Read)
 
 data DiskResize = KeepSize
                 | ResizeImage DiskSize
-                | ResizeFS FileSystem DiskSize deriving (Eq)
+                | ResizeFS FileSystem DiskSize deriving (Eq, Show, Read)
 
-data Partition = NoPT | Partition Int deriving (Eq)
+data Partition = NoPT | Partition Int deriving (Eq, Show, Read)
 
-data SizeUnit = GB | MB | KB | B deriving (Eq,Show)
+data SizeUnit = GB | MB | KB | B deriving (Eq, Show, Read)
 
 isPartitioned :: Partition -> Bool
 isPartitioned p | p == NoPT = False
@@ -47,13 +47,25 @@ getPartition :: Partition -> Int
 getPartition (Partition p) = p
 getPartition NoPT = error "No partitions!"
 
-newtype MountPoint = MountPoint FilePath deriving Show
+newtype MountPoint = MountPoint FilePath deriving (Show, Read)
 
 type Mounted a = (a, MountPoint)
 
 data ImageSource = FileSystem FileSystem DiskSize
                  | SourceImage Image Partition DiskResize
                  | CopyOnWrite Image
+                 deriving (Show, Read)
+
+data FileSystem = NoFileSystem | Ext4 deriving (Eq, Show, Read)
+
+data ImageType = Raw | QCow2 | Vmdk deriving (Eq, Read)
+
+instance Show ImageType where
+  show Raw = "raw"
+  show QCow2 = "qcow2"
+  show Vmdk = "vmdk"
+
+data Image = Image FilePath ImageType deriving (Eq, Show, Read)
 
 compatibleImageTypes :: ImageSource -> [ImageType]
 compatibleImageTypes src =
@@ -83,15 +95,6 @@ ensureAbsoluteImageDirExists img@(Image path _) = do
   createDirectoryIfMissing True dir
   dirAbs <- canonicalizePath dir
   return $ changeImageDirectory dirAbs img
-
-data FileSystem = NoFileSystem | Ext4 deriving (Eq, Show)
-data ImageType = Raw | QCow2 | Vmdk deriving Eq
-instance Show ImageType where
-  show Raw = "raw"
-  show QCow2 = "qcow2"
-  show Vmdk = "vmdk"
-
-data Image = Image FilePath ImageType
 
 changeImageFormat :: ImageType -> Image -> Image
 changeImageFormat fmt' (Image img _) = Image img' fmt'

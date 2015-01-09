@@ -1,4 +1,7 @@
-module B9.LibVirtLXC ( runInEnvironment, supportedImageTypes ) where
+module B9.LibVirtLXC ( runInEnvironment
+                     , supportedImageTypes
+                     , setDefaultConfig
+                     ) where
 
 import Control.Applicative ( (<$>), (<*>) )
 import Control.Exception ( bracket )
@@ -37,7 +40,8 @@ runInEnvironment env scriptIn = setUp >>= execute
       uuid <- randomUUID
       let scriptDirHost = buildDir </> "init-script"
           scriptDirGuest = "/" ++ buildId
-          domain = createDomain cfg env uuid' scriptDirHost scriptDirGuest
+          domain = createDomain cfg env buildId uuid' scriptDirHost
+                   scriptDirGuest
           uuid' = printf "%U" uuid
           script = Begin [scriptIn, successMarkerCmd scriptDirGuest]
       domainFile <- (</> domainConfig) <$> getBuildDir
@@ -62,37 +66,58 @@ runInEnvironment env scriptIn = setUp >>= execute
 
     virshCommand :: LibVirtLXCConfig -> String
     virshCommand cfg = printf "%s%s -c %s" useSudo' virshPath' virshURI'
-      where useSudo' = if fromJust $ useSudo cfg then "sudo " else ""
-            virshPath' = fromJust $ virshPath cfg
-            virshURI' = fromJust $ virshURI cfg
+      where useSudo' = if useSudo cfg then "sudo " else ""
+            virshPath' = virshPath cfg
+            virshURI' = virshURI cfg
 
 data Context = Context FilePath UUID FilePath LibVirtLXCConfig
 
-data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Maybe Bool
-                                         , virshPath :: Maybe FilePath
-                                         , emulator :: Maybe FilePath
-                                         , virshURI :: Maybe FilePath
-                                         , networkId :: Maybe (Maybe String)
+data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Bool
+                                         , virshPath :: FilePath
+                                         , emulator :: FilePath
+                                         , virshURI :: FilePath
+                                         , networkId :: Maybe String
                                          } deriving (Read, Show)
 defaultLibVirtLXCConfig = LibVirtLXCConfig
-                          (Just True)
-                          (Just "/usr/bin/virsh")
-                          (Just "/usr/lib/libvirt/libvirt_lxc")
-                          (Just "lxc:///")
-                          (Just (Just "default"))
+                          True
+                          "/usr/bin/virsh"
+                          "/usr/lib/libvirt/libvirt_lxc"
+                          "lxc:///"
+                          (Just "default")
 
-instance Monoid LibVirtLXCConfig where
-  mempty = LibVirtLXCConfig (Just True) mempty mempty mempty mempty
-  mappend c c' = LibVirtLXCConfig { useSudo = allOn useSudo c c'
-                                  , virshPath = lastOn virshPath c c'
-                                  , emulator = lastOn emulator c c'
-                                  , virshURI = lastOn virshURI c c'
-                                  , networkId = lastOn networkId c c'
-                                  }
-configureLibVirtLXC = do
-  configFile <- execEnvConfigFile <$> getConfig
-  loadedCfg <- maybeConsultSystemPath configFile defaultLibVirtLXCConfig
-  return $ defaultLibVirtLXCConfig <> loadedCfg
+cfgFileSection = "libvirt-lxc"
+useSudoK = "use_sudo"
+virshPathK = "virsh_path"
+emulatorK = "emulator_path"
+virshURIK = "connection"
+networkIdK = "network"
+
+configureLibVirtLXC = readLibVirtConfig
+
+setDefaultConfig :: ConfigParser
+setDefaultConfig = either (error . show) id eitherCp
+  where
+    eitherCp = do
+      let cp = emptyCP
+          c = defaultLibVirtLXCConfig
+      cp <- add_section cp cfgFileSection
+      cp <- setshow cp cfgFileSection useSudoK $ useSudo c
+      cp <- setshow cp cfgFileSection virshPathK $ virshPath c
+      cp <- setshow cp cfgFileSection emulatorK $ emulator c
+      cp <- setshow cp cfgFileSection virshURIK $ virshURI c
+      setshow cp cfgFileSection networkIdK $ networkId c
+
+readLibVirtConfig = do
+  cp <- getConfigParser
+  let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
+      geto = getOptionOr cp cfgFileSection
+  return $ LibVirtLXCConfig {
+    useSudo = geto useSudoK $ useSudo defaultLibVirtLXCConfig
+    , virshPath = geto virshPathK $ virshPath defaultLibVirtLXCConfig
+    , emulator = geto emulatorK $ emulator defaultLibVirtLXCConfig
+    , virshURI = geto virshURIK $ virshURI defaultLibVirtLXCConfig
+    , networkId = geto networkIdK $ networkId defaultLibVirtLXCConfig
+    }
 
 initScript = "init.sh"
 domainConfig = "domain.xml"
@@ -100,12 +125,13 @@ domainConfig = "domain.xml"
 createDomain :: LibVirtLXCConfig
              -> ExecEnv
              -> String
+             -> String
              -> FilePath
              -> FilePath
              -> String
-createDomain cfg e uuid scriptDirHost scriptDirGuest =
+createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   "<domain type='lxc'>\n\
-  \  <name>" ++ envName e ++ "</name>\n\
+  \  <name>" ++ buildId ++ "</name>\n\
   \  <uuid>" ++ uuid ++ "</uuid>\n\
   \  <memory unit='" ++ memoryUnit e ++ "'>" ++ memoryAmount e ++ "</memory>\n\
   \  <currentMemory unit='" ++ memoryUnit e ++ "'>" ++ memoryAmount e ++ "</currentMemory>\n\
@@ -119,7 +145,7 @@ createDomain cfg e uuid scriptDirHost scriptDirGuest =
   \  <on_reboot>restart</on_reboot>\n\
   \  <on_crash>destroy</on_crash>\n\
   \  <devices>\n\
-  \    <emulator>" ++ fromJust (emulator cfg) ++ "</emulator>\n"
+  \    <emulator>" ++ emulator cfg ++ "</emulator>\n"
   ++ unlines (libVirtNetwork (networkId cfg) ++
               (fsImage <$> (envImageMounts e)) ++
               (fsSharedDir <$> (envSharedDirectories e))) ++ "\n" ++
@@ -137,8 +163,8 @@ osArch e = case cpuArch (envResources e) of
             X86_64 -> "x86_64"
             I386 -> "i686"
 
-libVirtNetwork (Just Nothing) = []
-libVirtNetwork (Just (Just networkId)) =
+libVirtNetwork Nothing = []
+libVirtNetwork (Just networkId) =
   [ "<interface type='network'>"
   , "  <source network='" ++ networkId ++ "'/>"
   , "</interface>" ]

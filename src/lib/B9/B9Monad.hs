@@ -5,6 +5,7 @@ module B9.B9Monad ( B9
                   , dbgL
                   , infoL
                   , errorL
+                  , getConfigParser
                   , getConfig
                   , getBuildId
                   , getBuildDir
@@ -13,6 +14,7 @@ module B9.B9Monad ( B9
                   ) where
 
 import           B9.B9Config
+import           B9.ConfigUtils
 import           Control.Applicative
 import           Control.Exception ( bracket )
 import           Control.Monad
@@ -38,6 +40,7 @@ import qualified Data.Conduit.List        as CL
 import           Data.Conduit.Process
 
 data BuildState = BuildState { bsBuildId :: String
+                             , bsCfgParser :: ConfigParser
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
                              , bsProf :: [ProfilingEntry]
@@ -49,14 +52,14 @@ data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
-run :: String -> B9Config -> [String] -> B9 a -> IO a
-run name cfg args action = do
+run :: String -> ConfigParser -> B9Config -> [String] -> B9 a -> IO a
+run name cfgParser cfg args action = do
   buildId <- generateBuildId name
   bracket (createBuildDir buildId) removeBuildDir (run' buildId)
   where
     run' buildId buildDir = do
-      let ctx = BuildState buildId cfg buildDir []
-                          args (envVars cfg)
+      let ctx = BuildState buildId cfgParser cfg buildDir []
+                args (envVars cfg)
       (r, ctxOut) <- runStateT (runB9 action) ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
@@ -64,16 +67,25 @@ run name cfg args action = do
       return r
 
     createBuildDir buildId = do
-      createDirectoryIfMissing True $ buildDirRoot cfg
-      root <- canonicalizePath $ buildDirRoot cfg
       if uniqueBuildDirs cfg then do
-        let buildDir = root </> "BUILD-" ++ buildId
+        let subDir = "BUILD-" ++ buildId
+        buildDir <- resolveBuildDir subDir
         createDirectory buildDir
-        return buildDir
+        canonicalizePath buildDir
        else do
-        let buildDir = root </> "BUILD-" ++ name
+        let subDir = "BUILD-" ++ name
+        buildDir <- resolveBuildDir subDir
         createDirectoryIfMissing True buildDir
-        return buildDir
+        canonicalizePath buildDir
+      where
+        resolveBuildDir f = do
+          case buildDirRoot cfg of
+           Nothing ->
+             return f
+           Just root' -> do
+             createDirectoryIfMissing True root'
+             root <- canonicalizePath root'
+             return $ root </> f
 
     removeBuildDir buildDir =
       when (uniqueBuildDirs cfg) $ removeDirectoryRecursive buildDir
@@ -87,6 +99,9 @@ getBuildId = gets bsBuildId
 
 getBuildDir :: B9 FilePath
 getBuildDir = gets bsBuildDir
+
+getConfigParser :: B9 ConfigParser
+getConfigParser = gets bsCfgParser
 
 getConfig :: B9 B9Config
 getConfig = gets bsCfg

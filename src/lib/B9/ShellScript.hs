@@ -21,6 +21,21 @@ data Script = In FilePath [Script]
             | Verbosity CmdVerbosity [Script]
             | Begin [Script]
             | Run FilePath [String]
+            deriving (Show, Read)
+
+data Cmd = Cmd { cmdPath :: String
+               , cmdArgs :: [String]
+               , cmdUser :: User
+               , cmdCwd :: Cwd
+               , cmdErrorChecking :: Bool
+               , cmdVerbosity :: CmdVerbosity
+               } deriving (Show, Read)
+data CmdVerbosity = Debug | Verbose | OnlyStdErr | Quiet
+                  deriving (Show, Read)
+
+data Cwd = Cwd FilePath | NoCwd deriving (Show, Read)
+
+data User = User String | NoUser deriving (Show, Read)
 
 data Ctx = Ctx { ctxCwd :: Cwd
                , ctxUser :: User
@@ -46,18 +61,6 @@ toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
       i <- reader ctxIgnoreErrors
       v <- reader ctxVerbosity
       return [Cmd cmd args u c i v]
-
-
-data Cmd = Cmd { cmdPath :: String
-               , cmdArgs :: [String]
-               , cmdUser :: User
-               , cmdCwd :: Cwd
-               , cmdErrorChecking :: Bool
-               , cmdVerbosity :: CmdVerbosity
-               }
-data CmdVerbosity = Debug | Verbose | OnlyStdErr | Quiet deriving Show
-data Cwd = Cwd FilePath | NoCwd
-data User = User String | NoUser
 
 writeSh :: FilePath -> Script -> IO ()
 writeSh file script = do
