@@ -48,8 +48,8 @@ import           B9.DiskImages
 import           B9.ShellScript
 import qualified B9.LibVirtLXC as LXC
 
-buildProject :: Project -> ConfigParser -> B9Config -> [String] -> IO Bool
-buildProject p cfgParser cfg args = run (projectName p) cfgParser cfg args $ do
+buildProject :: Project -> ConfigParser -> [String] -> IO Bool
+buildProject p cfgParser args = run (projectName p) cfgParser args $ do
   infoL "START BUILD"
   buildImgs <- createBuildImages (projectDisks p)
   infoL "DISK IMAGES CREATED"

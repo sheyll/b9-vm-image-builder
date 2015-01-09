@@ -37,7 +37,7 @@ data DiskResize = KeepSize
 
 data Partition = NoPT | Partition Int deriving (Eq, Show, Read)
 
-data SizeUnit = GB | MB | KB | B deriving (Eq, Show, Read)
+data SizeUnit = B | KB | MB | GB deriving (Eq, Show, Read, Ord)
 
 isPartitioned :: Partition -> Bool
 isPartitioned p | p == NoPT = False

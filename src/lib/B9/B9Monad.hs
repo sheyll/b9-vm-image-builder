@@ -52,11 +52,13 @@ data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
-run :: String -> ConfigParser -> B9Config -> [String] -> B9 a -> IO a
-run name cfgParser cfg args action = do
+run :: String -> ConfigParser -> [String] -> B9 a -> IO a
+run name cfgParser args action = do
   buildId <- generateBuildId name
   bracket (createBuildDir buildId) removeBuildDir (run' buildId)
   where
+    cfg = parseB9Config cfgParser
+
     run' buildId buildDir = do
       let ctx = BuildState buildId cfgParser cfg buildDir []
                 args (envVars cfg)

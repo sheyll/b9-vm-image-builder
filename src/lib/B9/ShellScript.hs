@@ -5,6 +5,7 @@ module B9.ShellScript ( writeSh
                       , Script (..)
                       ) where
 
+import Data.Monoid
 import Control.Monad.Reader
 import Control.Applicative ( (<$>), (<*>) )
 import Data.List ( intercalate )
@@ -22,6 +23,10 @@ data Script = In FilePath [Script]
             | Begin [Script]
             | Run FilePath [String]
             deriving (Show, Read)
+
+instance Monoid Script where
+  mempty = Begin []
+  s `mappend` s' = Begin [s, s']
 
 data Cmd = Cmd { cmdPath :: String
                , cmdArgs :: [String]

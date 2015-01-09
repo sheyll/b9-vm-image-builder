@@ -4,6 +4,7 @@ module B9.B9Config ( B9Config(..)
                    , defaultB9Config
                    , writeInitialB9Config
                    , readB9Config
+                   , parseB9Config
                    , LogLevel(..)
                    , LogConfig(..)
                    , ExecEnvType (..)
@@ -62,9 +63,12 @@ uniqueBuildDirsK = "unique_build_dirs"
 
 cfgFileSection = "global"
 
-writeInitialB9Config :: MonadIO m => ConfigParser -> m ()
-writeInitialB9Config cpNonGlobal = do
-  cfgFile <- resolve defaultB9ConfigFile
+writeInitialB9Config :: MonadIO m => (Maybe SystemPath) -> ConfigParser -> m ()
+writeInitialB9Config Nothing cpNonGlobal = writeInitialB9Config
+                                           (Just defaultB9ConfigFile)
+                                           cpNonGlobal
+writeInitialB9Config (Just cfgPath) cpNonGlobal = do
+  cfgFile <- resolve cfgPath
   ensureDir cfgFile
   exists <- liftIO $ doesFileExist cfgFile
   when (not exists) $
@@ -86,21 +90,21 @@ writeInitialB9Config cpNonGlobal = do
      Right cp ->
        liftIO $ writeFile cfgFile $ to_string cp
 
-readB9Config :: MonadIO m
-             => (Maybe SystemPath)
-             -> B9Config
-             -> m (ConfigParser, B9Config)
-readB9Config Nothing cfgIn = readB9Config (Just defaultB9ConfigFile) cfgIn
-readB9Config (Just cfgFile) c = do
-  cp <- readIniFile cfgFile
+readB9Config :: MonadIO m => (Maybe SystemPath) -> m ConfigParser
+readB9Config Nothing = readB9Config (Just defaultB9ConfigFile)
+readB9Config (Just cfgFile) = readIniFile cfgFile
+
+parseB9Config :: ConfigParser -> B9Config
+parseB9Config cp =
   let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
       geto = getOptionOr cp cfgFileSection
-      cfg = B9Config {
-        logConfig = geto logConfigK $ logConfig c
-        , buildDirRoot = geto buildDirRootK $ buildDirRoot c
-        , execEnvType = geto execEnvTypeK $ execEnvType c
-        , profileFile = geto profileFileK $ profileFile c
-        , envVars = getOption cp cfgFileSection envVarsK <> envVars c
-        , uniqueBuildDirs = geto uniqueBuildDirsK $ uniqueBuildDirs c
-        , keepTempDirs = geto keepTempDirsK $ keepTempDirs c }
-  return (cp, cfg)
+      c = defaultB9Config
+  in B9Config {
+    logConfig = geto logConfigK $ logConfig c
+    , buildDirRoot = geto buildDirRootK $ buildDirRoot c
+    , execEnvType = geto execEnvTypeK $ execEnvType c
+    , profileFile = geto profileFileK $ profileFile c
+    , envVars = getOption cp cfgFileSection envVarsK <> envVars c
+    , uniqueBuildDirs = geto uniqueBuildDirsK $ uniqueBuildDirs c
+    , keepTempDirs = geto keepTempDirsK $ keepTempDirs c
+    }
