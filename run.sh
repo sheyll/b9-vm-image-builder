@@ -1,8 +1,7 @@
 #!/bin/sh
 
-# Execute 'b9' directly from the sources without using cabal or the need to
-# compile it.
+# Execute 'b9', if necessary compile it.
 
 set -e
 
-runhaskell -isrc/lib:src/cli src/cli/Main.hs $@
+cabal run -- $@

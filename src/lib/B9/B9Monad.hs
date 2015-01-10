@@ -64,16 +64,11 @@ run name cfgParser cliCfg args action = do
     run' buildId buildDir = do
       let ctx = BuildState buildId cfgParser cfg buildDir []
                 args (envVars cfg)
-      (r, ctxOut) <- runStateT (runB9 action') ctx
+      (r, ctxOut) <- runStateT (runB9 action) ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
                   (unlines $ show <$> (reverse $ bsProf ctxOut))
       return r
-      where
-        action' = do
-          cfg' <- getConfig
-          dbgL $ printf "USING BUILD CONFIGURATION: %v" (show cfg')
-          action
 
     createBuildDir buildId = do
       if uniqueBuildDirs cfg then do
@@ -125,15 +120,15 @@ cmd cmdStr = do
   (Inherited, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
   cmdLogger <- getCmdLogger
   e <- liftIO $ runConcurrently $
-       Concurrently (cpOut $$ cmdLogger) *>
-       Concurrently (cpErr $$ cmdLogger) *>
+       Concurrently (cpOut $$ cmdLogger LogTrace) *>
+       Concurrently (cpErr $$ cmdLogger LogInfo) *>
        Concurrently (waitForStreamingProcess cph)
   checkExitCode e
   where
     getCmdLogger = do
       lv <- gets $ verbosity . bsCfg
       lf <- gets $ logFile . bsCfg
-      return $ (CL.mapM_ (logImpl lv lf LogTrace . B.unpack))
+      return $ \ level -> (CL.mapM_ (logImpl lv lf level . B.unpack))
 
     checkExitCode ExitSuccess =
       traceL $ "COMMAND SUCCESS"

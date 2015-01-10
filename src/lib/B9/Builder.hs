@@ -52,6 +52,8 @@ buildProject :: Project -> ConfigParser -> B9Config -> [String] -> IO Bool
 buildProject p cfgParser cliCfg args =
   run (projectName p) cfgParser cliCfg args $ do
   infoL "START BUILD"
+  getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . show
+  traceL $ printf "USING PROJECT: %s" (show p)
   buildImgs <- createBuildImages (projectDisks p)
   infoL "DISK IMAGES CREATED"
   sharedDirs <- createSharedDirs (projectSharedDirectories p)

@@ -92,7 +92,10 @@ emulatorK = "emulator_path"
 virshURIK = "connection"
 networkIdK = "network"
 
-configureLibVirtLXC = readLibVirtConfig
+configureLibVirtLXC = do
+  c <- readLibVirtConfig
+  traceL $ printf "USING LibVirtLXCConfig: %s" (show c)
+  return c
 
 setDefaultConfig :: ConfigParser
 setDefaultConfig = either (error . show) id eitherCp

@@ -58,16 +58,12 @@ cliArgParser = toCliOpts
                              <> short 'c'
                              <> long "configuration-file"
                              <> metavar "FILENAME"))
-               <*> optional (option auto
-                             (help "Minimum log-level for console logging"
-                             <> showDefault
+               <*> switch (help "Log everything that happens to stdout"
                              <> short 'v'
-                             <> long "verbosity"
-                             <> metavar "LEVEL"
-                             <> completeWith (show <$> [ LogTrace
-                                                       , LogDebug
-                                                       , LogInfo
-                                                       , LogError ])))
+                             <> long "verbose")
+               <*> switch (help "Suppress non-error output"
+                             <> short 'q'
+                             <> long "quiet")
                <*> optional (strOption
                              (help "Path to a logfile"
                              <> short 'l'
@@ -94,7 +90,8 @@ cliArgParser = toCliOpts
   where
     toCliOpts :: [FilePath]
               -> Maybe FilePath
-              -> Maybe LogLevel
+              -> Bool
+              -> Bool
               -> Maybe FilePath
               -> Maybe FilePath
               -> Maybe FilePath
@@ -102,18 +99,20 @@ cliArgParser = toCliOpts
               -> Bool
               -> [String]
               -> CliOpts
-    toCliOpts ps cfg minLevel logF profF buildRoot keep notUnique args =
-      CliOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
-              , projectFiles = ps
-              , extraArgs = args
-              , cliB9Config = mempty { verbosity = minLevel
-                                     , logFile = logF
-                                     , profileFile = profF
-                                     , buildDirRoot = buildRoot
-                                     , keepTempDirs = keep
-                                     , uniqueBuildDirs = not notUnique
-                                     }
-              }
+    toCliOpts ps cfg verbose quiet logF profF buildRoot keep notUnique args =
+      let minLogLevel = if verbose then Just LogTrace else
+                          if quiet then Just LogError else Nothing
+      in CliOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
+                 , projectFiles = ps
+                 , extraArgs = args
+                 , cliB9Config = mempty { verbosity = minLogLevel
+                                        , logFile = logF
+                                        , profileFile = profF
+                                        , buildDirRoot = buildRoot
+                                        , keepTempDirs = keep
+                                        , uniqueBuildDirs = not notUnique
+                                        }
+                 }
 
 testImageArchlinux64 = Image "../archlinux_x86_64_2014.12.01.raw" Raw
 testImageFedora32 = Image "../Fedora-i386-20-20131211.1-sda.qcow2" QCow2
