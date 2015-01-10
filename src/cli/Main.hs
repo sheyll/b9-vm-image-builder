@@ -1,17 +1,119 @@
 module Main where
 
 import System.Environment
-
+import Options.Applicative
+import Options.Applicative.Help.Pretty
 import B9
-import qualified B9.LibVirtLXC as LibVirtLXC
 
 main :: IO ()
 main = do
-  writeInitialB9Config LibVirtLXC.setDefaultConfig
-  (cfgParser, cfg) <- readB9Config Nothing defaultB9Config
-  p <- maybeConsult (Just "B9_BUILD") emptyProject
-  success <- buildProject p cfgParser cfg []
-  when (not success) $ exitWith (ExitFailure 128)
+  opts <- parseCommandLine
+  conf <- configure (configFile opts) (cliB9Config opts)
+  prjs <- mapM load (projectFiles opts)
+  code <- build (mconcat prjs) conf (cliB9Config opts) (extraArgs opts)
+  exit code
+
+exit success = when (not success) $ exitWith (ExitFailure 128)
+
+data CliOpts = CliOpts { configFile :: Maybe SystemPath
+                       , projectFiles :: [FilePath]
+                       , extraArgs :: [String]
+                       , cliB9Config :: B9Config
+                       }
+
+parseCommandLine :: IO CliOpts
+parseCommandLine =
+  execParser (info (helper <*> cliArgParser)
+               (fullDesc
+                <> progDesc "Build and run VM-Images inside LXC containers.\
+                            \ Custom arguments follow after '--' and are\
+                            \ accessable in many strings in project configs \
+                            \ trough mustache templates, i.e. '{{N}}' referes to\
+                            \ positional argument $N."
+                <> headerDoc (Just helpHeader)))
+
+helpHeader = linebreak <> b9AsciiArt <> linebreak
+             <> text "B9 - a benign VM-Image build tool"
+
+b9AsciiArt = string "\
+\                      @!#?@!\n\
+\               ,----, /\n\
+\              /   9 9\\__\n\
+\       B   E  |       _ \\   I   G   N\n\
+\.  .  .  .  . \\      / \\N' .  .  .  .  .  .  .  .  .  .  .  .  .\n\
+\ .   .   .   . `||-||.   .   .   .   .   .   .   .   .   .   .   .\n\
+\   .    .    .  |L_|L_ .    .    .    .    .    .    .    .    .\n\
+\=================================================================="
+
+cliArgParser = toCliOpts
+               <$> some (strOption
+                         (help "A project to build, specify more than once to\
+                                \ compose multiple projects"
+                          <> short 'f'
+                          <> long "project-file"
+                          <> metavar "FILENAME"
+                          <> noArgError (ErrorMsg "No project file specified!")))
+               <*> optional (strOption
+                             (help "Path to users b9-configuration"
+                             <> short 'c'
+                             <> long "configuration-file"
+                             <> metavar "FILENAME"))
+               <*> optional (option auto
+                             (help "Minimum log-level for console logging"
+                             <> showDefault
+                             <> short 'v'
+                             <> long "verbosity"
+                             <> metavar "LEVEL"
+                             <> completeWith (show <$> [ LogTrace
+                                                       , LogDebug
+                                                       , LogInfo
+                                                       , LogError ])))
+               <*> optional (strOption
+                             (help "Path to a logfile"
+                             <> short 'l'
+                             <> long "log-file"
+                             <> metavar "FILENAME"))
+               <*> optional (strOption
+                             (help "Output file for a command/timing profile"
+                             <> short 'p'
+                             <> long "profile-file"
+                             <> metavar "FILENAME"))
+               <*> optional (strOption
+                             (help "Root directory for build directories"
+                             <> short 'b'
+                             <> long "build-root-dir"
+                             <> metavar "DIRECTORY"))
+               <*> switch (help "Keep build directories after exit"
+                             <> short 'k'
+                             <> long "keep-build-dir")
+               <*> switch (help "Predictable build directory names"
+                             <> short 'u'
+                             <> long "predictable-build-dir")
+               <*> many (strArgument idm)
+
+  where
+    toCliOpts :: [FilePath]
+              -> Maybe FilePath
+              -> Maybe LogLevel
+              -> Maybe FilePath
+              -> Maybe FilePath
+              -> Maybe FilePath
+              -> Bool
+              -> Bool
+              -> [String]
+              -> CliOpts
+    toCliOpts ps cfg minLevel logF profF buildRoot keep notUnique args =
+      CliOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
+              , projectFiles = ps
+              , extraArgs = args
+              , cliB9Config = mempty { verbosity = minLevel
+                                     , logFile = logF
+                                     , profileFile = profF
+                                     , buildDirRoot = buildRoot
+                                     , keepTempDirs = keep
+                                     , uniqueBuildDirs = not notUnique
+                                     }
+              }
 
 testImageArchlinux64 = Image "../archlinux_x86_64_2014.12.01.raw" Raw
 testImageFedora32 = Image "../Fedora-i386-20-20131211.1-sda.qcow2" QCow2

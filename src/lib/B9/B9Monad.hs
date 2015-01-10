@@ -22,6 +22,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.State
 import qualified Data.ByteString.Char8 as B
 import           Data.Functor ()
+import           Data.Monoid
 import           Data.Maybe
 import           Data.Time.Clock
 import           Data.Time.Format
@@ -52,21 +53,27 @@ data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
-run :: String -> ConfigParser -> [String] -> B9 a -> IO a
-run name cfgParser args action = do
-  buildId <- generateBuildId name
+run :: String -> ConfigParser -> B9Config -> [String] -> B9 a -> IO a
+run name cfgParser cliCfg args action = do
+  buildId <- if uniqueBuildDirs cfg then generateBuildId name
+             else return name
   bracket (createBuildDir buildId) removeBuildDir (run' buildId)
   where
-    cfg = parseB9Config cfgParser
+    cfg = parseB9Config cfgParser <> cliCfg
 
     run' buildId buildDir = do
       let ctx = BuildState buildId cfgParser cfg buildDir []
                 args (envVars cfg)
-      (r, ctxOut) <- runStateT (runB9 action) ctx
+      (r, ctxOut) <- runStateT (runB9 action') ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
                   (unlines $ show <$> (reverse $ bsProf ctxOut))
       return r
+      where
+        action' = do
+          cfg' <- getConfig
+          dbgL $ printf "USING BUILD CONFIGURATION: %v" (show cfg')
+          action
 
     createBuildDir buildId = do
       if uniqueBuildDirs cfg then do
@@ -90,7 +97,8 @@ run name cfgParser args action = do
              return $ root </> f
 
     removeBuildDir buildDir =
-      when (uniqueBuildDirs cfg) $ removeDirectoryRecursive buildDir
+      when (uniqueBuildDirs cfg && not (keepTempDirs cfg))
+      $ removeDirectoryRecursive buildDir
 
     generateBuildId name =
       printf "%s-%08X" name <$> (randomIO :: IO Word32)
@@ -123,8 +131,9 @@ cmd cmdStr = do
   checkExitCode e
   where
     getCmdLogger = do
-      lc <- gets $ logConfig . bsCfg
-      return $ (CL.mapM_ (logImpl lc LogTrace . B.unpack))
+      lv <- gets $ verbosity . bsCfg
+      lf <- gets $ logFile . bsCfg
+      return $ (CL.mapM_ (logImpl lv lf LogTrace . B.unpack))
 
     checkExitCode ExitSuccess =
       traceL $ "COMMAND SUCCESS"
@@ -146,24 +155,16 @@ errorL = b9Log LogError
 
 b9Log :: LogLevel -> String -> B9 ()
 b9Log level msg = do
-  lc <- gets $ logConfig . bsCfg
+  lv <- gets $ verbosity . bsCfg
+  lf <- gets $ logFile . bsCfg
   modify $ \ ctx -> ctx { bsProf = LogEvent level msg : bsProf ctx }
-  B9 $ liftIO $ logImpl lc level msg
+  B9 $ liftIO $ logImpl lv lf level msg
 
-logImpl :: LogConfig -> LogLevel -> String -> IO ()
-logImpl (ToStdOut minLevel) level msg
-  | level >= minLevel = formatLogMsg level msg >>= putStr
-  | otherwise = return ()
-logImpl (ToStdErr minLevel) level msg
-  | level >= minLevel =
-      formatLogMsg level msg >>= hPutStr stderr
-  | otherwise = return ()
-logImpl (ToFile f minLevel) level msg
-  | level >= minLevel =
-      formatLogMsg level msg >>= appendFile f
-  | otherwise = return ()
-logImpl (LogTo cfgs) level msg =
-  mapM_ (\ cfg -> logImpl cfg level msg) cfgs
+logImpl :: Maybe LogLevel -> Maybe FilePath -> LogLevel -> String -> IO ()
+logImpl minLevel mf level msg = do
+  lm <- formatLogMsg level msg
+  when (isJust minLevel && level >= fromJust minLevel) (putStr lm)
+  when (isJust mf) (appendFile (fromJust mf) lm)
 
 formatLogMsg :: LogLevel -> String -> IO String
 formatLogMsg l msg = do

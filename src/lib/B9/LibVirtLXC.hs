@@ -102,10 +102,10 @@ setDefaultConfig = either (error . show) id eitherCp
           c = defaultLibVirtLXCConfig
       cp <- add_section cp cfgFileSection
       cp <- setshow cp cfgFileSection useSudoK $ useSudo c
-      cp <- setshow cp cfgFileSection virshPathK $ virshPath c
-      cp <- setshow cp cfgFileSection emulatorK $ emulator c
-      cp <- setshow cp cfgFileSection virshURIK $ virshURI c
-      setshow cp cfgFileSection networkIdK $ networkId c
+      cp <- set cp cfgFileSection virshPathK $ virshPath c
+      cp <- set cp cfgFileSection emulatorK $ emulator c
+      cp <- set cp cfgFileSection virshURIK $ virshURI c
+      maybe (return cp) (set cp cfgFileSection networkIdK) (networkId c)
 
 readLibVirtConfig = do
   cp <- getConfigParser

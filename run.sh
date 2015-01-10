@@ -5,4 +5,4 @@
 
 set -e
 
-runhaskell -isrc/lib:src/cli src/cli/Main.hs
+runhaskell -isrc/lib:src/cli src/cli/Main.hs $@
