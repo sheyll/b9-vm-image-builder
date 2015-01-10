@@ -8,3 +8,5 @@ TAGS
 /OUT
 /cabal.config
 
+/.cabal-sandbox/
+/cabal.sandbox.config

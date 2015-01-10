@@ -83,7 +83,7 @@ defaultLibVirtLXCConfig = LibVirtLXCConfig
                           "/usr/bin/virsh"
                           "/usr/lib/libvirt/libvirt_lxc"
                           "lxc:///"
-                          (Just "default")
+                          Nothing
 
 cfgFileSection = "libvirt-lxc"
 useSudoK = "use_sudo"
@@ -108,7 +108,7 @@ setDefaultConfig = either (error . show) id eitherCp
       cp <- set cp cfgFileSection virshPathK $ virshPath c
       cp <- set cp cfgFileSection emulatorK $ emulator c
       cp <- set cp cfgFileSection virshURIK $ virshURI c
-      maybe (return cp) (set cp cfgFileSection networkIdK) (networkId c)
+      setshow cp cfgFileSection networkIdK $ networkId c
 
 readLibVirtConfig = do
   cp <- getConfigParser
