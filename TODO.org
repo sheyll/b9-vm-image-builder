@@ -21,15 +21,15 @@
 *** DONE Add merging of B9Configs/Resources
 *** DONE Use Data.ConfigFile http://hackage.haskell.org/package/ConfigFile-1.1.3/docs/Data-ConfigFile.html
 ** DONE Add a project file reader
-** TODO Add command line handling
-*** TODO [#B] Allow setting alternative B9Config path
-*** TODO [#B] Allow overwriting B9Config items
-*** TODO Allow setting of alternative Project path
-*** TODO Pass parameters for the project script
-*** TODO Allow passing several 'Project's that are then merged
+** DONE Add command line handling
+*** DONE [#B] Allow setting alternative B9Config path
+*** DONE [#B] Allow overwriting B9Config items
+*** DONE Allow setting of alternative Project path
+*** DONE Pass parameters for the project script
+*** DONE Allow passing several 'Project's that are then merged
 **** DONE Make Project's composable (a Monoid)
-*** TODO Use string templates for 'Project' to cli Args and Environment Vars
-** Add Example Projects
+*** DONE Use string templates for 'Project' to cli Args and Environment Vars
+** DONE Add Example Projects
 ** Write a nice documentation
 ** Publish
 *** Create github repo
@@ -72,4 +72,6 @@
 ***** disk index
 ***** kexec infos
 ***** disk version?
-* Use Shell-Escaping: http://hackage.haskell.org/package/shell-escape-0.1.2
+* Improve Commands
+** Use Shell-Escaping: http://hackage.haskell.org/package/shell-escape-0.1.2
+** Move 'ShellScripting' dependency into the exec env, thereby making the project independent of 'Bash'- scripting

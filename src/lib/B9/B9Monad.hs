@@ -39,31 +39,27 @@ import           Control.Concurrent.Async (Concurrently (..))
 import           Data.Conduit             (($$))
 import qualified Data.Conduit.List        as CL
 import           Data.Conduit.Process
+import qualified Data.Traversable as T
 
 data BuildState = BuildState { bsBuildId :: String
                              , bsCfgParser :: ConfigParser
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
                              , bsProf :: [ProfilingEntry]
-                             , bsCliArgs :: [String]
-                             , bsEnvVars :: [(String, String)]
                              }
 
 data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
-run :: String -> ConfigParser -> B9Config -> [String] -> B9 a -> IO a
-run name cfgParser cliCfg args action = do
+run :: String -> ConfigParser -> B9Config -> B9 a -> IO a
+run name cfgParser cfg action = do
   buildId <- if uniqueBuildDirs cfg then generateBuildId name
              else return name
   bracket (createBuildDir buildId) removeBuildDir (run' buildId)
   where
-    cfg = parseB9Config cfgParser <> cliCfg
-
     run' buildId buildDir = do
       let ctx = BuildState buildId cfgParser cfg buildDir []
-                args (envVars cfg)
       (r, ctxOut) <- runStateT (runB9 action) ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))

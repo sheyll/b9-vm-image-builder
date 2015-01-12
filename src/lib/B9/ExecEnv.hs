@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module B9.ExecEnv
        ( ExecEnv (..)
        , Resources (..)
@@ -7,8 +8,8 @@ module B9.ExecEnv
        , RamSize (..)
        ) where
 
+import Data.Data
 import Data.Monoid
-import B9.ShellScript
 import B9.DiskImages
 
 data ExecEnv = ExecEnv { envName :: String
@@ -18,12 +19,12 @@ data ExecEnv = ExecEnv { envName :: String
                        }
 
 data SharedDirectory = SharedDirectory FilePath MountPoint
-                     deriving (Read, Show)
+                     deriving (Read, Show, Typeable, Data)
 
 data Resources = Resources { maxMemory :: RamSize
                            , cpuCount :: Int
                            , cpuArch :: CPUArch
-                           } deriving (Read, Show)
+                           } deriving (Read, Show, Typeable, Data)
 
 instance Monoid Resources where
   mempty = Resources mempty 1 mempty
@@ -33,7 +34,7 @@ instance Monoid Resources where
 noResources :: Resources
 noResources = mempty
 
-data CPUArch = X86_64 | I386 deriving (Read, Show)
+data CPUArch = X86_64 | I386 deriving (Read, Show, Typeable, Data)
 
 instance Monoid CPUArch where
   mempty = I386
@@ -41,7 +42,7 @@ instance Monoid CPUArch where
   X86_64 `mappend` _ = X86_64
 
 data RamSize = RamSize Int SizeUnit
-             | AutomaticRamSize deriving (Eq, Read, Show, Ord)
+             | AutomaticRamSize deriving (Eq, Read, Show, Ord, Typeable, Data)
 
 instance Monoid RamSize where
   mempty = AutomaticRamSize

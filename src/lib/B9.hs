@@ -9,6 +9,7 @@ module B9
        , module Data.List
        , module Data.Maybe
        , module Text.Printf
+       , BuildAction(..)
        , load
        , configure
        , build
@@ -46,6 +47,8 @@ import Text.Printf ( printf )
 
 import qualified B9.LibVirtLXC as LibVirtLXC
 
+data BuildAction = DryRun | RunBuild
+
 configure :: MonadIO m => Maybe SystemPath -> B9Config -> m ConfigParser
 configure b9ConfigPath cliConfig = do
   writeInitialB9Config b9ConfigPath cliConfig LibVirtLXC.setDefaultConfig
@@ -54,5 +57,6 @@ configure b9ConfigPath cliConfig = do
 load :: MonadIO m => FilePath -> m Project
 load projectFile = maybeConsult (Just projectFile) emptyProject
 
-build :: Project -> ConfigParser -> B9Config -> [String] -> IO Bool
-build = buildProject
+build :: BuildAction -> Project -> ConfigParser -> B9Config -> IO Bool
+build RunBuild = buildProject
+build DryRun = printProject

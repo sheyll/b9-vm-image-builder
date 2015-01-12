@@ -10,15 +10,15 @@ main = do
   opts <- parseCommandLine
   conf <- configure (configFile opts) (cliB9Config opts)
   prjs <- mapM load (projectFiles opts)
-  code <- build (mconcat prjs) conf (cliB9Config opts) (extraArgs opts)
+  code <- build (cliAction opts) (mconcat prjs) conf (cliB9Config opts)
   exit code
 
 exit success = when (not success) $ exitWith (ExitFailure 128)
 
 data CliOpts = CliOpts { configFile :: Maybe SystemPath
                        , projectFiles :: [FilePath]
-                       , extraArgs :: [String]
                        , cliB9Config :: B9Config
+                       , cliAction :: BuildAction
                        }
 
 parseCommandLine :: IO CliOpts
@@ -58,12 +58,15 @@ cliArgParser = toCliOpts
                              <> short 'c'
                              <> long "configuration-file"
                              <> metavar "FILENAME"))
+               <*> switch (help "Show the processed project and config without building"
+                             <> short 'd'
+                             <> long "dry-run")
                <*> switch (help "Log everything that happens to stdout"
                              <> short 'v'
                              <> long "verbose")
                <*> switch (help "Suppress non-error output"
-                             <> short 'q'
-                             <> long "quiet")
+                         <> short 'q'
+                         <> long "quiet")
                <*> optional (strOption
                              (help "Path to a logfile"
                              <> short 'l'
@@ -92,6 +95,7 @@ cliArgParser = toCliOpts
               -> Maybe FilePath
               -> Bool
               -> Bool
+              -> Bool
               -> Maybe FilePath
               -> Maybe FilePath
               -> Maybe FilePath
@@ -99,112 +103,22 @@ cliArgParser = toCliOpts
               -> Bool
               -> [String]
               -> CliOpts
-    toCliOpts ps cfg verbose quiet logF profF buildRoot keep notUnique args =
+    toCliOpts ps cfg dryRun verbose quiet logF profF buildRoot keep notUnique
+              rest =
       let minLogLevel = if verbose then Just LogTrace else
                           if quiet then Just LogError else Nothing
+          extraArgs = zip (("arg_"++) . show <$> [1..]) rest
       in CliOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
                  , projectFiles = ps
-                 , extraArgs = args
+                 , cliAction = if dryRun
+                                  then DryRun
+                                  else RunBuild
                  , cliB9Config = mempty { verbosity = minLogLevel
                                         , logFile = logF
                                         , profileFile = profF
                                         , buildDirRoot = buildRoot
                                         , keepTempDirs = keep
                                         , uniqueBuildDirs = not notUnique
+                                        , envVars = extraArgs
                                         }
                  }
-
-testImageArchlinux64 = Image "../archlinux_x86_64_2014.12.01.raw" Raw
-testImageFedora32 = Image "../Fedora-i386-20-20131211.1-sda.qcow2" QCow2
-
-testProject1 = Project
-               { projectName = "test-b7-1"
-               , projectDisks =
-                 [ ( Export (Image "/home/sven/tmp/b7-tests/fedora.raw" Raw)
-                     (SourceImage testImageFedora32 (Partition 1) KeepSize)
-                   , MountPoint "/")
-                 , ( Transient (SourceImage testImageFedora32 (Partition 1) KeepSize)
-                   , MountPoint "/mnt/test1" )
-                 , ( Transient
-                     (CopyOnWrite testImageArchlinux64)
-                   , MountPoint "/mnt/test2" )
-                 , ( Export (Image "/home/sven/tmp/b7-tests/archBacked.vmdk" Vmdk)
-                     (CopyOnWrite testImageArchlinux64)
-                   , MountPoint "/mnt/test3" )
-                 , ( Transient (FileSystem Ext4 (DiskSize 32 MB))
-                   , MountPoint "/mnt/test4" )
-                 , ( Export (Image "/home/sven/tmp/b7-tests/testEmpty.vmdk" Vmdk)
-                     (FileSystem Ext4 (DiskSize 64 MB))
-                   , MountPoint "/mnt/test5" ) ]
-               , projectSharedDirectories =
-                 [ SharedDirectory "." (MountPoint "/home/beqemu/Test-WORKSPACE") ]
-               , projectBuildScript =
-                 Begin [ Run "/usr/bin/mount" []
-                       , Run "/usr/bin/df" ["-h"]
-                       ]
-               , projectResources = Resources { maxMemory = RamSize 8 GB
-                                              , cpuCount = 4
-                                              , cpuArch = I386
-                                              }
-               }
-
-archBuildImg = Image "/home/sven/.beqemu/machines/\
-                     \svox-pico_builder-archlinux-mem2048-smp4\
-                     \/archlinux_devel_base_img/img.qcow2" QCow2
-
-testProject2 = Project
-               { projectName = "test-b7-2"
-               , projectDisks =
-                 [(Transient (CopyOnWrite archBuildImg), MountPoint "/")]
-               , projectSharedDirectories =
-                 [ SharedDirectory
-                   "/home/sven/MRF/mrf_third_party/custom-pkgs/lbm_pjproject"
-                   (MountPoint "/home/beqemu/BASE")
-                 , SharedDirectory
-                   "./OUT"
-                   (MountPoint "/home/beqemu/OUT")
-                 ]
-               , projectBuildScript =
-                   Verbosity OnlyStdErr
-                   [ Run "dhcpcd" []
-                   , As "beqemu"
-                     [ In "/home/beqemu"
-                       [ Run "mkdir" ["-p", "build"] ]
-                     , In "/home/beqemu/BASE"
-                       [ Run "cp" [ "archlinux/PKGBUILD"
-                                  , "archlinux/QBUILD"
-                                  , "backtrace.patch"
-                                  , "/home/beqemu/build" ] ]
-                     , In "/home/beqemu/build"
-                       [ Run "./QBUILD" ["2.1.0", "3"]
-                       , Run "mv" ["*.pkg.*", "/home/beqemu/OUT"] ]
-                     ]
-                   ]
-               , projectResources = Resources { maxMemory = RamSize 8 GB
-                                              , cpuCount = 4
-                                              , cpuArch = X86_64
-                                              }
-               }
-
-testImageArchDevelBase = Image "../archlinux_devel_base_img.qcow2" QCow2
-
-testImageArchQCow2 = Image "/home/sven/tmp/ArchXXX.qcow2" QCow2
-
-testImageArchVmdk = Image "/home/sven/tmp/ArchXXX.vmdk" Vmdk
-
-testProject3 = Project
-               { projectName = "testProject3"
-               , projectDisks =
-                 [ ( Export testImageArchQCow2
-                     (SourceImage testImageArchDevelBase NoPT KeepSize)
-                   , MountPoint "/") ]
-               , projectSharedDirectories =  [ ]
-               , projectBuildScript =
-                 Verbosity Debug
-                 [ Run "dhcpcd" []
-                 , Run "ls" ["-la", "/"] ]
-               , projectResources = Resources { maxMemory = RamSize 8 GB
-                                              , cpuCount = 4
-                                              , cpuArch = X86_64
-                                              }
-               }

@@ -1,0 +1,20 @@
+Project { projectName = "project-${arg_1}"
+               , projectDisks =
+                   [ (Export
+                     (Image "/home/sven/tmp/$arg_2.qcow2" QCow2)
+                     (SourceImage
+                      (Image "../beqemu7/$arg_1.qcow2" QCow2)
+                      NoPT KeepSize)
+                   , MountPoint "/${arg_1}") ]
+               , projectSharedDirectories =  [ SharedDirectory "${arg_1}"
+                                                               (MountPoint "${arg_1}") ]
+               , projectBuildScript =
+                 Verbosity Debug
+                 [ In "${arg_1}"
+                   [ As "${arg_1}"
+                     [Run "${arg_1}" ["${arg_1}", "${arg_1}"]]]]
+               , projectResources = Resources { maxMemory = RamSize 8 GB
+                                              , cpuCount = 4
+                                              , cpuArch = X86_64
+                                              }
+           }

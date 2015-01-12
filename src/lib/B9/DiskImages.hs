@@ -1,43 +1,37 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module B9.DiskImages where
 
-import Control.Applicative ( (<$>) )
-import Control.Exception ( bracket )
 import Control.Monad ( when )
 import Control.Monad.IO.Class
 import Data.List ( nub )
-import Data.Maybe ( isJust, fromJust )
-import Data.Word ( Word32 )
+
+
 import System.Directory ( createDirectoryIfMissing
-                        , createDirectory
-                        , setCurrentDirectory
-                        , getCurrentDirectory
                         , canonicalizePath
                         , renameFile
                         , removeFile
-                        , copyFile
-                        , removeDirectoryRecursive
                         )
 import System.FilePath ( takeDirectory
                        , takeFileName
                        , replaceExtension
                        , (<.>)
                        , (</>) )
-import           System.Process ( callCommand )
-import           System.Random ( randomIO )
 import           Text.Printf ( printf )
+import Data.Data
 
 import qualified B9.PartitionTable as PartitionTable
 import           B9.B9Monad
 
-data DiskSize = DiskSize Int SizeUnit deriving (Eq, Show, Read)
+data DiskSize = DiskSize Int SizeUnit deriving (Eq, Show, Read, Typeable, Data)
 
 data DiskResize = KeepSize
                 | ResizeImage DiskSize
-                | ResizeFS FileSystem DiskSize deriving (Eq, Show, Read)
+                | ResizeFS FileSystem DiskSize
+                  deriving (Eq, Show, Read, Typeable, Data)
 
-data Partition = NoPT | Partition Int deriving (Eq, Show, Read)
+data Partition = NoPT | Partition Int deriving (Eq, Show, Read, Typeable, Data)
 
-data SizeUnit = B | KB | MB | GB deriving (Eq, Show, Read, Ord)
+data SizeUnit = B | KB | MB | GB deriving (Eq, Show, Read, Ord, Typeable, Data)
 
 isPartitioned :: Partition -> Bool
 isPartitioned p | p == NoPT = False
@@ -47,25 +41,25 @@ getPartition :: Partition -> Int
 getPartition (Partition p) = p
 getPartition NoPT = error "No partitions!"
 
-newtype MountPoint = MountPoint FilePath deriving (Show, Read)
+newtype MountPoint = MountPoint FilePath deriving (Show, Read, Typeable, Data)
 
 type Mounted a = (a, MountPoint)
 
 data ImageSource = FileSystem FileSystem DiskSize
                  | SourceImage Image Partition DiskResize
                  | CopyOnWrite Image
-                 deriving (Show, Read)
+                 deriving (Show,Read,Typeable,Data)
 
-data FileSystem = NoFileSystem | Ext4 deriving (Eq, Show, Read)
+data FileSystem = NoFileSystem | Ext4 deriving (Eq,Show,Read,Typeable,Data)
 
-data ImageType = Raw | QCow2 | Vmdk deriving (Eq, Read)
+data ImageType = Raw | QCow2 | Vmdk deriving (Eq,Read,Typeable,Data)
 
 instance Show ImageType where
   show Raw = "raw"
   show QCow2 = "qcow2"
   show Vmdk = "vmdk"
 
-data Image = Image FilePath ImageType deriving (Eq, Show, Read)
+data Image = Image FilePath ImageType deriving (Eq, Show, Read, Typeable, Data)
 
 compatibleImageTypes :: ImageSource -> [ImageType]
 compatibleImageTypes src =

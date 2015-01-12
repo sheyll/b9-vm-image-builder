@@ -10,10 +10,8 @@ module B9.B9Config ( B9Config(..)
                    ) where
 
 import Data.Monoid
-import Data.Typeable
 import Control.Monad
 import Control.Exception
-import Control.Applicative
 import Data.Function (on)
 import Control.Monad.IO.Class
 import System.Directory

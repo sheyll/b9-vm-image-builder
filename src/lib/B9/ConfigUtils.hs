@@ -15,11 +15,11 @@ module B9.ConfigUtils ( allOn
                       , consult
                       , maybeConsult
                       , maybeConsultSystemPath
+                      , subst
                       ) where
 
 import Data.Monoid
 import Data.Function ( on )
-import Data.Maybe
 import Data.Typeable
 import Control.Applicative
 import Control.Exception
@@ -29,10 +29,12 @@ import Text.Read ( readEither )
 import System.Random ( randomIO )
 import Data.Word ( Word16, Word32 )
 import System.FilePath
-import System.Directory
 import Text.Printf
 import Data.ConfigFile
-import Control.Monad.Error
+import Data.Text.Template (render, templateSafe)
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text as T
+
 
 allOn :: (a -> Maybe Bool) -> a -> a -> Maybe Bool
 allOn getter x y = getAll <$> on mappend (fmap All . getter) x y
@@ -61,11 +63,9 @@ resolve (InTempDir p) = liftIO $ do
 ensureDir :: MonadIO m => FilePath -> m ()
 ensureDir p = liftIO (createDirectoryIfMissing True $ takeDirectory p)
 
-data ReaderException = ReaderException { fileToRead :: FilePath
-                                       , errorMessage :: String
-                                       } deriving (Show, Typeable)
+data ReaderException = ReaderException FilePath String
+  deriving (Show, Typeable)
 instance Exception ReaderException
-
 
 consult :: (MonadIO m, Read a) => FilePath -> m a
 consult f = liftIO $ do
@@ -133,3 +133,17 @@ randomUUID = liftIO (UUID <$> ((,,,,,)
                                <*> randomIO
                                <*> randomIO
                                <*> randomIO))
+
+subst :: [(String,String)] -> String -> String
+subst env template =
+  LT.unpack (render template' env')
+  where env' t = case lookup (T.unpack t) env of
+                   Just v -> T.pack v
+                   Nothing -> error ("Invalid template parameter: \""
+                                    ++ (T.unpack t) ++ "\" in: \"" ++ template
+                                    ++ "\". Valid entries: " ++ show env)
+        template' = case templateSafe (T.pack template) of
+          Left (row,col) -> error ("Invalid template, error at row: "
+                                  ++ show row ++ ", col: " ++ show col
+                                  ++ " in: \"" ++ template)
+          Right t -> t

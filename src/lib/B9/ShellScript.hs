@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module B9.ShellScript ( writeSh
                       , CmdVerbosity (..)
                       , Cwd (..)
@@ -5,16 +6,14 @@ module B9.ShellScript ( writeSh
                       , Script (..)
                       ) where
 
+import Data.Data
 import Data.Monoid
 import Control.Monad.Reader
-import Control.Applicative ( (<$>), (<*>) )
+import Control.Applicative ( (<$>) )
 import Data.List ( intercalate )
-import System.Directory ( getTemporaryDirectory
-                        , getPermissions
+import System.Directory ( getPermissions
                         , setPermissions
-                        , setOwnerExecutable
-                        , createDirectoryIfMissing )
-import System.IO ( writeFile )
+                        , setOwnerExecutable )
 
 data Script = In FilePath [Script]
             | As String [Script]
@@ -22,7 +21,7 @@ data Script = In FilePath [Script]
             | Verbosity CmdVerbosity [Script]
             | Begin [Script]
             | Run FilePath [String]
-            deriving (Show, Read)
+            deriving (Show, Read, Typeable, Data)
 
 instance Monoid Script where
   mempty = Begin []
@@ -35,8 +34,9 @@ data Cmd = Cmd { cmdPath :: String
                , cmdErrorChecking :: Bool
                , cmdVerbosity :: CmdVerbosity
                } deriving (Show, Read)
+
 data CmdVerbosity = Debug | Verbose | OnlyStdErr | Quiet
-                  deriving (Show, Read)
+                  deriving (Show, Read, Typeable, Data)
 
 data Cwd = Cwd FilePath | NoCwd deriving (Show, Read)
 
