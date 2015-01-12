@@ -34,30 +34,20 @@
 ** Publish
 *** Create github repo
 *** Create git01 repo
-* Add a check mode that tells what would happen if a project file executed
+* DONE Add a check mode that tells what would happen if a project file executed
 * Add a 'beq_run' pendant
 ** Add to Project projectPersistentEnvInit (Maybe Script)
 ** Do not remove the build directory
 ** Do not export any images
-* Add support for reusable exec environments containing pre-built images named 'ExecEnvTemplate':
-*** General:
-**** Add Image name
-**** Add Author
-**** Add build date
-**** Add Version
-**** Add (Maybe GitRepo)
-*** Runtime:
-**** Add kexec params shell file
-**** Add CPU Architecture
-**** Add login credentials
-**** Add a list of [Mounted Image]
-**** Add scripts for setup and teardown
-** Fetch ExecEnvTemplate git repositories
-*** have a configurable 'git' repo-dir, e.g. in ~/.b7/exec_env_template_git_repos/
-** Add support for local ExecEnvTemplates directories
-** Add "Legacy" base-image import
-** Add support for creating config ISO images
-*** Add 'NotMounted'
+* TODO Add support for reusable 'BaseImage'
+** TODO Define BaseImageInfo currently empty, later: version, image type,...
+** TODO Define ImportBaseImage Name Repo (Maybe DiskSize)
+** TODO Define ExportBaseImage Name Repo
+** TODO Define Repository for 'base-images'
+*** TODO Add to B9Config 'baseImageRepositories'
+*** TODO Add to B9Config 'skipRepositoryCheck'
+*** TODO Add to B9Config 'baseImageCacheDir'
+*** TODO Add to BuildAction 'ClearCache'
 * Add support for the beqemu repo directory layout
 ** Introduce 'ExportToLiveRepo'
 *** Add Root directory parameter

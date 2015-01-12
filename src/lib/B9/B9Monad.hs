@@ -10,11 +10,13 @@ module B9.B9Monad ( B9
                   , getBuildId
                   , getBuildDir
                   , getExecEnvType
+                  , getRepositories
                   , cmd
                   ) where
 
 import           B9.B9Config
 import           B9.ConfigUtils
+import           B9.Repository
 import           Control.Applicative
 import           Control.Exception ( bracket )
 import           Control.Monad
@@ -22,16 +24,13 @@ import           Control.Monad.IO.Class
 import           Control.Monad.State
 import qualified Data.ByteString.Char8 as B
 import           Data.Functor ()
-import           Data.Monoid
 import           Data.Maybe
 import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.Word ( Word32 )
-import           System.CPUTime
 import           System.Directory
 import           System.Exit
 import           System.FilePath
-import           System.IO
 import           System.Locale ( defaultTimeLocale )
 import           System.Random ( randomIO )
 import           Text.Printf
@@ -39,7 +38,6 @@ import           Control.Concurrent.Async (Concurrently (..))
 import           Data.Conduit             (($$))
 import qualified Data.Conduit.List        as CL
 import           Data.Conduit.Process
-import qualified Data.Traversable as T
 
 data BuildState = BuildState { bsBuildId :: String
                              , bsCfgParser :: ConfigParser
@@ -91,8 +89,8 @@ run name cfgParser cfg action = do
       when (uniqueBuildDirs cfg && not (keepTempDirs cfg))
       $ removeDirectoryRecursive buildDir
 
-    generateBuildId name =
-      printf "%s-%08X" name <$> (randomIO :: IO Word32)
+    generateBuildId name' =
+      printf "%s-%08X" name' <$> (randomIO :: IO Word32)
 
 
 getBuildId :: B9 FilePath
@@ -109,6 +107,9 @@ getConfig = gets bsCfg
 
 getExecEnvType :: B9 ExecEnvType
 getExecEnvType = gets $ execEnvType . bsCfg
+
+getRepositories :: B9 [Repository]
+getRepositories = gets $ repositories . bsCfg
 
 cmd :: String -> B9 ()
 cmd cmdStr = do
@@ -182,7 +183,7 @@ instance MonadIO B9 where
     start <- B9 $ liftIO getCurrentTime
     res <- B9 $ liftIO m
     stop <- B9 $ liftIO getCurrentTime
-    let durMS = IoActionDuration $ (stop `diffUTCTime` start)
+    let durMS = IoActionDuration (stop `diffUTCTime` start)
     modify $
       \ ctx ->
        ctx { bsProf = durMS : bsProf ctx }

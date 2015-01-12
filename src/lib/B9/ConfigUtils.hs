@@ -34,7 +34,7 @@ import Data.ConfigFile
 import Data.Text.Template (render, templateSafe)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
-
+import Data.Data
 
 allOn :: (a -> Maybe Bool) -> a -> a -> Maybe Bool
 allOn getter x y = getAll <$> on mappend (fmap All . getter) x y
@@ -46,7 +46,7 @@ data SystemPath = Path FilePath
                 | InHomeDir FilePath
                 | InB9UserDir FilePath
                 | InTempDir FilePath
-                  deriving (Eq, Read, Show)
+                  deriving (Eq, Read, Show, Typeable, Data)
 
 resolve :: MonadIO m => SystemPath -> m FilePath
 resolve (Path p) = return p

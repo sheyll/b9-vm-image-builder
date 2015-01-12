@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 module B9.Project ( Project(..)
                   , emptyProject
                   , DiskTarget(..)
@@ -9,6 +8,8 @@ import Data.Monoid
 import B9.ShellScript ( Script(..), CmdVerbosity(..))
 import B9.ExecEnv
 import B9.DiskImages
+import B9.BaseImages
+import B9.Repository
 
 data Project = Project { projectName :: String
                        , projectDisks :: [Mounted DiskTarget]
@@ -27,6 +28,7 @@ emptyProject = mempty
 
 data DiskTarget = Export Image ImageSource
                 | Transient ImageSource
+                | Publish RepositoryRef BaseImage ImageSource
                 deriving (Read, Show, Typeable, Data)
 
 -- -----------------------------------------------------------------------------

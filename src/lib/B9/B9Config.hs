@@ -17,6 +17,7 @@ import Control.Monad.IO.Class
 import System.Directory
 
 import B9.ConfigUtils
+import B9.Repository
 
 data ExecEnvType = LibVirtLXC deriving (Eq, Show, Ord, Read)
 
@@ -31,6 +32,8 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , profileFile :: Maybe FilePath
                          , envVars :: [(String, String)]
                          , uniqueBuildDirs :: Bool
+                         , repositories :: [Repository]
+                         , repositoryCache :: RepositoryCache
                          } deriving (Show)
 
 instance Monoid B9Config where
@@ -44,6 +47,8 @@ instance Monoid B9Config where
              , profileFile = getLast $ on mappend (Last . profileFile) c c'
              , envVars = on mappend envVars c c'
              , uniqueBuildDirs = getAll $ on mappend (All . uniqueBuildDirs) c c'
+             , repositories = on mappend repositories c c'
+             , repositoryCache = on mappend repositoryCache c c'
              }
 
 defaultB9Config = B9Config { verbosity = Nothing
@@ -54,6 +59,9 @@ defaultB9Config = B9Config { verbosity = Nothing
                            , profileFile = Nothing
                            , envVars = []
                            , uniqueBuildDirs = True
+                           , repositories = mempty
+                           , repositoryCache = RepositoryCache
+                                                 (InB9UserDir "repo-cache")
                            }
 
 defaultB9ConfigFile = InB9UserDir "b9.conf"
@@ -66,6 +74,8 @@ execEnvTypeK = "exec_env"
 profileFileK = "profile_file"
 envVarsK = "environment_vars"
 uniqueBuildDirsK = "unique_build_dirs"
+repositoriesK = "repositories"
+repositoryCacheK = "repository_cache"
 
 cfgFileSection = "global"
 
@@ -95,6 +105,8 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
           cp <- setshow cp cfgFileSection profileFileK $ profileFile c
           cp <- setshow cp cfgFileSection envVarsK $ envVars c
           cp <- setshow cp cfgFileSection uniqueBuildDirsK $ uniqueBuildDirs c
+          cp <- setshow cp cfgFileSection repositoriesK $ repositories c
+          cp <- setshow cp cfgFileSection repositoryCacheK $ repositoryCache c
           return $ merge cp cpNonGlobal
     in case res of
      Left e ->
@@ -110,8 +122,6 @@ parseB9Config :: ConfigParser -> B9Config
 parseB9Config cp =
   let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
       geto = getOptionOr cp cfgFileSection
-      getm :: (Get_C a, Read a) => OptionSpec -> Maybe a
-      getm = getOptionM cp cfgFileSection
       c = mempty
   in B9Config {
     verbosity = geto verbosityK $ verbosity c
@@ -122,4 +132,6 @@ parseB9Config cp =
     , profileFile = geto profileFileK $ profileFile c
     , envVars = getOption cp cfgFileSection envVarsK <> envVars c
     , uniqueBuildDirs = geto uniqueBuildDirsK $ uniqueBuildDirs c
+    , repositories = getOption cp cfgFileSection repositoriesK <> repositories c
+    , repositoryCache = geto repositoryCacheK $ repositoryCache c
     }

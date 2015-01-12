@@ -1,11 +1,13 @@
-{-# LANGUAGE RankNTypes #-}
 module B9.Builder ( module B9.B9Monad
                   , module B9.ConfigUtils
                   , module B9.B9Config
                   , module B9.Project
                   , module B9.ExecEnv
                   , module B9.DiskImages
+                  , module B9.DiskImageBuilder
                   , module B9.ShellScript
+                  , module B9.Repository
+                  , module B9.BaseImages
                   , buildProject
                   , printProject
                   , runInEnvironment
@@ -19,20 +21,22 @@ import           Control.Monad.IO.Class ( liftIO )
 import           Data.List ( nub )
 import Data.Generics.Schemes
 import Data.Generics.Aliases
-import           Data.Maybe ( catMaybes )
+import Data.Maybe ( catMaybes )
 import System.Directory (createDirectoryIfMissing, canonicalizePath)
 import System.FilePath ( takeDirectory
                        , (</>)
                        , (<.>) )
-import           Text.Printf ( printf )
-
-import           B9.B9Monad
-import           B9.ConfigUtils
-import           B9.B9Config
-import           B9.Project
-import           B9.ExecEnv
-import           B9.DiskImages
-import           B9.ShellScript
+import Text.Printf ( printf )
+import B9.B9Monad
+import B9.ConfigUtils
+import B9.B9Config
+import B9.Project
+import B9.ExecEnv
+import B9.DiskImages
+import B9.DiskImageBuilder
+import B9.BaseImages
+import B9.ShellScript
+import B9.Repository
 import qualified B9.LibVirtLXC as LXC
 import Text.Show.Pretty (ppShow)
 
@@ -80,13 +84,20 @@ buildProject projectTemplate cfgParser cliCfg =
             return False
   where
     cfg = parseB9Config cfgParser <> cliCfg
+
     project = substProject (envVars cfg) projectTemplate
+
     exportImage ((imgI, _), (Export imgO@(Image imgOFile _) _, _)) = do
       liftIO $ createDirectoryIfMissing True $ takeDirectory imgOFile
       convert True imgI imgO
       return $ Just imgOFile
-    exportImage _ = return Nothing
 
+    exportImage ((imgI@(Image imgIFile _), _),
+                 (Publish biRepoRef baseImg _, _)) = do
+      publishBaseImage biRepoRef imgI baseImg
+      return $ Just imgIFile
+
+    exportImage _ = return Nothing
 
 createBuildImages :: [Mounted DiskTarget] -> B9 [Mounted Image]
 createBuildImages disks = mapM create $ zip [0..] disks
@@ -96,29 +107,37 @@ createBuildImages disks = mapM create $ zip [0..] disks
       buildDir <- getBuildDir
       envType <- getExecEnvType
       let (src, dest) = case disk of
-                         Export dest'@(Image _ destFmt') src ->
-                           let dest = changeImageDirectory buildDir
-                                      $ changeImageFormat destFmt dest'
-                               srcCompatible = compatibleImageTypes src
-                               destFmt = head
-                                         $ filter (`elem` allowedTypes)
-                                         $ filter (`elem` srcCompatible)
-                                         $ nub
-                                         $ destFmt' : srcCompatible
-                           in (src, dest)
+                         Publish _biRepo (BaseImage biName) biSrc ->
+                           let biDest = Image biDestFile biDestFmt
+                               biDestFile = buildDir
+                                            </> biName
+                                            <.> (show biDestFmt)
+                               biDestFmt = QCow2
+                           in (biSrc, biDest)
 
-                         Transient src ->
-                           let dest = Image destFile destFmt
-                               destFile = buildDir
-                                          </> ("disk_" ++ show diskIndex)
-                                          <.> (show destFmt)
-                               destFmt = head
-                                         $ filter (`elem` allowedTypes)
-                                         $ compatibleImageTypes src
-                           in (src, dest)
+                         Export dest'@(Image _ destFmt') expSrc ->
+                           let expDest = changeImageDirectory buildDir
+                                         $ changeImageFormat expDestFmt dest'
+                               srcCompatible = compatibleImageTypes src
+                               expDestFmt = head
+                                            $ filter (`elem` allowedTypes)
+                                            $ filter (`elem` srcCompatible)
+                                            $ nub
+                                            $ destFmt' : srcCompatible
+                           in (expSrc, expDest)
+
+                         Transient tSrc ->
+                           let tDest = Image tDestFile tDestFmt
+                               tDestFile = buildDir
+                                           </> ("disk_" ++ show diskIndex)
+                                           <.> (show tDestFmt)
+                               tDestFmt = head
+                                          $ filter (`elem` allowedTypes)
+                                          $ compatibleImageTypes src
+                           in (tSrc, tDest)
           allowedTypes = supportedImageTypes envType
-      srcAbs <- liftIO $ ensureAbsoluteImageSourceDirExists src
-      destAbs <- liftIO $ ensureAbsoluteImageDirExists dest
+      srcAbs <- liftIO (ensureAbsoluteImageSourceDirExists src)
+      destAbs <- liftIO (ensureAbsoluteImageDirExists dest)
       createImage srcAbs destAbs
       return (destAbs, m)
 
@@ -139,17 +158,31 @@ runInEnvironment env script = do
 substProject :: [(String,String)] -> Project -> Project
 substProject env p = everywhere gsubst p
   where gsubst :: forall a. Data a => a -> a
-        gsubst = (mkT substProject_)
-                          `extT` substMountPoint
-                            `extT` substDiskImage
-                               `extT` substSharedDir
-                                 `extT` substScript
-        substProject_ prj = prj { projectName = subst env (projectName p)}
-        substMountPoint (MountPoint x) = MountPoint  (subst env x)
-        substDiskImage (Image fp t) = Image (subst env fp) t
-        substSharedDir (SharedDirectory fp mp) = SharedDirectory (subst env fp)
-                                                                 mp
-        substScript (In fp s) = In (subst env fp) s
-        substScript (As fp s) = As (subst env fp) s
-        substScript (Run fp args) = Run (subst env fp) (map (subst env) args)
+        gsubst = mkT substProject_
+                  `extT` substMountPoint
+                    `extT` substDiskImage
+                       `extT` substSharedDir
+                         `extT` substScript
+        substProject_ prj = prj { projectName = sub (projectName p)}
+
+        substMountPoint (MountPoint x) = MountPoint (sub x)
+
+        substDiskImage (Image fp t) = Image (sub fp) t
+
+        substSharedDir (SharedDirectory fp mp) =
+          SharedDirectory (sub fp) mp
+
+        substScript (In fp s) = In (sub fp) s
+        substScript (Run fp args) = Run (sub fp) (map sub args)
+        substScript (As fp s) = As (sub fp) s
         substScript s = s
+
+        sub = subst env
+
+publishBaseImage :: RepositoryRef -> Image -> BaseImage -> B9 ()
+publishBaseImage repoRef buildImg baseImg = do
+  repo <- lookupRepository repoRef
+  buildDir <- getBuildDir
+  liftIO (uploadBaseImage repo buildDir buildImg baseImg)
+
+uploadBaseImage = undefined

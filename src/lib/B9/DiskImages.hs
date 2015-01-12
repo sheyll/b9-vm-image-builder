@@ -1,26 +1,16 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 module B9.DiskImages where
 
-import Control.Monad ( when )
-import Control.Monad.IO.Class
 import Data.List ( nub )
-
+import Data.Data
 
 import System.Directory ( createDirectoryIfMissing
                         , canonicalizePath
-                        , renameFile
-                        , removeFile
                         )
 import System.FilePath ( takeDirectory
                        , takeFileName
                        , replaceExtension
-                       , (<.>)
                        , (</>) )
-import           Text.Printf ( printf )
 import Data.Data
-
-import qualified B9.PartitionTable as PartitionTable
-import           B9.B9Monad
 
 data DiskSize = DiskSize Int SizeUnit deriving (Eq, Show, Read, Typeable, Data)
 
@@ -97,89 +87,3 @@ changeImageFormat fmt' (Image img _) = Image img' fmt'
 changeImageDirectory :: FilePath -> Image -> Image
 changeImageDirectory dir (Image img fmt) = Image img' fmt
   where img' = dir </> takeFileName img
-
-createImage :: ImageSource -> Image -> B9 ()
-createImage src = case src of
-                   (FileSystem fsType size) ->
-                     createFS fsType size
-                   (SourceImage srcImg part size) ->
-                     createImageFromImage srcImg part size
-                   (CopyOnWrite backingImg) ->
-                     createCOWImage backingImg
-
-createImageFromImage :: Image -> Partition -> DiskResize -> Image -> B9 ()
-createImageFromImage src part size out = do
-  let tmp = if isPartitioned part
-            then changeImageFormat Raw out
-            else out
-  convert False src tmp
-  extractPartition part tmp
-  resizeImage size tmp
-  convert True tmp out
-  where
-    extractPartition :: Partition -> Image -> B9 ()
-    extractPartition NoPT _ = return ()
-    extractPartition (Partition partIndex) (Image outFile Raw) = do
-      (start, len, blockSize) <- liftIO $ PartitionTable.getPartition partIndex
-                                 outFile
-      let tmpFile = outFile <.> "extracted"
-      dbgL $ printf "Extracting partition %i from '%s'" partIndex outFile
-      cmd $ printf "dd if='%s' of='%s' bs=%i skip=%i count=%i &> /dev/null"
-        outFile tmpFile blockSize start len
-      cmd $ printf "mv '%s' '%s'" tmpFile outFile
-
-    extractPartition (Partition partIndex) (Image outFile fmt) =
-      error $ printf "Extract partition %i from image '%s': Invalid format %s"
-                     partIndex outFile (show fmt)
-
-createFS :: FileSystem -> DiskSize -> Image -> B9 ()
-createFS imgFs imgSize out = do
-  let imgTemp@(Image imgTempFile _) = changeImageFormat Raw out
-      fsCmd = case imgFs of
-               Ext4 -> "mkfs.ext4"
-  dbgL $ printf "Creating empty raw image '%s' with size %s" imgTempFile
-    (toQemuSizeOptVal imgSize)
-  cmd $ printf "fallocate -l %s '%s'" (toQemuSizeOptVal imgSize) imgTempFile
-  dbgL $ printf "Creating file system %s" (show imgFs)
-  cmd $ printf "%s -q '%s'" fsCmd imgTempFile
-  convert True imgTemp out
-
-createCOWImage (Image backingFile _) (Image imgOut imgFmt) = do
-  dbgL $ printf "Creating COW image '%s' backed by '%s'" imgOut backingFile
-  cmd $ printf"qemu-img create -f %s -o backing_file='%s' '%s'"
-    (show imgFmt) backingFile imgOut
-
-resizeImage :: DiskResize -> Image -> B9 ()
-resizeImage KeepSize _ = return ()
-resizeImage (ResizeImage newSize) (Image img _) = do
-  dbgL $ printf "Resizing image to %s" $ toQemuSizeOptVal newSize
-  cmd $ printf "qemu-img resize -q '%s' %s" img $ toQemuSizeOptVal newSize
-resizeImage (ResizeFS Ext4 newSize) (Image img Raw) = do
-  let sopt = toQemuSizeOptVal newSize
-  dbgL $ printf "Resizing image and filesystem to %s" sopt
-  cmd $ printf "qemu-img resize -q '%s' %s" img sopt
-  cmd $ printf "resize2fs -f '%s'" img
-
-convert :: Bool -> Image -> Image -> B9 ()
-convert doMove (Image imgIn fmtIn) (Image imgOut fmtOut)
-  | (imgIn ==imgOut) = dbgL $ printf "No need to convert: '%s'" imgIn
-
-  | doMove && (fmtIn ==fmtOut) = do
-      dbgL $ printf "Moving '%s' to '%s'" imgIn imgOut
-      liftIO $ renameFile imgIn imgOut
-
-  | otherwise = do
-      dbgL $ printf "Converting %s to %s: '%s' to '%s'" (show fmtIn)
-        (show fmtOut) imgIn imgOut
-      cmd $ printf "qemu-img convert -q -f %s -O %s '%s' '%s'" (show fmtIn)
-        (show fmtOut) imgIn imgOut
-      when doMove $ do
-        dbgL $ printf "Removing '%s'" imgIn
-        liftIO $ removeFile imgIn
-
-toQemuSizeOptVal :: DiskSize -> String
-toQemuSizeOptVal (DiskSize amount u) = show amount ++ case u of
-  GB -> "G"
-  MB -> "M"
-  KB -> "K"
-  B -> ""
