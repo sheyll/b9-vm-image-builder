@@ -7,7 +7,9 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.DiskImageBuilder
                   , module B9.ShellScript
                   , module B9.Repository
+                  , module B9.RepositoryIO
                   , module B9.BaseImages
+                  , module B9.BaseImageBuilder
                   , buildProject
                   , printProject
                   , runInEnvironment
@@ -35,8 +37,10 @@ import B9.ExecEnv
 import B9.DiskImages
 import B9.DiskImageBuilder
 import B9.BaseImages
+import B9.BaseImageBuilder
 import B9.ShellScript
 import B9.Repository
+import B9.RepositoryIO
 import qualified B9.LibVirtLXC as LXC
 import Text.Show.Pretty (ppShow)
 
@@ -55,7 +59,7 @@ printProject projectTemplate cfgParser cliCfg = do
 
 buildProject :: Project -> ConfigParser -> B9Config -> IO Bool
 buildProject projectTemplate cfgParser cliCfg =
-  run (projectName project) cfgParser cliCfg $ do
+  run (projectName project) cfgParser cfg $ do
   infoL "START BUILD"
   getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
   traceL $ printf "USING PROJECT TEMPLATE: %s" (ppShow projectTemplate)
@@ -93,8 +97,8 @@ buildProject projectTemplate cfgParser cliCfg =
       return $ Just imgOFile
 
     exportImage ((imgI@(Image imgIFile _), _),
-                 (Publish biRepoRef baseImg _, _)) = do
-      publishBaseImage biRepoRef imgI baseImg
+                 (Publish baseImg _, _)) = do
+      publishBaseImage imgI baseImg
       return $ Just imgIFile
 
     exportImage _ = return Nothing
@@ -107,7 +111,7 @@ createBuildImages disks = mapM create $ zip [0..] disks
       buildDir <- getBuildDir
       envType <- getExecEnvType
       let (src, dest) = case disk of
-                         Publish _biRepo (BaseImage biName) biSrc ->
+                         Publish (BaseImage biName) biSrc ->
                            let biDest = Image biDestFile biDestFmt
                                biDestFile = buildDir
                                             </> biName
@@ -178,11 +182,3 @@ substProject env p = everywhere gsubst p
         substScript s = s
 
         sub = subst env
-
-publishBaseImage :: RepositoryRef -> Image -> BaseImage -> B9 ()
-publishBaseImage repoRef buildImg baseImg = do
-  repo <- lookupRepository repoRef
-  buildDir <- getBuildDir
-  liftIO (uploadBaseImage repo buildDir buildImg baseImg)
-
-uploadBaseImage = undefined

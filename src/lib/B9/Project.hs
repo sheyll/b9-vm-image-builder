@@ -28,7 +28,7 @@ emptyProject = mempty
 
 data DiskTarget = Export Image ImageSource
                 | Transient ImageSource
-                | Publish RepositoryRef BaseImage ImageSource
+                | Publish BaseImage ImageSource
                 deriving (Read, Show, Typeable, Data)
 
 -- -----------------------------------------------------------------------------

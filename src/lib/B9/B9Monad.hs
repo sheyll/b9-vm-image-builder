@@ -10,7 +10,8 @@ module B9.B9Monad ( B9
                   , getBuildId
                   , getBuildDir
                   , getExecEnvType
-                  , getRepositories
+                  , getRepository
+                  , getRepositoryCache
                   , cmd
                   ) where
 
@@ -43,6 +44,8 @@ data BuildState = BuildState { bsBuildId :: String
                              , bsCfgParser :: ConfigParser
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
+                             , bsRepository :: Maybe Repository
+                             , bsRepositoryCache :: Maybe Repository
                              , bsProf :: [ProfilingEntry]
                              }
 
@@ -57,7 +60,9 @@ run name cfgParser cfg action = do
   bracket (createBuildDir buildId) removeBuildDir (run' buildId)
   where
     run' buildId buildDir = do
-      let ctx = BuildState buildId cfgParser cfg buildDir []
+      let ctx = BuildState buildId cfgParser cfg buildDir repo repoCache []
+          repo = repository cfg >>= return . lookupRepository cfgParser
+          repoCache = repositoryCache cfg >>= return . lookupRepository cfgParser
       (r, ctxOut) <- runStateT (runB9 action) ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
@@ -106,10 +111,13 @@ getConfig :: B9 B9Config
 getConfig = gets bsCfg
 
 getExecEnvType :: B9 ExecEnvType
-getExecEnvType = gets $ execEnvType . bsCfg
+getExecEnvType = gets (execEnvType . bsCfg)
 
-getRepositories :: B9 [Repository]
-getRepositories = gets $ repositories . bsCfg
+getRepository :: B9 (Maybe Repository)
+getRepository = gets bsRepository
+
+getRepositoryCache :: B9 (Maybe Repository)
+getRepositoryCache = gets bsRepositoryCache
 
 cmd :: String -> B9 ()
 cmd cmdStr = do

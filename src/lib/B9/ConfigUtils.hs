@@ -12,6 +12,7 @@ module B9.ConfigUtils ( allOn
                       , module Data.ConfigFile
                       , UUID (..)
                       , randomUUID
+                      , tell
                       , consult
                       , maybeConsult
                       , maybeConsultSystemPath
@@ -35,6 +36,7 @@ import Data.Text.Template (render, templateSafe)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
 import Data.Data
+import Text.Show.Pretty (ppShow)
 
 allOn :: (a -> Maybe Bool) -> a -> a -> Maybe Bool
 allOn getter x y = getAll <$> on mappend (fmap All . getter) x y
@@ -66,6 +68,11 @@ ensureDir p = liftIO (createDirectoryIfMissing True $ takeDirectory p)
 data ReaderException = ReaderException FilePath String
   deriving (Show, Typeable)
 instance Exception ReaderException
+
+tell :: (MonadIO m, Show a) => FilePath -> a -> m ()
+tell f x = do
+  ensureDir f
+  liftIO (writeFile f (ppShow x))
 
 consult :: (MonadIO m, Read a) => FilePath -> m a
 consult f = liftIO $ do

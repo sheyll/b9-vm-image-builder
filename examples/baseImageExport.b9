@@ -1,0 +1,17 @@
+Project { projectName = "base-image-arch"
+               , projectDisks =
+                   [ (Publish
+                        (BaseImage "test-base-image")
+                        (CopyOnWrite
+                         (Image "../beqemu7/archlinux_devel_base_img.qcow2" QCow2))
+                   , MountPoint "/") ]
+               , projectSharedDirectories =  [ ]
+               , projectBuildScript =
+                 Verbosity Debug
+                 [ Run "dhcpcd" []
+                 , Run "ls" ["-la", "/"] ]
+               , projectResources = Resources { maxMemory = RamSize 8 GB
+                                              , cpuCount = 4
+                                              , cpuArch = X86_64
+                                              }
+           }

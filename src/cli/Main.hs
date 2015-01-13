@@ -28,8 +28,13 @@ parseCommandLine =
                 <> progDesc "Build and run VM-Images inside LXC containers.\
                             \ Custom arguments follow after '--' and are\
                             \ accessable in many strings in project configs \
-                            \ trough mustache templates, i.e. '{{N}}' referes to\
-                            \ positional argument $N."
+                            \ trough shell like variable references, i.e. \
+                            \'${arg_N}' referes to positional argument $N.\n\
+                            \\n\
+                            \Repository names passed to the command line are\
+                            \ looked up in the B9 configuration file, which is\
+                            \ on Un*x like system per default located in: \
+                            \ '~/.b9/b9.config'"
                 <> headerDoc (Just helpHeader)))
 
 helpHeader = linebreak <> b9AsciiArt <> linebreak
@@ -74,7 +79,6 @@ cliArgParser = toCliOpts
                              <> metavar "FILENAME"))
                <*> optional (strOption
                              (help "Output file for a command/timing profile"
-                             <> short 'p'
                              <> long "profile-file"
                              <> metavar "FILENAME"))
                <*> optional (strOption
@@ -88,7 +92,19 @@ cliArgParser = toCliOpts
                <*> switch (help "Predictable build directory names"
                              <> short 'u'
                              <> long "predictable-build-dir")
-               <*> many (strArgument idm)
+               <*> optional (strOption
+                             (help "Cache downloaded base images downloaded in a \
+                                   \custom repository, default: 'cache-repo' \
+                                   \defined in the B9 config file"
+                             <> long "repo-cache"
+                             <> metavar "REPOSITORY_ID"))
+               <*> optional (strOption
+                             (help "Publish base images to a repository defined\
+                                   \ in the B9 config file"
+                              <> short 'P'
+                              <> long "publish-to"
+                              <> metavar "REPOSITORY_ID"))
+              <*> many (strArgument idm)
 
   where
     toCliOpts :: [FilePath]
@@ -101,10 +117,12 @@ cliArgParser = toCliOpts
               -> Maybe FilePath
               -> Bool
               -> Bool
+              -> Maybe String
+              -> Maybe String
               -> [String]
               -> CliOpts
     toCliOpts ps cfg dryRun verbose quiet logF profF buildRoot keep notUnique
-              rest =
+              repo repoCache rest =
       let minLogLevel = if verbose then Just LogTrace else
                           if quiet then Just LogError else Nothing
           extraArgs = zip (("arg_"++) . show <$> [1..]) rest
@@ -120,5 +138,7 @@ cliArgParser = toCliOpts
                                         , keepTempDirs = keep
                                         , uniqueBuildDirs = not notUnique
                                         , envVars = extraArgs
+                                        , repository = repo
+                                        , repositoryCache = repoCache
                                         }
                  }

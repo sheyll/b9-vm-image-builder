@@ -32,8 +32,8 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , profileFile :: Maybe FilePath
                          , envVars :: [(String, String)]
                          , uniqueBuildDirs :: Bool
-                         , repositories :: [Repository]
-                         , repositoryCache :: RepositoryCache
+                         , repositoryCache :: Maybe String
+                         , repository :: Maybe String
                          } deriving (Show)
 
 instance Monoid B9Config where
@@ -46,9 +46,9 @@ instance Monoid B9Config where
              , execEnvType = LibVirtLXC
              , profileFile = getLast $ on mappend (Last . profileFile) c c'
              , envVars = on mappend envVars c c'
-             , uniqueBuildDirs = getAll $ on mappend (All . uniqueBuildDirs) c c'
-             , repositories = on mappend repositories c c'
-             , repositoryCache = on mappend repositoryCache c c'
+             , uniqueBuildDirs = getAll ((mappend `on` (All . uniqueBuildDirs)) c c')
+             , repositoryCache = getLast ((mappend `on` (Last . repositoryCache)) c c')
+             , repository = getLast ((mappend `on` (Last . repository)) c c')
              }
 
 defaultB9Config = B9Config { verbosity = Nothing
@@ -59,10 +59,15 @@ defaultB9Config = B9Config { verbosity = Nothing
                            , profileFile = Nothing
                            , envVars = []
                            , uniqueBuildDirs = True
-                           , repositories = mempty
-                           , repositoryCache = RepositoryCache
-                                                 (InB9UserDir "repo-cache")
+                           , repository = Nothing
+                           , repositoryCache = Just defaultRepositoryCacheId
                            }
+
+defaultRepositoryCacheId = "cache"
+
+defaultRepositoryCache =
+  Repository defaultRepositoryCacheId
+             (LocalRepo (InB9UserDir defaultRepositoryCacheId))
 
 defaultB9ConfigFile = InB9UserDir "b9.conf"
 
@@ -74,8 +79,8 @@ execEnvTypeK = "exec_env"
 profileFileK = "profile_file"
 envVarsK = "environment_vars"
 uniqueBuildDirsK = "unique_build_dirs"
-repositoriesK = "repositories"
 repositoryCacheK = "repository_cache"
+repositoryK = "repository"
 
 cfgFileSection = "global"
 
@@ -96,6 +101,7 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
     let res = do
           let cp = emptyCP
               c = cliCfg
+          cp <- writeRepositoryToB9Config defaultRepositoryCache cp
           cp <- add_section cp cfgFileSection
           cp <- setshow cp cfgFileSection verbosityK $ verbosity c
           cp <- setshow cp cfgFileSection logFileK $ logFile c
@@ -105,14 +111,11 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
           cp <- setshow cp cfgFileSection profileFileK $ profileFile c
           cp <- setshow cp cfgFileSection envVarsK $ envVars c
           cp <- setshow cp cfgFileSection uniqueBuildDirsK $ uniqueBuildDirs c
-          cp <- setshow cp cfgFileSection repositoriesK $ repositories c
           cp <- setshow cp cfgFileSection repositoryCacheK $ repositoryCache c
           return $ merge cp cpNonGlobal
     in case res of
-     Left e ->
-       liftIO $ throwIO (IniFileException cfgFile e)
-     Right cp ->
-       liftIO $ writeFile cfgFile $ to_string cp
+     Left e -> liftIO (throwIO (IniFileException cfgFile e))
+     Right cp -> liftIO (writeFile cfgFile (to_string cp))
 
 readB9Config :: MonadIO m => (Maybe SystemPath) -> m ConfigParser
 readB9Config Nothing = readB9Config (Just defaultB9ConfigFile)
@@ -123,6 +126,7 @@ parseB9Config cp =
   let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
       geto = getOptionOr cp cfgFileSection
       c = mempty
+
   in B9Config {
     verbosity = geto verbosityK $ verbosity c
     , logFile = geto logFileK $ logFile c
@@ -132,6 +136,7 @@ parseB9Config cp =
     , profileFile = geto profileFileK $ profileFile c
     , envVars = getOption cp cfgFileSection envVarsK <> envVars c
     , uniqueBuildDirs = geto uniqueBuildDirsK $ uniqueBuildDirs c
-    , repositories = getOption cp cfgFileSection repositoriesK <> repositories c
-    , repositoryCache = geto repositoryCacheK $ repositoryCache c
+    , repositoryCache =    getOption cp cfgFileSection repositoryCacheK
+                        <> repositoryCache c
+    , repository = getOption cp cfgFileSection repositoryK <> repository c
     }
