@@ -40,14 +40,24 @@
 ** Do not remove the build directory
 ** Do not export any images
 * TODO Add support for reusable 'BaseImage'
-** TODO Define BaseImageInfo currently empty, later: version, image type,...
-** TODO Define ImportBaseImage Name Repo (Maybe DiskSize)
+** DONE Define BaseImageInfo currently empty, later: version, image type,...
+** DONE Define ImportBaseImage Name Repo (Maybe DiskSize)
 ** TODO Define ExportBaseImage Name Repo
-** TODO Define Repository for 'base-images'
-*** TODO Add to B9Config 'baseImageRepositories'
+** DONE Define Repository for 'base-images'
+*** TODO Download base image infos
+*** TODO Cache impl
+*** DONE Add to B9Config 'baseImageRepositories'
 *** TODO Add to B9Config 'skipRepositoryCheck'
-*** TODO Add to B9Config 'baseImageCacheDir'
+*** DONE Add to B9Config 'baseImageCacheDir'
 *** TODO Add to BuildAction 'ClearCache'
+*** TODO Add 'show repos' action
+*** TODO Add 'list repo contents' action
+*** TODO Add 'refresh repos action
+*** TODO Add 'add remote repo' with sshkey generation
+* Add 'system-setup' helper action
+** Check for nbd
+** Check that libvirt is running
+** Check that all important tools are installed
 * Add support for the beqemu repo directory layout
 ** Introduce 'ExportToLiveRepo'
 *** Add Root directory parameter
