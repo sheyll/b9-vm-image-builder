@@ -4,4 +4,8 @@
 
 set -e
 
-cabal run -- $@
+if [[ ! -x .cabal-sandbox/bin/b9c ]]; then
+    cabal install
+fi
+
+.cabal-sandbox/bin/b9c  $@
