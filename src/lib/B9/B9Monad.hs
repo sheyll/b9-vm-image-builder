@@ -45,7 +45,7 @@ data BuildState = BuildState { bsBuildId :: String
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
                              , bsRepository :: Maybe Repository
-                             , bsRepositoryCache :: Maybe Repository
+                             , bsRepositoryCache :: Repository
                              , bsProf :: [ProfilingEntry]
                              }
 
@@ -62,7 +62,7 @@ run name cfgParser cfg action = do
     run' buildId buildDir = do
       let ctx = BuildState buildId cfgParser cfg buildDir repo repoCache []
           repo = repository cfg >>= return . lookupRepository cfgParser
-          repoCache = repositoryCache cfg >>= return . lookupRepository cfgParser
+          repoCache = Repository "CACHE" (LocalRepo (repositoryCache cfg))
       (r, ctxOut) <- runStateT (runB9 action) ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
@@ -116,7 +116,7 @@ getExecEnvType = gets (execEnvType . bsCfg)
 getRepository :: B9 (Maybe Repository)
 getRepository = gets bsRepository
 
-getRepositoryCache :: B9 (Maybe Repository)
+getRepositoryCache :: B9 Repository
 getRepositoryCache = gets bsRepositoryCache
 
 cmd :: String -> B9 ()

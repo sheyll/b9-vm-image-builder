@@ -30,6 +30,15 @@ baseImageRootDirectory = "b9_base_images"
 baseImageInfoFile = "BaseImageInfo"
 baseImageType = QCow2
 
+-- List BIs: rsync fetch only the baseimage infos (=> need file pattern for this)
+listBaseImagesFromCache :: B9 [BaseImageInfo]
+listBaseImagesFromCache = do
+  repoCacheDir <- getRepositoryCache
+  --findFiles
+  return []
+  -- getBI: Fetch a BI from Repo and provide a local Image
+
+
 createBaseImage :: Image -> BaseImage -> B9 FilePath
 createBaseImage buildImg baseImg@(BaseImage biName) = do
   buildId <- getBuildId
@@ -58,17 +67,12 @@ createBaseImage buildImg baseImg@(BaseImage biName) = do
 publishBaseImage :: Image -> BaseImage -> B9 ()
 publishBaseImage buildImg baseImg = do
   cacheRepo <- getRepositoryCache
+  directoryToUpload <- createBaseImage buildImg baseImg
+  publishDirectoryRecursive cacheRepo directoryToUpload
+  infoL (printf "CACHED BASE IMAGE '%s'" (show baseImg))
   publishRepo <- getRepository
-  let anyWorkRequired = isJust cacheRepo || isJust publishRepo
-      (Just (Repository publishRepoId _)) = publishRepo
-      (Just (Repository cacheRepoId _)) = cacheRepo
-  when anyWorkRequired $ do
-    directoryToUpload <- createBaseImage buildImg baseImg
-    when (isJust cacheRepo) $ do
-      publishDirectoryRecursive (fromJust cacheRepo) directoryToUpload
-      infoL (printf "CACHED BASE IMAGE '%s' INTO '%s'" (show baseImg)
-                                                       cacheRepoId)
-    when (isJust publishRepo) $ do
-      publishDirectoryRecursive (fromJust publishRepo) directoryToUpload
-      infoL (printf "PUBLISHED BASE IMAGE '%s' TO '%s'" (show baseImg)
-                                                         publishRepoId)
+  when (isJust publishRepo) $ do
+    let Repository publishRepoId _ = fromJust publishRepo
+    publishDirectoryRecursive (fromJust publishRepo) directoryToUpload
+    infoL (printf "PUBLISHED BASE IMAGE '%s' TO '%s'" (show baseImg)
+                                                       publishRepoId)

@@ -37,18 +37,7 @@ parseCommandLine =
                             \ '~/.b9/b9.config'"
                 <> headerDoc (Just helpHeader)))
 
-helpHeader = linebreak <> b9AsciiArt <> linebreak
-             <> text "B9 - a benign VM-Image build tool"
-
-b9AsciiArt = string "\
-\                      @!#?@!\n\
-\               ,----, /\n\
-\              /   9 9\\__\n\
-\       B   E  |       _ \\   I   G   N\n\
-\.  .  .  .  . \\      / \\N' .  .  .  .  .  .  .  .  .  .  .  .  .\n\
-\ .   .   .   . `||-||.   .   .   .   .   .   .   .   .   .   .   .\n\
-\   .    .    .  |L_|L_ .    .    .    .    .    .    .    .    .\n\
-\=================================================================="
+helpHeader = linebreak <> text "B9 - a benign VM-Image build tool"
 
 cliArgParser = toCliOpts
                <$> some (strOption
@@ -93,16 +82,14 @@ cliArgParser = toCliOpts
                              <> short 'u'
                              <> long "predictable-build-dir")
                <*> optional (strOption
-                             (help "Cache downloaded base images downloaded in a \
-                                   \custom repository, default: 'cache-repo' \
-                                   \defined in the B9 config file"
+                             (help "Cache downloaded base images in a \
+                                   \custom directory, default: '~/.b9/repo-cache'"
                              <> long "repo-cache"
-                             <> metavar "REPOSITORY_ID"))
+                             <> metavar "DIRECTORY"))
                <*> optional (strOption
-                             (help "Publish base images to a repository defined\
-                                   \ in the B9 config file"
-                              <> short 'P'
-                              <> long "publish-to"
+                             (help "Base image repository"
+                              <> short 'r'
+                              <> long "repo"
                               <> metavar "REPOSITORY_ID"))
               <*> many (strArgument idm)
 
@@ -118,27 +105,32 @@ cliArgParser = toCliOpts
               -> Bool
               -> Bool
               -> Maybe String
-              -> Maybe String
+              -> Maybe FilePath
               -> [String]
               -> CliOpts
     toCliOpts ps cfg dryRun verbose quiet logF profF buildRoot keep notUnique
-              repo repoCache rest =
+              repo mRepoCache rest =
       let minLogLevel = if verbose then Just LogTrace else
                           if quiet then Just LogError else Nothing
           extraArgs = zip (("arg_"++) . show <$> [1..]) rest
+          b9cfg' = let b9cfg = mempty { verbosity = minLogLevel
+                                      , logFile = logF
+                                      , profileFile = profF
+                                      , buildDirRoot = buildRoot
+                                      , keepTempDirs = keep
+                                      , uniqueBuildDirs = not notUnique
+                                      , envVars = extraArgs
+                                      , repository = repo
+                                      }
+                   in case mRepoCache of
+                        Nothing -> b9cfg
+                        Just repoCache ->
+                          let rc = Path repoCache
+                          in b9cfg { repositoryCache = rc }
       in CliOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
                  , projectFiles = ps
                  , cliAction = if dryRun
                                   then DryRun
                                   else RunBuild
-                 , cliB9Config = mempty { verbosity = minLogLevel
-                                        , logFile = logF
-                                        , profileFile = profF
-                                        , buildDirRoot = buildRoot
-                                        , keepTempDirs = keep
-                                        , uniqueBuildDirs = not notUnique
-                                        , envVars = extraArgs
-                                        , repository = repo
-                                        , repositoryCache = repoCache
-                                        }
+                 , cliB9Config = b9cfg'
                  }

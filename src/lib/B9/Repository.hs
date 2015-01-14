@@ -1,5 +1,4 @@
-module B9.Repository (RepositoryRef(..)
-                     ,Repository(..)
+module B9.Repository (Repository(..)
                      ,RepositoryType(..)
                      ,SshPrivKey(..)
                      ,SshRemoteHost(..)
@@ -17,9 +16,6 @@ import Data.ConfigFile
 import Text.Printf
 
 import B9.ConfigUtils
-
-data RepositoryRef = RepositoryId String | DefaultRepository
-  deriving (Read, Show, Typeable, Data)
 
 data Repository = Repository String RepositoryType
   deriving (Read, Show, Typeable, Data)

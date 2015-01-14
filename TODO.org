@@ -36,24 +36,27 @@
 *** Create git01 repo
 * DONE Add a check mode that tells what would happen if a project file executed
 * Add a 'beq_run' pendant
+** Add --shell param
 ** Add to Project projectPersistentEnvInit (Maybe Script)
 ** Do not remove the build directory
 ** Do not export any images
-* TODO Add support for reusable 'BaseImage'
+* Add support for reusable 'BaseImage'
 ** DONE Define BaseImageInfo currently empty, later: version, image type,...
-** DONE Define ImportBaseImage Name Repo (Maybe DiskSize)
-** TODO Define ExportBaseImage Name Repo
+** TODO Define ImportBaseImage Name Repo (Maybe DiskSize)
+** DONE Define ExportBaseImage Name Repo
 ** DONE Define Repository for 'base-images'
-*** TODO Download base image infos
-*** TODO Cache impl
-*** DONE Add to B9Config 'baseImageRepositories'
-*** TODO Add to B9Config 'skipRepositoryCheck'
-*** DONE Add to B9Config 'baseImageCacheDir'
-*** TODO Add to BuildAction 'ClearCache'
-*** TODO Add 'show repos' action
-*** TODO Add 'list repo contents' action
-*** TODO Add 'refresh repos action
-*** TODO Add 'add remote repo' with sshkey generation
+** Add Author and Description fields to base image
+** Add build host to base image info
+** Download base image infos
+** Cache impl
+** DONE Add to B9Config 'baseImageRepositories'
+** Add to B9Config 'skipRepositoryCheck'
+** DONE Add to B9Config 'baseImageCacheDir'
+** Add to BuildAction 'ClearCache'
+** Add 'show repos' action
+** Add 'list repo contents' action
+** Add 'refresh repos action
+** Add 'add remote repo' with sshkey generation
 * Add 'system-setup' helper action
 ** Check for nbd
 ** Check that libvirt is running

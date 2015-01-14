@@ -32,7 +32,7 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , profileFile :: Maybe FilePath
                          , envVars :: [(String, String)]
                          , uniqueBuildDirs :: Bool
-                         , repositoryCache :: Maybe String
+                         , repositoryCache :: SystemPath
                          , repository :: Maybe String
                          } deriving (Show)
 
@@ -47,7 +47,7 @@ instance Monoid B9Config where
              , profileFile = getLast $ on mappend (Last . profileFile) c c'
              , envVars = on mappend envVars c c'
              , uniqueBuildDirs = getAll ((mappend `on` (All . uniqueBuildDirs)) c c')
-             , repositoryCache = getLast ((mappend `on` (Last . repositoryCache)) c c')
+             , repositoryCache = repositoryCache c'
              , repository = getLast ((mappend `on` (Last . repository)) c c')
              }
 
@@ -60,14 +60,10 @@ defaultB9Config = B9Config { verbosity = Nothing
                            , envVars = []
                            , uniqueBuildDirs = True
                            , repository = Nothing
-                           , repositoryCache = Just defaultRepositoryCacheId
+                           , repositoryCache = defaultRepositoryCache
                            }
 
-defaultRepositoryCacheId = "cache"
-
-defaultRepositoryCache =
-  Repository defaultRepositoryCacheId
-             (LocalRepo (InB9UserDir defaultRepositoryCacheId))
+defaultRepositoryCache = InB9UserDir "repo-cache"
 
 defaultB9ConfigFile = InB9UserDir "b9.conf"
 
@@ -101,17 +97,16 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
     let res = do
           let cp = emptyCP
               c = cliCfg
-          cp <- writeRepositoryToB9Config defaultRepositoryCache cp
           cp <- add_section cp cfgFileSection
-          cp <- setshow cp cfgFileSection verbosityK $ verbosity c
-          cp <- setshow cp cfgFileSection logFileK $ logFile c
-          cp <- setshow cp cfgFileSection buildDirRootK $ buildDirRoot c
-          cp <- setshow cp cfgFileSection keepTempDirsK $ keepTempDirs c
-          cp <- setshow cp cfgFileSection execEnvTypeK $ execEnvType c
-          cp <- setshow cp cfgFileSection profileFileK $ profileFile c
-          cp <- setshow cp cfgFileSection envVarsK $ envVars c
-          cp <- setshow cp cfgFileSection uniqueBuildDirsK $ uniqueBuildDirs c
-          cp <- setshow cp cfgFileSection repositoryCacheK $ repositoryCache c
+          cp <- setshow cp cfgFileSection verbosityK (verbosity c)
+          cp <- setshow cp cfgFileSection logFileK (logFile c)
+          cp <- setshow cp cfgFileSection buildDirRootK (buildDirRoot c)
+          cp <- setshow cp cfgFileSection keepTempDirsK (keepTempDirs c)
+          cp <- setshow cp cfgFileSection execEnvTypeK (execEnvType c)
+          cp <- setshow cp cfgFileSection profileFileK (profileFile c)
+          cp <- setshow cp cfgFileSection envVarsK (envVars c)
+          cp <- setshow cp cfgFileSection uniqueBuildDirsK (uniqueBuildDirs c)
+          cp <- setshow cp cfgFileSection repositoryCacheK (repositoryCache c)
           return $ merge cp cpNonGlobal
     in case res of
      Left e -> liftIO (throwIO (IniFileException cfgFile e))
@@ -128,15 +123,14 @@ parseB9Config cp =
       c = mempty
 
   in B9Config {
-    verbosity = geto verbosityK $ verbosity c
-    , logFile = geto logFileK $ logFile c
-    , buildDirRoot = geto buildDirRootK $ buildDirRoot c
-    , keepTempDirs = geto keepTempDirsK $ keepTempDirs c
-    , execEnvType = geto execEnvTypeK $ execEnvType c
-    , profileFile = geto profileFileK $ profileFile c
+    verbosity = geto verbosityK (verbosity c)
+    , logFile = geto logFileK (logFile c)
+    , buildDirRoot = geto buildDirRootK (buildDirRoot c)
+    , keepTempDirs = geto keepTempDirsK (keepTempDirs c)
+    , execEnvType = geto execEnvTypeK (execEnvType c)
+    , profileFile = geto profileFileK (profileFile c)
     , envVars = getOption cp cfgFileSection envVarsK <> envVars c
-    , uniqueBuildDirs = geto uniqueBuildDirsK $ uniqueBuildDirs c
-    , repositoryCache =    getOption cp cfgFileSection repositoryCacheK
-                        <> repositoryCache c
+    , uniqueBuildDirs = geto uniqueBuildDirsK (uniqueBuildDirs c)
+    , repositoryCache = geto repositoryCacheK (repositoryCache c)
     , repository = getOption cp cfgFileSection repositoryK <> repository c
     }
