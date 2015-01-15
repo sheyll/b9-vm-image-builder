@@ -1,0 +1,17 @@
+Project { projectName = "archlinux-img"
+               , projectDisks =
+                   [ (Share
+                        (ImageInfo "archlinux-img")
+                        (CopyOnWrite
+                         (Image "${arg_1}" QCow2))
+                   , MountPoint "/") ]
+               , projectSharedDirectories =  [ ]
+               , projectBuildScript =
+                 Verbosity Debug
+                 [ Run "dhcpcd" []
+                 , Run "ls" ["-la", "/"] ]
+               , projectResources = Resources { maxMemory = RamSize 8 GB
+                                              , cpuCount = 4
+                                              , cpuArch = X86_64
+                                              }
+           }

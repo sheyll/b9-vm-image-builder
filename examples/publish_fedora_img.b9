@@ -1,9 +1,9 @@
-Project { projectName = "base-image-arch"
+Project { projectName = "fedora-img"
                , projectDisks =
-                   [ (Publish
-                        (BaseImage "test-base-image")
+                   [ (Share
+                        (ImageInfo "fedora-img")
                         (CopyOnWrite
-                         (Image "../beqemu7/archlinux_devel_base_img.qcow2" QCow2))
+                         (Image "${arg_1}" QCow2))
                    , MountPoint "/") ]
                , projectSharedDirectories =  [ ]
                , projectBuildScript =
