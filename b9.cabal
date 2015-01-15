@@ -1,7 +1,7 @@
 name:                b9
 version:             0.1.0.0
-synopsis:            A Benign VM-Build Tool
-description:         A set of Linux tools for using and creating VM Images from a declaretiv build script using Libvirt-LXC.
+synopsis:            Use light-weight containers to build heavy-weight VM images.
+description:         A set of Linux tools for using and creating VM Images from a declaretiv build script using Libvirt-LXC with a focus in compatibility to non-lxc hypervisors.
 license:             MIT
 license-file:        LICENSE
 author:              Sven Heyll <svh@posteo.de>
@@ -11,7 +11,6 @@ category:            Development
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
-
 
 library
   exposed-modules:   B9
@@ -29,8 +28,7 @@ library
                    , B9.LibVirtLXC
                    , B9.Repository
                    , B9.RepositoryIO
-                   , B9.BaseImages
-                   , B9.BaseImageBuilder
+                   , B9.ImageShareing
   -- other-extensions:
   build-depends:     ConfigFile >= 1.1.3 && <1.2
                    , async >=2.0.1 && <2.1

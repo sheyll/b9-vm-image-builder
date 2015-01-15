@@ -8,6 +8,7 @@ module B9.B9Monad ( B9
                   , getConfigParser
                   , getConfig
                   , getBuildId
+                  , getBuildDate
                   , getBuildDir
                   , getExecEnvType
                   , getRepository
@@ -41,42 +42,50 @@ import qualified Data.Conduit.List        as CL
 import           Data.Conduit.Process
 
 data BuildState = BuildState { bsBuildId :: String
+                             , bsBuildDate :: String
                              , bsCfgParser :: ConfigParser
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
                              , bsRepository :: Maybe Repository
-                             , bsRepositoryCache :: Repository
+                             , bsRepositoryCache :: FilePath
                              , bsProf :: [ProfilingEntry]
                              }
-
 data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
 run :: String -> ConfigParser -> B9Config -> B9 a -> IO a
 run name cfgParser cfg action = do
-  buildId <- if uniqueBuildDirs cfg then generateBuildId name
+  buildId <- if uniqueBuildDirs cfg then generateBuildId
              else return name
-  bracket (createBuildDir buildId) removeBuildDir (run' buildId)
+  now <- getCurrentTime
+  bracket (createBuildDir buildId) removeBuildDir (run' buildId now)
   where
-    run' buildId buildDir = do
-      let ctx = BuildState buildId cfgParser cfg buildDir repo repoCache []
+    run' buildId now buildDir = do
+      repoCacheDir <- initRepoCache
+      let ctx = BuildState buildId buildDate cfgParser cfg buildDir
+                           repo repoCacheDir []
           repo = repository cfg >>= return . lookupRepository cfgParser
-          repoCache = Repository "CACHE" (LocalRepo (repositoryCache cfg))
+          buildDate = formatTime undefined "%F-%T" now
       (r, ctxOut) <- runStateT (runB9 action) ctx
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
                   (unlines $ show <$> (reverse $ bsProf ctxOut))
       return r
 
+    initRepoCache = do
+      r <- initRepo (Repository "CACHE" (LocalRepo (repositoryCache cfg)))
+      let (Repository _ (LocalRepo (Path cacheDir))) = r
+      return cacheDir
+
     createBuildDir buildId = do
       if uniqueBuildDirs cfg then do
-        let subDir = "BUILD-" ++ buildId
+        let subDir = "BUILD-" ++ name ++ "-" ++ buildId
         buildDir <- resolveBuildDir subDir
         createDirectory buildDir
         canonicalizePath buildDir
        else do
-        let subDir = "BUILD-" ++ name
+        let subDir = "BUILD-" ++ buildId
         buildDir <- resolveBuildDir subDir
         createDirectoryIfMissing True buildDir
         canonicalizePath buildDir
@@ -94,12 +103,14 @@ run name cfgParser cfg action = do
       when (uniqueBuildDirs cfg && not (keepTempDirs cfg))
       $ removeDirectoryRecursive buildDir
 
-    generateBuildId name' =
-      printf "%s-%08X" name' <$> (randomIO :: IO Word32)
+    generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
 
 
 getBuildId :: B9 FilePath
 getBuildId = gets bsBuildId
+
+getBuildDate :: B9 String
+getBuildDate = gets bsBuildDate
 
 getBuildDir :: B9 FilePath
 getBuildDir = gets bsBuildDir
@@ -116,7 +127,7 @@ getExecEnvType = gets (execEnvType . bsCfg)
 getRepository :: B9 (Maybe Repository)
 getRepository = gets bsRepository
 
-getRepositoryCache :: B9 Repository
+getRepositoryCache :: B9 FilePath
 getRepositoryCache = gets bsRepositoryCache
 
 cmd :: String -> B9 ()

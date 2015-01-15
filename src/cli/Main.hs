@@ -1,29 +1,20 @@
 module Main where
 
-import System.Environment
-import Options.Applicative
+import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty
 import B9
 
 main :: IO ()
 main = do
-  opts <- parseCommandLine
-  conf <- configure (configFile opts) (cliB9Config opts)
-  prjs <- mapM load (projectFiles opts)
-  code <- build (cliAction opts) (mconcat prjs) conf (cliB9Config opts)
-  exit code
+  b9Opts <- parseCommandLine
+  result <- runB9 b9Opts
+  exit result
+  where
+    exit success = when (not success) (exitWith (ExitFailure 128))
 
-exit success = when (not success) $ exitWith (ExitFailure 128)
-
-data CliOpts = CliOpts { configFile :: Maybe SystemPath
-                       , projectFiles :: [FilePath]
-                       , cliB9Config :: B9Config
-                       , cliAction :: BuildAction
-                       }
-
-parseCommandLine :: IO CliOpts
+parseCommandLine :: IO B9Options
 parseCommandLine =
-  execParser (info (helper <*> cliArgParser)
+  execParser (info (helper <*> (B9Options <$> globals <*> cmds <*> buildVars))
                (fullDesc
                 <> progDesc "Build and run VM-Images inside LXC containers.\
                             \ Custom arguments follow after '--' and are\
@@ -36,25 +27,54 @@ parseCommandLine =
                             \ on Un*x like system per default located in: \
                             \ '~/.b9/b9.config'"
                 <> headerDoc (Just helpHeader)))
+  where
+    helpHeader = linebreak <> text "B9 - a benign VM-Image build tool"
 
-helpHeader = linebreak <> text "B9 - a benign VM-Image build tool"
+data B9Options = B9Options GlobalOpts
+                           BuildAction
+                           BuildVariables
 
-cliArgParser = toCliOpts
-               <$> some (strOption
-                         (help "A project to build, specify more than once to\
-                                \ compose multiple projects"
-                          <> short 'f'
-                          <> long "project-file"
-                          <> metavar "FILENAME"
-                          <> noArgError (ErrorMsg "No project file specified!")))
-               <*> optional (strOption
+data GlobalOpts = GlobalOpts { configFile :: Maybe SystemPath
+                             , cliB9Config :: B9Config  }
+
+type BuildAction = ConfigParser -> B9Config -> IO Bool
+
+runB9 :: B9Options -> IO Bool
+runB9 (B9Options globalOpts action vars) = do
+  let cfgWithArgs = cfgCli { envVars = envVars cfgCli ++ vars }
+      cfgCli = cliB9Config globalOpts
+  cp <- configure (configFile globalOpts) cfgCli
+  action cp cfgWithArgs
+
+runBuild :: [FilePath] -> BuildAction
+runBuild projectFiles cp conf = do
+  prjs <- mapM consult projectFiles
+  buildProject (mconcat prjs) cp conf
+
+runShow :: [FilePath] -> BuildAction
+runShow projectFiles cp conf = do
+  prjs <- mapM consult projectFiles
+  showProject (mconcat prjs) cp conf
+
+runListSharedImages :: BuildAction
+runListSharedImages cp conf = impl
+  where
+    conf' = conf { keepTempDirs = True }
+    impl = do
+      imgs <- run "list-share-images" cp conf' getSharedImages
+      if null imgs
+        then putStrLn "\n\nNO SHAREABLE IMAGES\n"
+        else putStrLn "SHAREABLE IMAGES:"
+      mapM_ (putStrLn . ppShow) imgs
+      return True
+
+globals :: Parser GlobalOpts
+globals = toGlobalOpts
+               <$> optional (strOption
                              (help "Path to users b9-configuration"
                              <> short 'c'
                              <> long "configuration-file"
                              <> metavar "FILENAME"))
-               <*> switch (help "Show the processed project and config without building"
-                             <> short 'd'
-                             <> long "dry-run")
                <*> switch (help "Log everything that happens to stdout"
                              <> short 'v'
                              <> long "verbose")
@@ -91,12 +111,9 @@ cliArgParser = toCliOpts
                               <> short 'r'
                               <> long "repo"
                               <> metavar "REPOSITORY_ID"))
-              <*> many (strArgument idm)
 
   where
-    toCliOpts :: [FilePath]
-              -> Maybe FilePath
-              -> Bool
+    toGlobalOpts ::  Maybe FilePath
               -> Bool
               -> Bool
               -> Maybe FilePath
@@ -106,20 +123,17 @@ cliArgParser = toCliOpts
               -> Bool
               -> Maybe String
               -> Maybe FilePath
-              -> [String]
-              -> CliOpts
-    toCliOpts ps cfg dryRun verbose quiet logF profF buildRoot keep notUnique
-              repo mRepoCache rest =
+              -> GlobalOpts
+    toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique
+                 repo mRepoCache =
       let minLogLevel = if verbose then Just LogTrace else
                           if quiet then Just LogError else Nothing
-          extraArgs = zip (("arg_"++) . show <$> [1..]) rest
           b9cfg' = let b9cfg = mempty { verbosity = minLogLevel
                                       , logFile = logF
                                       , profileFile = profF
                                       , buildDirRoot = buildRoot
                                       , keepTempDirs = keep
                                       , uniqueBuildDirs = not notUnique
-                                      , envVars = extraArgs
                                       , repository = repo
                                       }
                    in case mRepoCache of
@@ -127,10 +141,34 @@ cliArgParser = toCliOpts
                         Just repoCache ->
                           let rc = Path repoCache
                           in b9cfg { repositoryCache = rc }
-      in CliOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
-                 , projectFiles = ps
-                 , cliAction = if dryRun
-                                  then DryRun
-                                  else RunBuild
-                 , cliB9Config = b9cfg'
-                 }
+      in GlobalOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
+                    , cliB9Config = b9cfg' }
+
+cmds :: Parser BuildAction
+cmds = subparser (  command "build"
+                             (info (runBuild <$> projects)
+                                   (progDesc "Merge all project files and\
+                                             \ build."))
+                  <> command "print"
+                             (info (runShow <$> projects)
+                                   (progDesc "Show the final project that\
+                                             \ would be used by the 'build' \
+                                             \ command."))
+                  <> command "list-shared-images"
+                             (info (pure runListSharedImages)
+                                   (progDesc "Show the final project that\
+                                             \ would be used by the 'build' \
+                                             \ command.")))
+
+projects :: Parser [FilePath]
+projects = helper <*>
+           some (strOption
+                  (help "Project file to load, specify multiple project\
+                        \ files to merge them into a single project."
+                  <> short 'f'
+                  <> long "project-file"
+                  <> metavar "FILENAME"
+                  <> noArgError (ErrorMsg "No project file specified!")))
+
+buildVars :: Parser BuildVariables
+buildVars = zip (("arg_"++) . show <$> ([1..] :: [Int])) <$> many (strArgument idm)

@@ -4,4 +4,5 @@
 
 set -e
 
-cabal run -- $@
+cabal install
+./run.sh $@

@@ -56,6 +56,9 @@ instance Show ImageType where
 data Image = Image FilePath ImageType
            deriving (Eq, Show, Read, Typeable, Data)
 
+data ImageInfo = ImageInfo String
+  deriving (Read, Show, Typeable, Data)
+
 compatibleImageTypes :: ImageSource -> [ImageType]
 compatibleImageTypes src =
   case src of

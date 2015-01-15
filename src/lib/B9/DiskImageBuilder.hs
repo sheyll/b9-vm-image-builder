@@ -1,4 +1,9 @@
-module B9.DiskImageBuilder (createImage,convert,resizeImage) where
+module B9.DiskImageBuilder (createImage
+                           ,resizeImage
+                           ,importImage
+                           ,exportImage
+                           ,exportAndRemoveImage
+                           ,convertImage) where
 
 import Control.Monad ( when )
 import Control.Monad.IO.Class
@@ -15,6 +20,7 @@ import System.FilePath ( takeDirectory
 import Text.Printf ( printf )
 import B9.B9Monad
 import B9.DiskImages
+import B9.ConfigUtils
 import qualified B9.PartitionTable as PartitionTable
 
 createImage :: ImageSource -> Image -> B9 ()
@@ -31,10 +37,10 @@ createImageFromImage src part size out = do
   let tmp = if isPartitioned part
             then changeImageFormat Raw out
             else out
-  convert False src tmp
+  importImage src tmp
   extractPartition part tmp
   resizeImage size tmp
-  convert True tmp out
+  convertImage tmp out
   where
     extractPartition :: Partition -> Image -> B9 ()
     extractPartition NoPT _ = return ()
@@ -61,7 +67,7 @@ createFS imgFs imgSize out = do
   cmd $ printf "fallocate -l %s '%s'" (toQemuSizeOptVal imgSize) imgTempFile
   dbgL $ printf "Creating file system %s" (show imgFs)
   cmd $ printf "%s -q '%s'" fsCmd imgTempFile
-  convert True imgTemp out
+  convertImage imgTemp out
 
 createCOWImage (Image backingFile _) (Image imgOut imgFmt) = do
   dbgL $ printf "Creating COW image '%s' backed by '%s'" imgOut backingFile
@@ -79,22 +85,43 @@ resizeImage (ResizeFS Ext4 newSize) (Image img Raw) = do
   cmd $ printf "qemu-img resize -q '%s' %s" img sopt
   cmd $ printf "resize2fs -f '%s'" img
 
+-- | Import a disk image from some external source into the build directory
+-- if necessary convert the image.
+importImage :: Image -> Image -> B9 ()
+importImage = convert False
+
+-- | Export a disk image from the build directory; if necessary convert the image.
+exportImage :: Image -> Image -> B9 ()
+exportImage = convert False
+
+-- | Export a disk image from the build directory; if necessary convert the image.
+exportAndRemoveImage :: Image -> Image -> B9 ()
+exportAndRemoveImage = convert True
+
+-- | Convert an image in the build directory to another format and return the new image.
+convertImage :: Image -> Image -> B9 ()
+convertImage imgIn imgOut = convert True imgIn imgOut
+
 convert :: Bool -> Image -> Image -> B9 ()
 convert doMove (Image imgIn fmtIn) (Image imgOut fmtOut)
-  | (imgIn ==imgOut) = dbgL $ printf "No need to convert: '%s'" imgIn
+  | imgIn == imgOut = do
+    ensureDir imgOut
+    dbgL $ printf "No need to convert: '%s'" imgIn
 
-  | doMove && (fmtIn ==fmtOut) = do
+  | doMove && fmtIn == fmtOut = do
+      ensureDir imgOut
       dbgL $ printf "Moving '%s' to '%s'" imgIn imgOut
       liftIO $ renameFile imgIn imgOut
 
   | otherwise = do
-      dbgL $ printf "Converting %s to %s: '%s' to '%s'" (show fmtIn)
-        (show fmtOut) imgIn imgOut
-      cmd $ printf "qemu-img convert -q -f %s -O %s '%s' '%s'" (show fmtIn)
-        (show fmtOut) imgIn imgOut
-      when doMove $ do
-        dbgL $ printf "Removing '%s'" imgIn
-        liftIO $ removeFile imgIn
+    ensureDir imgOut
+    dbgL $ printf "Converting %s to %s: '%s' to '%s'" (show fmtIn)
+      (show fmtOut) imgIn imgOut
+    cmd $ printf "qemu-img convert -q -f %s -O %s '%s' '%s'" (show fmtIn)
+      (show fmtOut) imgIn imgOut
+    when doMove $ do
+      dbgL $ printf "Removing '%s'" imgIn
+      liftIO $ removeFile imgIn
 
 toQemuSizeOptVal :: DiskSize -> String
 toQemuSizeOptVal (DiskSize amount u) = show amount ++ case u of

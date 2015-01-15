@@ -1,30 +1,63 @@
-module B9.RepositoryIO (publishDirectoryRecursive) where
+module B9.RepositoryIO (publishDirectoryRecursive
+                       ,repoSearch
+                       ,FilePathGlob(..)) where
 
 import B9.Repository
 import B9.B9Monad
 import B9.ConfigUtils
 
+import Control.Monad
+import Control.Applicative
+import Data.Maybe
+import Data.List
 import Control.Monad.IO.Class
 import System.Directory
+import System.FilePath
 import Text.Printf (printf)
 
-publishDirectoryRecursive :: Repository -> FilePath -> B9 ()
-publishDirectoryRecursive repo@(Repository _ repoType) dir = do
+-- | Recursively upload a directory into the repository cache directory and into
+-- a repository if configured
+publishDirectoryRecursive :: FilePath -> B9 ()
+publishDirectoryRecursive dir = do
+   cacheDir <- getRepositoryCache
+   let cache = repoSpecFromDirectory (Path cacheDir)
+   uploadDirectoryRecursive cache dir
+   publishRepo <- getRepository
+   when (isJust publishRepo) $ do
+     let Repository publishRepoId publishRepoType = fromJust publishRepo
+     uploadDirectoryRecursive publishRepoType dir
+     infoL (printf "PUBLISHED TO '%s'" publishRepoId)
+
+-- | Find files which are in 'subDir' and match 'glob' in the repository
+-- cache. NOTE: This operates on the repository cache, but does not enforce a
+-- repository cache update.
+repoSearch :: FilePath -> FilePathGlob -> B9 [FilePath]
+repoSearch subDir glob = do
+  cacheDir <- getRepositoryCache
+  let dir = cacheDir </> subDir
+  traceL (printf "reading contents of directory '%s'" dir)
+  ensureDir (dir ++ "/")
+  files <- liftIO (getDirectoryContents dir)
+  return ((dir </>) <$> (filter (matchGlob glob) files))
+
+-- | Express a pattern for file paths, used when searching repositories.
+data FilePathGlob = FileNameEndsWith String
+
+-- * Internals
+
+-- | A predicate that is satisfied if a file path matches a glob.
+matchGlob :: FilePathGlob -> FilePath -> Bool
+matchGlob (FileNameEndsWith suffix) = isSuffixOf suffix
+
+uploadDirectoryRecursive :: RepositorySpec -> FilePath -> B9 ()
+uploadDirectoryRecursive repoType dir = do
   dbgL (printf "UPLOADING DIRECTORY '%s' TO REPO '%s'"
                dir
-               (show repo))
-  repoTypeResolved <- prepareRepo repoType
-  let uploadCmd = createUploadCommandTemplate repoTypeResolved
+               (show repoType))
+  let uploadCmd = createUploadCommandTemplate repoType
   cmd (printf uploadCmd dir)
 
-prepareRepo :: RepositoryType -> B9 RepositoryType
-prepareRepo (LocalRepo repoDirSystemPath) = do
-  repoDir <- resolve repoDirSystemPath
-  liftIO (createDirectoryIfMissing True repoDir)
-  return (LocalRepo (Path repoDir))
-prepareRepo repo = return repo
-
-createUploadCommandTemplate :: RepositoryType -> String
+createUploadCommandTemplate :: RepositorySpec -> String
 createUploadCommandTemplate (LocalRepo (Path repoDir)) =
   "rsync -av '%s' '"++ repoDir ++"'"
 createUploadCommandTemplate (RemoteRepo rootDir

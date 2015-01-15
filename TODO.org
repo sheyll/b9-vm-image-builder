@@ -30,8 +30,8 @@
 **** DONE Make Project's composable (a Monoid)
 *** DONE Use string templates for 'Project' to cli Args and Environment Vars
 ** DONE Add Example Projects
-** Write a nice documentation
-** Publish
+** TODO Write a nice documentation
+** TODO Publish
 *** Create github repo
 *** Create git01 repo
 * DONE Add a check mode that tells what would happen if a project file executed
@@ -40,22 +40,20 @@
 ** Add to Project projectPersistentEnvInit (Maybe Script)
 ** Do not remove the build directory
 ** Do not export any images
-* Add support for reusable 'BaseImage'
-** DONE Define BaseImageInfo currently empty, later: version, image type,...
-** TODO Define ImportBaseImage Name Repo (Maybe DiskSize)
-** DONE Define ExportBaseImage Name Repo
-** DONE Define Repository for 'base-images'
-** Add Author and Description fields to base image
-** Add build host to base image info
-** Download base image infos
-** Cache impl
-** DONE Add to B9Config 'baseImageRepositories'
-** Add to B9Config 'skipRepositoryCheck'
+* TODO Add support for sharing 'Image's
+** DONE Define ImageInfo currently only a name, later: version, type author, ...
+** TODO Add importing share images from cache
+** TODO Add importing share images from external repo
+** DONE Move/Rename B9.BaseImageBuilder
+** DONE Add share images export
+** DONE Define Repository for shared-images'
+** DONE Add to B9Config items for shared image repositories
 ** DONE Add to B9Config 'baseImageCacheDir'
-** Add to BuildAction 'ClearCache'
-** Add 'show repos' action
-** Add 'list repo contents' action
-** Add 'refresh repos action
+** DONE Use optparse commands
+** TODO Add 'ClearCache' action
+** TODO Add 'show repos' action
+** DONE Add 'list repo contents' action
+** TODO Add 'refresh repos action
 ** Add 'add remote repo' with sshkey generation
 * Add 'system-setup' helper action
 ** Check for nbd

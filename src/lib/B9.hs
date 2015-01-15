@@ -9,13 +9,10 @@ module B9
        , module Data.List
        , module Data.Maybe
        , module Text.Printf
-       , BuildAction(..)
-       , load
+       , module Text.Show.Pretty
        , configure
-       , build
        ) where
 
-import B9.Builder
 import Control.Applicative
 import Control.Exception
 import Control.Monad
@@ -24,6 +21,7 @@ import Data.Monoid
 import Data.List
 import Data.Maybe
 import Data.Word
+import Text.Show.Pretty (ppShow)
 import System.Directory ( createDirectoryIfMissing
                         , createDirectory
                         , setCurrentDirectory
@@ -44,19 +42,17 @@ import System.FilePath ( takeDirectory
 import System.Process ( callCommand )
 import System.Random ( randomIO )
 import Text.Printf ( printf )
+import Text.Show.Pretty (ppShow)
 
+import B9.Builder
 import qualified B9.LibVirtLXC as LibVirtLXC
 
-data BuildAction = DryRun | RunBuild
-
+-- | Merge 'existingConfig' with the configuration from the main b9 config
+-- file. If the file does not exists, a new config file with the given
+-- configuration will be written. The return value is a parser for the config
+-- file. Returning the raw config file parser allows modules unkown to
+-- 'B9.B9Config' to add their own values to the shared config file.
 configure :: MonadIO m => Maybe SystemPath -> B9Config -> m ConfigParser
-configure b9ConfigPath cliConfig = do
-  writeInitialB9Config b9ConfigPath cliConfig LibVirtLXC.setDefaultConfig
+configure b9ConfigPath existingConfig = do
+  writeInitialB9Config b9ConfigPath existingConfig LibVirtLXC.setDefaultConfig
   readB9Config b9ConfigPath
-
-load :: MonadIO m => FilePath -> m Project
-load projectFile = maybeConsult (Just projectFile) emptyProject
-
-build :: BuildAction -> Project -> ConfigParser -> B9Config -> IO Bool
-build RunBuild = buildProject
-build DryRun = printProject

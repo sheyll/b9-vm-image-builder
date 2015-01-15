@@ -8,10 +8,9 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.ShellScript
                   , module B9.Repository
                   , module B9.RepositoryIO
-                  , module B9.BaseImages
-                  , module B9.BaseImageBuilder
+                  , module B9.ImageShareing
                   , buildProject
-                  , printProject
+                  , showProject
                   , runInEnvironment
                   , createBuildImages
                   , createSharedDirs
@@ -36,16 +35,15 @@ import B9.Project
 import B9.ExecEnv
 import B9.DiskImages
 import B9.DiskImageBuilder
-import B9.BaseImages
-import B9.BaseImageBuilder
+import B9.ImageShareing
 import B9.ShellScript
 import B9.Repository
 import B9.RepositoryIO
 import qualified B9.LibVirtLXC as LXC
 import Text.Show.Pretty (ppShow)
 
-printProject :: Project -> ConfigParser -> B9Config -> IO Bool
-printProject projectTemplate cfgParser cliCfg = do
+showProject :: Project -> ConfigParser -> B9Config -> IO Bool
+showProject projectTemplate cfgParser cliCfg = do
   putStrLn $ printf "\n>>> Merged project template: \n%s\n\n\
                     \>>> Configuration merged from config file and cli: \n\n%s\n\n\
                     \>>> Interpolated project:  \n\n%s\n\n"
@@ -77,10 +75,7 @@ buildProject projectTemplate cfgParser cliCfg =
   success <- runInEnvironment execEnv script
   if success
     then do infoL "BUILD SCRIPT SUCCESSULLY EXECUTED IN CONTAINER"
-            exported <- mapM exportImage
-                            (zip buildImgs (projectDisks project))
-            when (not (null (catMaybes exported)))
-              (infoL $ "DISK IMAGES SUCCESSFULLY EXPORTED")
+            mapM_ export (zip buildImgs (projectDisks project))
             infoL "BUILD FINISHED"
             return True
 
@@ -91,17 +86,9 @@ buildProject projectTemplate cfgParser cliCfg =
 
     project = substProject (envVars cfg) projectTemplate
 
-    exportImage ((imgI, _), (Export imgO@(Image imgOFile _) _, _)) = do
-      liftIO $ createDirectoryIfMissing True $ takeDirectory imgOFile
-      convert True imgI imgO
-      return $ Just imgOFile
-
-    exportImage ((imgI@(Image imgIFile _), _),
-                 (Publish baseImg _, _)) = do
-      publishBaseImage imgI baseImg
-      return $ Just imgIFile
-
-    exportImage _ = return Nothing
+    export ((imgI, _), (Export imgO _, _)) = exportImage imgI imgO
+    export ((imgI, _), (Share info _, _)) = shareImage imgI info
+    export _ = return ()
 
 createBuildImages :: [Mounted DiskTarget] -> B9 [Mounted Image]
 createBuildImages disks = mapM create $ zip [0..] disks
@@ -111,13 +98,13 @@ createBuildImages disks = mapM create $ zip [0..] disks
       buildDir <- getBuildDir
       envType <- getExecEnvType
       let (src, dest) = case disk of
-                         Publish (BaseImage biName) biSrc ->
-                           let biDest = Image biDestFile biDestFmt
-                               biDestFile = buildDir
-                                            </> biName
-                                            <.> (show biDestFmt)
-                               biDestFmt = QCow2
-                           in (biSrc, biDest)
+                         Share (ImageInfo biName) biSrc ->
+                                let biDest = Image biDestFile biDestFmt
+                                    biDestFile = buildDir
+                                                 </> biName
+                                                 <.> (show biDestFmt)
+                                    biDestFmt = QCow2
+                                in (biSrc, biDest)
 
                          Export dest'@(Image _ destFmt') expSrc ->
                            let expDest = changeImageDirectory buildDir

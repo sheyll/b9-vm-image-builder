@@ -7,6 +7,7 @@ module B9.B9Config ( B9Config(..)
                    , parseB9Config
                    , LogLevel(..)
                    , ExecEnvType (..)
+                   , BuildVariables
                    ) where
 
 import Data.Monoid
@@ -19,6 +20,8 @@ import System.Directory
 import B9.ConfigUtils
 import B9.Repository
 
+type BuildVariables = [(String,String)]
+
 data ExecEnvType = LibVirtLXC deriving (Eq, Show, Ord, Read)
 
 data LogLevel = LogTrace | LogDebug | LogInfo | LogError | LogNothing
@@ -30,7 +33,7 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , keepTempDirs :: Bool
                          , execEnvType :: ExecEnvType
                          , profileFile :: Maybe FilePath
-                         , envVars :: [(String, String)]
+                         , envVars :: BuildVariables
                          , uniqueBuildDirs :: Bool
                          , repositoryCache :: SystemPath
                          , repository :: Maybe String
@@ -51,6 +54,7 @@ instance Monoid B9Config where
              , repository = getLast ((mappend `on` (Last . repository)) c c')
              }
 
+defaultB9Config :: B9Config
 defaultB9Config = B9Config { verbosity = Nothing
                            , logFile = Nothing
                            , buildDirRoot = Nothing
@@ -63,21 +67,31 @@ defaultB9Config = B9Config { verbosity = Nothing
                            , repositoryCache = defaultRepositoryCache
                            }
 
+defaultRepositoryCache :: SystemPath
 defaultRepositoryCache = InB9UserDir "repo-cache"
-
+defaultB9ConfigFile :: SystemPath
 defaultB9ConfigFile = InB9UserDir "b9.conf"
-
+verbosityK :: String
 verbosityK = "verbosity"
+logFileK :: String
 logFileK = "log_file"
+buildDirRootK :: String
 buildDirRootK = "build_dir_root"
+keepTempDirsK :: String
 keepTempDirsK = "keep_temp_dirs"
+execEnvTypeK :: String
 execEnvTypeK = "exec_env"
+profileFileK :: String
 profileFileK = "profile_file"
+envVarsK :: String
 envVarsK = "environment_vars"
+uniqueBuildDirsK :: String
 uniqueBuildDirsK = "unique_build_dirs"
+repositoryCacheK :: String
 repositoryCacheK = "repository_cache"
+repositoryK :: String
 repositoryK = "repository"
-
+cfgFileSection :: String
 cfgFileSection = "global"
 
 writeInitialB9Config :: MonadIO m
@@ -97,17 +111,17 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
     let res = do
           let cp = emptyCP
               c = cliCfg
-          cp <- add_section cp cfgFileSection
-          cp <- setshow cp cfgFileSection verbosityK (verbosity c)
-          cp <- setshow cp cfgFileSection logFileK (logFile c)
-          cp <- setshow cp cfgFileSection buildDirRootK (buildDirRoot c)
-          cp <- setshow cp cfgFileSection keepTempDirsK (keepTempDirs c)
-          cp <- setshow cp cfgFileSection execEnvTypeK (execEnvType c)
-          cp <- setshow cp cfgFileSection profileFileK (profileFile c)
-          cp <- setshow cp cfgFileSection envVarsK (envVars c)
-          cp <- setshow cp cfgFileSection uniqueBuildDirsK (uniqueBuildDirs c)
-          cp <- setshow cp cfgFileSection repositoryCacheK (repositoryCache c)
-          return $ merge cp cpNonGlobal
+          cp1 <- add_section cp cfgFileSection
+          cp2 <- setshow cp1 cfgFileSection verbosityK (verbosity c)
+          cp3 <- setshow cp2 cfgFileSection logFileK (logFile c)
+          cp4 <- setshow cp3 cfgFileSection buildDirRootK (buildDirRoot c)
+          cp5 <- setshow cp4 cfgFileSection keepTempDirsK (keepTempDirs c)
+          cp6 <- setshow cp5 cfgFileSection execEnvTypeK (execEnvType c)
+          cp7 <- setshow cp6 cfgFileSection profileFileK (profileFile c)
+          cp8 <- setshow cp7 cfgFileSection envVarsK (envVars c)
+          cp9 <- setshow cp8 cfgFileSection uniqueBuildDirsK (uniqueBuildDirs c)
+          cpA <- setshow cp9 cfgFileSection repositoryCacheK (repositoryCache c)
+          return $ merge cpA cpNonGlobal
     in case res of
      Left e -> liftIO (throwIO (IniFileException cfgFile e))
      Right cp -> liftIO (writeFile cfgFile (to_string cp))
