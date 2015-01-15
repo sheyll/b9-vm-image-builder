@@ -2,8 +2,8 @@ Project { projectName = "fedora-img"
                , projectDisks =
                    [ (Share
                         (ImageInfo "fedora-img")
-                        (CopyOnWrite
-                         (Image "${arg_1}" QCow2))
+                        (SourceImage
+                         (Image "${arg_1}" QCow2) (Partition 1) KeepSize)
                    , MountPoint "/") ]
                , projectSharedDirectories =  [ ]
                , projectBuildScript =
