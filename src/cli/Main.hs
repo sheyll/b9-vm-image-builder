@@ -76,11 +76,11 @@ globals = toGlobalOpts
                              <> long "configuration-file"
                              <> metavar "FILENAME"))
                <*> switch (help "Log everything that happens to stdout"
-                             <> short 'v'
-                             <> long "verbose")
+                          <> short 'v'
+                          <> long "verbose")
                <*> switch (help "Suppress non-error output"
-                         <> short 'q'
-                         <> long "quiet")
+                          <> short 'q'
+                          <> long "quiet")
                <*> optional (strOption
                              (help "Path to a logfile"
                              <> short 'l'
@@ -102,12 +102,11 @@ globals = toGlobalOpts
                              <> short 'u'
                              <> long "predictable-build-dir")
                <*> optional (strOption
-                             (help "Cache downloaded base images in a \
-                                   \custom directory, default: '~/.b9/repo-cache'"
+                             (help "Cache directory for shared images, default: '~/.b9/repo-cache'"
                              <> long "repo-cache"
                              <> metavar "DIRECTORY"))
                <*> optional (strOption
-                             (help "Base image repository"
+                             (help "Remote repository to share image to"
                               <> short 'r'
                               <> long "repo"
                               <> metavar "REPOSITORY_ID"))
@@ -156,9 +155,7 @@ cmds = subparser (  command "build"
                                              \ command."))
                   <> command "list-shared-images"
                              (info (pure runListSharedImages)
-                                   (progDesc "Show the final project that\
-                                             \ would be used by the 'build' \
-                                             \ command.")))
+                                   (progDesc "List shared images.")))
 
 projects :: Parser [FilePath]
 projects = helper <*>

@@ -5,7 +5,6 @@ import B9.B9Monad
 import B9.ConfigUtils
 import B9.DiskImages
 import B9.DiskImageBuilder
-import B9.Repository
 import B9.RepositoryIO
 
 import Data.Maybe

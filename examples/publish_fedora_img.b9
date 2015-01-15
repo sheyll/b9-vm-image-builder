@@ -8,8 +8,7 @@ Project { projectName = "fedora-img"
                , projectSharedDirectories =  [ ]
                , projectBuildScript =
                  Verbosity Debug
-                 [ Run "dhcpcd" []
-                 , Run "ls" ["-la", "/"] ]
+                 [ Run "ls" ["-la", "/"] ]
                , projectResources = Resources { maxMemory = RamSize 8 GB
                                               , cpuCount = 4
                                               , cpuArch = X86_64

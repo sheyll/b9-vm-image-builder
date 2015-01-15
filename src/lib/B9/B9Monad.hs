@@ -11,8 +11,9 @@ module B9.B9Monad ( B9
                   , getBuildDate
                   , getBuildDir
                   , getExecEnvType
-                  , getRepository
-                  , getRepositoryCache
+                  , getSelectedRemoteRepo
+                  , getRemoteRepos
+                  , getRepoCache
                   , cmd
                   ) where
 
@@ -46,8 +47,9 @@ data BuildState = BuildState { bsBuildId :: String
                              , bsCfgParser :: ConfigParser
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
-                             , bsRepository :: Maybe Repository
-                             , bsRepositoryCache :: FilePath
+                             , bsSelectedRemoteRepo :: Maybe RemoteRepo
+                             , bsRemoteRepos :: [RemoteRepo]
+                             , bsRepoCache :: RepoCache
                              , bsProf :: [ProfilingEntry]
                              }
 data ProfilingEntry = IoActionDuration NominalDiffTime
@@ -62,21 +64,30 @@ run name cfgParser cfg action = do
   bracket (createBuildDir buildId) removeBuildDir (run' buildId now)
   where
     run' buildId now buildDir = do
-      repoCacheDir <- initRepoCache
+      -- Check repositories
+      repoCache <- initRepoCache (repositoryCache cfg)
+      let remoteRepos = getConfiguredRemoteRepos cfgParser
+      mapM_ (initRemoteRepo repoCache) remoteRepos
       let ctx = BuildState buildId buildDate cfgParser cfg buildDir
-                           repo repoCacheDir []
-          repo = repository cfg >>= return . lookupRepository cfgParser
+                           selectedRemoteRepo remoteRepos repoCache []
           buildDate = formatTime undefined "%F-%T" now
+          selectedRemoteRepo = do
+            sel <- repository cfg
+            (lookupRemoteRepo remoteRepos sel
+             <|> error (printf "selected remote repo '%s' not configured,\
+                                \ valid remote repos are: '%s'"
+                                sel
+                                (show remoteRepos)))
+
+
+
+      -- Run the action build action
       (r, ctxOut) <- runStateT (runB9 action) ctx
+      -- Write a profiling report
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
                   (unlines $ show <$> (reverse $ bsProf ctxOut))
       return r
-
-    initRepoCache = do
-      r <- initRepo (Repository "CACHE" (LocalRepo (repositoryCache cfg)))
-      let (Repository _ (LocalRepo (Path cacheDir))) = r
-      return cacheDir
 
     createBuildDir buildId = do
       if uniqueBuildDirs cfg then do
@@ -124,11 +135,14 @@ getConfig = gets bsCfg
 getExecEnvType :: B9 ExecEnvType
 getExecEnvType = gets (execEnvType . bsCfg)
 
-getRepository :: B9 (Maybe Repository)
-getRepository = gets bsRepository
+getSelectedRemoteRepo :: B9 (Maybe RemoteRepo)
+getSelectedRemoteRepo = gets bsSelectedRemoteRepo
 
-getRepositoryCache :: B9 FilePath
-getRepositoryCache = gets bsRepositoryCache
+getRemoteRepos :: B9 [RemoteRepo]
+getRemoteRepos = gets bsRemoteRepos
+
+getRepoCache :: B9 RepoCache
+getRepoCache = gets bsRepoCache
 
 cmd :: String -> B9 ()
 cmd cmdStr = do

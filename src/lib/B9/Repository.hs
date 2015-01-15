@@ -1,14 +1,17 @@
-module B9.Repository (Repository(..)
-                     ,RepositorySpec(..)
+module B9.Repository (RemoteRepo(..)
+                     ,RepoCache(..)
                      ,SshPrivKey(..)
                      ,SshRemoteHost(..)
                      ,SshRemoteUser(..)
-                     ,parseRepositoriesFromB9Config
-                     ,writeRepositoryToB9Config
-                     ,lookupRepository
-                     ,initRepo
-                     ,repoSpecFromDirectory) where
+                     ,initRepoCache
+                     ,initRemoteRepo
+                     ,remoteRepoCacheDir
+                     ,localRepoDir
+                     ,writeRemoteRepoConfig
+                     ,getConfiguredRemoteRepos
+                     ,lookupRemoteRepo) where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Applicative
 import Data.Data
@@ -16,18 +19,17 @@ import Data.List
 import Data.ConfigFile
 import Text.Printf
 import System.FilePath
-
+import System.Directory
 import B9.ConfigUtils
 
-data Repository = Repository String RepositorySpec
+newtype RepoCache = RepoCache FilePath
   deriving (Read, Show, Typeable, Data)
 
-data RepositorySpec = LocalRepo SystemPath
-                    | RemoteRepo
-                      FilePath
-                      SshPrivKey
-                      SshRemoteHost
-                      SshRemoteUser
+data RemoteRepo = RemoteRepo String
+                             FilePath
+                             SshPrivKey
+                             SshRemoteHost
+                             SshRemoteUser
   deriving (Read, Show, Typeable, Data)
 
 newtype SshPrivKey = SshPrivKey FilePath
@@ -39,45 +41,72 @@ newtype SshRemoteHost = SshRemoteHost (String,Int)
 newtype SshRemoteUser = SshRemoteUser String
   deriving (Read, Show, Typeable, Data)
 
-lookupRepository :: ConfigParser -> String -> Repository
-lookupRepository cp repoId =
-  let repos = map (\r@(Repository rid _) -> (rid,r))
-                  (parseRepositoriesFromB9Config cp)
-      in maybe (error (printf "Repository '%s' not defined!" repoId))
-               id
-               (lookup repoId repos)
+-- | Initialize the local repository cache directory.
+initRepoCache :: MonadIO m => SystemPath -> m RepoCache
+initRepoCache repoDirSystemPath = do
+  repoDir <- resolve repoDirSystemPath
+  ensureDir (repoDir ++ "/")
+  return (RepoCache repoDir)
 
-writeRepositoryToB9Config :: Repository
-                          -> ConfigParser
-                          -> Either CPError ConfigParser
-writeRepositoryToB9Config repo cp = cpWithRepo
+-- | Initialize the repository; load the corresponding settings from the config
+-- file, check that the priv key exists and create the correspondig cache
+-- directory.
+initRemoteRepo :: MonadIO m
+               => RepoCache
+               -> RemoteRepo
+               -> m ()
+initRemoteRepo cache repo = do
+  let (RemoteRepo repoId _ (SshPrivKey privKeyFile) _ _) = repo
+  exists <- liftIO (doesFileExist privKeyFile)
+  when (not exists)
+       (error (printf "SSH Key file '%s' for repository '%s' is missing."
+                      privKeyFile
+                      repoId))
+  ensureDir (remoteRepoCacheDir cache repoId ++ "/")
+  return ()
+
+-- | Return the cache directory for a remote repository relative to the root
+-- cache dir.
+remoteRepoCacheDir :: RepoCache  -- ^ The repository cache directory
+                   -> String    -- ^ Id of the repository
+                   -> FilePath  -- ^ The existing, absolute path to the
+                                -- cache directory
+remoteRepoCacheDir (RepoCache cacheDir) repoId =
+  cacheDir </> "remote-repos" </> repoId
+
+-- | Return the local repository directory.
+localRepoDir :: RepoCache  -- ^ The repository cache directory
+             -> FilePath  -- ^ The existing, absolute path to the
+                          --  directory
+localRepoDir (RepoCache cacheDir) =
+  cacheDir </> "local-repo"
+
+-- | Persist a repo to a configuration file.
+writeRemoteRepoConfig :: RemoteRepo
+                      -> ConfigParser
+                      -> Either CPError ConfigParser
+writeRemoteRepoConfig repo cpIn = cpWithRepo
   where section = repoId ++ repoSectionSuffix
-        (Repository repoId repoType) = repo
-        cpWithRepo = do cp' <- add_section cp section
-                        writeRepositorySpecToB9Config section repoType cp'
+        (RemoteRepo repoId
+                    remoteRootDir
+                    (SshPrivKey keyFile)
+                    (SshRemoteHost (host,port))
+                    (SshRemoteUser user)) = repo
+        cpWithRepo = do cp1 <- add_section cpIn section
+                        cp2 <- set cp1 section repoRemotePathK remoteRootDir
+                        cp3 <- set cp2 section repoRemoteSshKeyK keyFile
+                        cp4 <- set cp3 section repoRemoteSshHostK host
+                        cp5 <- setshow cp4 section repoRemoteSshPortK port
+                        set cp5 section repoRemoteSshUserK user
 
-writeRepositorySpecToB9Config :: SectionSpec
-                              -> RepositorySpec
-                              -> ConfigParser
-                              -> Either CPError ConfigParser
-writeRepositorySpecToB9Config section (LocalRepo p) cp = do
-  cp' <- set cp section repoTypeK repoTypeLocal
-  setshow cp' section repoLocalPathK p
-writeRepositorySpecToB9Config section
-                              (RemoteRepo remoteRootDir
-                                          (SshPrivKey keyFile)
-                                          (SshRemoteHost (host,port))
-                                          (SshRemoteUser user))
-                              cp = do
-  cp1 <- set cp section repoTypeK repoTypeRemote
-  cp2 <- set cp1 section repoRemotePathK remoteRootDir
-  cp3 <- set cp2 section repoRemoteSshKeyK keyFile
-  cp4 <- set cp3 section repoRemoteSshHostK host
-  cp5 <- setshow cp4 section repoRemoteSshPortK port
-  set cp5 section repoRemoteSshUserK user
+-- | Load a repository from a configuration file that has been written by
+-- 'writeRepositoryToB9Config'.
+lookupRemoteRepo :: [RemoteRepo] -> String -> Maybe RemoteRepo
+lookupRemoteRepo repos repoId = lookup repoId repoIdRepoPairs
+  where repoIdRepoPairs = map (\r@(RemoteRepo rid _ _ _ _) -> (rid,r)) repos
 
-parseRepositoriesFromB9Config :: ConfigParser -> [Repository]
-parseRepositoriesFromB9Config cp = map parseRepoSection repoSections
+getConfiguredRemoteRepos :: ConfigParser -> [RemoteRepo]
+getConfiguredRemoteRepos cp = map parseRepoSection repoSections
   where
     repoSections =
           filter (repoSectionSuffix `isSuffixOf`) (sections cp)
@@ -85,36 +114,24 @@ parseRepositoriesFromB9Config cp = map parseRepoSection repoSections
       case parseResult of
         Left e -> error ("Error while parsing repo section \""
                          ++ section ++ "\": " ++ show e)
-        Right r -> Repository repoId r
+        Right r -> r
       where
-        repoId = take prefixLen section
-          where prefixLen = length section - suffixLen
-                suffixLen = length repoSectionSuffix
         getsec :: Get_C a =>  OptionSpec -> Either CPError a
         getsec = get cp section
         parseResult = do
-          repoType <- getsec repoTypeK
-          case repoType of
-           t | t == repoTypeLocal ->
-             LocalRepo <$> getsec repoLocalPathK
-           t | t == repoTypeRemote ->
-             RemoteRepo <$> getsec repoRemotePathK
-                        <*> (SshPrivKey <$> getsec repoRemoteSshKeyK)
-                        <*> (SshRemoteHost <$>
-                             ((,) <$> (getsec repoRemoteSshHostK)
-                                  <*> (getsec repoRemoteSshPortK)))
-                        <*> (SshRemoteUser <$> getsec repoRemoteSshUserK)
+          RemoteRepo repoId
+            <$> getsec repoRemotePathK
+            <*> (SshPrivKey <$> getsec repoRemoteSshKeyK)
+            <*> (SshRemoteHost <$> ((,) <$> (getsec repoRemoteSshHostK)
+                                        <*> (getsec repoRemoteSshPortK)))
+            <*> (SshRemoteUser <$> getsec repoRemoteSshUserK)
+          where
+            repoId = let prefixLen = length section - suffixLen
+                         suffixLen = length repoSectionSuffix
+                         in take prefixLen section
 
 repoSectionSuffix :: String
 repoSectionSuffix = "-repo"
-repoTypeK :: String
-repoTypeK = "repo_type"
-repoTypeLocal :: String
-repoTypeLocal = "rsync-local"
-repoTypeRemote :: String
-repoTypeRemote = "rsync-remote"
-repoLocalPathK :: String
-repoLocalPathK = "path"
 repoRemotePathK :: String
 repoRemotePathK = "remote_path"
 repoRemoteSshKeyK :: String
@@ -125,16 +142,3 @@ repoRemoteSshPortK :: String
 repoRemoteSshPortK = "ssh_remote_port"
 repoRemoteSshUserK :: String
 repoRemoteSshUserK = "ssh_remote_user"
-
--- | Initialize the repository, if the repository is local make sure the
--- directory exists.
-initRepo :: MonadIO m => Repository -> m Repository
-initRepo (Repository repoId (LocalRepo repoDirSystemPath)) = do
-  repoDir <- resolve repoDirSystemPath
-  ensureDir (repoDir ++ "/")
-  return (Repository repoId (LocalRepo (Path repoDir)))
-initRepo repo = return repo
-
--- | Create a 'RepoSpec' for a local directory.
-repoSpecFromDirectory :: SystemPath -> RepositorySpec
-repoSpecFromDirectory = LocalRepo
