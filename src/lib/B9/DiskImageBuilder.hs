@@ -5,34 +5,28 @@ module B9.DiskImageBuilder (createImage
                            ,exportAndRemoveImage
                            ,convertImage) where
 
-import Control.Monad ( when )
+import Control.Monad
 import Control.Monad.IO.Class
-import System.Directory ( createDirectoryIfMissing
-                        , canonicalizePath
-                        , renameFile
-                        , removeFile
-                        )
-import System.FilePath ( takeDirectory
-                       , takeFileName
-                       , replaceExtension
-                       , (<.>)
-                       , (</>) )
-import Text.Printf ( printf )
+import System.Directory
+import System.FilePath
+import Text.Printf (printf)
 import B9.B9Monad
 import B9.DiskImages
 import B9.ConfigUtils
 import qualified B9.PartitionTable as PartitionTable
 
-createImage :: ImageSource -> Image -> B9 ()
-createImage src = case src of
-                   (FileSystem fsType size) ->
-                     createFS fsType size
-                   (SourceImage srcImg part size) ->
-                     createImageFromImage srcImg part size
-                   (CopyOnWrite backingImg) ->
-                     createCOWImage backingImg
+-- | Create an image as close as possible to 'dest' from 'src' and return the
+-- actual image created. NOTE: This maybe diffrent to 'dest'
+createImage :: ImageSource -> Image -> B9 Image
+createImage src dest = case src of
+                        (FileSystem fsType size) ->
+                          createFS fsType size dest
+                        (SourceImage srcImg part size) ->
+                          createImageFromImage srcImg part size dest
+                        (CopyOnWrite backingImg) ->
+                          createCOWImage backingImg dest
 
-createImageFromImage :: Image -> Partition -> DiskResize -> Image -> B9 ()
+createImageFromImage :: Image -> Partition -> DiskResize -> Image -> B9 Image
 createImageFromImage src part size out = do
   let tmp = if isPartitioned part
             then changeImageFormat Raw out
@@ -40,7 +34,7 @@ createImageFromImage src part size out = do
   importImage src tmp
   extractPartition part tmp
   resizeImage size tmp
-  convertImage tmp out
+  return tmp
   where
     extractPartition :: Partition -> Image -> B9 ()
     extractPartition NoPT _ = return ()
@@ -57,7 +51,7 @@ createImageFromImage src part size out = do
       error $ printf "Extract partition %i from image '%s': Invalid format %s"
                      partIndex outFile (show fmt)
 
-createFS :: FileSystem -> DiskSize -> Image -> B9 ()
+createFS :: FileSystem -> DiskSize -> Image -> B9 Image
 createFS imgFs imgSize out = do
   let imgTemp@(Image imgTempFile _) = changeImageFormat Raw out
       fsCmd = case imgFs of
@@ -67,12 +61,15 @@ createFS imgFs imgSize out = do
   cmd $ printf "fallocate -l %s '%s'" (toQemuSizeOptVal imgSize) imgTempFile
   dbgL $ printf "Creating file system %s" (show imgFs)
   cmd $ printf "%s -q '%s'" fsCmd imgTempFile
-  convertImage imgTemp out
+  return imgTemp
 
-createCOWImage (Image backingFile _) (Image imgOut imgFmt) = do
-  dbgL $ printf "Creating COW image '%s' backed by '%s'" imgOut backingFile
-  cmd $ printf"qemu-img create -f %s -o backing_file='%s' '%s'"
-    (show imgFmt) backingFile imgOut
+createCOWImage :: Image -> Image -> B9 Image
+createCOWImage (Image backingFile _) out@(Image imgOut imgFmt) = do
+  dbgL (printf "Creating COW image '%s' backed by '%s'"
+               imgOut backingFile)
+  cmd (printf "qemu-img create -f %s -o backing_file='%s' '%s'"
+              (show imgFmt) backingFile imgOut)
+  return out
 
 resizeImage :: DiskResize -> Image -> B9 ()
 resizeImage KeepSize _ = return ()

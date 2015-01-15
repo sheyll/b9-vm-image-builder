@@ -129,8 +129,8 @@ createBuildImages disks = mapM create $ zip [0..] disks
           allowedTypes = supportedImageTypes envType
       srcAbs <- liftIO (ensureAbsoluteImageSourceDirExists src)
       destAbs <- liftIO (ensureAbsoluteImageDirExists dest)
-      createImage srcAbs destAbs
-      return (destAbs, m)
+      createdImg <- createImage srcAbs destAbs
+      return (createdImg, m)
 
 createSharedDirs :: [SharedDirectory] -> B9 [SharedDirectory]
 createSharedDirs sharedDirsIn = mapM createSharedDir sharedDirsIn
