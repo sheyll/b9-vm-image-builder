@@ -37,36 +37,51 @@ data B9Options = B9Options GlobalOpts
 data GlobalOpts = GlobalOpts { configFile :: Maybe SystemPath
                              , cliB9Config :: B9Config  }
 
-type BuildAction = ConfigParser -> B9Config -> IO Bool
+type BuildAction = Maybe SystemPath -> ConfigParser -> B9Config -> IO Bool
 
 runB9 :: B9Options -> IO Bool
 runB9 (B9Options globalOpts action vars) = do
   let cfgWithArgs = cfgCli { envVars = envVars cfgCli ++ vars }
       cfgCli = cliB9Config globalOpts
-  cp <- configure (configFile globalOpts) cfgCli
-  action cp cfgWithArgs
+      cfgFile = configFile globalOpts
+  cp <- configure cfgFile cfgCli
+  action cfgFile cp cfgWithArgs
 
 runBuild :: [FilePath] -> BuildAction
-runBuild projectFiles cp conf = do
+runBuild projectFiles _cfgFile cp conf = do
   prjs <- mapM consult projectFiles
   buildProject (mconcat prjs) cp conf
 
 runShow :: [FilePath] -> BuildAction
-runShow projectFiles cp conf = do
+runShow projectFiles _cfgFile  cp conf = do
   prjs <- mapM consult projectFiles
   showProject (mconcat prjs) cp conf
 
 runListSharedImages :: BuildAction
-runListSharedImages cp conf = impl
+runListSharedImages _cfgFile cp conf = impl
   where
     conf' = conf { keepTempDirs = True }
     impl = do
-      imgs <- run "list-share-images" cp conf' getSharedImages
+      imgs <- run "list" cp conf' getSharedImages
       if null imgs
         then putStrLn "\n\nNO SHAREABLE IMAGES\n"
         else putStrLn "SHAREABLE IMAGES:"
       mapM_ (putStrLn . ppShow) imgs
       return True
+
+runAddRepo :: RemoteRepo -> BuildAction
+runAddRepo repo cfgFile cp _conf = do
+  repo' <- remoteRepoCheckSshPrivKey repo
+  case writeRemoteRepoConfig repo' cp of
+     Left er ->
+       error (printf "Failed to add remote repo '%s'\
+                     \ to b9 configuration. The \
+                     \error was: \"%s\"."
+                     (show repo) (show er))
+
+     Right cpWithRepo ->
+       writeB9Config cfgFile cpWithRepo
+  return True
 
 globals :: Parser GlobalOpts
 globals = toGlobalOpts
@@ -120,11 +135,11 @@ globals = toGlobalOpts
               -> Maybe FilePath
               -> Bool
               -> Bool
-              -> Maybe String
               -> Maybe FilePath
+              -> Maybe String
               -> GlobalOpts
     toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique
-                 repo mRepoCache =
+                 mRepoCache repo =
       let minLogLevel = if verbose then Just LogTrace else
                           if quiet then Just LogError else Nothing
           b9cfg' = let b9cfg = mempty { verbosity = minLogLevel
@@ -153,9 +168,12 @@ cmds = subparser (  command "build"
                                    (progDesc "Show the final project that\
                                              \ would be used by the 'build' \
                                              \ command."))
-                  <> command "list-shared-images"
+                  <> command "list"
                              (info (pure runListSharedImages)
-                                   (progDesc "List shared images.")))
+                                   (progDesc "List shared images."))
+                  <> command "add-repo"
+                             (info (runAddRepo <$> remoteRepoOpts)
+                                   (progDesc "Add a remote repo.")))
 
 projects :: Parser [FilePath]
 projects = helper <*>
@@ -168,4 +186,29 @@ projects = helper <*>
                   <> noArgError (ErrorMsg "No project file specified!")))
 
 buildVars :: Parser BuildVariables
-buildVars = zip (("arg_"++) . show <$> ([1..] :: [Int])) <$> many (strArgument idm)
+buildVars = zip (("arg_"++) . show <$> ([1..] :: [Int]))
+            <$> many (strArgument idm)
+
+
+remoteRepoOpts :: Parser RemoteRepo
+remoteRepoOpts =
+  helper <*>
+  (RemoteRepo <$> strArgument (help "The name of the remmote repository."
+                              <> metavar "NAME")
+              <*> strArgument (help "The (remote) repository root path."
+                              <> metavar "REMOTE_DIRECTORY")
+              <*> (SshPrivKey
+                   <$> strArgument (help "Path to the SSH private\
+                                         \ key file used for \
+                                         \ authorization."
+                                   <> metavar "SSH_PRIV_KEY_FILE"))
+              <*> (SshRemoteHost
+                   <$> ((,)
+                        <$> strArgument (help "Repo hostname or IP"
+                                        <> metavar "HOST")
+                        <*> argument auto (help "SSH-Port number"
+                                     <> value 22
+                                     <> showDefault
+                                     <> metavar "PORT")))
+              <*> (SshRemoteUser <$> strArgument (help "SSH-User to login"
+                                                 <> metavar "USER")))

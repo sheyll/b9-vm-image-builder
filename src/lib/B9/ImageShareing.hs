@@ -5,8 +5,10 @@ import B9.B9Monad
 import B9.ConfigUtils
 import B9.DiskImages
 import B9.DiskImageBuilder
+import B9.Repository
 import B9.RepositoryIO
 
+import Control.Arrow
 import Data.Maybe
 import Control.Monad
 import Control.Applicative
@@ -20,32 +22,43 @@ import Data.List
 
 -- | Publish an sharedImage made from an image and image meta data to the
 -- configured repository
-shareImage :: Image -> ImageInfo -> B9 ()
+shareImage :: Image -> ImageInfo -> B9 SharedImage
 shareImage buildImg info = do
-  artRoot <- assembleSharedImageInBuildDir buildImg info
-  infoL (printf "ASSEMBLED '%s' FOR SHARING" (show info))
-  publishDirectoryRecursive artRoot
+  sharedImage <- createSharedImageInCache buildImg info
+  infoL (printf "SHARED IMAGE '%s' TO LOCAL REPO" (show info))
+  uploadToSelectedRepo sharedImage
+  return sharedImage
 
--- | Return a list of all existing sharedImages from the repository.
-getSharedImages :: B9 [SharedImage]
+-- | Return a list of all existing sharedImages from cached repositories.
+getSharedImages :: B9 [(Repository, [SharedImage])]
 getSharedImages = do
-  sharedImagePaths <- repoSearch sharedImagesRootDirectory
-                                 (FileNameEndsWith sharedImageFileExtension)
-  mapM consult sharedImagePaths
+  reposAndFiles <- repoSearch sharedImagesRootDirectory
+                              (FileNameEndsWith sharedImageFileExtension)
+  mapM (\(repo,files) -> (repo,) <$> mapM consult files) reposAndFiles
 
 -- * Internals:
 
+uploadToSelectedRepo :: SharedImage -> B9 ()
+uploadToSelectedRepo i = do
+  c <- getSharedImagesCacheDir
+  r <- getSelectedRemoteRepo
+  when (isJust r) $ do
+    let (Image imgFile' _imgType) = sharedImageImage i
+        cachedImgFile = c </> imgFile'
+        cachedInfoFile = c </> sharedImageFileName i
+        repoImgFile = sharedImagesRootDirectory </> imgFile'
+        repoInfoFile = sharedImagesRootDirectory </> sharedImageFileName i
+    uploadToRepo (fromJust r) cachedImgFile repoImgFile
+    uploadToRepo (fromJust r) cachedInfoFile repoInfoFile
+
 -- | Convert the disk image and serialize the base image data structure.
-assembleSharedImageInBuildDir :: Image -> ImageInfo -> B9 FilePath
-assembleSharedImageInBuildDir buildImg info = do
-  art <- sharedImage info
-  buildDir <- getBuildDir
-  let sharedImageImg = changeImageDirectory sharedImageDir (sharedImageImage art)
-      sharedImageFile = sharedImageDir </> sharedImageFilePath art
-      sharedImageDir = buildDir </> sharedImagesRootDirectory
-  convertImage buildImg sharedImageImg
-  tell sharedImageFile art
-  return sharedImageDir
+createSharedImageInCache :: Image -> ImageInfo -> B9 SharedImage
+createSharedImageInCache img info = do
+  sharedImg <- sharedImage info
+  dir <- getSharedImagesCacheDir
+  convertImage img (changeImageDirectory dir (sharedImageImage sharedImg))
+  tell (dir </> sharedImageFileName sharedImg) sharedImg
+  return sharedImg
   where
     sharedImage :: ImageInfo -> B9 SharedImage
     sharedImage (ImageInfo name) = do
@@ -56,8 +69,12 @@ assembleSharedImageInBuildDir buildImg info = do
                         (SharedImageBuildId buildId)
                         info)
 
--- | `Info` hold all data necessary to identify file locations of a SharedImage's
--- sharedImages.
+getSharedImagesCacheDir :: B9 FilePath
+getSharedImagesCacheDir = do
+  cacheDir <- localRepoDir <$> getRepoCache
+  return (cacheDir </> sharedImagesRootDirectory)
+
+-- | 'SharedImage' holds all data necessary to identify an image shared.
 data SharedImage = SharedImage SharedImageName
                                SharedImageDate
                                SharedImageBuildId
@@ -76,11 +93,11 @@ sharedImageImage (SharedImage (SharedImageName n)
   Image (n ++ "_" ++ bid <.> show sharedImageType) sharedImageType
 
 -- | Calculate the path to the text file holding the serialized `ImageInfo`
--- relative to the root of a repository.
-sharedImageFilePath :: SharedImage -> FilePath
-sharedImageFilePath (SharedImage (SharedImageName n)
-                                 _
-                                 (SharedImageBuildId bid) _) =
+-- relative to the directory of shared images in a repository.
+sharedImageFileName :: SharedImage -> FilePath
+sharedImageFileName (SharedImage (SharedImageName n)
+                                     _
+                                     (SharedImageBuildId bid) _) =
   n ++ "_" ++ bid <.> sharedImageFileExtension
 
 sharedImagesRootDirectory :: FilePath

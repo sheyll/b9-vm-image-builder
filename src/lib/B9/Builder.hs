@@ -17,16 +17,13 @@ module B9.Builder ( module B9.B9Monad
                   ) where
 import Data.Data
 import Data.Monoid
-import           Control.Monad ( when )
-import           Control.Monad.IO.Class ( liftIO )
-import           Data.List ( nub )
+import Control.Monad
+import Control.Monad.IO.Class ( liftIO )
+import Data.List ( nub )
 import Data.Generics.Schemes
 import Data.Generics.Aliases
-import Data.Maybe ( catMaybes )
 import System.Directory (createDirectoryIfMissing, canonicalizePath)
-import System.FilePath ( takeDirectory
-                       , (</>)
-                       , (<.>) )
+import System.FilePath
 import Text.Printf ( printf )
 import B9.B9Monad
 import B9.ConfigUtils
@@ -87,7 +84,7 @@ buildProject projectTemplate cfgParser cliCfg =
     project = substProject (envVars cfg) projectTemplate
 
     export ((imgI, _), (Export imgO _, _)) = exportImage imgI imgO
-    export ((imgI, _), (Share info _, _)) = shareImage imgI info
+    export ((imgI, _), (Share info _, _)) = void (shareImage imgI info)
     export _ = return ()
 
 createBuildImages :: [Mounted DiskTarget] -> B9 [Mounted Image]

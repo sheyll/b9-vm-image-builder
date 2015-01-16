@@ -67,9 +67,9 @@ run name cfgParser cfg action = do
       -- Check repositories
       repoCache <- initRepoCache (repositoryCache cfg)
       let remoteRepos = getConfiguredRemoteRepos cfgParser
-      mapM_ (initRemoteRepo repoCache) remoteRepos
+      remoteRepos' <- mapM (initRemoteRepo repoCache) remoteRepos
       let ctx = BuildState buildId buildDate cfgParser cfg buildDir
-                           selectedRemoteRepo remoteRepos repoCache []
+                           selectedRemoteRepo remoteRepos' repoCache []
           buildDate = formatTime undefined "%F-%T" now
           selectedRemoteRepo = do
             sel <- repository cfg
@@ -78,8 +78,6 @@ run name cfgParser cfg action = do
                                 \ valid remote repos are: '%s'"
                                 sel
                                 (show remoteRepos)))
-
-
 
       -- Run the action build action
       (r, ctxOut) <- runStateT (runB9 action) ctx

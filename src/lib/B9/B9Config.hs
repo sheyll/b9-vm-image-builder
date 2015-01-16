@@ -2,6 +2,8 @@
 module B9.B9Config ( B9Config(..)
                    , defaultB9ConfigFile
                    , defaultB9Config
+                   , getB9ConfigFile
+                   , writeB9Config
                    , writeInitialB9Config
                    , readB9Config
                    , parseB9Config
@@ -18,7 +20,6 @@ import Control.Monad.IO.Class
 import System.Directory
 
 import B9.ConfigUtils
-import B9.Repository
 
 type BuildVariables = [(String,String)]
 
@@ -93,6 +94,20 @@ repositoryK :: String
 repositoryK = "repository"
 cfgFileSection :: String
 cfgFileSection = "global"
+
+getB9ConfigFile :: MonadIO m => Maybe SystemPath -> m FilePath
+getB9ConfigFile mCfgFile = do
+  cfgFile <- resolve (maybe defaultB9ConfigFile id mCfgFile)
+  ensureDir cfgFile
+  return cfgFile
+
+writeB9Config :: MonadIO m
+                 => (Maybe SystemPath)
+                 -> ConfigParser
+                 -> m ()
+writeB9Config cfgFileIn cp = do
+  cfgFile <- getB9ConfigFile cfgFileIn
+  liftIO (writeFile cfgFile (to_string cp))
 
 writeInitialB9Config :: MonadIO m
                         => (Maybe SystemPath)

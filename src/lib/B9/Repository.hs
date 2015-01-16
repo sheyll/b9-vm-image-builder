@@ -5,6 +5,7 @@ module B9.Repository (RemoteRepo(..)
                      ,SshRemoteUser(..)
                      ,initRepoCache
                      ,initRemoteRepo
+                     ,remoteRepoCheckSshPrivKey
                      ,remoteRepoCacheDir
                      ,localRepoDir
                      ,writeRemoteRepoConfig
@@ -48,22 +49,29 @@ initRepoCache repoDirSystemPath = do
   ensureDir (repoDir ++ "/")
   return (RepoCache repoDir)
 
+-- | Check for existance of priv-key and make it an absolute path.
+remoteRepoCheckSshPrivKey :: MonadIO m => RemoteRepo -> m RemoteRepo
+remoteRepoCheckSshPrivKey (RemoteRepo rId rp (SshPrivKey keyFile) h u) = do
+  exists <- liftIO (doesFileExist keyFile)
+  keyFile' <- liftIO (canonicalizePath keyFile)
+  when (not exists)
+       (error (printf "SSH Key file '%s' for repository '%s' is missing."
+                      keyFile'
+                      rId))
+  return (RemoteRepo rId rp (SshPrivKey keyFile') h u)
+
 -- | Initialize the repository; load the corresponding settings from the config
 -- file, check that the priv key exists and create the correspondig cache
 -- directory.
 initRemoteRepo :: MonadIO m
                => RepoCache
                -> RemoteRepo
-               -> m ()
+               -> m RemoteRepo
 initRemoteRepo cache repo = do
-  let (RemoteRepo repoId _ (SshPrivKey privKeyFile) _ _) = repo
-  exists <- liftIO (doesFileExist privKeyFile)
-  when (not exists)
-       (error (printf "SSH Key file '%s' for repository '%s' is missing."
-                      privKeyFile
-                      repoId))
+  repo' <- remoteRepoCheckSshPrivKey repo
+  let (RemoteRepo repoId _ _ _ _) = repo'
   ensureDir (remoteRepoCacheDir cache repoId ++ "/")
-  return ()
+  return repo'
 
 -- | Return the cache directory for a remote repository relative to the root
 -- cache dir.
