@@ -1,14 +1,18 @@
 Project { projectName = "helloworldraw"
                , projectDisks =
                    [ (Share
-                        (ImageInfo "helloWorldRaw-img")
+                        "helloWorldRaw-img"
+                        Raw
                         (SourceImage
                          (Image "${arg_1}" QCow2) NoPT KeepSize)
                    , MountPoint "/") ]
                , projectSharedDirectories =  [ ]
                , projectBuildScript =
                  Verbosity Debug
-                 [ Run "echo" ["Hello WOrld"]]
+                 [ Run "dhcpcd" []
+                 , Run "pacman-db-upgrade" []
+                 , Run "pacman" ["--noconfirm", "-Syu"]
+                 ]
                , projectResources = Resources { maxMemory = RamSize 1 GB
                                               , cpuCount = 1
                                               , cpuArch = X86_64

@@ -18,6 +18,8 @@ import Control.Exception
 import Data.Function (on)
 import Control.Monad.IO.Class
 import System.Directory
+import Text.Printf
+import Control.Applicative
 
 import B9.ConfigUtils
 
@@ -41,7 +43,8 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          } deriving (Show)
 
 instance Monoid B9Config where
-  mempty = defaultB9Config
+  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True
+                    defaultRepositoryCache Nothing
   mappend c c' =
     B9Config { verbosity = getLast $ on mappend (Last . verbosity) c c'
              , logFile = getLast $ on mappend (Last . logFile) c c'
@@ -56,7 +59,7 @@ instance Monoid B9Config where
              }
 
 defaultB9Config :: B9Config
-defaultB9Config = B9Config { verbosity = Nothing
+defaultB9Config = B9Config { verbosity = Just LogInfo
                            , logFile = Nothing
                            , buildDirRoot = Nothing
                            , keepTempDirs = False
@@ -125,7 +128,7 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
   when (not exists) $
     let res = do
           let cp = emptyCP
-              c = cliCfg
+              c = defaultB9Config <> cliCfg
           cp1 <- add_section cp cfgFileSection
           cp2 <- setshow cp1 cfgFileSection verbosityK (verbosity c)
           cp3 <- setshow cp2 cfgFileSection logFileK (logFile c)
@@ -145,21 +148,23 @@ readB9Config :: MonadIO m => (Maybe SystemPath) -> m ConfigParser
 readB9Config Nothing = readB9Config (Just defaultB9ConfigFile)
 readB9Config (Just cfgFile) = readIniFile cfgFile
 
-parseB9Config :: ConfigParser -> B9Config
+parseB9Config :: ConfigParser -> Either String B9Config
 parseB9Config cp =
-  let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
-      geto = getOptionOr cp cfgFileSection
-      c = mempty
-
-  in B9Config {
-    verbosity = geto verbosityK (verbosity c)
-    , logFile = geto logFileK (logFile c)
-    , buildDirRoot = geto buildDirRootK (buildDirRoot c)
-    , keepTempDirs = geto keepTempDirsK (keepTempDirs c)
-    , execEnvType = geto execEnvTypeK (execEnvType c)
-    , profileFile = geto profileFileK (profileFile c)
-    , envVars = getOption cp cfgFileSection envVarsK <> envVars c
-    , uniqueBuildDirs = geto uniqueBuildDirsK (uniqueBuildDirs c)
-    , repositoryCache = geto repositoryCacheK (repositoryCache c)
-    , repository = getOption cp cfgFileSection repositoryK <> repository c
-    }
+  let getr :: (Get_C a, Read a) => OptionSpec -> Either CPError a
+      getr = get cp cfgFileSection
+      getB9Config =
+        B9Config <$> getr verbosityK
+                 <*> getr logFileK
+                 <*> getr buildDirRootK
+                 <*> getr keepTempDirsK
+                 <*> getr execEnvTypeK
+                 <*> getr profileFileK
+                 <*> getr envVarsK
+                 <*> getr uniqueBuildDirsK
+                 <*> getr repositoryCacheK
+                 <*> getr repositoryK
+  in case getB9Config of
+       Left err ->
+         Left (printf "Failed to parse B9 configuration file: '%s'" (show err))
+       Right x ->
+         Right x

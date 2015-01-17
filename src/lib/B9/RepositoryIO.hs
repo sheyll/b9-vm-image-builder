@@ -1,5 +1,7 @@
 module B9.RepositoryIO (repoSearch
-                       ,uploadToRepo
+                       ,pushToRepo
+                       ,pullFromRepo
+                       ,pullGlob
                        ,Repository(..)
                        ,FilePathGlob(..)) where
 
@@ -15,14 +17,7 @@ import System.FilePath
 import Text.Printf (printf)
 
 data Repository = Cache | Remote String
-  deriving (Read, Show)
-
--- | Upload a file from the cache to a remote repository
-uploadToRepo :: RemoteRepo -> FilePath -> FilePath -> B9 ()
-uploadToRepo repo@(RemoteRepo repoId _ _ _ _) src dest = do
-  dbgL (printf "UPLOADING '%s' TO REPO '%s'" (takeFileName src) repoId)
-  cmd (repoEnsureDirCmd repo dest)
-  cmd (uploadCmd repo src dest)
+  deriving (Eq, Ord, Read, Show)
 
 -- | Find files which are in 'subDir' and match 'glob' in the repository
 -- cache. NOTE: This operates on the repository cache, but does not enforce a
@@ -55,46 +50,98 @@ repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
           files <- liftIO (getDirectoryContents dir)
           return ((dir </>) <$> (filter (matchGlob glob) files))
 
+-- | Push a file from the cache to a remote repository
+pushToRepo :: RemoteRepo -> FilePath -> FilePath -> B9 ()
+pushToRepo repo@(RemoteRepo repoId _ _ _ _) src dest = do
+  dbgL (printf "PUSHING '%s' TO REPO '%s'" (takeFileName src) repoId)
+  cmd (repoEnsureDirCmd repo dest)
+  cmd (pushCmd repo src dest)
+
+-- | Pull a file from a remote repository to cache
+pullFromRepo :: RemoteRepo -> FilePath -> FilePath -> B9 ()
+pullFromRepo repo@(RemoteRepo repoId
+                              rootDir
+                              _key
+                              (SshRemoteHost (host, _port))
+                              (SshRemoteUser user)) src dest = do
+  dbgL (printf "PULLING '%s' FROM REPO '%s'" (takeFileName src) repoId)
+  cmd (printf "rsync -rtv -e 'ssh %s' '%s@%s:%s' '%s'"
+              (sshOpts repo)
+              user
+              host
+              (rootDir </> src)
+              dest)
+
+-- | Push a file from the cache to a remote repository
+pullGlob :: FilePath -> FilePathGlob -> RemoteRepo -> B9 ()
+pullGlob subDir glob repo@(RemoteRepo repoId
+                                      rootDir
+                                      _key
+                                      (SshRemoteHost (host, _port))
+                                      (SshRemoteUser user)) = do
+  cache <- getRepoCache
+  infoL (printf "SYNCING REPO METADATA '%s'" repoId)
+  let c = printf "rsync -rtv\
+                 \ --include '%s'\
+                 \ --exclude '*.*'\
+                 \ -e 'ssh %s'\
+                 \ '%s@%s:%s/' '%s/'"
+                 (globToPattern glob)
+                 (sshOpts repo)
+                 user
+                 host
+                 (rootDir </> subDir)
+                 destDir
+      destDir = repoCacheDir </> subDir
+      repoCacheDir = remoteRepoCacheDir cache repoId
+  ensureDir destDir
+  cmd c
+
 -- | Express a pattern for file paths, used when searching repositories.
-data FilePathGlob = FileNameEndsWith String
+data FilePathGlob = FileExtension String
 
 -- * Internals
 
+globToPattern :: FilePathGlob -> String
+globToPattern (FileExtension ext) = "*." ++ ext
+
 -- | A predicate that is satisfied if a file path matches a glob.
 matchGlob :: FilePathGlob -> FilePath -> Bool
-matchGlob (FileNameEndsWith suffix) = isSuffixOf suffix
+matchGlob (FileExtension ext) = isSuffixOf ("." ++ ext)
 
--- | A shell command string for invoking rsync to upload a path to a remote host
+-- | A shell command string for invoking rsync to push a path to a remote host
 -- via ssh.
-uploadCmd :: RemoteRepo -> FilePath -> FilePath -> String
-uploadCmd (RemoteRepo _repoId
-                       rootDir
-                       (SshPrivKey key)
-                       (SshRemoteHost (host, port))
-                       (SshRemoteUser user)) src dest =
+pushCmd :: RemoteRepo -> FilePath -> FilePath -> String
+pushCmd repo@(RemoteRepo _repoId
+                         rootDir
+                         _key
+                         (SshRemoteHost (host, _port))
+                         (SshRemoteUser user)) src dest =
   printf "rsync -rtv --inplace --ignore-existing -e 'ssh %s' '%s' '%s'"
-         sshOpts src sshDest
-  where sshOpts = unwords ["-o","StrictHostKeyChecking=no"
-                          ,"-o","UserKnownHostsFile=/dev/null"
-                          ,"-o",printf "Port=%i" port
-                          ,"-o","IdentityFile=" ++ key]
-        sshDest = printf "%s@%s:%s/%s" user host rootDir dest :: String
+         (sshOpts repo) src sshDest
+  where sshDest = printf "%s@%s:%s/%s" user host rootDir dest :: String
 
 -- | A shell command string for invoking rsync to create the directories for a
--- file upload.
+-- file push.
 repoEnsureDirCmd :: RemoteRepo -> FilePath -> String
-repoEnsureDirCmd (RemoteRepo _repoId
-                              rootDir
-                              (SshPrivKey key)
-                              (SshRemoteHost (host, port))
-                              (SshRemoteUser user)) dest =
+repoEnsureDirCmd repo@(RemoteRepo _repoId
+                                   rootDir
+                                   _key
+                                   (SshRemoteHost (host, _port))
+                                   (SshRemoteUser user)) dest =
   printf "ssh %s %s@%s mkdir -p '%s'"
-         sshOpts
+         (sshOpts repo)
          user
          host
          (rootDir </> takeDirectory dest)
-  where
-    sshOpts = unwords ["-o","StrictHostKeyChecking=no"
-                      ,"-o","UserKnownHostsFile=/dev/null"
-                      ,"-o",printf "Port=%i" port
-                      ,"-o","IdentityFile=" ++ key]
+
+sshOpts :: RemoteRepo -> String
+sshOpts (RemoteRepo _repoId
+                    _rootDir
+                    (SshPrivKey key)
+                    (SshRemoteHost (_host, port))
+                    _user) =
+  unwords ["-o","StrictHostKeyChecking=no"
+          ,"-o","UserKnownHostsFile=/dev/null"
+          ,"-o",printf "Port=%i" port
+          ,"-o","IdentityFile=" ++ key]

@@ -1,0 +1,17 @@
+Project {
+  projectName = "from_shared_to_shared",
+  projectDisks = [
+    (Share "${arg_1}_with_emacs" QCow2 (From "${arg_1}" KeepSize),
+     MountPoint "/")
+  ],
+  projectSharedDirectories = [],
+  projectBuildScript =
+    Begin [
+      Run "pacman" ["--noconfirm", "-S", "emacs"]
+    ],
+  projectResources = Resources {
+    maxMemory = AutomaticRamSize,
+    cpuCount = 1,
+    cpuArch = X86_64
+  }
+}

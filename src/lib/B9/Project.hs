@@ -25,6 +25,6 @@ emptyProject :: Project
 emptyProject = mempty
 
 data DiskTarget = Export Image ImageSource
+                | Share String ImageType ImageSource
                 | Transient ImageSource
-                | Share ImageInfo ImageSource
                 deriving (Read, Show, Typeable, Data)

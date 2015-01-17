@@ -21,10 +21,16 @@ data Script = In FilePath [Script]
             | Verbosity CmdVerbosity [Script]
             | Begin [Script]
             | Run FilePath [String]
+            | NoOP
             deriving (Show, Read, Typeable, Data)
 
 instance Monoid Script where
-  mempty = Begin []
+  mempty = NoOP
+  NoOP `mappend` s = s
+  s `mappend` NoOP = s
+  (Begin ss) `mappend` (Begin ss') = Begin (ss ++ ss')
+  (Begin ss) `mappend` s' = Begin (ss ++ [s'])
+  s `mappend` (Begin ss') = Begin (s : ss')
   s `mappend` s' = Begin [s, s']
 
 data Cmd = Cmd { cmdPath :: String
@@ -51,6 +57,7 @@ toCmds :: Script -> [Cmd]
 toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
   where
     toLLC :: Script -> Reader Ctx [Cmd]
+    toLLC NoOP = return []
     toLLC (In d cs) = local (\ ctx -> ctx { ctxCwd = (Cwd d) })
                       (toLLC (Begin cs))
     toLLC (As u cs) = local (\ ctx -> ctx { ctxUser = (User u) })

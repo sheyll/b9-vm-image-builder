@@ -1,7 +1,8 @@
 Project { projectName = "helloworld_partitioned"
                , projectDisks =
                    [ (Share
-                        (ImageInfo "hello-world-partitioned-img")
+                        "hello-world-partitioned-img"
+                        QCow2
                         (SourceImage
                          (Image "${arg_1}" QCow2) (Partition 1) KeepSize)
                    , MountPoint "/") ]

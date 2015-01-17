@@ -3,31 +3,22 @@ module B9.LibVirtLXC ( runInEnvironment
                      , setDefaultConfig
                      ) where
 
-import Control.Applicative ( (<$>), (<*>) )
-import Control.Exception ( bracket )
+import Control.Applicative
 import Control.Monad.IO.Class ( liftIO )
-import Data.Monoid
-import Data.Maybe
-import Data.List ( intercalate )
-import System.Directory ( getTemporaryDirectory
-                        , getPermissions
-                        , setPermissions
-                        , setOwnerExecutable
-                        , createDirectoryIfMissing
-                        , doesFileExist
-                        , removeDirectoryRecursive )
-import System.FilePath ( (</>), (<.>) )
-import System.IO ( writeFile )
-import System.Process ( callCommand )
+import System.Directory
+import System.FilePath
 import Text.Printf ( printf )
 
 import B9.ShellScript
-import B9.B9Config
 import B9.B9Monad
 import B9.DiskImages
 import B9.ExecEnv
 import B9.ConfigUtils
 
+lxcDefaultRamSize :: RamSize
+lxcDefaultRamSize = RamSize 1 GB
+
+supportedImageTypes :: [ImageType]
 supportedImageTypes = [Raw, QCow2, Vmdk]
 
 runInEnvironment :: ExecEnv -> Script -> B9 Bool
@@ -78,6 +69,8 @@ data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Bool
                                          , virshURI :: FilePath
                                          , networkId :: Maybe String
                                          } deriving (Read, Show)
+
+defaultLibVirtLXCConfig :: LibVirtLXCConfig
 defaultLibVirtLXCConfig = LibVirtLXCConfig
                           True
                           "/usr/bin/virsh"
@@ -85,13 +78,20 @@ defaultLibVirtLXCConfig = LibVirtLXCConfig
                           "lxc:///"
                           Nothing
 
+cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
+useSudoK :: String
 useSudoK = "use_sudo"
+virshPathK :: String
 virshPathK = "virsh_path"
+emulatorK :: String
 emulatorK = "emulator_path"
+virshURIK :: String
 virshURIK = "connection"
+networkIdK :: String
 networkIdK = "network"
 
+configureLibVirtLXC :: B9 LibVirtLXCConfig
 configureLibVirtLXC = do
   c <- readLibVirtConfig
   traceL $ printf "USING LibVirtLXCConfig: %s" (show c)
@@ -103,13 +103,14 @@ setDefaultConfig = either (error . show) id eitherCp
     eitherCp = do
       let cp = emptyCP
           c = defaultLibVirtLXCConfig
-      cp <- add_section cp cfgFileSection
-      cp <- setshow cp cfgFileSection useSudoK $ useSudo c
-      cp <- set cp cfgFileSection virshPathK $ virshPath c
-      cp <- set cp cfgFileSection emulatorK $ emulator c
-      cp <- set cp cfgFileSection virshURIK $ virshURI c
-      setshow cp cfgFileSection networkIdK $ networkId c
+      cp1 <- add_section cp cfgFileSection
+      cp2 <- setshow cp1 cfgFileSection useSudoK $ useSudo c
+      cp3 <- set cp2 cfgFileSection virshPathK $ virshPath c
+      cp4 <- set cp3 cfgFileSection emulatorK $ emulator c
+      cp5 <- set cp4 cfgFileSection virshURIK $ virshURI c
+      setshow cp5 cfgFileSection networkIdK $ networkId c
 
+readLibVirtConfig :: B9 LibVirtLXCConfig
 readLibVirtConfig = do
   cp <- getConfigParser
   let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
@@ -122,7 +123,10 @@ readLibVirtConfig = do
     , networkId = geto networkIdK $ networkId defaultLibVirtLXCConfig
     }
 
+initScript :: String
 initScript = "init.sh"
+
+domainConfig :: String
 domainConfig = "domain.xml"
 
 createDomain :: LibVirtLXCConfig
@@ -162,17 +166,19 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   \  </devices>\n\
   \</domain>\n"
 
+osArch :: ExecEnv -> String
 osArch e = case cpuArch (envResources e) of
             X86_64 -> "x86_64"
             I386 -> "i686"
 
+libVirtNetwork :: Maybe String -> [String]
 libVirtNetwork Nothing = []
-libVirtNetwork (Just networkId) =
+libVirtNetwork (Just n) =
   [ "<interface type='network'>"
-  , "  <source network='" ++ networkId ++ "'/>"
+  , "  <source network='" ++ n ++ "'/>"
   , "</interface>" ]
 
-
+fsImage :: (Image, MountPoint) -> String
 fsImage (img, mnt) =
   "<filesystem type='file' accessmode='passthrough'>\n  " ++
   fsImgDriver img ++ "\n  " ++ fsImgSource img ++ "\n  " ++ fsTarget mnt ++
@@ -186,27 +192,33 @@ fsImage (img, mnt) =
           QCow2 -> ("type='nbd'", "format='qcow2'")
           Vmdk -> ("type='nbd'", "format='vmdk'")
 
-    fsImgSource (Image img _fmt) = "<source file='" ++ img ++ "'/>"
+    fsImgSource (Image src _fmt) = "<source file='" ++ src ++ "'/>"
 
+fsSharedDir :: SharedDirectory -> String
 fsSharedDir (SharedDirectory hostDir mnt) =
   "<filesystem type='mount'>\n  " ++
-  fsSharedDirSource hostDir ++ "\n  " ++ fsTarget mnt ++
+  fsSharedDirSource ++ "\n  " ++ fsTarget mnt ++
   "\n</filesystem>"
   where
-    fsSharedDirSource hostDir = "<source dir='" ++ hostDir ++ "'/>"
+    fsSharedDirSource = "<source dir='" ++ hostDir ++ "'/>"
 
+fsTarget :: MountPoint -> String
 fsTarget (MountPoint dir) = "<target dir='" ++ dir ++ "'/>"
 
+memoryUnit :: ExecEnv -> String
 memoryUnit = toUnit . maxMemory . envResources
   where
+    toUnit AutomaticRamSize = toUnit lxcDefaultRamSize
     toUnit (RamSize _ u) = case u of
                             GB -> "GiB"
                             MB -> "MiB"
                             KB -> "KiB"
                             B -> "B"
-
+memoryAmount :: ExecEnv -> String
 memoryAmount = show . toAmount . maxMemory . envResources
   where
+    toAmount AutomaticRamSize = toAmount lxcDefaultRamSize
     toAmount (RamSize n _) = n
 
+cpuCountStr :: ExecEnv -> String
 cpuCountStr = show . cpuCount . envResources

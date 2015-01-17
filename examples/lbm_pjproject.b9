@@ -1,8 +1,6 @@
-
-Project
-               { projectName = "test-b7-2"
+Project       { projectName = "test-b7-2"
                , projectDisks =
-                 [(Transient (CopyOnWrite (Image "/home/sven/.beqemu/machines/svox-pico_builder-archlinux-mem2048-smp4/archlinux_devel_base_img/img.qcow2" QCow2)), MountPoint "/")]
+                 [(Transient (CopyOnWrite (Image "${arg_1}" QCow2)), MountPoint "/")]
                , projectSharedDirectories =
                  [ SharedDirectory
                    "/home/sven/MRF/mrf_third_party/custom-pkgs/lbm_pjproject"

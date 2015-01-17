@@ -51,6 +51,8 @@ data BuildState = BuildState { bsBuildId :: String
                              , bsRemoteRepos :: [RemoteRepo]
                              , bsRepoCache :: RepoCache
                              , bsProf :: [ProfilingEntry]
+                             , bsStartTime :: UTCTime
+                             , bsInheritStdIn :: Bool
                              }
 data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
@@ -69,7 +71,8 @@ run name cfgParser cfg action = do
       let remoteRepos = getConfiguredRemoteRepos cfgParser
       remoteRepos' <- mapM (initRemoteRepo repoCache) remoteRepos
       let ctx = BuildState buildId buildDate cfgParser cfg buildDir
-                           selectedRemoteRepo remoteRepos' repoCache []
+                           selectedRemoteRepo remoteRepos' repoCache
+                           [] now True
           buildDate = formatTime undefined "%F-%T" now
           selectedRemoteRepo = do
             sel <- repository cfg
@@ -78,9 +81,7 @@ run name cfgParser cfg action = do
                                 \ valid remote repos are: '%s'"
                                 sel
                                 (show remoteRepos)))
-
-      -- Run the action build action
-      (r, ctxOut) <- runStateT (runB9 action) ctx
+      (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
       -- Write a profiling report
       when (isJust (profileFile cfg)) $
         writeFile (fromJust (profileFile cfg))
@@ -114,6 +115,15 @@ run name cfgParser cfg action = do
 
     generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
 
+    -- Run the action build action
+    wrappedAction = do
+      startTime <- gets bsStartTime
+      r <- action
+      now <- liftIO getCurrentTime
+      let duration = show (now `diffUTCTime` startTime)
+      infoL (printf "DURATION: %s" duration)
+      return r
+
 
 getBuildId :: B9 FilePath
 getBuildId = gets bsBuildId
@@ -143,15 +153,29 @@ getRepoCache :: B9 RepoCache
 getRepoCache = gets bsRepoCache
 
 cmd :: String -> B9 ()
-cmd cmdStr = do
+cmd str = do
+  inheritStdIn <- gets bsInheritStdIn
+  if inheritStdIn
+     then interactive str
+     else nonInteractive str
+
+interactive :: String -> B9 ()
+interactive str = void (cmdWithStdIn str :: B9 Inherited)
+
+nonInteractive :: String -> B9 ()
+nonInteractive str = void (cmdWithStdIn str :: B9 ClosedStream)
+
+cmdWithStdIn :: (InputSource stdin) => String -> B9 stdin
+cmdWithStdIn cmdStr = do
   traceL $ "COMMAND: " ++ cmdStr
-  (Inherited, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
+  (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
   cmdLogger <- getCmdLogger
   e <- liftIO $ runConcurrently $
        Concurrently (cpOut $$ cmdLogger LogTrace) *>
        Concurrently (cpErr $$ cmdLogger LogInfo) *>
        Concurrently (waitForStreamingProcess cph)
   checkExitCode e
+  return cpIn
   where
     getCmdLogger = do
       lv <- gets $ verbosity . bsCfg

@@ -1,4 +1,5 @@
 module B9.Repository (RemoteRepo(..)
+                     ,remoteRepoRepoId
                      ,RepoCache(..)
                      ,SshPrivKey(..)
                      ,SshRemoteHost(..)
@@ -32,6 +33,9 @@ data RemoteRepo = RemoteRepo String
                              SshRemoteHost
                              SshRemoteUser
   deriving (Read, Show, Typeable, Data)
+
+remoteRepoRepoId :: RemoteRepo -> String
+remoteRepoRepoId (RemoteRepo repoId _ _ _ _) = repoId
 
 newtype SshPrivKey = SshPrivKey FilePath
   deriving (Read, Show, Typeable, Data)

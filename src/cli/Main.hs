@@ -52,15 +52,36 @@ runBuild projectFiles _cfgFile cp conf = do
   prjs <- mapM consult projectFiles
   buildProject (mconcat prjs) cp conf
 
-runShow :: [FilePath] -> BuildAction
-runShow projectFiles _cfgFile  cp conf = do
+runPrint :: [FilePath] -> BuildAction
+runPrint projectFiles _cfgFile  cp conf = do
   prjs <- mapM consult projectFiles
-  showProject (mconcat prjs) cp conf
+  printProject (mconcat prjs) cp conf
+
+runPush :: SharedImageName -> BuildAction
+runPush name _cfgFile cp conf = impl
+  where
+    conf' = conf { keepTempDirs = False }
+    impl = run "push" cp conf'
+               (if not (isJust (repository conf'))
+                   then do
+                     errorL "No repository specified! \
+                            \ Use '-r' to specify a repo BEFORE 'push'."
+                     return False
+                   else do
+                     pushSharedImageLatestVersion name
+                     return True)
+
+runPull :: Maybe SharedImageName -> BuildAction
+runPull mName _cfgFile cp conf =
+  run "pull" cp conf' (pullRemoteRepos >> maybePullImage)
+  where
+    conf' = conf { keepTempDirs = False }
+    maybePullImage = maybe (return True) pullLatestImage mName
 
 runListSharedImages :: BuildAction
 runListSharedImages _cfgFile cp conf = impl
   where
-    conf' = conf { keepTempDirs = True }
+    conf' = conf { keepTempDirs = False }
     impl = do
       imgs <- run "list" cp conf' getSharedImages
       if null imgs
@@ -160,11 +181,27 @@ globals = toGlobalOpts
 
 cmds :: Parser BuildAction
 cmds = subparser (  command "build"
-                             (info (runBuild <$> projects)
+                             (info (runBuild <$> projectsParser)
                                    (progDesc "Merge all project files and\
                                              \ build."))
+                  <> command "push"
+                             (info (runPush <$> sharedImageNameParser)
+                                   (progDesc "Push the lastest shared image\
+                                             \ from cache to the selected \
+                                             \ remote repository."))
+                  <> command "pull"
+                             (info (runPull <$> optional sharedImageNameParser)
+                                   (progDesc "Either pull shared image meta\
+                                             \ data from all repositories,\
+                                             \ or only from just a selected one.\
+                                             \ If additionally the name of a\
+                                             \ shared images was specified,\
+                                             \ pull the newest version\
+                                             \ from either the selected repo,\
+                                             \ or from the repo with the most\
+                                             \ recent version."))
                   <> command "print"
-                             (info (runShow <$> projects)
+                             (info (runPrint <$> projectsParser)
                                    (progDesc "Show the final project that\
                                              \ would be used by the 'build' \
                                              \ command."))
@@ -172,26 +209,26 @@ cmds = subparser (  command "build"
                              (info (pure runListSharedImages)
                                    (progDesc "List shared images."))
                   <> command "add-repo"
-                             (info (runAddRepo <$> remoteRepoOpts)
+                             (info (runAddRepo <$> remoteRepoParser)
                                    (progDesc "Add a remote repo.")))
 
-projects :: Parser [FilePath]
-projects = helper <*>
-           some (strOption
-                  (help "Project file to load, specify multiple project\
-                        \ files to merge them into a single project."
-                  <> short 'f'
-                  <> long "project-file"
-                  <> metavar "FILENAME"
-                  <> noArgError (ErrorMsg "No project file specified!")))
+projectsParser :: Parser [FilePath]
+projectsParser = helper <*>
+   some (strOption
+          (help "Project file to load, specify multiple project\
+                \ files to merge them into a single project."
+          <> short 'f'
+          <> long "project-file"
+          <> metavar "FILENAME"
+          <> noArgError (ErrorMsg "No project file specified!")))
 
 buildVars :: Parser BuildVariables
 buildVars = zip (("arg_"++) . show <$> ([1..] :: [Int]))
             <$> many (strArgument idm)
 
 
-remoteRepoOpts :: Parser RemoteRepo
-remoteRepoOpts =
+remoteRepoParser :: Parser RemoteRepo
+remoteRepoParser =
   helper <*>
   (RemoteRepo <$> strArgument (help "The name of the remmote repository."
                               <> metavar "NAME")
@@ -212,3 +249,10 @@ remoteRepoOpts =
                                      <> metavar "PORT")))
               <*> (SshRemoteUser <$> strArgument (help "SSH-User to login"
                                                  <> metavar "USER")))
+
+sharedImageNameParser :: Parser SharedImageName
+sharedImageNameParser =
+  helper <*>
+  (SharedImageName <$> strArgument
+                         (help "Shared image name"
+                         <> metavar "NAME"))
