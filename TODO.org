@@ -42,8 +42,8 @@
 ** Do not export any images
 * TODO Add support for sharing 'Image's
 ** DONE Define ImageInfo currently only a name, later: version, type author, ...
-** TODO Add importing share images from cache
-** TODO Add importing share images from external repo
+** DONE Add importing share images from cache
+** DONE Add importing share images from external repo
 ** DONE Move/Rename B9.BaseImageBuilder
 ** DONE Add share images export
 ** DONE Define Repository for shared-images'
@@ -53,7 +53,7 @@
 ** TODO Add 'ClearCache' action
 ** TODO Add 'show repos' action
 ** DONE Add 'list repo contents' action
-** TODO Add 'refresh repos action
+** DONE Add 'refresh repos action
 ** Add 'add remote repo' with sshkey generation
 * Add 'system-setup' helper action
 ** Check for nbd
