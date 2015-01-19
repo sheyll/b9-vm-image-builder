@@ -19,6 +19,7 @@ data ExecEnv = ExecEnv { envName :: String
                        }
 
 data SharedDirectory = SharedDirectory FilePath MountPoint
+                     | SharedDirectoryRO FilePath MountPoint
                      deriving (Read, Show, Typeable, Data)
 
 data Resources = Resources { maxMemory :: RamSize

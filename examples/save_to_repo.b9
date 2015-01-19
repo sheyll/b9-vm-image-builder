@@ -1,0 +1,31 @@
+Project { projectName = "save-to-repo"
+        , projectDisks =
+            [ ImageTarget
+                (ExportDisk 0 [Vmdk] KeepSize)
+                (From "${arg_1}" (Resize (ImageSize 4 GB)))
+                (MountPoint "/")
+            ]
+        , projectConfigGenerator =
+            FromDirectory
+             (Path "cloud-config/")
+             (TemplateFiles ["meta-data", "user-data"])
+             [ Let [("domain", "te.st"),
+                   ("network", "192.168.178."),
+                   ("ntp-server", "192.168.178.92")]
+                   [ Let [("host", "test-server-1")]
+                         [CloudInit CI_ISO
+                                    "EXPORT/"
+                                    (InstanceId "test-server-1")]
+                   , Let [("host", "test-server-2")]
+                         [CloudInit CI_VFAT
+                                    "EXPORT/"
+                                    (InstanceId "test-server-1")]
+                   ]
+             ]
+        , projectSharedDirectories = []
+        , projectBuildScript = Run "echo" ["hello world"]
+        , projectCpuArch = X86_64
+        }
+
+-- P: Multiple Configs vs Mounting a Config during Build
+-- S: Add ImageDestination and ImageSource for cloud init

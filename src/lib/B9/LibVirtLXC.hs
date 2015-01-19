@@ -197,10 +197,12 @@ fsImage (img, mnt) =
 fsSharedDir :: SharedDirectory -> String
 fsSharedDir (SharedDirectory hostDir mnt) =
   "<filesystem type='mount'>\n  " ++
-  fsSharedDirSource ++ "\n  " ++ fsTarget mnt ++
+  "<source dir='" ++ hostDir ++ "'/>" ++ "\n  " ++ fsTarget mnt ++
   "\n</filesystem>"
-  where
-    fsSharedDirSource = "<source dir='" ++ hostDir ++ "'/>"
+fsSharedDir (SharedDirectoryRO hostDir mnt) =
+  "<filesystem type='mount'>\n  " ++
+  "<source dir='" ++ hostDir ++ "'/>" ++ "\n  " ++ fsTarget mnt ++
+  "\n  <readonly />\n</filesystem>"
 
 fsTarget :: MountPoint -> String
 fsTarget (MountPoint dir) = "<target dir='" ++ dir ++ "'/>"

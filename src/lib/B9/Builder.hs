@@ -136,6 +136,8 @@ substProject env p = everywhere gsubst p
 
         substSharedDir (SharedDirectory fp mp) =
           SharedDirectory (sub fp) mp
+        substSharedDir (SharedDirectoryRO fp mp) =
+          SharedDirectoryRO (sub fp) mp
 
         substScript (In fp s) = In (sub fp) s
         substScript (Run fp args) = Run (sub fp) (map sub args)

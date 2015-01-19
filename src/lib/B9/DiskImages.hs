@@ -27,7 +27,7 @@ itImageMountPoint :: ImageTarget -> MountPoint
 itImageMountPoint (ImageTarget _ _ m) = m
 
 data MountPoint = MountPoint FilePath | NotMounted
-                     deriving (Show, Read, Typeable, Data)
+                     deriving (Show, Read, Typeable, Data, Eq)
 
 type Mounted a = (a, MountPoint)
 
