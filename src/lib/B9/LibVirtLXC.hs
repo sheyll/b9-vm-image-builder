@@ -184,7 +184,7 @@ fsImage (img, mnt) =
   fsImgDriver img ++ "\n  " ++ fsImgSource img ++ "\n  " ++ fsTarget mnt ++
   "\n</filesystem>"
   where
-    fsImgDriver (Image _img fmt) =
+    fsImgDriver (Image _img fmt _fs) =
       printf "<driver %s %s/>" driver fmt'
       where
         (driver, fmt') = case fmt of
@@ -192,7 +192,7 @@ fsImage (img, mnt) =
           QCow2 -> ("type='nbd'", "format='qcow2'")
           Vmdk -> ("type='nbd'", "format='vmdk'")
 
-    fsImgSource (Image src _fmt) = "<source file='" ++ src ++ "'/>"
+    fsImgSource (Image src _fmt _fs) = "<source file='" ++ src ++ "'/>"
 
 fsSharedDir :: SharedDirectory -> String
 fsSharedDir (SharedDirectory hostDir mnt) =

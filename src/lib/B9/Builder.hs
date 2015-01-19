@@ -15,14 +15,13 @@ module B9.Builder ( module B9.B9Monad
                   , createSharedDirs
                   ) where
 import Data.Data
+import Data.List
 import Data.Monoid
-import Control.Monad
+import Control.Applicative
 import Control.Monad.IO.Class ( liftIO )
-import Data.List ( nub )
 import Data.Generics.Schemes
 import Data.Generics.Aliases
 import System.Directory (createDirectoryIfMissing, canonicalizePath)
-import System.FilePath
 import Text.Printf ( printf )
 import B9.B9Monad
 import B9.ConfigUtils
@@ -61,70 +60,45 @@ buildProject projectTemplate cfgParser cliCfg =
       buildImgs <- createBuildImages (projectDisks project)
       infoL "DISK IMAGES CREATED"
       sharedDirs <- createSharedDirs (projectSharedDirectories project)
-
       let execEnv = ExecEnv (projectName project)
-                            buildImgs
+                            mountedBuildImgs
                             sharedDirs
-                            (projectResources project)
+                            (Resources AutomaticRamSize
+                                       8
+                                       (projectCpuArch project))
+          mountedBuildImgs = zip buildImgs (itImageMountPoint
+                                            <$> projectDisks project)
           script = projectBuildScript project
-
       success <- runInEnvironment execEnv script
       if success
         then do infoL "BUILD SCRIPT SUCCESSULLY EXECUTED IN CONTAINER"
-                mapM_ export (zip buildImgs (projectDisks project))
+                mapM_ (uncurry createDestinationImage)
+                      (zip buildImgs (itImageDestination <$>
+                                        (projectDisks project)))
                 infoL "BUILD FINISHED"
                 return True
 
         else do errorL "FAILED TO EXECUTE COMMANDS"
                 return False
-      where
-        export ((imgI, _), (Export imgO _, _)) =
-          exportImage imgI imgO
-        export ((imgI, _), (Share name _ _, _)) =
-          void (shareImage imgI (SharedImageName name))
-        export _ = return ()
 
-createBuildImages :: [Mounted DiskTarget] -> B9 [Mounted Image]
-createBuildImages disks = mapM create $ zip [0..] disks
+createBuildImages :: [ImageTarget] -> B9 [Image]
+createBuildImages disks = mapM create disks
   where
-    supportedImageTypes LibVirtLXC = LXC.supportedImageTypes
-    create (diskIndex, (disk, m)) = do
-      buildDir <- getBuildDir
+    create (ImageTarget dest imageSource _mnt) = do
       envType <- getExecEnvType
-      let (src, dest) =
-            case disk of
-             Share biName biDestFmt biSrc ->
-               let biDest = Image biDestFile biDestFmt
-                   biDestFile = buildDir
-                                </> biName
-                                <.> (show biDestFmt)
-               in (biSrc, biDest)
-
-             Export dest'@(Image _ destFmt') expSrc ->
-               let expDest = changeImageDirectory buildDir
-                             $ changeImageFormat expDestFmt dest'
-                   srcCompatible = compatibleImageTypes src
-                   expDestFmt = head
-                                $ filter (`elem` allowedTypes)
-                                $ filter (`elem` srcCompatible)
-                                $ nub
-                                $ destFmt' : srcCompatible
-               in (expSrc, expDest)
-
-             Transient tSrc ->
-               let tDest = Image tDestFile tDestFmt
-                   tDestFile = buildDir
-                               </> ("disk_" ++ show diskIndex)
-                               <.> (show tDestFmt)
-                   tDestFmt = head
-                              $ filter (`elem` allowedTypes)
-                              $ compatibleImageTypes src
-               in (tSrc, tDest)
-          allowedTypes = supportedImageTypes envType
-      srcAbs <- liftIO (ensureAbsoluteImageSourceDirExists src)
-      destAbs <- liftIO (ensureAbsoluteImageDirExists dest)
-      createdImg <- createImage srcAbs destAbs
-      return (createdImg, m)
+      buildDir <- getBuildDir
+      destTypes <- preferredDestImageTypes imageSource
+      let buildImgType = head (destTypes
+                               `intersect`
+                               preferredSourceImageTypes dest
+                               `intersect`
+                               (supportedImageTypes envType))
+      srcImg <- resolveImageSource imageSource
+      let buildImg = changeImageFormat buildImgType
+                                       (changeImageDirectory buildDir srcImg)
+      buildImgAbsolutePath <- liftIO (ensureAbsoluteImageDirExists buildImg)
+      materializeImageSource imageSource buildImg
+      return buildImgAbsolutePath
 
 createSharedDirs :: [SharedDirectory] -> B9 [SharedDirectory]
 createSharedDirs sharedDirsIn = mapM createSharedDir sharedDirsIn
@@ -133,6 +107,9 @@ createSharedDirs sharedDirsIn = mapM createSharedDir sharedDirsIn
       createDirectoryIfMissing True d
       d' <- canonicalizePath d
       return $ SharedDirectory d' m
+
+supportedImageTypes :: ExecEnvType -> [ImageType]
+supportedImageTypes LibVirtLXC = LXC.supportedImageTypes
 
 runInEnvironment :: ExecEnv -> Script -> B9 Bool
 runInEnvironment env script = do
@@ -145,16 +122,17 @@ substProject env p = everywhere gsubst p
   where gsubst :: forall a. Data a => a -> a
         gsubst = mkT substProject_
                   `extT` substMountPoint
-                    `extT` substDiskImage
+                    `extT` substImage
                        `extT` substSharedDir
                          `extT` substScript
                            `extT` substImageSource
                              `extT` substDiskTarget
         substProject_ prj = prj { projectName = sub (projectName p)}
 
+        substMountPoint NotMounted = NotMounted
         substMountPoint (MountPoint x) = MountPoint (sub x)
 
-        substDiskImage (Image fp t) = Image (sub fp) t
+        substImage (Image fp t fs) = Image (sub fp) t fs
 
         substSharedDir (SharedDirectory fp mp) =
           SharedDirectory (sub fp) mp
@@ -165,6 +143,7 @@ substProject env p = everywhere gsubst p
         substScript s = s
 
         substImageSource (From n s) = From (sub n) s
+        substImageSource (EmptyImage l f t s) = EmptyImage (sub l) f t s
         substImageSource s = s
 
         substDiskTarget (Share n t s) = Share (sub n) t s

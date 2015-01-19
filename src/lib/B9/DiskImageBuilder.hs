@@ -1,11 +1,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module B9.DiskImageBuilder (createImage
+module B9.DiskImageBuilder (materializeImageSource
+                           ,preferredDestImageTypes
+                           ,preferredSourceImageTypes
+                           ,resolveImageSource
+                           ,createDestinationImage
                            ,resizeImage
                            ,importImage
                            ,exportImage
                            ,exportAndRemoveImage
                            ,convertImage
                            ,shareImage
+                           ,ensureAbsoluteImageDirExists
                            ,pushSharedImageLatestVersion
                            ,lookupSharedImages
                            ,getSharedImages
@@ -31,77 +36,178 @@ import B9.Repository
 import B9.RepositoryIO
 import B9.DiskImages
 import B9.ConfigUtils
-import qualified B9.PartitionTable as PartitionTable
+import qualified B9.PartitionTable as P
 
--- | Create an image as close as possible to 'dest' from 'src' and return the
--- actual image created. NOTE: This maybe diffrent to 'dest'
-createImage :: ImageSource -> Image -> B9 Image
-createImage src dest = case src of
-                        (FileSystem fsType size) ->
-                          createFS fsType size dest
-                        (SourceImage srcImg part resize) ->
-                          createImageFromImage srcImg part resize dest
-                        (CopyOnWrite backingImg) ->
-                          createCOWImage backingImg dest
-                        (From name resize) -> do
-                          sharedImg <- getLatestImageByName name
-                          createImage (SourceImage sharedImg NoPT resize) dest
 
-createImageFromImage :: Image -> Partition -> DiskResize -> Image -> B9 Image
+-- | Resolve an ImageSource to an 'Image'. Note however that this source will
+-- may not exist as is the case for 'EmptyImage'.
+resolveImageSource :: ImageSource -> B9 Image
+resolveImageSource src = do
+  case src of
+   (EmptyImage fsLabel fsType imgType _size) ->
+     let img = Image fsLabel imgType fsType
+     in return (changeImageFormat imgType img)
+   (SourceImage srcImg _part _resize) ->
+     liftIO (ensureAbsoluteImageDirExists srcImg)
+   (CopyOnWrite backingImg) ->
+     liftIO (ensureAbsoluteImageDirExists backingImg)
+   (From name _resize) -> do
+     latestImage <- getLatestImageByName name
+     liftIO (ensureAbsoluteImageDirExists latestImage)
+
+-- | Return all valid image types sorted by preference.
+preferredDestImageTypes :: ImageSource -> B9 [ImageType]
+preferredDestImageTypes src =
+  case src of
+   (CopyOnWrite (Image _file fmt _fs)) -> return [fmt]
+   (EmptyImage _label NoFileSystem fmt _size) ->
+     return (nub [fmt, Raw, QCow2, Vmdk])
+   (EmptyImage _label _fs _fmt _size) -> return [Raw]
+   (SourceImage _img (Partition _) _resize) -> return [Raw]
+   (SourceImage (Image _file fmt _fs) _pt resize) ->
+     return (nub [fmt, Raw, QCow2, Vmdk]
+             `intersect`
+             (allowedImageTypesForResize resize))
+   (From name resize) -> do
+     sharedImg <- getLatestImageByName name
+     preferredDestImageTypes (SourceImage sharedImg NoPT resize)
+
+preferredSourceImageTypes :: ImageDestination -> [ImageType]
+preferredSourceImageTypes dest =
+  case dest of
+    (Share _ fmt resize) ->
+      nub [fmt, Raw, QCow2, Vmdk]
+      `intersect` (allowedImageTypesForResize resize)
+    (LocalFile (Image _ fmt _) resize) ->
+      nub [fmt, Raw, QCow2, Vmdk]
+      `intersect` (allowedImageTypesForResize resize)
+    Transient -> [Raw, QCow2, Vmdk]
+
+allowedImageTypesForResize :: ImageResize -> [ImageType]
+allowedImageTypesForResize r =
+  case r of
+    Resize _ -> [Raw]
+    ShrinkToMinimum -> [Raw]
+    _ -> [Raw, QCow2, Vmdk]
+
+ensureAbsoluteImageDirExists :: Image -> IO Image
+ensureAbsoluteImageDirExists img@(Image path _ _) = do
+  let dir = takeDirectory path
+  createDirectoryIfMissing True dir
+  dirAbs <- canonicalizePath dir
+  return $ changeImageDirectory dirAbs img
+
+-- | Create an image from an image source. The destination image must have a
+-- compatible image type and filesyste. The directory of the image MUST be
+-- present and the image file itself MUST NOT alredy exist.
+materializeImageSource :: ImageSource -> Image -> B9 ()
+materializeImageSource src dest =
+  case src of
+   (EmptyImage fsLabel fsType imgType size) ->
+     createEmptyImage fsLabel fsType imgType size dest
+   (SourceImage srcImg part resize) ->
+     createImageFromImage srcImg part resize dest
+   (CopyOnWrite backingImg) ->
+     createCOWImage backingImg dest
+   (From name resize) -> do
+     sharedImg <- getLatestImageByName name
+     materializeImageSource (SourceImage sharedImg NoPT resize) dest
+
+createImageFromImage :: Image -> Partition -> ImageResize -> Image -> B9 ()
 createImageFromImage src part size out = do
-  let tmp = if isPartitioned part
-            then changeImageFormat Raw out
-            else out
-  importImage src tmp
-  extractPartition part tmp
-  resizeImage size tmp
-  return tmp
+  importImage src out
+  extractPartition part out
+  resizeImage size out
   where
     extractPartition :: Partition -> Image -> B9 ()
     extractPartition NoPT _ = return ()
-    extractPartition (Partition partIndex) (Image outFile Raw) = do
-      (start, len, blockSize) <- liftIO $ PartitionTable.getPartition partIndex
-                                 outFile
+    extractPartition (Partition partIndex) (Image outFile Raw _) = do
+      (start, len, blockSize) <- liftIO (P.getPartition partIndex outFile)
       let tmpFile = outFile <.> "extracted"
       dbgL (printf "Extracting partition %i from '%s'" partIndex outFile)
       cmd (printf "dd if='%s' of='%s' bs=%i skip=%i count=%i &> /dev/null"
                    outFile tmpFile blockSize start len)
       cmd (printf "mv '%s' '%s'" tmpFile outFile)
 
-    extractPartition (Partition partIndex) (Image outFile fmt) =
+    extractPartition (Partition partIndex) (Image outFile fmt _) =
       error (printf "Extract partition %i from image '%s': Invalid format %s"
                     partIndex outFile (imageFileExtension fmt))
 
-createFS :: FileSystem -> DiskSize -> Image -> B9 Image
-createFS imgFs imgSize out = do
-  let imgTemp@(Image imgTempFile _) = changeImageFormat Raw out
-  dbgL (printf "Creating empty raw image '%s' with size %s" imgTempFile
-                (toQemuSizeOptVal imgSize))
-  cmd (printf "fallocate -l %s '%s'" (toQemuSizeOptVal imgSize) imgTempFile)
-  when (imgFs /= NoFileSystem) $ do
-    let fsCmd = "mkfs.ext4"
-    dbgL (printf "Creating file system %s" (show imgFs))
-    cmd (printf "%s -q '%s'" fsCmd imgTempFile)
-  return imgTemp
+createDestinationImage :: Image -> ImageDestination -> B9 ()
+createDestinationImage buildImg dest =
+  case dest of
+    (Share name imgType imgResize) -> do
+      resizeImage imgResize buildImg
+      let shareableImg = changeImageFormat imgType buildImg
+      exportAndRemoveImage buildImg shareableImg
+      void (shareImage shareableImg (SharedImageName name))
+    (LocalFile destImg imgResize) -> do
+      resizeImage imgResize buildImg
+      exportAndRemoveImage buildImg destImg
+    Transient ->
+      return ()
 
-createCOWImage :: Image -> Image -> B9 Image
-createCOWImage (Image backingFile _) out@(Image imgOut imgFmt) = do
+createEmptyImage :: String
+                 -> FileSystem
+                 -> ImageType
+                 -> ImageSize
+                 -> Image
+                 -> B9 ()
+createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
+  | fsType /= fsType' =
+  error (printf "Conflicting createEmptyImage parameters. Requested\
+                \ is file system %s but the destination image has %s."
+                (show fsType) (show fsType'))
+  | imgType /= imgType' =
+  error (printf "Conflicting createEmptyImage parameters. Requested\
+                \ is image type %s but the destination image has type %s."
+                (show imgType) (show imgType'))
+  | otherwise = do
+  let (Image imgFile imgFmt imgFs) = dest
+  dbgL (printf "Creating empty raw image '%s' with size %s" imgFile
+                (toQemuSizeOptVal imgSize))
+  cmd (printf "qemu-img create -f %s '%s' '%s'"
+              (imageFileExtension imgFmt)
+              imgFile
+              (toQemuSizeOptVal imgSize))
+  case (imgFmt, imgFs) of
+    (Raw, Ext4) -> do
+      let fsCmd = "mkfs.ext4"
+      dbgL (printf "Creating file system %s" (show imgFs))
+      cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
+    (_,NoFileSystem) ->
+      return ()
+
+createCOWImage :: Image -> Image -> B9 ()
+createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
   dbgL (printf "Creating COW image '%s' backed by '%s'"
                imgOut backingFile)
   cmd (printf "qemu-img create -f %s -o backing_file='%s' '%s'"
               (imageFileExtension imgFmt) backingFile imgOut)
-  return out
 
-resizeImage :: DiskResize -> Image -> B9 ()
+-- | Resize an image, including the file system inside the image.
+resizeImage :: ImageResize -> Image -> B9 ()
 resizeImage KeepSize _ = return ()
-resizeImage (ResizeImage newSize) (Image img _) = do
-  dbgL $ printf "Resizing image to %s" $ toQemuSizeOptVal newSize
-  cmd $ printf "qemu-img resize -q '%s' %s" img $ toQemuSizeOptVal newSize
-resizeImage (ResizeFS Ext4 newSize) (Image img Raw) = do
-  let sopt = toQemuSizeOptVal newSize
-  dbgL $ printf "Resizing image and filesystem to %s" sopt
-  cmd $ printf "qemu-img resize -q '%s' %s" img sopt
-  cmd $ printf "resize2fs -f '%s'" img
+resizeImage (Resize newSize) (Image img Raw Ext4) = do
+  let sizeOpt = toQemuSizeOptVal newSize
+  dbgL (printf "Resizing ext4 filesystem on raw image to %s" sizeOpt)
+  cmd (printf "e2fsck -p '%s'" img)
+  cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
+
+resizeImage (ResizeImage newSize) (Image img _ _) = do
+  let sizeOpt = toQemuSizeOptVal newSize
+  dbgL (printf "Resizing image to %s" sizeOpt)
+  cmd (printf "qemu-img resize -q '%s' %s" img sizeOpt)
+
+resizeImage ShrinkToMinimum (Image img Raw Ext4) = do
+  dbgL "Shrinking image to minimum size"
+  cmd (printf "e2fsck -p '%s'" img)
+  cmd (printf "resize2fs -f -M '%s'" img)
+
+resizeImage _ img =
+  error (printf "Invalid image type or filesystem, cannot resize image: %s"
+                (show img))
+
 
 -- | Import a disk image from some external source into the build directory
 -- if necessary convert the image.
@@ -122,7 +228,7 @@ convertImage imgIn imgOut = convert True imgIn imgOut
 
 -- | Convert/Copy/Move images
 convert :: Bool -> Image -> Image -> B9 ()
-convert doMove (Image imgIn fmtIn) (Image imgOut fmtOut)
+convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
   | imgIn == imgOut = do
     ensureDir imgOut
     dbgL (printf "No need to convert: '%s'" imgIn)
@@ -144,8 +250,8 @@ convert doMove (Image imgIn fmtIn) (Image imgOut fmtOut)
       dbgL (printf "Removing '%s'" imgIn)
       liftIO (removeFile imgIn)
 
-toQemuSizeOptVal :: DiskSize -> String
-toQemuSizeOptVal (DiskSize amount u) = show amount ++ case u of
+toQemuSizeOptVal :: ImageSize -> String
+toQemuSizeOptVal (ImageSize amount u) = show amount ++ case u of
   GB -> "G"
   MB -> "M"
   KB -> "K"
@@ -163,13 +269,14 @@ shareImage buildImg sname@(SharedImageName name) = do
 -- | Return a 'SharedImage' with the current build data and build id from the
 -- name and disk image.
 getSharedImageFromImageInfo :: SharedImageName -> Image -> B9 SharedImage
-getSharedImageFromImageInfo name (Image _ imgType) = do
+getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
    buildId <- getBuildId
    date <- getBuildDate
    return (SharedImage name
                        (SharedImageDate date)
                        (SharedImageBuildId buildId)
-                       imgType)
+                       imgType
+                       imgFS)
 
 -- | Convert the disk image and serialize the base image data structure.
 createSharedImageInCache :: Image -> SharedImageName -> B9 SharedImage
@@ -198,7 +305,7 @@ pushToSelectedRepo i = do
   c <- getSharedImagesCacheDir
   r <- getSelectedRemoteRepo
   when (isJust r) $ do
-    let (Image imgFile' _imgType) = sharedImageImage i
+    let (Image imgFile' _imgType _imgFS) = sharedImageImage i
         cachedImgFile = c </> imgFile'
         cachedInfoFile = c </> sharedImageFileName i
         repoImgFile = sharedImagesRootDirectory </> imgFile'
@@ -234,7 +341,7 @@ pullLatestImage (SharedImageName name) = do
              return False
      else do dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
              cacheDir <- getSharedImagesCacheDir
-             let (Image imgFile' _imgType) = sharedImageImage image
+             let (Image imgFile' _imgType _fs) = sharedImageImage image
                  cachedImgFile = cacheDir </> imgFile'
                  cachedInfoFile = cacheDir </> sharedImageFileName image
                  repoImgFile = sharedImagesRootDirectory </> imgFile'

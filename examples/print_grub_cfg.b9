@@ -1,0 +1,16 @@
+Project { projectName = "print-grub-cfg"
+        , projectDisks =
+            [ ImageTarget
+                Transient
+                (From "${arg_1}" KeepSize)
+                (MountPoint "/")
+            ]
+            , projectSharedDirectories =  [ ]
+            , projectBuildScript =
+              Verbosity Debug
+              [ Run "dhclient" []
+              , Run "yum" ["-y", "update"]
+              , Run "cat" ["/boot/grub/grub.conf"]
+              , Run "cat" ["/boot/grub/menu.lst"]]
+            , projectCpuArch = I386
+           }

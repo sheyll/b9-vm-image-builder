@@ -1,6 +1,5 @@
 module B9.Project ( Project(..)
                   , emptyProject
-                  , DiskTarget(..)
                   ) where
 
 import Data.Data
@@ -10,10 +9,10 @@ import B9.ExecEnv
 import B9.DiskImages
 
 data Project = Project { projectName :: String
-                       , projectDisks :: [Mounted DiskTarget]
+                       , projectDisks :: [ImageTarget]
                        , projectSharedDirectories :: [SharedDirectory]
                        , projectBuildScript :: Script
-                       , projectResources :: Resources
+                       , projectCpuArch :: CPUArch
                        } deriving (Read, Show, Typeable, Data)
 
 instance Monoid Project where
@@ -23,8 +22,3 @@ instance Monoid Project where
 
 emptyProject :: Project
 emptyProject = mempty
-
-data DiskTarget = Export Image ImageSource
-                | Share String ImageType ImageSource
-                | Transient ImageSource
-                deriving (Read, Show, Typeable, Data)

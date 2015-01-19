@@ -1,0 +1,19 @@
+Project { projectName = "update-and-cat"
+        , projectDisks =
+            [ ImageTarget
+                (LocalFile (Image "/home/sven/test-arch.img" QCow2 Ext4)
+                           KeepSize)
+                (From "${arg_1}" (Resize (ImageSize 4 GB)))
+                (MountPoint "/")
+            ]
+            , projectSharedDirectories =  [ ]
+            , projectBuildScript =
+              Verbosity Debug
+              [ Run "dhcpcd" []
+              , Run "ping" ["-c", "5", "lindenbaum.eu"]
+              , Run "pacman" ["--noconfirm", "-Syu"]
+              , Run "pacman-db-upgrade" []
+              , Run "cat" ["${arg_2}"]
+              ]
+            , projectCpuArch = X86_64
+           }

@@ -139,7 +139,8 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
           cp8 <- setshow cp7 cfgFileSection envVarsK (envVars c)
           cp9 <- setshow cp8 cfgFileSection uniqueBuildDirsK (uniqueBuildDirs c)
           cpA <- setshow cp9 cfgFileSection repositoryCacheK (repositoryCache c)
-          return $ merge cpA cpNonGlobal
+          cpB <- setshow cpA cfgFileSection repositoryK (repository c)
+          return $ merge cpB cpNonGlobal
     in case res of
      Left e -> liftIO (throwIO (IniFileException cfgFile e))
      Right cp -> liftIO (writeFile cfgFile (to_string cp))
