@@ -1,0 +1,11 @@
+#cloud-config
+# vim: syntax=yaml
+
+final_message: "The system is finally up, after $UPTIME seconds"
+
+# Upgrade the instance on first boot
+# (ie run apt-get upgrade)
+#
+# Default: false
+# Aliases: apt_upgrade
+package_upgrade: true

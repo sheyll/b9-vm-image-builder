@@ -23,6 +23,8 @@ import Data.Generics.Schemes
 import Data.Generics.Aliases
 import System.Directory (createDirectoryIfMissing, canonicalizePath)
 import Text.Printf ( printf )
+import Text.Show.Pretty (ppShow)
+
 import B9.B9Monad
 import B9.ConfigUtils
 import B9.B9Config
@@ -34,7 +36,6 @@ import B9.ShellScript
 import B9.Repository
 import B9.RepositoryIO
 import qualified B9.LibVirtLXC as LXC
-import Text.Show.Pretty (ppShow)
 
 printProject :: Project -> ConfigParser -> B9Config -> IO Bool
 printProject projectTemplate cfgParser cliCfg =

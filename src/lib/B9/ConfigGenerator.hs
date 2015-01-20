@@ -18,6 +18,7 @@ import Control.Monad.Reader
 import Control.Monad.Writer
 import System.FilePath
 import System.Directory
+import Text.Printf
 
 -- | Given a subdirectory and a config generator, run the config generator to
 -- produce the configuration artifacts inside that subdirectory and return a list of ready-to-use 'Config'
@@ -44,7 +45,7 @@ newtype TemplateFiles = TemplateFiles [FilePath]
 newtype InstanceId = IID String
   deriving (Read, Show, Typeable, Data, Eq)
 
-data ConfigTarget = ConfigImage CloudInitType FilePath
+data ConfigTarget = CloudInitTarget CloudInitType FilePath
                   | ConfigMount FilePath MountPoint
   deriving (Read, Show, Typeable, Data, Eq)
 
@@ -62,8 +63,7 @@ data ConfigEnv = ConfigEnv { ceTemplateFiles :: [FilePath]
                            , ceOutDir :: FilePath }
   deriving (Read, Show, Typeable, Data, Eq)
 
-data AssembledConfig = AssembledConfig { acDirectory :: FilePath
-                                       , acIID :: InstanceId
+data AssembledConfig = AssembledConfig { acIID :: InstanceId
                                        , acTargets :: [ConfigTarget]  }
   deriving (Read, Show, Typeable, Data, Eq)
 
@@ -76,17 +76,34 @@ assembleCfg g =
   case g of
     FromDirectory dir ts gs -> addDirectory dir ts gs
     Let bindings gs -> local (addBindings bindings) (mapM_ assembleCfg gs)
-    ConfigInstance iid targets -> mapM_ (createTarget iid) targets
+    ConfigInstance iid assemblies -> do
+      uniqueIID <- generateUniqueIID iid
+      configDir <- materializeConfiguration uniqueIID
+      targets <- mapM (createTarget uniqueIID configDir) assemblies
+      tell [AssembledConfig iid targets]
   where
     addBindings :: [(String, String)] -> ConfigEnv -> ConfigEnv
     addBindings newEnv ce = ce { ceEnv = ceEnv ce <> newEnv}
 
-createTarget :: InstanceId -> ConfigAssembly -> CEM ()
-createTarget iid@(IID iidStr) ca = do
+generateUniqueIID :: MonadIO m => InstanceId -> m InstanceId
+generateUniqueIID (IID iid) = do
+  (UUID (r1,_,_,_,_,_)) <- randomUUID
+  return (IID (printf "%s-%08x" iid r1))
+
+materializeConfiguration :: InstanceId -> CEM FilePath
+materializeConfiguration (IID iid) = do
   ce <- ask
-  let instanceDir = outDir </> iidStr
+  let instanceDir = outDir </> iid
       ConfigEnv teFiles nonTeFiles env outDir = ce
-  tell [AssembledConfig instanceDir iid []]
+  undefined
+
+createTarget :: InstanceId -> FilePath -> ConfigAssembly -> CEM ConfigTarget
+createTarget iid configDir (CloudInit CI_ISO isoFile) = do
+  undefined
+createTarget iid configDir (CloudInit CI_VFAT isoFile) = do
+  undefined
+createTarget iid configDir MountDuringBuild = do
+  undefined
 
 addDirectory :: SystemPath -> TemplateFiles -> [ConfigGenerator] -> CEM ()
 addDirectory sysPath (TemplateFiles tes) gs = do
@@ -106,7 +123,7 @@ addDirectory sysPath (TemplateFiles tes) gs = do
 
 test1 =
   FromDirectory
-    (Path "/home/sven/TELECONF_AND_OCC/vm-deployment/mrfp/lb-mp1.meetyoo.de/")
+    (Path "examples/test-cloud-config1/")
     (TemplateFiles ["meta-data", "user-data"])
     [ Let [("domain", "te.st"),
           ("network", "192.168.178."),

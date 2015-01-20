@@ -17,12 +17,14 @@ module B9.ConfigUtils ( allOn
                       , maybeConsult
                       , maybeConsultSystemPath
                       , subst
+                      , substFile
                       ) where
 
 import Data.Monoid
 import Data.Function ( on )
 import Data.Typeable
 import Control.Applicative
+import Control.Arrow
 import Control.Exception
 import Control.Monad.IO.Class
 import System.Directory
@@ -32,9 +34,15 @@ import Data.Word ( Word16, Word32 )
 import System.FilePath
 import Text.Printf
 import Data.ConfigFile
-import Data.Text.Template (render, templateSafe)
+import Data.Text.Template (render
+                          ,templateSafe
+                          ,substitute)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
+import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString as B
+import Data.Text.Encoding as E
+import Data.Text.Lazy.Encoding as LE
 import Data.Data
 import Text.Show.Pretty (ppShow)
 
@@ -141,16 +149,36 @@ randomUUID = liftIO (UUID <$> ((,,,,,)
                                <*> randomIO
                                <*> randomIO))
 
+-- String template substitution via dollar
 subst :: [(String,String)] -> String -> String
-subst env template =
+subst env templateStr =
   LT.unpack (render template' env')
   where env' t = case lookup (T.unpack t) env of
                    Just v -> T.pack v
                    Nothing -> error ("Invalid template parameter: \""
-                                    ++ (T.unpack t) ++ "\" in: \"" ++ template
+                                    ++ (T.unpack t) ++ "\" in: \""
+                                    ++ templateStr
                                     ++ "\". Valid entries: " ++ show env)
-        template' = case templateSafe (T.pack template) of
+        template' = case templateSafe (T.pack templateStr) of
           Left (row,col) -> error ("Invalid template, error at row: "
                                   ++ show row ++ ", col: " ++ show col
-                                  ++ " in: \"" ++ template)
+                                  ++ " in: \"" ++ templateStr)
           Right t -> t
+
+substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
+substFile assocs src dest = do
+  templateBs <- liftIO (B.readFile src)
+  let t = E.decodeUtf8 templateBs
+      out = LE.encodeUtf8 (substitute t envLookup)
+  liftIO (LB.writeFile dest out)
+  return ()
+  where
+    envT :: [(T.Text, T.Text)]
+    envT = (T.pack *** T.pack) <$> assocs
+    envLookup :: T.Text -> T.Text
+    envLookup x = maybe (err x) id (lookup x envT)
+    err x = error (printf "Invalid template parameter: '%s' in file: '%s'\
+                          \ valid environment entries: '%s'"
+                          (T.unpack x)
+                          src
+                          (show assocs))
