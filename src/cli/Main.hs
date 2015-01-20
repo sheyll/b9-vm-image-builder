@@ -2,6 +2,7 @@ module Main where
 
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty
+
 import B9
 
 main :: IO ()
@@ -51,6 +52,11 @@ runBuild :: [FilePath] -> BuildAction
 runBuild projectFiles _cfgFile cp conf = do
   prjs <- mapM consult projectFiles
   buildProject (mconcat prjs) cp conf
+
+runGenerateConfig :: [FilePath] ->  BuildAction
+runGenerateConfig projectFiles cfgFile cp conf = do
+  prjs <- mapM consult projectFiles
+  generateConfig (mconcat prjs) cp conf
 
 runPrint :: [FilePath] -> BuildAction
 runPrint projectFiles _cfgFile  cp conf = do
@@ -184,11 +190,21 @@ cmds = subparser (  command "build"
                              (info (runBuild <$> projectsParser)
                                    (progDesc "Merge all project files and\
                                              \ build."))
+                  <> command "generate-config-images"
+                             (info (runGenerateConfig <$> projectsParser)
+                                   (progDesc "Merge all project files and\
+                                             \ generate all (cloud-init-)\
+                                             \ config images."))
+                  <> command "print"
+                                (info (runPrint <$> projectsParser)
+                                      (progDesc "Show the final project that\
+                                                \ would be used by the 'build' \
+                                                \ command."))
                   <> command "push"
-                             (info (runPush <$> sharedImageNameParser)
-                                   (progDesc "Push the lastest shared image\
-                                             \ from cache to the selected \
-                                             \ remote repository."))
+                        (info (runPush <$> sharedImageNameParser)
+                              (progDesc "Push the lastest shared image\
+                                        \ from cache to the selected \
+                                        \ remote repository."))
                   <> command "pull"
                              (info (runPull <$> optional sharedImageNameParser)
                                    (progDesc "Either pull shared image meta\
@@ -200,11 +216,6 @@ cmds = subparser (  command "build"
                                              \ from either the selected repo,\
                                              \ or from the repo with the most\
                                              \ recent version."))
-                  <> command "print"
-                             (info (runPrint <$> projectsParser)
-                                   (progDesc "Show the final project that\
-                                             \ would be used by the 'build' \
-                                             \ command."))
                   <> command "list"
                              (info (pure runListSharedImages)
                                    (progDesc "List shared images."))

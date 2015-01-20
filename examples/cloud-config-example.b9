@@ -1,7 +1,5 @@
 Project { projectName = "cloud-config-example"
-        , projectDisks =
-            [
-            ]
+        , projectDisks = []
         , projectConfigGenerator =
             FromDirectory
              (Path "examples/test-cloud-config1/")
@@ -13,7 +11,8 @@ Project { projectName = "cloud-config-example"
                           ,("ip_suffix", "13")]
                           [(ConfigInstance (IID "${host}")
                                            [CloudInit CI_ISO "EXPORT/${instance_id}-cloud-init.iso"
-                                           ,CloudInit CI_VFAT "EXPORT/${instance_id}-cloud-init.vfat"])]
+                                           ,CloudInit CI_VFAT "EXPORT/${instance_id}-cloud-init.vfat"
+                                           ,MountDuringBuild "/mnt/${instance_id}"])]
                     , Let [("host", "test-server-2.${domain}")
                           ,("ip_suffix", "14")]
                           [(ConfigInstance (IID "${host}")
@@ -22,9 +21,6 @@ Project { projectName = "cloud-config-example"
                    ]
               ]
         , projectSharedDirectories = []
-        , projectBuildScript = Run "echo" ["hello world"]
+        , projectBuildScript = Run "tree" ["/mnt"]
         , projectCpuArch = X86_64
         }
-
--- P: Multiple Configs vs Mounting a Config during Build
--- S: Add ImageDestination and ImageSource for cloud init

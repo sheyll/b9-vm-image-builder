@@ -25,6 +25,7 @@ import           Control.Exception ( bracket )
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.State
+import           Control.Monad.Trans.Class
 import qualified Data.ByteString.Char8 as B
 import           Data.Functor ()
 import           Data.Maybe
@@ -231,7 +232,8 @@ newtype B9 a = B9 { runB9 :: StateT BuildState IO a }
   deriving ( Functor
            , Applicative
            , Monad
-           , MonadState BuildState )
+           , MonadState BuildState
+           )
 
 instance MonadIO B9 where
   liftIO m = do

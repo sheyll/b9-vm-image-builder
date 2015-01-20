@@ -14,6 +14,7 @@ module B9.ConfigUtils ( allOn
                       , randomUUID
                       , tell
                       , consult
+                      , getDirectoryFiles
                       , maybeConsult
                       , maybeConsultSystemPath
                       , subst
@@ -69,6 +70,13 @@ resolve (InB9UserDir p) = liftIO $ do
 resolve (InTempDir p) = liftIO $ do
   d <- getTemporaryDirectory
   return $ d </> p
+
+-- | Get all files from 'dir' that is get ONLY files not directories
+getDirectoryFiles :: MonadIO m => FilePath -> m [FilePath]
+getDirectoryFiles dir = do
+  entries <- liftIO (getDirectoryContents dir)
+  fileEntries <- mapM (liftIO . doesFileExist . (dir </>)) entries
+  return (snd <$> filter fst (fileEntries `zip` entries))
 
 ensureDir :: MonadIO m => FilePath -> m ()
 ensureDir p = liftIO (createDirectoryIfMissing True $ takeDirectory p)
@@ -168,10 +176,17 @@ subst env templateStr =
 substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
 substFile assocs src dest = do
   templateBs <- liftIO (B.readFile src)
-  let t = E.decodeUtf8 templateBs
-      out = LE.encodeUtf8 (substitute t envLookup)
-  liftIO (LB.writeFile dest out)
-  return ()
+  let t = templateSafe (E.decodeUtf8 templateBs)
+  case t of
+    Left (r,c) ->
+      let badLine = unlines (take r (lines (T.unpack (E.decodeUtf8 templateBs))))
+          colMarker = replicate (c - 1) '-' ++ "^"
+      in error (printf "Template error in file '%s' line %i:\n\n%s\n%s\n"
+                       src r badLine colMarker)
+    Right template' -> do
+      let out = LE.encodeUtf8 (render template' envLookup)
+      liftIO (LB.writeFile dest out)
+      return ()
   where
     envT :: [(T.Text, T.Text)]
     envT = (T.pack *** T.pack) <$> assocs

@@ -8,7 +8,10 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.ShellScript
                   , module B9.Repository
                   , module B9.RepositoryIO
+                  , module B9.ConfigGenerator
+                  , module B9.ConfigGeneratorImpl
                   , buildProject
+                  , generateConfig
                   , printProject
                   , runInEnvironment
                   , createBuildImages
@@ -35,19 +38,9 @@ import B9.DiskImageBuilder
 import B9.ShellScript
 import B9.Repository
 import B9.RepositoryIO
+import B9.ConfigGenerator
+import B9.ConfigGeneratorImpl
 import qualified B9.LibVirtLXC as LXC
-
-printProject :: Project -> ConfigParser -> B9Config -> IO Bool
-printProject projectTemplate cfgParser cliCfg =
-  withB9Config cfgParser cliCfg $ \cfg -> do
-    let project = substProject (envVars cfg) projectTemplate
-    putStrLn (printf "\n>>> Interpolated B9-config: \n%s\n\n"
-                     (ppShow cfg))
-    putStrLn (printf "\n>>> Effective project template: \n%s\n\n"
-                     (ppShow projectTemplate))
-    putStrLn (printf "\n>>> Effective project: \n%s\n\n"
-                     (ppShow project))
-    return True
 
 buildProject :: Project -> ConfigParser -> B9Config -> IO Bool
 buildProject projectTemplate cfgParser cliCfg =
@@ -60,10 +53,13 @@ buildProject projectTemplate cfgParser cliCfg =
       traceL $ printf "RESULTING IN PROJECT: %s" (ppShow project)
       buildImgs <- createBuildImages (projectDisks project)
       infoL "DISK IMAGES CREATED"
-      sharedDirs <- createSharedDirs (projectSharedDirectories project)
+      acs <- assemble (projectConfigGenerator project)
+      let sharedDirsCfg = sharedDirectoriesFromGeneratedConfig acs
+      infoL "CONFIG GENERATED"
+      sharedDirsPrj <- createSharedDirs (projectSharedDirectories project)
       let execEnv = ExecEnv (projectName project)
                             mountedBuildImgs
-                            sharedDirs
+                            (sharedDirsCfg ++ sharedDirsPrj)
                             (Resources AutomaticRamSize
                                        8
                                        (projectCpuArch project))
@@ -81,6 +77,30 @@ buildProject projectTemplate cfgParser cliCfg =
 
         else do errorL "FAILED TO EXECUTE COMMANDS"
                 return False
+
+generateConfig :: Project -> ConfigParser -> B9Config -> IO Bool
+generateConfig projectTemplate cfgParser cliCfg =
+  withB9Config cfgParser cliCfg $ \cfg -> do
+    let project = substProject (envVars cfg) projectTemplate
+    run (projectName project) cfgParser cfg $ do
+      infoL "START CONFIG GENERATION"
+      getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
+      traceL $ printf "USING PROJECT TEMPLATE: %s" (ppShow projectTemplate)
+      traceL $ printf "RESULTING IN PROJECT: %s" (ppShow project)
+      assemble (projectConfigGenerator project)
+      return True
+
+printProject :: Project -> ConfigParser -> B9Config -> IO Bool
+printProject projectTemplate cfgParser cliCfg =
+  withB9Config cfgParser cliCfg $ \cfg -> do
+    let project = substProject (envVars cfg) projectTemplate
+    putStrLn (printf "\n>>> Interpolated B9-config: \n%s\n\n"
+                     (ppShow cfg))
+    putStrLn (printf "\n>>> Effective project template: \n%s\n\n"
+                     (ppShow projectTemplate))
+    putStrLn (printf "\n>>> Effective project: \n%s\n\n"
+                     (ppShow project))
+    return True
 
 createBuildImages :: [ImageTarget] -> B9 [Image]
 createBuildImages disks = mapM create disks
