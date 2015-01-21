@@ -54,7 +54,7 @@ runBuild projectFiles _cfgFile cp conf = do
   buildProject (mconcat prjs) cp conf
 
 runGenerateConfig :: [FilePath] ->  BuildAction
-runGenerateConfig projectFiles cfgFile cp conf = do
+runGenerateConfig projectFiles _cfgFile cp conf = do
   prjs <- mapM consult projectFiles
   generateConfig (mconcat prjs) cp conf
 

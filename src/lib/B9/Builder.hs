@@ -124,6 +124,10 @@ createBuildImages disks = mapM create disks
 createSharedDirs :: [SharedDirectory] -> B9 [SharedDirectory]
 createSharedDirs sharedDirsIn = mapM createSharedDir sharedDirsIn
   where
+    createSharedDir (SharedDirectoryRO d m) = liftIO $ do
+      createDirectoryIfMissing True d
+      d' <- canonicalizePath d
+      return $ SharedDirectoryRO d' m
     createSharedDir (SharedDirectory d m) = liftIO $ do
       createDirectoryIfMissing True d
       d' <- canonicalizePath d

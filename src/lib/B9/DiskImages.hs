@@ -2,8 +2,6 @@ module B9.DiskImages where
 
 import Data.Semigroup
 import Data.Data
-import Data.List
-import System.Directory
 import System.FilePath
 
 
