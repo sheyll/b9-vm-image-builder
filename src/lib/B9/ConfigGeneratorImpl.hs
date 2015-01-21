@@ -9,6 +9,7 @@ import B9.ConfigUtils hiding (tell)
 import Data.Data
 import Data.List
 import Data.Function
+import Control.Arrow
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -106,6 +107,19 @@ materializeConfiguration (IID iid) = do
 -- | Create the actual configuration target, either just a mountpoint, or an ISO
 -- or VFAT image.
 createTarget :: FilePath -> ConfigAssembly -> CEM ConfigTarget
+createTarget instanceDir (CloudInit CI_DIR ciDirTemplate) = do
+  env <- asks ceEnv
+  let ciDir = subst env ciDirTemplate
+  ensureDir (ciDir ++ "/")
+  liftB9 $ dbgL (printf "creating cloud init directory '%s'" ciDir)
+  files <- getDirectoryFiles instanceDir
+  liftB9 $ traceL (printf "copying files: " (show files))
+  liftIO (mapM_
+            (uncurry copyFile)
+            (((instanceDir </>) &&& (ciDir </>)) <$> files))
+  liftB9 (infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir)))
+  return (CloudInitTarget CI_DIR ciDir)
+
 createTarget instanceDir (CloudInit CI_ISO isoFileNameTemplate) = do
   outDir <- asks ceOutDir
   env <- asks ceEnv
@@ -119,7 +133,7 @@ createTarget instanceDir (CloudInit CI_ISO isoFileNameTemplate) = do
                 \ -output '%s'\
                 \ -volid cidata\
                 \ -rock\
-                \ -d '%s'"
+                \ -d '%s' 2>&1"
                 tmpFile
                 instanceDir)
     dbgL (printf "moving cloud init iso image '%s' to '%s'"
@@ -127,7 +141,9 @@ createTarget instanceDir (CloudInit CI_ISO isoFileNameTemplate) = do
                  isoFile)
   ensureDir isoFile
   liftIO (copyFile tmpFile isoFile)
+  liftB9 (infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile)))
   return (CloudInitTarget CI_ISO isoFile)
+
 createTarget instanceDir (CloudInit CI_VFAT vfatFileTemplate) = do
   outDir <- asks ceOutDir
   env <- asks ceEnv
@@ -139,17 +155,24 @@ createTarget instanceDir (CloudInit CI_VFAT vfatFileTemplate) = do
     dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
     traceL (printf "adding '%s'" (show files))
     cmd (printf "truncate --size 2M '%s'" tmpFile)
-    cmd (printf "mkfs.vfat -n cidata '%s'" tmpFile)
-    cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile) : (printf "'%s'" <$> files)) ++ " ::")
+    cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
+    cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
+                          : (printf "'%s'" <$> files))
+         ++ " ::")
     dbgL (printf "moving cloud init vfat image '%s' to '%s'" tmpFile vfatFile)
   ensureDir vfatFile
   liftIO (copyFile tmpFile vfatFile)
+  liftB9 (infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile)))
   return (CloudInitTarget CI_ISO vfatFile)
+
 createTarget configDir (MountDuringBuild mountPointTemplate) = do
   env <- asks ceEnv
   let mountPoint = subst env mountPointTemplate
   liftB9 (dbgL (printf "add config mount point '%s' -> '%s'"
                        configDir mountPointTemplate))
+  liftB9 (infoL (printf "MOUNTED CI_DIR '%s' TO '%s'"
+                        (takeFileName configDir)
+                        mountPoint))
   return (ConfigMount configDir (MountPoint mountPoint))
 
 newtype CEM a = CEM { runCEM :: WriterT [AssembledConfig] (ReaderT ConfigEnv B9) a }

@@ -58,7 +58,7 @@ data ConfigAssembly = CloudInit CloudInitType FilePath
 data AssembledConfig = AssembledConfig InstanceId [ConfigTarget]
   deriving (Read, Show, Typeable, Data, Eq)
 
-data CloudInitType = CI_ISO | CI_VFAT
+data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
   deriving (Read, Show, Typeable, Data, Eq)
 
 
