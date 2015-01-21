@@ -143,6 +143,11 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   \  <memory unit='" ++ memoryUnit e ++ "'>" ++ memoryAmount e ++ "</memory>\n\
   \  <currentMemory unit='" ++ memoryUnit e ++ "'>" ++ memoryAmount e ++ "</currentMemory>\n\
   \  <vcpu placement='static'>" ++ cpuCountStr e ++ "</vcpu>\n\
+  \  <features>\n\
+  \   <capabilities policy='default'>\n\
+  \     <mknod state='on'/>\n\
+  \   </capabilities>\n\
+  \  </features>\n\
   \  <os>\n\
   \    <type arch='" ++ osArch e ++ "'>exe</type>\n\
   \    <init>" ++ scriptDirGuest </> initScript ++ "</init>\n\
@@ -165,6 +170,8 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   \    </console>\n\
   \  </devices>\n\
   \</domain>\n"
+
+
 
 osArch :: ExecEnv -> String
 osArch e = case cpuArch (envResources e) of
