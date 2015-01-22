@@ -84,7 +84,8 @@ generateUniqueIID (IID iid) = do
 
 addDirectory :: SystemPath -> TemplateFiles -> [ConfigGenerator] -> CEM ()
 addDirectory sysPath (TemplateFiles tes) gs = do
-  dir <- resolve sysPath
+  env <- asks ceEnv
+  dir <- resolve (substPath env sysPath)
   entries <- liftIO (getDirectoryContents dir)
   fileEntries <- mapM (liftIO . doesFileExist . (dir </>)) entries
   let files = snd <$> filter fst (fileEntries `zip` entries)

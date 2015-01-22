@@ -19,6 +19,7 @@ module B9.ConfigUtils ( allOn
                       , maybeConsultSystemPath
                       , subst
                       , substFile
+                      , substPath
                       ) where
 
 import Data.Monoid
@@ -196,3 +197,11 @@ substFile assocs src dest = do
                           (T.unpack x)
                           src
                           (ppShow assocs))
+
+substPath :: [(String, String)] -> SystemPath -> SystemPath
+substPath assocs src =
+          case src of
+            Path p -> Path (subst assocs p)
+            InHomeDir p -> InHomeDir (subst assocs p)
+            InB9UserDir p -> InB9UserDir (subst assocs p)
+            InTempDir p -> InTempDir (subst assocs p)
