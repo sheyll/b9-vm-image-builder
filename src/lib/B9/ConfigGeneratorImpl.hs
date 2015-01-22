@@ -10,6 +10,7 @@ import Data.Data
 import Data.List
 import Data.Function
 import Control.Arrow
+import Control.Exception
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -17,6 +18,7 @@ import Control.Monad.Writer
 import System.FilePath
 import System.Directory
 import Text.Printf
+import Text.Show.Pretty (ppShow)
 
 -- | Given a subdirectory and a config generator, run the config generator to
 -- produce the configuration artifacts inside that subdirectory and return a list of ready-to-use 'Config'
@@ -37,6 +39,9 @@ assembleCfg g =
   case g of
     FromDirectory dir ts gs -> addDirectory dir ts gs
     Let bindings gs -> local (addBindings bindings) (mapM_ assembleCfg gs)
+    Each vars valueSets gs ->
+      let bindingSets = generateEachBinding vars valueSets
+          in mapM_ assembleCfg (flip Let gs <$> bindingSets)
     ConfigInstance (IID iidStrTemplate) assemblies -> do
       env <- asks ceEnv
       let iid@(IID iidStr) = IID (subst env iidStrTemplate)
@@ -52,11 +57,25 @@ assembleCfg g =
           oldEnv = ceEnv ce
       in ce { ceEnv = nubBy ((==) `on` fst) (newEnvSubst ++ oldEnv)}
 
+    generateEachBinding :: [String] -> [[String]] -> [[(String,String)]]
+    generateEachBinding vars valueSets =
+      if all ((== length vars) . length) valueSets
+         then zip vars <$> valueSets
+         else error (printf "Error in 'Each' binding during configuration \
+                            \generation in:\n '%s'.\n\nThe variable list\n\
+                            \%s\n has %i entries, but this binding set\n%s\n\n\
+                            \has a different number of entries!\n"
+                            (ppShow g)
+                            (ppShow vars)
+                            (length vars)
+                            (ppShow (head (dropWhile ((== length vars) . length)
+                                                     valueSets))))
+
     createTargets :: InstanceId -> InstanceId -> [ConfigAssembly] -> CEM ()
     createTargets uniqueIID iid assemblies = do
       instanceDir <- materializeConfiguration uniqueIID
       targets <- mapM (createTarget instanceDir) assemblies
-      tell [AssembledConfig iid targets]
+      tell [AssembledConfig iid (join targets)]
 
 generateUniqueIID :: InstanceId -> CEM InstanceId
 generateUniqueIID (IID iid) = do
@@ -106,65 +125,7 @@ materializeConfiguration (IID iid) = do
 
 -- | Create the actual configuration target, either just a mountpoint, or an ISO
 -- or VFAT image.
-createTarget :: FilePath -> ConfigAssembly -> CEM ConfigTarget
-createTarget instanceDir (CloudInit CI_DIR ciDirTemplate) = do
-  env <- asks ceEnv
-  let ciDir = subst env ciDirTemplate
-  ensureDir (ciDir ++ "/")
-  liftB9 $ dbgL (printf "creating cloud init directory '%s'" ciDir)
-  files <- getDirectoryFiles instanceDir
-  liftB9 $ traceL (printf "copying files: " (show files))
-  liftIO (mapM_
-            (uncurry copyFile)
-            (((instanceDir </>) &&& (ciDir </>)) <$> files))
-  liftB9 (infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir)))
-  return (CloudInitTarget CI_DIR ciDir)
-
-createTarget instanceDir (CloudInit CI_ISO isoFileNameTemplate) = do
-  outDir <- asks ceOutDir
-  env <- asks ceEnv
-  let isoFile = subst env isoFileNameTemplate
-      tmpFile = outDir </> takeFileName isoFile
-  ensureDir tmpFile
-  liftB9 $ do
-    dbgL (printf "creating cloud init iso temp image '%s',\
-                 \ destination file: '%s" tmpFile isoFile)
-    cmd (printf "genisoimage\
-                \ -output '%s'\
-                \ -volid cidata\
-                \ -rock\
-                \ -d '%s' 2>&1"
-                tmpFile
-                instanceDir)
-    dbgL (printf "moving cloud init iso image '%s' to '%s'"
-                 tmpFile
-                 isoFile)
-  ensureDir isoFile
-  liftIO (copyFile tmpFile isoFile)
-  liftB9 (infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile)))
-  return (CloudInitTarget CI_ISO isoFile)
-
-createTarget instanceDir (CloudInit CI_VFAT vfatFileTemplate) = do
-  outDir <- asks ceOutDir
-  env <- asks ceEnv
-  let vfatFile = subst env vfatFileTemplate
-      tmpFile = outDir </> takeFileName vfatFile
-  ensureDir tmpFile
-  files <- (map (instanceDir </>)) <$> getDirectoryFiles instanceDir
-  liftB9 $ do
-    dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
-    traceL (printf "adding '%s'" (show files))
-    cmd (printf "truncate --size 2M '%s'" tmpFile)
-    cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
-    cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
-                          : (printf "'%s'" <$> files))
-         ++ " ::")
-    dbgL (printf "moving cloud init vfat image '%s' to '%s'" tmpFile vfatFile)
-  ensureDir vfatFile
-  liftIO (copyFile tmpFile vfatFile)
-  liftB9 (infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile)))
-  return (CloudInitTarget CI_ISO vfatFile)
-
+createTarget :: FilePath -> ConfigAssembly -> CEM [ConfigTarget]
 createTarget configDir (MountDuringBuild mountPointTemplate) = do
   env <- asks ceEnv
   let mountPoint = subst env mountPointTemplate
@@ -173,7 +134,67 @@ createTarget configDir (MountDuringBuild mountPointTemplate) = do
   liftB9 (infoL (printf "MOUNTED CI_DIR '%s' TO '%s'"
                         (takeFileName configDir)
                         mountPoint))
-  return (ConfigMount configDir (MountPoint mountPoint))
+  return [ConfigMount configDir (MountPoint mountPoint)]
+createTarget configDir (CloudInit types pathTemplate) = do
+  mapM (create_ configDir pathTemplate) types
+  where
+    create_ instanceDir ciDirTemplate CI_DIR = do
+      env <- asks ceEnv
+      let ciDir = subst env ciDirTemplate
+      ensureDir (ciDir ++ "/")
+      liftB9 $ dbgL (printf "creating cloud init directory '%s'" ciDir)
+      files <- getDirectoryFiles instanceDir
+      liftB9 $ traceL (printf "copying files: %s" (show files))
+      liftIO (mapM_
+                (uncurry copyFile)
+                (((instanceDir </>) &&& (ciDir </>)) <$> files))
+      liftB9 (infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir)))
+      return (CloudInitTarget CI_DIR ciDir)
+
+    create_ instanceDir isoFileNameTemplate CI_ISO = do
+      outDir <- asks ceOutDir
+      env <- asks ceEnv
+      let isoFile = subst env isoFileNameTemplate <.> "iso"
+          tmpFile = outDir </> takeFileName isoFile
+      ensureDir tmpFile
+      liftB9 $ do
+        dbgL (printf "creating cloud init iso temp image '%s',\
+                     \ destination file: '%s" tmpFile isoFile)
+        cmd (printf "genisoimage\
+                    \ -output '%s'\
+                    \ -volid cidata\
+                    \ -rock\
+                    \ -d '%s' 2>&1"
+                    tmpFile
+                    instanceDir)
+        dbgL (printf "moving cloud init iso image '%s' to '%s'"
+                     tmpFile
+                     isoFile)
+      ensureDir isoFile
+      liftIO (copyFile tmpFile isoFile)
+      liftB9 (infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile)))
+      return (CloudInitTarget CI_ISO isoFile)
+
+    create_ instanceDir vfatFileTemplate CI_VFAT = do
+      outDir <- asks ceOutDir
+      env <- asks ceEnv
+      let vfatFile = subst env vfatFileTemplate <.> "vfat"
+          tmpFile = outDir </> takeFileName vfatFile
+      ensureDir tmpFile
+      files <- (map (instanceDir </>)) <$> getDirectoryFiles instanceDir
+      liftB9 $ do
+        dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
+        traceL (printf "adding '%s'" (show files))
+        cmd (printf "truncate --size 2M '%s'" tmpFile)
+        cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
+        cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
+                              : (printf "'%s'" <$> files))
+             ++ " ::")
+        dbgL (printf "moving cloud init vfat image '%s' to '%s'" tmpFile vfatFile)
+      ensureDir vfatFile
+      liftIO (copyFile tmpFile vfatFile)
+      liftB9 (infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile)))
+      return (CloudInitTarget CI_ISO vfatFile)
 
 newtype CEM a = CEM { runCEM :: WriterT [AssembledConfig] (ReaderT ConfigEnv B9) a }
   deriving ( Functor, Applicative, Monad, MonadReader ConfigEnv
@@ -199,6 +220,37 @@ test_configEntriesAreOverwritten = do
       expected = "2"
   [AssembledConfig _ [ConfigMount _ (MountPoint x)]] <- assembleTest t
   when (x /= expected) (error (printf "Expected '%s' got '%s'" expected x))
+
+test_Each = do
+  let t = Each ["x", "y"]
+               expected
+               [ConfigInstance (IID "$x$y") [MountDuringBuild "egal"]]
+      expected = [["1", "a"], ["2", "b"]]
+  [ AssembledConfig (IID v1) [ConfigMount _ _]
+    , AssembledConfig (IID v2) [ConfigMount _ _]] <- assembleTest t
+  let actual = [v1, v2]
+      expected' = map join expected
+  when (actual /= expected') (error (printf "Expected '%s' got '%s'"
+                                           (show expected')
+                                           (show actual)))
+
+test_EachToManyVars = do
+  let t = Each ["x"] expected []
+      expected = [["1", "a"], ["2", "b"]]
+  Left (SomeException _) <- try (assembleTest t)
+  return ()
+
+test_EachEmpty = do
+  let t = Each [] expected []
+      expected = [[], []]
+  [] <- assembleTest t
+  return ()
+
+test_EachNotEnoughVars = do
+  let t = Each ["x", "y"] expected []
+      expected = [["a"]]
+  Left (SomeException _) <- try (assembleTest t)
+  return ()
 
 test_useTemplateVarsInTemplateVars = do
   let t = Let [("x", "1")]
@@ -226,14 +278,14 @@ test_canBuildExampleConfig = assembleTest exampleCfg
                ("ntp-server", "192.168.178.92")]
                [ Let [("host", "test-server-1.${domain}")
                      ,("ip_suffix", "13")]
-                     [(ConfigInstance (IID "${host}")
-                                      [CloudInit CI_ISO "EXPORT/${instance_id}-cloud-init.iso"
-                                      ,CloudInit CI_VFAT "EXPORT/${instance_id}-cloud-init.vfat"])]
+                     [ConfigInstance (IID "${host}")
+                                     [CloudInit [CI_ISO, CI_VFAT, CI_DIR]
+                                                "EXPORT/${instance_id}-cloud-init"]]
                , Let [("host", "test-server-2.${domain}")
                      ,("ip_suffix", "14")]
-                     [(ConfigInstance (IID "${host}")
-                                      [CloudInit CI_ISO "EXPORT/${instance_id}-cloud-init.iso"
-                                      ,MountDuringBuild "/mnt/${instance_id}"])]
+                     [ConfigInstance (IID "${host}")
+                                     [CloudInit [] "EXPORT/${instance_id}-cloud-init"
+                                     ,MountDuringBuild "/mnt/${instance_id}"]]
               ]
          ]
 

@@ -35,9 +35,7 @@ import Data.Word ( Word16, Word32 )
 import System.FilePath
 import Text.Printf
 import Data.ConfigFile
-import Data.Text.Template (render
-                          ,templateSafe
-                          ,substitute)
+import Data.Text.Template (render,templateSafe)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as LB
@@ -166,7 +164,7 @@ subst env templateStr =
                    Nothing -> error ("Invalid template parameter: \""
                                     ++ (T.unpack t) ++ "\" in: \""
                                     ++ templateStr
-                                    ++ "\". Valid entries: " ++ show env)
+                                    ++ "\".\nValid variables:\n" ++ ppShow env)
         template' = case templateSafe (T.pack templateStr) of
           Left (row,col) -> error ("Invalid template, error at row: "
                                   ++ show row ++ ", col: " ++ show col
@@ -192,8 +190,9 @@ substFile assocs src dest = do
     envT = (T.pack *** T.pack) <$> assocs
     envLookup :: T.Text -> T.Text
     envLookup x = maybe (err x) id (lookup x envT)
-    err x = error (printf "Invalid template parameter: '%s' in file: '%s'\
-                          \ valid environment entries: '%s'"
+    err x = error (printf "Invalid template parameter: '%s'\n\
+                          \In file: '%s'\n\
+                          \Valid variables:\n%s\n"
                           (T.unpack x)
                           src
-                          (show assocs))
+                          (ppShow assocs))

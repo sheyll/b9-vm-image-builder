@@ -26,6 +26,7 @@ import B9.ExecEnv
 data ConfigGenerator =
   FromDirectory SystemPath TemplateFiles [ConfigGenerator]
   | Let [(String, String)] [ConfigGenerator]
+  | Each [String] [[String]] [ConfigGenerator]
   | ConfigInstance InstanceId  [ConfigAssembly]
   deriving (Read, Show, Typeable, Data)
 
@@ -51,7 +52,7 @@ data ConfigTarget = CloudInitTarget CloudInitType FilePath
                   | ConfigMount FilePath MountPoint
   deriving (Read, Show, Typeable, Data, Eq)
 
-data ConfigAssembly = CloudInit CloudInitType FilePath
+data ConfigAssembly = CloudInit [CloudInitType] FilePath
                     | MountDuringBuild FilePath
   deriving (Read, Show, Typeable, Data, Eq)
 
