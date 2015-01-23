@@ -83,13 +83,23 @@ generateUniqueIID (IID iid) = do
   return (IID (printf "%s-%s" iid buildId))
 
 addDirectory :: SystemPath -> TemplateFiles -> [ConfigGenerator] -> CEM ()
-addDirectory sysPath (TemplateFiles tes) gs = do
+addDirectory sysPath (TemplateFiles teTemplates) gs = do
   env <- asks ceEnv
+  let tes = subst env <$> teTemplates
   dir <- resolve (substPath env sysPath)
   entries <- liftIO (getDirectoryContents dir)
   fileEntries <- mapM (liftIO . doesFileExist . (dir </>)) entries
   let files = snd <$> filter fst (fileEntries `zip` entries)
   let (filesTe, filesNonTe) = partition (`elem` tes) files
+  when (length tes /= length filesTe)
+    (error (printf "Error in configuration generator.\n\
+                   \Not all listed 'TemplateFiles' could be found.\n\
+                   \Directory: '%s'\n\
+                   \Requested Files: %s\n\
+                   \Available Files: %s\n"
+                   dir
+                   (show tes)
+                   (show files)))
   liftB9 (traceL (printf "Adding template files from '%s': %s"
                          dir (show filesTe)))
   liftB9 (traceL (printf "Adding non-template files from '%s': %s"
