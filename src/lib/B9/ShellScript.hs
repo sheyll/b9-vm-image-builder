@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module B9.ShellScript ( writeSh
+                      , emptyScript
                       , CmdVerbosity (..)
                       , Cwd (..)
                       , User (..)
@@ -53,6 +54,17 @@ data Ctx = Ctx { ctxCwd :: Cwd
                , ctxIgnoreErrors :: Bool
                , ctxVerbosity :: CmdVerbosity }
 
+-- | Convert 'script' to bash-shell-script written to 'file' and make 'file'
+-- executable.
+writeSh :: FilePath -> Script -> IO ()
+writeSh file script = do
+  writeFile file (toBash $ toCmds script)
+  getPermissions file >>= setPermissions file . setOwnerExecutable True
+
+-- | Check if a script has the same effect as 'NoOP'
+emptyScript :: Script -> Bool
+emptyScript = null . toCmds
+
 toCmds :: Script -> [Cmd]
 toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
   where
@@ -73,11 +85,6 @@ toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
       i <- reader ctxIgnoreErrors
       v <- reader ctxVerbosity
       return [Cmd cmd args u c i v]
-
-writeSh :: FilePath -> Script -> IO ()
-writeSh file script = do
-  writeFile file (toBash $ toCmds script)
-  getPermissions file >>= setPermissions file . setOwnerExecutable True
 
 toBash :: [Cmd] -> String
 toBash cmds =
