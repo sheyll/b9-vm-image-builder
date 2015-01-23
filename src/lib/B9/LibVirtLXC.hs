@@ -4,6 +4,7 @@ module B9.LibVirtLXC ( runInEnvironment
                      ) where
 
 import Control.Applicative
+import Control.Monad
 import Control.Monad.IO.Class ( liftIO )
 import System.Directory
 import System.FilePath
@@ -19,10 +20,13 @@ lxcDefaultRamSize :: RamSize
 lxcDefaultRamSize = RamSize 1 GB
 
 supportedImageTypes :: [ImageType]
-supportedImageTypes = [Raw, QCow2, Vmdk]
+supportedImageTypes = [Raw, QCow2]
 
 runInEnvironment :: ExecEnv -> Script -> B9 Bool
-runInEnvironment env scriptIn = setUp >>= execute
+runInEnvironment env scriptIn =
+  if emptyScript scriptIn
+     then return True
+     else setUp >>= execute
   where
     setUp = do
       cfg <- configureLibVirtLXC
