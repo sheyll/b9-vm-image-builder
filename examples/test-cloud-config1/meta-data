@@ -1,9 +1,0 @@
-instance-id: ${instance_id}
-network-interfaces: |
-  iface eth0 inet static
-  address ${ip_prefix}.${ip_suffix}
-  network ${ip_prefix}.0
-  netmask 255.255.255.0
-  broadcast ${ip_prefix}.255
-  gateway ${ip_prefix}.254
-hostname: ${host}
