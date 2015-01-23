@@ -1,6 +1,7 @@
 #!/bin/bash
-
-# Install the latest stackage lts snapshot and run cabal clean/update
+#
+# Install the latest stackage lts snapshot, run cabal clean/update and
+# initialize the cabal sandbox.
 
 set -e
 
@@ -9,5 +10,5 @@ cabal sandbox delete -v || echo "IGNORING"
 rm -f cabal.config
 wget http://www.stackage.org/lts/cabal.config
 cabal update -v
-cabal sandbox -v init 
+cabal sandbox -v init
 cabal install -v --only-dependencies -j
