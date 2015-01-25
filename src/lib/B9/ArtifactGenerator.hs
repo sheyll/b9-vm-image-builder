@@ -7,8 +7,10 @@ module B9.ArtifactGenerator
   ,ArtifactAssembly(..)
   ,AssembledArtifact(..)
   ,instanceIdKey
-  ,uniqueInstanceIdKey
+  ,buildIdKey
+  ,buildDateKey
   ,sharedDirectoriesFromGeneratedArtifact
+  ,agFilterAssemblies
   ) where
 
 
@@ -41,6 +43,18 @@ instance Monoid ArtifactGenerator where
   x `mappend` (Let [] []) = x
   x `mappend` y = Let [] [x, y]
 
+
+agFilterAssemblies :: (ArtifactAssembly -> Bool)
+                   -> ArtifactGenerator
+                   -> ArtifactGenerator
+agFilterAssemblies p ag =
+  case ag of
+    Sources s ags -> Sources s (agFilterAssemblies p <$> ags)
+    Let b ags -> Let b (agFilterAssemblies p <$> ags)
+    Each k v ags -> Each k v (agFilterAssemblies p <$> ags)
+    Artifact i as -> Artifact i (filter p as)
+    EmptyArtifact -> EmptyArtifact
+
 -- | Explicit is better than implicit: Only files that have explicitly been
 -- listed will be included in any generated configuration. That's right: There's
 -- no "inlcude *.*". B9 will check that *all* files in the directory specified with 'FromDir' are referred to by nested 'ArtifactSource's.
@@ -50,7 +64,7 @@ data ArtifactSource = Template FilePath
                   | Files [FilePath]
                   | SetPermissions Int Int Int [ArtifactSource]
   --                | SetUserGroupID Int Int [ArtifactSource]
-  --                | Collage FilePath [ArtifactSource]
+                  | Concatenation FilePath [ArtifactSource]
                   | FromDirectory FilePath [ArtifactSource]
                   | IntoDirectory FilePath [ArtifactSource]
     deriving (Read, Show, Typeable, Data, Eq)
@@ -61,8 +75,11 @@ newtype InstanceId = IID String
 instanceIdKey :: String
 instanceIdKey = "instance_id"
 
-uniqueInstanceIdKey :: String
-uniqueInstanceIdKey = "unique_instance_id"
+buildIdKey :: String
+buildIdKey = "build_id"
+
+buildDateKey :: String
+buildDateKey = "build_date"
 
 data ArtifactAssembly = CloudInit [CloudInitType] FilePath
                     | MountDuringBuild FilePath

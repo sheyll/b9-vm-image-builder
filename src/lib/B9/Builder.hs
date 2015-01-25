@@ -10,8 +10,8 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.RepositoryIO
                   , module B9.ArtifactGenerator
                   , module B9.ArtifactGeneratorImpl
-                  , buildProject
-                  , generateConfig
+                  , buildDisks
+                  , buildArtifacts
                   , printProject
                   , runInEnvironment
                   , createBuildImages
@@ -42,8 +42,8 @@ import B9.ArtifactGenerator
 import B9.ArtifactGeneratorImpl
 import qualified B9.LibVirtLXC as LXC
 
-buildProject :: Project -> ConfigParser -> B9Config -> IO Bool
-buildProject projectTemplate cfgParser cliCfg =
+buildDisks :: Project -> ConfigParser -> B9Config -> IO Bool
+buildDisks projectTemplate cfgParser cliCfg =
   withB9Config cfgParser cliCfg $ \cfg -> do
     let project = substProject (envVars cfg) projectTemplate
     run (projectName project) cfgParser cfg $ do
@@ -53,9 +53,9 @@ buildProject projectTemplate cfgParser cliCfg =
       traceL $ printf "RESULTING IN PROJECT: %s" (ppShow project)
       buildImgs <- createBuildImages (projectDisks project)
       infoL "DISK IMAGES CREATED"
-      acs <- assemble (projectArtifacts project)
+      acs <- assembleMountedArtifacts (projectArtifacts project)
       let sharedDirsCfg = sharedDirectoriesFromGeneratedArtifact acs
-      infoL "CONFIG GENERATED"
+      infoL "ARTIFACTS GENERATED"
       sharedDirsPrj <- createSharedDirs (projectSharedDirectories project)
       let execEnv = ExecEnv (projectName project)
                             mountedBuildImgs
@@ -78,16 +78,16 @@ buildProject projectTemplate cfgParser cliCfg =
         else do errorL "FAILED TO EXECUTE COMMANDS"
                 return False
 
-generateConfig :: Project -> ConfigParser -> B9Config -> IO Bool
-generateConfig projectTemplate cfgParser cliCfg =
+buildArtifacts :: Project -> ConfigParser -> B9Config -> IO Bool
+buildArtifacts projectTemplate cfgParser cliCfg =
   withB9Config cfgParser cliCfg $ \cfg -> do
     let project = substProject (envVars cfg) projectTemplate
     run (projectName project) cfgParser cfg $ do
-      infoL "START CONFIG GENERATION"
+      infoL "BUILDING ARTIFACTS"
       getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
       traceL $ printf "USING PROJECT TEMPLATE: %s" (ppShow projectTemplate)
       traceL $ printf "RESULTING IN PROJECT: %s" (ppShow project)
-      assemble (projectArtifacts project)
+      assembleArchives (projectArtifacts project)
       return True
 
 printProject :: Project -> ConfigParser -> B9Config -> IO Bool

@@ -18,6 +18,7 @@ module B9.ConfigUtils ( allOn
                       , maybeConsult
                       , maybeConsultSystemPath
                       , subst
+                      , substE
                       , substFile
                       , substPath
                       ) where
@@ -36,7 +37,7 @@ import Data.Word ( Word16, Word32 )
 import System.FilePath
 import Text.Printf
 import Data.ConfigFile
-import Data.Text.Template (render,templateSafe)
+import Data.Text.Template (render,templateSafe,renderA)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as LB
@@ -159,18 +160,29 @@ randomUUID = liftIO (UUID <$> ((,,,,,)
 -- String template substitution via dollar
 subst :: [(String,String)] -> String -> String
 subst env templateStr =
-  LT.unpack (render template' env')
-  where env' t = case lookup (T.unpack t) env of
-                   Just v -> T.pack v
-                   Nothing -> error ("Invalid template parameter: \""
-                                    ++ (T.unpack t) ++ "\" in: \""
-                                    ++ templateStr
-                                    ++ "\".\nValid variables:\n" ++ ppShow env)
-        template' = case templateSafe (T.pack templateStr) of
-          Left (row,col) -> error ("Invalid template, error at row: "
-                                  ++ show row ++ ", col: " ++ show col
-                                  ++ " in: \"" ++ templateStr)
-          Right t -> t
+  case substE env templateStr of
+    Left e -> error e
+    Right r -> r
+
+-- String template substitution via dollar
+substE :: [(String,String)] -> String -> Either String String
+substE env templateStr = do
+  t <- template'
+  res <- renderA t env'
+  return (LT.unpack res)
+  where
+    env' t = case lookup (T.unpack t) env of
+               Just v -> Right (T.pack v)
+               Nothing -> Left ("Invalid template parameter: \""
+                                ++ (T.unpack t) ++ "\" in: \""
+                                ++ templateStr
+                                ++ "\".\nValid variables:\n" ++ ppShow env)
+
+    template' = case templateSafe (T.pack templateStr) of
+      Left (row,col) -> Left ("Invalid template, error at row: "
+                             ++ show row ++ ", col: " ++ show col
+                             ++ " in: \"" ++ templateStr)
+      Right t -> Right t
 
 substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
 substFile assocs src dest = do

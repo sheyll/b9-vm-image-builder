@@ -48,15 +48,15 @@ runB9 (B9Options globalOpts action vars) = do
   cp <- configure cfgFile cfgCli
   action cfgFile cp cfgWithArgs
 
-runBuild :: [FilePath] -> BuildAction
-runBuild projectFiles _cfgFile cp conf = do
+runBuildDisks :: [FilePath] -> BuildAction
+runBuildDisks projectFiles _cfgFile cp conf = do
   prjs <- mapM consult projectFiles
-  buildProject (mconcat prjs) cp conf
+  buildDisks (mconcat prjs) cp conf
 
-runGenerateConfig :: [FilePath] ->  BuildAction
-runGenerateConfig projectFiles _cfgFile cp conf = do
+runBuildArtifacts :: [FilePath] ->  BuildAction
+runBuildArtifacts projectFiles _cfgFile cp conf = do
   prjs <- mapM consult projectFiles
-  generateConfig (mconcat prjs) cp conf
+  buildArtifacts (mconcat prjs) cp conf
 
 runPrint :: [FilePath] -> BuildAction
 runPrint projectFiles _cfgFile  cp conf = do
@@ -186,15 +186,14 @@ globals = toGlobalOpts
                     , cliB9Config = b9cfg' }
 
 cmds :: Parser BuildAction
-cmds = subparser (  command "build"
-                             (info (runBuild <$> projectsParser)
+cmds = subparser (  command "disks"
+                            (info (runBuildDisks <$> projectsParser)
+                                  (progDesc "Merge all project files and\
+                                            \ build all vm-disk-images."))
+                  <> command "artifacts"
+                             (info (runBuildArtifacts <$> projectsParser)
                                    (progDesc "Merge all project files and\
-                                             \ build."))
-                  <> command "generate-config-images"
-                             (info (runGenerateConfig <$> projectsParser)
-                                   (progDesc "Merge all project files and\
-                                             \ generate all (cloud-init-)\
-                                             \ config images."))
+                                             \ generate all extra artifacts."))
                   <> command "print"
                                 (info (runPrint <$> projectsParser)
                                       (progDesc "Show the final project that\

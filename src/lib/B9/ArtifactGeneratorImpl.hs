@@ -1,4 +1,4 @@
-module B9.ArtifactGeneratorImpl (assemble) where
+module B9.ArtifactGeneratorImpl (assembleArchives,assembleMountedArtifacts) where
 
 import B9.ArtifactGenerator
 import B9.DiskImages
@@ -10,7 +10,6 @@ import Data.Data
 import Data.List
 import Data.Function
 import Control.Arrow
-import Control.Exception
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -23,18 +22,43 @@ import Text.Show.Pretty (ppShow)
 
 import Test.QuickCheck
 
--- | Given a subdirectory and a config generator, run the config generator to
--- produce the configuration artifacts inside that subdirectory and return a list of ready-to-use 'Artifact'
+-- | Run an artifact generator to produce the artifacts *not* including
+-- 'MountDuringBuild' targets
+assembleArchives :: ArtifactGenerator -> B9 [AssembledArtifact]
+assembleArchives artGen =
+  assemble (agFilterAssemblies (not . asIsMountedDuringBuild) artGen)
+
+-- | Run an artifact generator to produce the artifacts for 'MountDuringBuild'
+-- targets
+assembleMountedArtifacts :: ArtifactGenerator -> B9 [AssembledArtifact]
+assembleMountedArtifacts artGen =
+  assemble (agFilterAssemblies asIsMountedDuringBuild artGen)
+
+asIsMountedDuringBuild :: ArtifactAssembly -> Bool
+asIsMountedDuringBuild (MountDuringBuild _) = True
+asIsMountedDuringBuild _ = False
+
+-- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
-assemble cfgGen = do
+assemble artGen = do
   b9cfgEnvVars <- envVars <$> getConfig
-  case execCGParser (parseArtifactGenerator cfgGen) (ArtifactEnv b9cfgEnvVars []) of
-    Left (CGError err) -> error err
-    Right igs -> do
-      buildDir <- getBuildDir
-      let outDir = buildDir </> "config-instances"
-      ensureDir (outDir ++ "/")
-      mapM (createInstance outDir) igs
+  buildId <- getBuildId
+  buildDate <- getBuildDate
+  let ag = parseArtifactGenerator artGen
+      e = Environment
+            ((buildDateKey, buildDate):(buildIdKey, buildId):b9cfgEnvVars)
+            []
+  case execCGParser ag e of
+    Left (CGError err) ->
+      error err
+    Right igs ->
+      case execIGEnv `mapM` igs of
+        Left err ->
+          error (printf "Failed to parse:\n%s\nError: %s"
+                                   (ppShow artGen)
+                                   err)
+        Right is ->
+          createAssembledArtifacts is
 
 parseArtifactGenerator :: ArtifactGenerator -> CGParser ()
 parseArtifactGenerator g =
@@ -53,17 +77,17 @@ parseArtifactGenerator g =
       return ()
 
 withArtifactSources :: [ArtifactSource] -> CGParser () -> CGParser ()
-withArtifactSources srcs = local (\ce -> ce {ceSources = ceSources ce ++ srcs})
+withArtifactSources srcs = local (\ce -> ce {agSources = agSources ce ++ srcs})
 
 withBindings :: [(String,String)] -> CGParser () -> CGParser ()
 withBindings bs = local (addBindings bs)
-  where
-   addBindings :: [(String, String)] -> ArtifactEnv -> ArtifactEnv
-   addBindings newEnv ce =
-     let newEnvSubst = map resolveBinding newEnv
-         resolveBinding (k,v) = (k, subst oldEnv v)
-         oldEnv = ceEnv ce
-     in ce { ceEnv = nubBy ((==) `on` fst) (newEnvSubst ++ oldEnv)}
+
+addBindings :: [(String, String)] -> Environment -> Environment
+addBindings newEnv ce =
+  let newEnvSubst = map resolveBinding newEnv
+      resolveBinding (k,v) = (k, subst oldEnv v)
+      oldEnv = agEnv ce
+  in ce { agEnv = nubBy ((==) `on` fst) (newEnvSubst ++ oldEnv)}
 
 eachBindingSet :: ArtifactGenerator
                -> [String]
@@ -72,7 +96,7 @@ eachBindingSet :: ArtifactGenerator
 eachBindingSet g vars valueSets =
   if all ((== length vars) . length) valueSets
      then return (zip vars <$> valueSets)
-     else (cgError (printf "Error in 'Each' binding during configuration \
+     else (cgError (printf "Error in 'Each' binding during artifact \
                            \generation in:\n '%s'.\n\nThe variable list\n\
                            \%s\n has %i entries, but this binding set\n%s\n\n\
                            \has a different number of entries!\n"
@@ -83,28 +107,31 @@ eachBindingSet g vars valueSets =
                                                     valueSets)))))
 
 writeInstanceGenerator :: InstanceId -> [ArtifactAssembly] -> CGParser ()
-writeInstanceGenerator iid assemblies = do
-  env <- ask
-  tell [IG iid env assemblies]
+writeInstanceGenerator (IID iidStrT) assemblies = do
+  env@(Environment bindings _) <- ask
+  iid <- either (throwError . CGError) (return . IID) (substE bindings iidStrT)
+  let env' = addBindings [(instanceIdKey, iidStr)] env
+      IID iidStr = iid
+  tell [IG iid env' assemblies]
 
 -- | Monad for creating Instance generators.
 newtype CGParser a =
-  CGParser { runCGParser :: WriterT [InstanceGenerator]
-                                   (ReaderT ArtifactEnv
+  CGParser { runCGParser :: WriterT [InstanceGenerator Environment]
+                                   (ReaderT Environment
                                             (Either CGError))
                                    a
            }
   deriving ( Functor, Applicative, Monad
-           , MonadReader ArtifactEnv
-           , MonadWriter [InstanceGenerator]
+           , MonadReader Environment
+           , MonadWriter [InstanceGenerator Environment]
            , MonadError CGError
            )
 
-data ArtifactEnv = ArtifactEnv { ceEnv :: [(String, String)]
-                           , ceSources :: [ArtifactSource] }
+data Environment = Environment { agEnv :: [(String, String)]
+                               , agSources :: [ArtifactSource] }
   deriving (Read, Show, Typeable, Data, Eq)
 
-data InstanceGenerator = IG InstanceId ArtifactEnv [ArtifactAssembly]
+data InstanceGenerator e = IG InstanceId e [ArtifactAssembly]
   deriving (Read, Show, Typeable, Data, Eq)
 
 newtype CGError = CGError String
@@ -114,257 +141,217 @@ cgError :: String -> CGParser a
 cgError msg = throwError (CGError msg)
 
 execCGParser :: CGParser ()
-             -> ArtifactEnv
-             -> Either CGError [InstanceGenerator]
+             -> Environment
+             -> Either CGError [InstanceGenerator Environment]
 execCGParser = runReaderT . execWriterT . runCGParser
 
+execIGEnv :: InstanceGenerator Environment
+          -> Either String (InstanceGenerator [SourceGenerator])
+execIGEnv (IG iid (Environment env sources) assemblies) = do
+  IG iid <$> sourceGens <*> assemblies'
+  where
+    sourceGens = join <$> mapM (toSourceGen env) sources
+    assemblies' = substAssembly `mapM` assemblies
+      where
+        substAssembly (CloudInit ts f) = CloudInit ts <$> substE env f
+        substAssembly (MountDuringBuild d) = MountDuringBuild <$> substE env d
 
-createInstance :: FilePath -> InstanceGenerator -> B9 AssembledArtifact
-createInstance = undefined
+toSourceGen :: [(String, String)]
+            -> ArtifactSource
+            -> Either String [SourceGenerator]
+toSourceGen env src =
+  case src of
+    Template f -> do
+      f' <- substE env f
+      return [SGConcat env [SGFrom SGT f'] KeepPerm (takeFileName f')]
+    Templates fs ->
+      join <$> mapM (toSourceGen env . Template) fs
+    File f -> do
+      f' <- substE env f
+      return [SGConcat env [SGFrom SGF f'] KeepPerm (takeFileName f')]
+    Files fs ->
+      join <$> mapM (toSourceGen env . File) fs
+    Concatenation t src' -> do
+      sgs <- join <$> mapM (toSourceGen env) src'
+      t' <- substE env t
+      let froms = join (sgGetFroms <$> sgs)
+      return [SGConcat env froms KeepPerm t']
+    SetPermissions o g a src' -> do
+      sgs <- join <$> mapM (toSourceGen env) src'
+      mapM (setSGPerm o g a) sgs
+    FromDirectory fromDir src' -> do
+      sgs <- join <$> mapM (toSourceGen env) src'
+      fromDir' <- substE env fromDir
+      return (setSGFromDirectory fromDir' <$> sgs)
+    IntoDirectory toDir src' -> do
+      sgs <- join <$> mapM (toSourceGen env) src'
+      toDir' <- substE env toDir
+      return (setSGToDirectory toDir' <$> sgs)
 
---toSourceGenerator :: InstanceGenerator
+createAssembledArtifacts :: [InstanceGenerator [SourceGenerator]]
+                         -> B9 [AssembledArtifact]
+createAssembledArtifacts igs = do
+  buildDir <- getBuildDir
+  let outDir = buildDir </> "artifact-instances"
+  ensureDir (outDir ++ "/")
+  generated <- generateSources outDir `mapM` igs
+  createTargets `mapM` generated
+
+generateSources :: FilePath
+                -> InstanceGenerator [SourceGenerator]
+                -> B9 (InstanceGenerator FilePath)
+generateSources outDir (IG iid sgs assemblies) = do
+  uiid@(IID uiidStr) <- generateUniqueIID iid
+  dbgL (printf "generating sources for %s" uiidStr)
+  let instanceDir = outDir </> uiidStr
+  traceL (printf "generating sources for %s:\n%s\n" uiidStr (ppShow sgs))
+  generateSourceTo instanceDir `mapM_` sgs
+  return (IG uiid instanceDir assemblies)
+
+createTargets :: InstanceGenerator FilePath -> B9 AssembledArtifact
+createTargets (IG uiid@(IID uiidStr) instanceDir assemblies) = do
+  targets <- createTarget instanceDir `mapM` assemblies
+  dbgL (printf "assembled all artifacts for %s" uiidStr)
+  return (AssembledArtifact uiid (join targets))
+
+generateUniqueIID :: InstanceId -> B9 InstanceId
+generateUniqueIID (IID iid) = do
+  buildId <- getBuildId
+  return (IID (printf "%s-%s" iid buildId))
+
+generateSourceTo :: FilePath -> SourceGenerator -> B9 ()
+generateSourceTo instanceDir (SGConcat env froms p to) = do
+  let toAbs = instanceDir </> to
+  ensureDir toAbs
+  case froms of
+    [from] ->
+      sgProcess env from toAbs
+    [] ->
+      error (printf "File '%s' has no sources." toAbs)
+    _froms -> do
+      let tmpTos = zipWith (<.>) (repeat toAbs) (show <$> [1..length froms])
+          tmpTosQ = intercalate " " (printf "'%s'" <$> tmpTos)
+      mapM_ (uncurry (sgProcess env)) (froms `zip` tmpTos)
+      cmd (printf "cat %s > '%s'" tmpTosQ toAbs)
+      cmd (printf "rm %s" tmpTosQ)
+  sgChangePerm toAbs p
+
+sgProcess :: [(String,String)] -> SGFrom -> FilePath -> B9 ()
+sgProcess _ (SGFrom SGF f) t = do
+  traceL (printf "copy '%s' to '%s'" f t)
+  liftIO (copyFile f t)
+sgProcess env (SGFrom SGT f) t = do
+  traceL (printf "translate '%s' to '%s'" f t)
+  substFile env f t
+
+sgChangePerm :: FilePath -> SGPerm -> B9 ()
+sgChangePerm _ KeepPerm = return ()
+sgChangePerm f (SGSetPerm (o,g,a)) = cmd (printf "chmod 0%i%i%i '%s'" o g a f)
 
 -- | Internal data type simplifying the rather complex source generation by
 --   bioling down 'ArtifactSource's to a flat list of uniform 'SourceGenerator's.
-data SourceGenerator = SGConcat [SGFrom] SGPerm FilePath
+data SourceGenerator = SGConcat [(String,String)] [SGFrom] SGPerm FilePath
   deriving (Read, Show, Typeable, Data, Eq)
 data SGFrom = SGFrom SGType FilePath
   deriving (Read, Show, Typeable, Data, Eq)
 data SGType = SGT | SGF
   deriving (Read, Show, Typeable, Data, Eq)
-type SGPerm = (Int,Int,Int)
+data SGPerm = SGSetPerm (Int,Int,Int) | KeepPerm
+  deriving (Read, Show, Typeable, Data, Eq)
 
--- | Internal CEM action to generate configuration artifacts.
--- assembleCfg :: ArtifactGenerator -> CEM ()
--- assembleCfg g =
---   case g of
---     Sources srcs gs -> addArtifactSources srcs gs
---     Let bindings gs -> local (addBindings bindings) (mapM_ assembleCfg gs)
---     Each vars valueSets gs ->
---       let bindingSets = generateEachBinding vars valueSets
---           in mapM_ assembleCfg (flip Let gs <$> bindingSets)
---     ArtifactInstance (IID iidStrTemplate) assemblies -> do
---       env <- asks ceEnv
---       let iid@(IID iidStr) = IID (subst env iidStrTemplate)
---       uniqueIID@(IID uniqueIIDStr) <- generateUniqueIID iid
---       local (addBindings [(uniqueInstanceIdKey, uniqueIIDStr)
---                          ,(instanceIdKey, iidStr)])
---             (createTargets uniqueIID iid assemblies)
---   where
---     addBindings :: [(String, String)] -> ArtifactEnv -> ArtifactEnv
---     addBindings newEnv ce =
---       let newEnvSubst = map resolveBinding newEnv
---           resolveBinding (k,v) = (k, subst oldEnv v)
---           oldEnv = ceEnv ce
---       in ce { ceEnv = nubBy ((==) `on` fst) (newEnvSubst ++ oldEnv)}
---
---     generateEachBinding :: [String] -> [[String]] -> [[(String,String)]]
---     generateEachBinding vars valueSets =
---       if all ((== length vars) . length) valueSets
---          then zip vars <$> valueSets
---          else error (printf "Error in 'Each' binding during configuration \
---                             \generation in:\n '%s'.\n\nThe variable list\n\
---                             \%s\n has %i entries, but this binding set\n%s\n\n\
---                             \has a different number of entries!\n"
---                             (ppShow g)
---                             (ppShow vars)
---                             (length vars)
---                             (ppShow (head (dropWhile ((== length vars) . length)
---                                                      valueSets))))
---
---     createTargets :: InstanceId -> InstanceId -> [ArtifactAssembly] -> CEM ()
---     createTargets uniqueIID iid assemblies = do
---       instanceDir <- materializeArtifacturation uniqueIID
---       targets <- mapM (createTarget instanceDir) assemblies
---       tell [AssembledArtifact iid (join targets)]
---
--- generateUniqueIID :: InstanceId -> CEM InstanceId
--- generateUniqueIID (IID iid) = do
---   buildId <- liftB9 getBuildId
---   return (IID (printf "%s-%s" iid buildId))
---
--- addDirectory :: SystemPath -> TemplateFiles -> [ArtifactGenerator] -> CEM ()
--- addDirectory sysPath (TemplateFiles teTemplates) gs = do
---   env <- asks ceEnv
---   let tes = subst env <$> teTemplates
---   dir <- resolve (substPath env sysPath)
---   entries <- liftIO (getDirectoryContents dir)
---   fileEntries <- mapM (liftIO . doesFileExist . (dir </>)) entries
---   let files = snd <$> filter fst (fileEntries `zip` entries)
---   let (filesTe, filesNonTe) = partition (`elem` tes) files
---   when (length tes /= length filesTe)
---     (error (printf "Error in configuration generator.\n\
---                    \Not all listed 'TemplateFiles' could be found.\n\
---                    \Directory: '%s'\n\
---                    \Requested Files: %s\n\
---                    \Available Files: %s\n"
---                    dir
---                    (show tes)
---                    (show files)))
---   liftB9 (traceL (printf "Adding template files from '%s': %s"
---                          dir (show filesTe)))
---   liftB9 (traceL (printf "Adding non-template files from '%s': %s"
---                          dir (show filesNonTe)))
---   local (addTemplates (dir, filesTe) . addFiles (dir, filesNonTe))
---         (mapM_ assembleCfg gs)
---   where
---     addTemplates ts ce = ce { ceTemplateFiles = ts : ceTemplateFiles ce }
---     addFiles fs ce = ce { ceNonTemplateFiles = fs : ceNonTemplateFiles ce }
---
+sgGetFroms :: SourceGenerator -> [SGFrom]
+sgGetFroms (SGConcat _ fs _ _) = fs
 
--- | Create a directory in the build directory for a configuration instance containing
--- all source files, with all templates processed.
--- materializeArtifacturation :: InstanceId -> CEM FilePath
--- materializeArtifacturation (IID iid) = do
---   ce <- ask
---   let instanceDir = outDir </> iid
---       ArtifactEnv sources env outDir = ce
---   liftB9 (dbgL (printf "materializing configuration '%s'" iid))
---   liftB9 (traceL (printf "configuration environment: %s" (show env)))
---   ensureDir (instanceDir ++ "/")
---   mapM_ (materializeSource instanceDir) sources
---   return instanceDir
---
--- -- | Create output file(s) in 'instanceDir' from a 'ArtifactSource'.
--- materializeSource
---
+setSGPerm :: Int -> Int -> Int -> SourceGenerator
+          -> Either String SourceGenerator
+setSGPerm o g a (SGConcat env from KeepPerm dest) =
+  Right (SGConcat env from (SGSetPerm (o,g,a)) dest)
+setSGPerm o g a sg
+  | o < 0 || o > 7 =
+    Left (printf "Bad 'owner' permission %i in \n%s" o (ppShow sg))
+  | g < 0 || g > 7 =
+    Left (printf "Bad 'group' permission %i in \n%s" g (ppShow sg))
+  | a < 0 || a > 7 =
+    Left (printf "Bad 'all' permission %i in \n%s" a (ppShow sg))
+  | otherwise =
+   Left (printf "Permission for source already defined:\n %s" (ppShow sg))
 
--- | Create the actual configuration target, either just a mountpoint, or an ISO
--- or VFAT image.
--- createTarget :: FilePath -> ArtifactAssembly -> CEM [ArtifactTarget]
--- createTarget configDir (MountDuringBuild mountPointTemplate) = do
---   env <- asks ceEnv
---   let mountPoint = subst env mountPointTemplate
---   liftB9 (dbgL (printf "add config mount point '%s' -> '%s'"
---                        configDir mountPointTemplate))
---   liftB9 (infoL (printf "MOUNTED CI_DIR '%s' TO '%s'"
---                         (takeFileName configDir)
---                         mountPoint))
---   return [ArtifactMount configDir (MountPoint mountPoint)]
--- createTarget configDir (CloudInit types pathTemplate) = do
---   mapM (create_ configDir pathTemplate) types
---   where
---     create_ instanceDir ciDirTemplate CI_DIR = do
---       env <- asks ceEnv
---       let ciDir = subst env ciDirTemplate
---       ensureDir (ciDir ++ "/")
---       liftB9 $ dbgL (printf "creating cloud init directory '%s'" ciDir)
---       files <- getDirectoryFiles instanceDir
---       liftB9 $ traceL (printf "copying files: %s" (show files))
---       liftIO (mapM_
---                 (uncurry copyFile)
---                 (((instanceDir </>) &&& (ciDir </>)) <$> files))
---       liftB9 (infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir)))
---       return (CloudInitTarget CI_DIR ciDir)
---
---     create_ instanceDir isoFileNameTemplate CI_ISO = do
---       outDir <- asks ceOutDir
---       env <- asks ceEnv
---       let isoFile = subst env isoFileNameTemplate <.> "iso"
---           tmpFile = outDir </> takeFileName isoFile
---       ensureDir tmpFile
---       liftB9 $ do
---         dbgL (printf "creating cloud init iso temp image '%s',\
---                      \ destination file: '%s" tmpFile isoFile)
---         cmd (printf "genisoimage\
---                     \ -output '%s'\
---                     \ -volid cidata\
---                     \ -rock\
---                     \ -d '%s' 2>&1"
---                     tmpFile
---                     instanceDir)
---         dbgL (printf "moving cloud init iso image '%s' to '%s'"
---                      tmpFile
---                      isoFile)
---       ensureDir isoFile
---       liftIO (copyFile tmpFile isoFile)
---       liftB9 (infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile)))
---       return (CloudInitTarget CI_ISO isoFile)
---
---     create_ instanceDir vfatFileTemplate CI_VFAT = do
---       outDir <- asks ceOutDir
---       env <- asks ceEnv
---       let vfatFile = subst env vfatFileTemplate <.> "vfat"
---           tmpFile = outDir </> takeFileName vfatFile
---       ensureDir tmpFile
---       files <- (map (instanceDir </>)) <$> getDirectoryFiles instanceDir
---       liftB9 $ do
---         dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
---         traceL (printf "adding '%s'" (show files))
---         cmd (printf "truncate --size 2M '%s'" tmpFile)
---         cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
---         cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
---                               : (printf "'%s'" <$> files))
---              ++ " ::")
---         dbgL (printf "moving cloud init vfat image '%s' to '%s'" tmpFile vfatFile)
---       ensureDir vfatFile
---       liftIO (copyFile tmpFile vfatFile)
---       liftB9 (infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile)))
---       return (CloudInitTarget CI_ISO vfatFile)
+setSGFromDirectory :: FilePath -> SourceGenerator -> SourceGenerator
+setSGFromDirectory fromDir (SGConcat e fs p d) =
+  SGConcat e (setSGFrom <$> fs) p d
+  where
+    setSGFrom (SGFrom t f) = SGFrom t (fromDir </> f)
+
+setSGToDirectory :: FilePath -> SourceGenerator -> SourceGenerator
+setSGToDirectory toDir (SGConcat e fs p d) =
+  SGConcat e fs p (toDir </> d)
+
+-- | Create the actual target, either just a mountpoint, or an ISO or VFAT
+-- image.
+createTarget :: FilePath -> ArtifactAssembly -> B9 [ArtifactTarget]
+createTarget instanceDir (MountDuringBuild mountPoint) = do
+  dbgL (printf "add config mount point '%s' -> '%s'"
+               instanceDir mountPoint)
+  infoL (printf "MOUNTED CI_DIR '%s' TO '%s'"
+                (takeFileName instanceDir) mountPoint)
+  return [ArtifactMount instanceDir (MountPoint mountPoint)]
+createTarget instanceDir (CloudInit types outPath) = do
+  mapM create_ types
+  where
+    create_ CI_DIR = do
+      let ciDir = outPath
+      ensureDir (ciDir ++ "/")
+      dbgL (printf "creating directory '%s'" ciDir)
+      files <- getDirectoryFiles instanceDir
+      traceL (printf "copying files: %s" (show files))
+      liftIO (mapM_
+                (\(f,t) -> do
+                   ensureDir t
+                   copyFile f t)
+                (((instanceDir </>) &&& (ciDir </>)) <$> files))
+      infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir))
+      return (CloudInitTarget CI_DIR ciDir)
+
+    create_ CI_ISO = do
+      buildDir <- getBuildDir
+      let isoFile = outPath <.> "iso"
+          tmpFile = buildDir </> takeFileName isoFile
+      ensureDir tmpFile
+      dbgL (printf "creating cloud init iso temp image '%s',\
+                   \ destination file: '%s" tmpFile isoFile)
+      cmd (printf "genisoimage\
+                  \ -output '%s'\
+                  \ -volid cidata\
+                  \ -rock\
+                  \ -d '%s' 2>&1"
+                  tmpFile
+                  instanceDir)
+      dbgL (printf "moving iso image '%s' to '%s'" tmpFile isoFile)
+      ensureDir isoFile
+      liftIO (copyFile tmpFile isoFile)
+      infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile))
+      return (CloudInitTarget CI_ISO isoFile)
+
+    create_ CI_VFAT = do
+      buildDir <- getBuildDir
+      let vfatFile = outPath <.> "vfat"
+          tmpFile = buildDir </> takeFileName vfatFile
+      ensureDir tmpFile
+      files <- (map (instanceDir </>)) <$> getDirectoryFiles instanceDir
+      dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
+      traceL (printf "adding '%s'" (show files))
+      cmd (printf "truncate --size 2M '%s'" tmpFile)
+      cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
+      cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
+                            : (printf "'%s'" <$> files))
+           ++ " ::")
+      dbgL (printf "moving vfat image '%s' to '%s'" tmpFile vfatFile)
+      ensureDir vfatFile
+      liftIO (copyFile tmpFile vfatFile)
+      infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile))
+      return (CloudInitTarget CI_ISO vfatFile)
 
 -- * tests
-
-test_configEntriesAreOverwritten = do
-  let t = Let [("x", "1")
-              ,("y", "$x")]
-              [Let [("x", expected)]
-                   [Artifact (IID "test") [MountDuringBuild "${y}"]]]
-      expected = "2"
-  [AssembledArtifact _ [ArtifactMount _ (MountPoint x)]] <- assembleTest t
-  when (x /= expected) (error (printf "Expected '%s' got '%s'" expected x))
-
-test_Each = do
-  let t = Each ["x", "y"]
-               expected
-               [Artifact (IID "$x$y") [MountDuringBuild "egal"]]
-      expected = [["1", "a"], ["2", "b"]]
-  [ AssembledArtifact (IID v1) [ArtifactMount _ _]
-    , AssembledArtifact (IID v2) [ArtifactMount _ _]] <- assembleTest t
-  let actual = [v1, v2]
-      expected' = map join expected
-  when (actual /= expected') (error (printf "Expected '%s' got '%s'"
-                                           (show expected')
-                                           (show actual)))
-
-test_EachToManyVars = do
-  let t = Each ["x"] expected []
-      expected = [["1", "a"], ["2", "b"]]
-  Left (SomeException _) <- try (assembleTest t)
-  return ()
-
-test_EachEmpty = do
-  let t = Each [] expected []
-      expected = [[], []]
-  [] <- assembleTest t
-  return ()
-
-test_EachNotEnoughVars = do
-  let t = Each ["x", "y"] expected []
-      expected = [["a"]]
-  Left (SomeException _) <- try (assembleTest t)
-  return ()
-
-test_useTemplateVarsInTemplateVars = do
-  let t = Let [("x", "1")]
-              [Let [("y", "$x")]
-                   [Artifact (IID "test") [MountDuringBuild "$y"]]]
-      expected = "1"
-  [AssembledArtifact _ [ArtifactMount _ (MountPoint x)]] <- assembleTest t
-  when (x /= expected) (error (printf "Expected '%s' got '%s'" expected x))
-
-test_commandLineExtraArgsInTemplateVars = do
-  let t = Artifact (IID "test") [MountDuringBuild "${arg_1}"]
-      expected = "1"
-      args = [("arg_1", expected)]
-  [AssembledArtifact _ [ArtifactMount _ (MountPoint x)]] <- assembleTest' t args
-  when (x /= expected) (error (printf "Expected '%s' got '%s'" expected x))
-
-
-assembleTest t = run "test" emptyCP (mempty {verbosity = Just LogTrace})
-                                    (assemble t)
-assembleTest' t args = run "test" emptyCP (mempty {verbosity = Just LogTrace
-                                                  ,envVars = args})
-                                          (assemble t)
 
 test_GenerateNoInstanceGeneratorsForEmptyArtifact =
   let (Right igs) = execCGParser (parseArtifactGenerator EmptyArtifact) undefined
