@@ -8,8 +8,8 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.ShellScript
                   , module B9.Repository
                   , module B9.RepositoryIO
-                  , module B9.ConfigGenerator
-                  , module B9.ConfigGeneratorImpl
+                  , module B9.ArtifactGenerator
+                  , module B9.ArtifactGeneratorImpl
                   , buildProject
                   , generateConfig
                   , printProject
@@ -38,8 +38,8 @@ import B9.DiskImageBuilder
 import B9.ShellScript
 import B9.Repository
 import B9.RepositoryIO
-import B9.ConfigGenerator
-import B9.ConfigGeneratorImpl
+import B9.ArtifactGenerator
+import B9.ArtifactGeneratorImpl
 import qualified B9.LibVirtLXC as LXC
 
 buildProject :: Project -> ConfigParser -> B9Config -> IO Bool
@@ -53,8 +53,8 @@ buildProject projectTemplate cfgParser cliCfg =
       traceL $ printf "RESULTING IN PROJECT: %s" (ppShow project)
       buildImgs <- createBuildImages (projectDisks project)
       infoL "DISK IMAGES CREATED"
-      acs <- assemble (projectConfigGenerator project)
-      let sharedDirsCfg = sharedDirectoriesFromGeneratedConfig acs
+      acs <- assemble (projectArtifacts project)
+      let sharedDirsCfg = sharedDirectoriesFromGeneratedArtifact acs
       infoL "CONFIG GENERATED"
       sharedDirsPrj <- createSharedDirs (projectSharedDirectories project)
       let execEnv = ExecEnv (projectName project)
@@ -87,7 +87,7 @@ generateConfig projectTemplate cfgParser cliCfg =
       getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
       traceL $ printf "USING PROJECT TEMPLATE: %s" (ppShow projectTemplate)
       traceL $ printf "RESULTING IN PROJECT: %s" (ppShow project)
-      assemble (projectConfigGenerator project)
+      assemble (projectArtifacts project)
       return True
 
 printProject :: Project -> ConfigParser -> B9Config -> IO Bool

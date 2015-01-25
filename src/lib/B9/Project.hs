@@ -7,11 +7,11 @@ import Data.Monoid
 import B9.ShellScript ( Script(..))
 import B9.ExecEnv
 import B9.DiskImages
-import B9.ConfigGenerator
+import B9.ArtifactGenerator
 
 data Project = Project { projectName :: String
                        , projectDisks :: [ImageTarget]
-                       , projectConfigGenerator :: ConfigGenerator
+                       , projectArtifacts :: ArtifactGenerator
                        , projectSharedDirectories :: [SharedDirectory]
                        , projectBuildScript :: Script
                        , projectCpuArch :: CPUArch
