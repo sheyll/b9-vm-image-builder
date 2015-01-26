@@ -151,9 +151,9 @@ createDestinationImage buildImg dest =
       resizeImage imgResize buildImg
       let destImg = Image destFile Raw buildImgFs
           (Image _ _ buildImgFs) = buildImg
-          destFile = repo </> "machines" </> name </> "disks" </> "0.raw"
-          sizeFile = repo </> "machines" </> name </> "disks" </> "0.size"
-          versFile = repo </> "machines" </> name </> "disks" </> "VERSION"
+          destFile = repo </> "machines" </> name </> "disks"</> "raw" </> "0.raw"
+          sizeFile = repo </> "machines" </> name </> "disks"</> "raw" </> "0.size"
+          versFile = repo </> "machines" </> name </> "disks"</> "raw" </> "VERSION"
       exportAndRemoveImage buildImg destImg
       cmd (printf "echo $(qemu-img info -f raw '%s' \
                         \| gawk -e '/virtual size/ {print $4}' \

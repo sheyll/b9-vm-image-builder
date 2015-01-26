@@ -29,7 +29,6 @@ data MountPoint = MountPoint FilePath | NotMounted
 
 type Mounted a = (a, MountPoint)
 
-
 data ImageDestination = Share String ImageType ImageResize
                       | LiveInstallerImage String FilePath ImageResize
                       | LocalFile Image ImageResize
