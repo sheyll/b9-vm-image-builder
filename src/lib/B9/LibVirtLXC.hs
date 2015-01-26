@@ -4,7 +4,6 @@ module B9.LibVirtLXC ( runInEnvironment
                      ) where
 
 import Control.Applicative
-import Control.Monad
 import Control.Monad.IO.Class ( liftIO )
 import System.Directory
 import System.FilePath

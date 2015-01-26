@@ -81,7 +81,10 @@ preferredSourceImageTypes dest =
     (LocalFile (Image _ fmt _) resize) ->
       nub [fmt, Raw, QCow2, Vmdk]
       `intersect` (allowedImageTypesForResize resize)
-    Transient -> [Raw, QCow2, Vmdk]
+    Transient ->
+      [Raw, QCow2, Vmdk]
+    (LiveInstallerImage _name _repo _imgResize)  ->
+      [Raw]
 
 allowedImageTypesForResize :: ImageResize -> [ImageType]
 allowedImageTypesForResize r =
@@ -144,6 +147,22 @@ createDestinationImage buildImg dest =
     (LocalFile destImg imgResize) -> do
       resizeImage imgResize buildImg
       exportAndRemoveImage buildImg destImg
+    (LiveInstallerImage name repo imgResize) -> do
+      resizeImage imgResize buildImg
+      let destImg = Image destFile Raw buildImgFs
+          (Image _ _ buildImgFs) = buildImg
+          destFile = repo </> "machines" </> name </> "disks" </> "0.raw"
+          sizeFile = repo </> "machines" </> name </> "disks" </> "0.size"
+          versFile = repo </> "machines" </> name </> "disks" </> "VERSION"
+      exportAndRemoveImage buildImg destImg
+      cmd (printf "echo $(qemu-img info -f raw '%s' \
+                        \| gawk -e '/virtual size/ {print $4}' \
+                        \| tr -d '(') > '%s'"
+                  destFile
+                  sizeFile)
+      buildDate <- getBuildDate
+      buildId <- getBuildId
+      liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
     Transient ->
       return ()
 

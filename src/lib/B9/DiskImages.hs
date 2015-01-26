@@ -31,6 +31,7 @@ type Mounted a = (a, MountPoint)
 
 
 data ImageDestination = Share String ImageType ImageResize
+                      | LiveInstallerImage String FilePath ImageResize
                       | LocalFile Image ImageResize
                       | Transient
                       deriving (Read, Show, Typeable, Data)
