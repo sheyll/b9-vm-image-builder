@@ -82,23 +82,27 @@ runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
     setUpExecEnv = do
       let (VmScript cpu shares _) = vmScript
       let mountedImages = buildImages `zip` (itImageMountPoint <$> imageTargets)
-      sharesAbs <- createSharedDirs shares
+      sharesAbs <- createSharedDirs instanceDir shares
       return (ExecEnv iid
                       mountedImages
                       sharesAbs
                       (Resources AutomaticRamSize 8 cpu))
 
-createSharedDirs :: [SharedDirectory] -> B9 [SharedDirectory]
-createSharedDirs sharedDirsIn = mapM createSharedDir sharedDirsIn
+createSharedDirs :: FilePath -> [SharedDirectory] -> B9 [SharedDirectory]
+createSharedDirs instanceDir sharedDirsIn = mapM createSharedDir sharedDirsIn
   where
-    createSharedDir (SharedDirectoryRO d m) = liftIO $ do
-      createDirectoryIfMissing True d
-      d' <- canonicalizePath d
+    createSharedDir (SharedDirectoryRO d m) = do
+      d' <- createAndCanonicalize d
       return $ SharedDirectoryRO d' m
-    createSharedDir (SharedDirectory d m) = liftIO $ do
-      createDirectoryIfMissing True d
-      d' <- canonicalizePath d
+    createSharedDir (SharedDirectory d m) = do
+      d' <- createAndCanonicalize d
       return $ SharedDirectory d' m
+    createSharedDir (InstanceDirectory mp) = do
+      d' <- createAndCanonicalize instanceDir
+      return $ SharedDirectoryRO d' mp
+    createAndCanonicalize d = liftIO $ do
+      createDirectoryIfMissing True d
+      canonicalizePath d
 
 createDestinationImages :: [Image] -> [ImageTarget] -> B9 ()
 createDestinationImages buildImages imageTargets = do
