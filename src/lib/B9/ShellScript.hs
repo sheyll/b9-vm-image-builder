@@ -23,7 +23,7 @@ data Script = In FilePath [Script]
             | Begin [Script]
             | Run FilePath [String]
             | NoOP
-            deriving (Show, Read, Typeable, Data)
+            deriving (Show, Read, Typeable, Data,Eq)
 
 instance Monoid Script where
   mempty = NoOP
@@ -43,7 +43,7 @@ data Cmd = Cmd { cmdPath :: String
                } deriving (Show, Read)
 
 data CmdVerbosity = Debug | Verbose | OnlyStdErr | Quiet
-                  deriving (Show, Read, Typeable, Data)
+                  deriving (Show, Read, Typeable, Data,Eq)
 
 data Cwd = Cwd FilePath | NoCwd deriving (Show, Read)
 

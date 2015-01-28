@@ -10,7 +10,9 @@ module B9.ExecEnv
 
 import Data.Data
 import Data.Monoid
+
 import B9.DiskImages
+import B9.ConfigUtils
 
 data ExecEnv = ExecEnv { envName :: String
                        , envImageMounts :: [Mounted Image]
@@ -20,7 +22,8 @@ data ExecEnv = ExecEnv { envName :: String
 
 data SharedDirectory = SharedDirectory FilePath MountPoint
                      | SharedDirectoryRO FilePath MountPoint
-                     deriving (Read, Show, Typeable, Data)
+                     | InstanceDirectory MountPoint
+                     deriving (Read, Show, Typeable, Data,Eq)
 
 data Resources = Resources { maxMemory :: RamSize
                            , cpuCount :: Int
@@ -35,7 +38,7 @@ instance Monoid Resources where
 noResources :: Resources
 noResources = mempty
 
-data CPUArch = X86_64 | I386 deriving (Read, Show, Typeable, Data)
+data CPUArch = X86_64 | I386 deriving (Read, Show, Typeable, Data,Eq)
 
 instance Monoid CPUArch where
   mempty = I386

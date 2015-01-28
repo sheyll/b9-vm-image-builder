@@ -19,7 +19,7 @@ parseCommandLine =
                (fullDesc
                 <> progDesc "Build and run VM-Images inside LXC containers.\
                             \ Custom arguments follow after '--' and are\
-                            \ accessable in many strings in project configs \
+                            \ accessable in many strings in build files \
                             \ trough shell like variable references, i.e. \
                             \'${arg_N}' referes to positional argument $N.\n\
                             \\n\
@@ -48,26 +48,16 @@ runB9 (B9Options globalOpts action vars) = do
   cp <- configure cfgFile cfgCli
   action cfgFile cp cfgWithArgs
 
-runBuildDisks :: [FilePath] -> BuildAction
-runBuildDisks projectFiles _cfgFile cp conf = do
-  prjs <- mapM consult projectFiles
-  buildDisks (mconcat prjs) cp conf
-
 runBuildArtifacts :: [FilePath] ->  BuildAction
-runBuildArtifacts projectFiles _cfgFile cp conf = do
-  prjs <- mapM consult projectFiles
-  buildArtifacts (mconcat prjs) cp conf
-
-runPrint :: [FilePath] -> BuildAction
-runPrint projectFiles _cfgFile  cp conf = do
-  prjs <- mapM consult projectFiles
-  printProject (mconcat prjs) cp conf
+runBuildArtifacts buildFiles _cfgFile cp conf = do
+  generators <- mapM consult buildFiles
+  buildArtifacts (mconcat generators) cp conf
 
 runPush :: SharedImageName -> BuildAction
 runPush name _cfgFile cp conf = impl
   where
     conf' = conf { keepTempDirs = False }
-    impl = run "push" cp conf'
+    impl = run cp conf'
                (if not (isJust (repository conf'))
                    then do
                      errorL "No repository specified! \
@@ -79,7 +69,7 @@ runPush name _cfgFile cp conf = impl
 
 runPull :: Maybe SharedImageName -> BuildAction
 runPull mName _cfgFile cp conf =
-  run "pull" cp conf' (pullRemoteRepos >> maybePullImage)
+  run cp conf' (pullRemoteRepos >> maybePullImage)
   where
     conf' = conf { keepTempDirs = False }
     maybePullImage = maybe (return True) pullLatestImage mName
@@ -89,7 +79,7 @@ runListSharedImages _cfgFile cp conf = impl
   where
     conf' = conf { keepTempDirs = False }
     impl = do
-      imgs <- run "list" cp conf' getSharedImages
+      imgs <- run cp conf' getSharedImages
       if null imgs
         then putStrLn "\n\nNO SHAREABLE IMAGES\n"
         else putStrLn "SHAREABLE IMAGES:"
@@ -186,19 +176,10 @@ globals = toGlobalOpts
                     , cliB9Config = b9cfg' }
 
 cmds :: Parser BuildAction
-cmds = subparser (  command "disks"
-                            (info (runBuildDisks <$> projectsParser)
-                                  (progDesc "Merge all project files and\
-                                            \ build all vm-disk-images."))
-                  <> command "artifacts"
-                             (info (runBuildArtifacts <$> projectsParser)
-                                   (progDesc "Merge all project files and\
-                                             \ generate all extra artifacts."))
-                  <> command "print"
-                                (info (runPrint <$> projectsParser)
-                                      (progDesc "Show the final project that\
-                                                \ would be used by the 'build' \
-                                                \ command."))
+cmds = subparser (  command "build"
+                             (info (runBuildArtifacts <$> buildFileParser)
+                                   (progDesc "Merge all build file and\
+                                             \ generate all artifacts."))
                   <> command "push"
                         (info (runPush <$> sharedImageNameParser)
                               (progDesc "Push the lastest shared image\
@@ -222,15 +203,15 @@ cmds = subparser (  command "disks"
                              (info (runAddRepo <$> remoteRepoParser)
                                    (progDesc "Add a remote repo.")))
 
-projectsParser :: Parser [FilePath]
-projectsParser = helper <*>
+buildFileParser :: Parser [FilePath]
+buildFileParser = helper <*>
    some (strOption
-          (help "Project file to load, specify multiple project\
-                \ files to merge them into a single project."
+          (help "Build file to load, specify multiple build\
+                \ files (each witch '-f') to build them all in a single run."
           <> short 'f'
           <> long "project-file"
           <> metavar "FILENAME"
-          <> noArgError (ErrorMsg "No project file specified!")))
+          <> noArgError (ErrorMsg "No build file specified!")))
 
 buildVars :: Parser BuildVariables
 buildVars = zip (("arg_"++) . show <$> ([1..] :: [Int]))

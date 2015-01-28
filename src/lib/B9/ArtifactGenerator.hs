@@ -9,22 +9,17 @@ module B9.ArtifactGenerator
   ,instanceIdKey
   ,buildIdKey
   ,buildDateKey
-  ,sharedDirectoriesFromGeneratedArtifact
-  ,agFilterAssemblies
   ) where
 
 
 import Data.Data
 import Data.Monoid
-import Control.Monad
 import Control.Applicative
-import Data.Maybe
 
 import B9.DiskImages
-import B9.ExecEnv
+import B9.Vm
 
 import Test.QuickCheck
-
 
 -- | A single config generator specifies howto generate multiple output
 -- files/directories. It consists of a netsted set of variable bindings that are
@@ -33,27 +28,15 @@ data ArtifactGenerator =
     Sources [ArtifactSource] [ArtifactGenerator]
   | Let [(String, String)] [ArtifactGenerator]
   | Each [String] [[String]] [ArtifactGenerator]
-  | Artifact InstanceId  [ArtifactAssembly]
+  | Artifact InstanceId ArtifactAssembly
   | EmptyArtifact
-  deriving (Read, Show, Typeable, Data)
+  deriving (Read, Show, Typeable, Data, Eq)
 
 instance Monoid ArtifactGenerator where
   mempty = Let [] []
   (Let [] []) `mappend` x = x
   x `mappend` (Let [] []) = x
   x `mappend` y = Let [] [x, y]
-
-
-agFilterAssemblies :: (ArtifactAssembly -> Bool)
-                   -> ArtifactGenerator
-                   -> ArtifactGenerator
-agFilterAssemblies p ag =
-  case ag of
-    Sources s ags -> Sources s (agFilterAssemblies p <$> ags)
-    Let b ags -> Let b (agFilterAssemblies p <$> ags)
-    Each k v ags -> Each k v (agFilterAssemblies p <$> ags)
-    Artifact i as -> Artifact i (filter p as)
-    EmptyArtifact -> EmptyArtifact
 
 -- | Explicit is better than implicit: Only files that have explicitly been
 -- listed will be included in any generated configuration. That's right: There's
@@ -82,31 +65,18 @@ buildDateKey :: String
 buildDateKey = "build_date"
 
 data ArtifactAssembly = CloudInit [CloudInitType] FilePath
-                    | MountDuringBuild FilePath
+                      | VmImages [ImageTarget] VmScript
   deriving (Read, Show, Typeable, Data, Eq)
 
 data AssembledArtifact = AssembledArtifact InstanceId [ArtifactTarget]
   deriving (Read, Show, Typeable, Data, Eq)
 
 data ArtifactTarget = CloudInitTarget CloudInitType FilePath
-                  | ArtifactMount FilePath MountPoint
+                    | VmImagesTarget
   deriving (Read, Show, Typeable, Data, Eq)
 
 data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
   deriving (Read, Show, Typeable, Data, Eq)
-
-
--- | Generate 'SharedDirectory's from generated configuration by filtering all
--- 'MountDuringBuild' definitions.
-sharedDirectoriesFromGeneratedArtifact :: [AssembledArtifact] -> [SharedDirectory]
-sharedDirectoriesFromGeneratedArtifact = catMaybes . map toSharedDir
-                                       . join . map getTarget
-  where
-    toSharedDir (ArtifactMount hostDir guestMnt) = Just (SharedDirectoryRO hostDir guestMnt)
-    toSharedDir _ = Nothing
-
-    getTarget (AssembledArtifact _iid targets) = targets
-
 
 instance Arbitrary ArtifactGenerator where
   arbitrary = oneof [ Sources <$> (halfSize arbitrary) <*> (halfSize arbitrary)
@@ -150,7 +120,7 @@ instance Arbitrary InstanceId where
 
 instance Arbitrary ArtifactAssembly where
   arbitrary = oneof [ CloudInit <$> arbitrary <*> arbitraryFilePath
-                    , MountDuringBuild <$> arbitraryFilePath
+                    , pure (VmImages [] NoVmScript)
                     ]
 
 instance Arbitrary CloudInitType where

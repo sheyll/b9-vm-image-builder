@@ -55,14 +55,14 @@ data BuildState = BuildState { bsBuildId :: String
                              , bsStartTime :: UTCTime
                              , bsInheritStdIn :: Bool
                              }
+
 data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
-run :: String -> ConfigParser -> B9Config -> B9 a -> IO a
-run name cfgParser cfg action = do
-  buildId <- if uniqueBuildDirs cfg then generateBuildId
-             else return name
+run :: ConfigParser -> B9Config -> B9 a -> IO a
+run cfgParser cfg action = do
+  buildId <- generateBuildId
   now <- getCurrentTime
   bracket (createBuildDir buildId) removeBuildDir (run' buildId now)
   where
@@ -91,7 +91,7 @@ run name cfgParser cfg action = do
 
     createBuildDir buildId = do
       if uniqueBuildDirs cfg then do
-        let subDir = "BUILD-" ++ name ++ "-" ++ buildId
+        let subDir = "BUILD-" ++ buildId
         buildDir <- resolveBuildDir subDir
         createDirectory buildDir
         canonicalizePath buildDir

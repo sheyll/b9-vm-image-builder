@@ -16,7 +16,7 @@ data ImageTarget = ImageTarget
                      -- ^ Where to mount the image during the
                      -- build inside the execution
                      -- environment.
-                     deriving (Read, Show, Typeable, Data)
+                     deriving (Read, Show, Typeable, Data, Eq)
 
 itImageDestination :: ImageTarget -> ImageDestination
 itImageDestination (ImageTarget d _ _) = d
@@ -33,13 +33,13 @@ data ImageDestination = Share String ImageType ImageResize
                       | LiveInstallerImage String FilePath ImageResize
                       | LocalFile Image ImageResize
                       | Transient
-                      deriving (Read, Show, Typeable, Data)
+                      deriving (Read, Show, Typeable, Data,Eq)
 
 data ImageSource = EmptyImage String FileSystem ImageType ImageSize
                  | CopyOnWrite Image
                  | SourceImage Image Partition ImageResize
                  | From String ImageResize
-                 deriving (Show,Read,Typeable,Data)
+                 deriving (Show,Read,Typeable,Data,Eq)
 
 data Partition = NoPT | Partition Int
                deriving (Eq, Show, Read, Typeable, Data)

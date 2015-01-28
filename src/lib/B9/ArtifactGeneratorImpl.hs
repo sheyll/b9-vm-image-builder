@@ -1,9 +1,11 @@
-module B9.ArtifactGeneratorImpl (assembleArchives,assembleMountedArtifacts) where
+module B9.ArtifactGeneratorImpl (assemble) where
 
 import B9.ArtifactGenerator
 import B9.DiskImages
 import B9.B9Monad
 import B9.B9Config
+import B9.Vm
+import B9.VmBuilder
 import B9.ConfigUtils hiding (tell)
 
 import Data.Data
@@ -21,22 +23,6 @@ import Text.Printf
 import Text.Show.Pretty (ppShow)
 
 import Test.QuickCheck
-
--- | Run an artifact generator to produce the artifacts *not* including
--- 'MountDuringBuild' targets
-assembleArchives :: ArtifactGenerator -> B9 [AssembledArtifact]
-assembleArchives artGen =
-  assemble (agFilterAssemblies (not . asIsMountedDuringBuild) artGen)
-
--- | Run an artifact generator to produce the artifacts for 'MountDuringBuild'
--- targets
-assembleMountedArtifacts :: ArtifactGenerator -> B9 [AssembledArtifact]
-assembleMountedArtifacts artGen =
-  assemble (agFilterAssemblies asIsMountedDuringBuild artGen)
-
-asIsMountedDuringBuild :: ArtifactAssembly -> Bool
-asIsMountedDuringBuild (MountDuringBuild _) = True
-asIsMountedDuringBuild _ = False
 
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
@@ -71,8 +57,8 @@ parseArtifactGenerator g =
       allBindings <- eachBindingSet g keySet valueSets
       mapM_ ($ mapM_ parseArtifactGenerator gs)
             (withBindings <$> allBindings)
-    Artifact iid assemblies ->
-      writeInstanceGenerator iid assemblies
+    Artifact iid assembly ->
+      writeInstanceGenerator iid assembly
     EmptyArtifact ->
       return ()
 
@@ -106,13 +92,13 @@ eachBindingSet g vars valueSets =
                            (ppShow (head (dropWhile ((== length vars) . length)
                                                     valueSets)))))
 
-writeInstanceGenerator :: InstanceId -> [ArtifactAssembly] -> CGParser ()
-writeInstanceGenerator (IID iidStrT) assemblies = do
+writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
+writeInstanceGenerator (IID iidStrT) assembly = do
   env@(Environment bindings _) <- ask
   iid <- either (throwError . CGError) (return . IID) (substE bindings iidStrT)
   let env' = addBindings [(instanceIdKey, iidStr)] env
       IID iidStr = iid
-  tell [IG iid env' assemblies]
+  tell [IG iid env' assembly]
 
 -- | Monad for creating Instance generators.
 newtype CGParser a =
@@ -131,7 +117,7 @@ data Environment = Environment { agEnv :: [(String, String)]
                                , agSources :: [ArtifactSource] }
   deriving (Read, Show, Typeable, Data, Eq)
 
-data InstanceGenerator e = IG InstanceId e [ArtifactAssembly]
+data InstanceGenerator e = IG InstanceId e ArtifactAssembly
   deriving (Read, Show, Typeable, Data, Eq)
 
 newtype CGError = CGError String
@@ -147,14 +133,12 @@ execCGParser = runReaderT . execWriterT . runCGParser
 
 execIGEnv :: InstanceGenerator Environment
           -> Either String (InstanceGenerator [SourceGenerator])
-execIGEnv (IG iid (Environment env sources) assemblies) = do
-  IG iid <$> sourceGens <*> assemblies'
+execIGEnv (IG iid (Environment env sources) assembly) = do
+  IG iid <$> sourceGens <*> substAssembly assembly
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
-    assemblies' = substAssembly `mapM` assemblies
-      where
-        substAssembly (CloudInit ts f) = CloudInit ts <$> substE env f
-        substAssembly (MountDuringBuild d) = MountDuringBuild <$> substE env d
+    substAssembly (CloudInit ts f) = CloudInit ts <$> substE env f
+    substAssembly vmImages = Right vmImages -- TODO
 
 toSourceGen :: [(String, String)]
             -> ArtifactSource
@@ -200,19 +184,19 @@ createAssembledArtifacts igs = do
 generateSources :: FilePath
                 -> InstanceGenerator [SourceGenerator]
                 -> B9 (InstanceGenerator FilePath)
-generateSources outDir (IG iid sgs assemblies) = do
+generateSources outDir (IG iid sgs assembly) = do
   uiid@(IID uiidStr) <- generateUniqueIID iid
   dbgL (printf "generating sources for %s" uiidStr)
   let instanceDir = outDir </> uiidStr
   traceL (printf "generating sources for %s:\n%s\n" uiidStr (ppShow sgs))
   generateSourceTo instanceDir `mapM_` sgs
-  return (IG uiid instanceDir assemblies)
+  return (IG uiid instanceDir assembly)
 
 createTargets :: InstanceGenerator FilePath -> B9 AssembledArtifact
-createTargets (IG uiid@(IID uiidStr) instanceDir assemblies) = do
-  targets <- createTarget instanceDir `mapM` assemblies
-  dbgL (printf "assembled all artifacts for %s" uiidStr)
-  return (AssembledArtifact uiid (join targets))
+createTargets (IG uiid@(IID uiidStr) instanceDir assembly) = do
+  targets <- createTarget uiid instanceDir assembly
+  dbgL (printf "assembled artifact %s" uiidStr)
+  return (AssembledArtifact uiid targets)
 
 generateUniqueIID :: InstanceId -> B9 InstanceId
 generateUniqueIID (IID iid) = do
@@ -288,14 +272,12 @@ setSGToDirectory toDir (SGConcat e fs p d) =
 
 -- | Create the actual target, either just a mountpoint, or an ISO or VFAT
 -- image.
-createTarget :: FilePath -> ArtifactAssembly -> B9 [ArtifactTarget]
-createTarget instanceDir (MountDuringBuild mountPoint) = do
-  dbgL (printf "add config mount point '%s' -> '%s'"
-               instanceDir mountPoint)
-  infoL (printf "MOUNTED CI_DIR '%s' TO '%s'"
-                (takeFileName instanceDir) mountPoint)
-  return [ArtifactMount instanceDir (MountPoint mountPoint)]
-createTarget instanceDir (CloudInit types outPath) = do
+createTarget :: InstanceId -> FilePath -> ArtifactAssembly -> B9 [ArtifactTarget]
+createTarget iid instanceDir (VmImages imageTargets vmScript) = do
+  dbgL (printf "Creating VM-Images in '%s'" instanceDir)
+  buildWithVm iid imageTargets instanceDir vmScript
+  return [VmImagesTarget]
+createTarget _ instanceDir (CloudInit types outPath) = do
   mapM create_ types
   where
     create_ CI_DIR = do
