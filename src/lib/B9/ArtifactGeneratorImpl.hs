@@ -53,10 +53,14 @@ parseArtifactGenerator g =
       withBindings bs (mapM_ parseArtifactGenerator gs)
     LetX bs gs ->
       withXBindings bs (mapM_ parseArtifactGenerator gs)
-    Each keySet valueSets gs -> do
-      allBindings <- eachBindingSet g keySet valueSets
+    EachT keySet valueSets gs -> do
+      allBindings <- eachBindingSetT g keySet valueSets
       mapM_ ($ mapM_ parseArtifactGenerator gs)
             (withBindings <$> allBindings)
+    Each kvs gs -> do
+      allBindings <- eachBindingSet g kvs
+      mapM_ ($ mapM_ parseArtifactGenerator gs)
+             (withBindings <$> allBindings)
     Artifact iid assembly ->
       writeInstanceGenerator iid assembly
     EmptyArtifact ->
@@ -75,18 +79,17 @@ addBindings bs ce =
   in ce { agEnv = newEnv }
 
 withXBindings :: [(String,[String])] -> CGParser () -> CGParser ()
-withXBindings bs k = do
-  (flip local k) `mapM_` (addBindings <$> (allXBindings bs))
+withXBindings bs cp = do
+  (flip local cp) `mapM_` (addBindings <$> (allXBindings bs))
+  where
+    allXBindings ((k,vs):rest) = [(k,v):c | v <- vs, c <- allXBindings rest]
+    allXBindings [] = [[]]
 
-allXBindings :: [(k,[v])] -> [[(k,v)]]
-allXBindings ((k,vs):rest) = [(k,v):c | v <- vs, c <- allXBindings rest]
-allXBindings [] = [[]]
-
-eachBindingSet :: ArtifactGenerator
-               -> [String]
-               -> [[String]]
-               -> CGParser [[(String,String)]]
-eachBindingSet g vars valueSets =
+eachBindingSetT :: ArtifactGenerator
+                -> [String]
+                -> [[String]]
+                -> CGParser [[(String,String)]]
+eachBindingSetT g vars valueSets =
   if all ((== length vars) . length) valueSets
      then return (zip vars <$> valueSets)
      else (cgError (printf "Error in 'Each' binding during artifact \
@@ -98,6 +101,21 @@ eachBindingSet g vars valueSets =
                            (length vars)
                            (ppShow (head (dropWhile ((== length vars) . length)
                                                     valueSets)))))
+
+eachBindingSet :: ArtifactGenerator
+                -> [(String,[String])]
+                -> CGParser [[(String,String)]]
+eachBindingSet g kvs = do
+  checkInput
+  return bindingSets
+  where
+    bindingSets = transpose [repeat k `zip` vs | (k, vs) <- kvs ]
+    checkInput = when (1 /= (length $ nub $ length . snd <$> kvs))
+                      (cgError (printf "Error in 'Each' binding: \n%s\n\
+                                       \All value lists must have the same\
+                                       \length!"
+                                       (ppShow g)))
+
 
 writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
 writeInstanceGenerator (IID iidStrT) assembly = do

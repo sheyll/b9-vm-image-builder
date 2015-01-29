@@ -28,7 +28,8 @@ data ArtifactGenerator =
     Sources [ArtifactSource] [ArtifactGenerator]
   | Let [(String, String)] [ArtifactGenerator]
   | LetX [(String, [String])] [ArtifactGenerator]
-  | Each [String] [[String]] [ArtifactGenerator]
+  | EachT [String] [[String]] [ArtifactGenerator]
+  | Each [(String,[String])] [ArtifactGenerator]
   | Artifact InstanceId ArtifactAssembly
   | EmptyArtifact
   deriving (Read, Show, Typeable, Data, Eq)
@@ -82,19 +83,27 @@ data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
 instance Arbitrary ArtifactGenerator where
   arbitrary = oneof [ Sources <$> (halfSize arbitrary) <*> (halfSize arbitrary)
                     , Let <$> (halfSize arbitraryEnv) <*> (halfSize arbitrary)
+                    , (halfSize arbitraryEachT) <*> (halfSize arbitrary)
                     , (halfSize arbitraryEach) <*> (halfSize arbitrary)
                     , Artifact <$> (smaller arbitrary)
                                <*> (smaller arbitrary)
                     , pure EmptyArtifact
                     ]
 
+arbitraryEachT = sized $ \n ->
+   EachT <$> vectorOf n (halfSize
+                            (listOf1
+                               (choose ('a', 'z'))))
+         <*> oneof [ listOf (vectorOf n (halfSize arbitrary))
+                   , listOf1 (listOf (halfSize arbitrary))
+                   ]
+
 arbitraryEach = sized $ \n ->
-   Each <$> vectorOf n (halfSize
-                           (listOf1
-                              (choose ('a', 'z'))))
-        <*> oneof [ listOf (vectorOf n (halfSize arbitrary))
-                  , listOf1 (listOf (halfSize arbitrary))
-                  ]
+   Each <$> listOf ((,) <$> (listOf1
+                               (choose ('a', 'z')))
+                        <*> vectorOf n (halfSize
+                                          (listOf1
+                                             (choose ('a', 'z')))))
 
 arbitraryEnv = listOf ((,) <$> listOf1 (choose ('a', 'z')) <*> arbitrary)
 
