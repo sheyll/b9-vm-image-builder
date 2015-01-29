@@ -68,6 +68,12 @@ withArtifactSources srcs = local (\ce -> ce {agSources = agSources ce ++ srcs})
 withBindings :: [(String,String)] -> CGParser () -> CGParser ()
 withBindings bs = local (addBindings bs)
 
+addBindings :: [(String, String)] -> Environment -> Environment
+addBindings bs ce =
+  let addBinding env (k,v) = nubBy ((==) `on` fst) ((k, subst env v):env)
+      newEnv = foldl addBinding (agEnv ce) bs
+  in ce { agEnv = newEnv }
+
 withXBindings :: [(String,[String])] -> CGParser () -> CGParser ()
 withXBindings bs k = do
   (flip local k) `mapM_` (addBindings <$> (allXBindings bs))
@@ -75,13 +81,6 @@ withXBindings bs k = do
 allXBindings :: [(k,[v])] -> [[(k,v)]]
 allXBindings ((k,vs):rest) = [(k,v):c | v <- vs, c <- allXBindings rest]
 allXBindings [] = [[]]
-
-addBindings :: [(String, String)] -> Environment -> Environment
-addBindings newEnv ce =
-  let newEnvSubst = map resolveBinding newEnv
-      resolveBinding (k,v) = (k, subst oldEnv v)
-      oldEnv = agEnv ce
-  in ce { agEnv = nubBy ((==) `on` fst) (newEnvSubst ++ oldEnv)}
 
 eachBindingSet :: ArtifactGenerator
                -> [String]
