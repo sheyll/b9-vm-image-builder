@@ -1,10 +1,8 @@
 module B9.ArtifactGeneratorImpl (assemble) where
 
 import B9.ArtifactGenerator
-import B9.DiskImages
 import B9.B9Monad
 import B9.B9Config
-import B9.Vm
 import B9.VmBuilder
 import B9.ConfigUtils hiding (tell)
 
@@ -53,6 +51,8 @@ parseArtifactGenerator g =
       withArtifactSources srcs (mapM_ parseArtifactGenerator gs)
     Let bs gs ->
       withBindings bs (mapM_ parseArtifactGenerator gs)
+    LetX bs gs ->
+      withXBindings bs (mapM_ parseArtifactGenerator gs)
     Each keySet valueSets gs -> do
       allBindings <- eachBindingSet g keySet valueSets
       mapM_ ($ mapM_ parseArtifactGenerator gs)
@@ -67,6 +67,14 @@ withArtifactSources srcs = local (\ce -> ce {agSources = agSources ce ++ srcs})
 
 withBindings :: [(String,String)] -> CGParser () -> CGParser ()
 withBindings bs = local (addBindings bs)
+
+withXBindings :: [(String,[String])] -> CGParser () -> CGParser ()
+withXBindings bs k = do
+  (flip local k) `mapM_` (addBindings <$> (allXBindings bs))
+
+allXBindings :: [(k,[v])] -> [[(k,v)]]
+allXBindings ((k,vs):rest) = [(k,v):c | v <- vs, c <- allXBindings rest]
+allXBindings [] = [[]]
 
 addBindings :: [(String, String)] -> Environment -> Environment
 addBindings newEnv ce =

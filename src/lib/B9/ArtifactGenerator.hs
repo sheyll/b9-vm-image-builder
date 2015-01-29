@@ -27,6 +27,7 @@ import Test.QuickCheck
 data ArtifactGenerator =
     Sources [ArtifactSource] [ArtifactGenerator]
   | Let [(String, String)] [ArtifactGenerator]
+  | LetX [(String, [String])] [ArtifactGenerator]
   | Each [String] [[String]] [ArtifactGenerator]
   | Artifact InstanceId ArtifactAssembly
   | EmptyArtifact
