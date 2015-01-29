@@ -372,7 +372,8 @@ prop_GenerateNoInstanceGeneratorsForArtifactWithoutArtifactInstance =
       let nested = case g of
                      Sources _ gs -> gs
                      Let _ gs -> gs
-                     Each _ _ gs -> gs
+                     EachT _ _ gs -> gs
+                     Each _ gs -> gs
                      Artifact _ _ -> []
                      EmptyArtifact -> []
       in any containsArtifactInstance nested
