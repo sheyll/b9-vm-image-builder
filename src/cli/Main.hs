@@ -53,6 +53,14 @@ runBuildArtifacts buildFiles _cfgFile cp conf = do
   generators <- mapM consult buildFiles
   buildArtifacts (mconcat generators) cp conf
 
+runFormatBuildFiles :: [FilePath] ->  BuildAction
+runFormatBuildFiles buildFiles _cfgFile _cp _conf = do
+   generators <- mapM consult buildFiles
+   let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
+   putStrLn `mapM` (generatorsFormatted)
+   (uncurry writeFile) `mapM` (buildFiles `zip` generatorsFormatted)
+   return True
+
 runPush :: SharedImageName -> BuildAction
 runPush name _cfgFile cp conf = impl
   where
@@ -201,7 +209,10 @@ cmds = subparser (  command "build"
                                    (progDesc "List shared images."))
                   <> command "add-repo"
                              (info (runAddRepo <$> remoteRepoParser)
-                                   (progDesc "Add a remote repo.")))
+                                   (progDesc "Add a remote repo."))
+                  <> command "reformat"
+                             (info (runFormatBuildFiles <$> buildFileParser)
+                                   (progDesc "Re-Format all build files.")))
 
 buildFileParser :: Parser [FilePath]
 buildFileParser = helper <*>
