@@ -33,6 +33,8 @@ library
                    , B9.VmBuilder
   -- other-extensions:
   build-depends:     ConfigFile >= 1.1.3 && <1.2
+                   , QuickCheck
+                   , aeson
                    , async >=2.0.1 && <2.1
                    , base >=4.7 && <4.8
                    , binary >=0.7 && <0.8
@@ -43,16 +45,18 @@ library
                    , filepath >=1.3 && <1.4
                    , mtl >=2.1 && <2.2
                    , old-locale >=1.0 && <1.1
+                   , pretty-show
                    , process >=1.2 && <1.3
                    , random >=1.0 && <1.2
+                   , semigroups
                    , syb >= 0.4.4 && <0.5
                    , template
                    , text >= 1.2.0.4
-                   , pretty-show
                    , time >=1.4 && <1.5
                    , transformers >=0.3 && <0.4
-                   , semigroups
-                   , QuickCheck
+                   , unordered-containers
+                   , vector >= 0.10.12.2
+                   , yaml
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
                     , DeriveDataTypeable
