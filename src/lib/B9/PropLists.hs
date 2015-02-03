@@ -1,4 +1,4 @@
-module B9.PropLists () where
+module B9.PropLists (PList (..)) where
 
 import Data.Monoid
 import Data.Yaml
@@ -12,6 +12,7 @@ import Control.Applicative
 import Text.Show.Pretty
 import Data.Vector ((++))
 import Prelude hiding ((++))
+
 
 newtype PList = PList Object
   deriving (Show)
