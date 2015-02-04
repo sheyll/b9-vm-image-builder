@@ -9,14 +9,15 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.RepositoryIO
                   , module B9.ArtifactGenerator
                   , module B9.ArtifactGeneratorImpl
+                  , module B9.Vm
+                  , module B9.VmBuilder
+                  , module B9.ErlTerms
+                  , module B9.PropLists
+                  , module B9.ConcatableSyntax
                   , buildArtifacts
                   ) where
-import Data.Data
-import Data.List
+
 import Data.Monoid
-import Control.Applicative
-import Control.Monad.IO.Class ( liftIO )
-import System.Directory (createDirectoryIfMissing, canonicalizePath)
 import Text.Printf ( printf )
 import Text.Show.Pretty (ppShow)
 
@@ -31,10 +32,15 @@ import B9.Repository
 import B9.RepositoryIO
 import B9.ArtifactGenerator
 import B9.ArtifactGeneratorImpl
+import B9.Vm
+import B9.VmBuilder
+import B9.ErlTerms
+import B9.PropLists
+import B9.ConcatableSyntax
 
 buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
-  withB9Config cfgParser cliCfg $ \cfg -> do
+  withB9Config cfgParser cliCfg $ \cfg ->
     run cfgParser cfg $ do
       infoL "BUILDING ARTIFACTS"
       getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow

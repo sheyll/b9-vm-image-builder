@@ -14,6 +14,7 @@ import Control.Monad
 import Text.Printf
 import qualified Text.PrettyPrint as PP
 
+-- | Simplified Erlang term representation.
 data SimpleErlangTerm = ErlString String
                       | ErlFloat Double
                       | ErlNatural Integer
@@ -24,10 +25,16 @@ data SimpleErlangTerm = ErlString String
                       | ErlTuple [SimpleErlangTerm]
                       deriving (Eq,Ord,Read,Show,Data,Typeable)
 
+-- | Parser a subset of valid Erlang terms. It parses no maps and binaries are
+-- restricted to either empty binaries or binaries with a string. The input
+-- encoding must be restricted to ascii compatible 8-bit characters
+-- (e.g. latin-1 or UTF8).
 parseErlTerm :: String -> B.ByteString -> Either String SimpleErlangTerm
 parseErlTerm src content =
   either (Left . ppShow) Right (parse erlTermParser src content)
 
+-- | Convert an abstract Erlang term to a pretty byte string preserving the
+-- encoding.
 renderErlTerm :: SimpleErlangTerm -> B.ByteString
 renderErlTerm = B.pack . PP.render . prettyPrintErlTerm
 
@@ -139,14 +146,15 @@ instance Arbitrary SimpleErlangTerm where
 
 
 erlTermParser :: Parser SimpleErlangTerm
-erlTermParser = erlAtomParser
-                <|> erlCharParser
-                <|> erlStringParser
-                <|> erlBinaryParser
-                <|> try erlFloatParser
-                <|> erlNaturalParser
-                <|> try erlListParser
-                <|> erlTupleParser
+erlTermParser = spaces
+                >> (erlAtomParser
+                    <|> erlCharParser
+                    <|> erlStringParser
+                    <|> erlBinaryParser
+                    <|> try erlFloatParser
+                    <|> erlNaturalParser
+                    <|> erlListParser
+                    <|> erlTupleParser)
 
 erlAtomParser :: Parser SimpleErlangTerm
 erlAtomParser =
@@ -278,8 +286,8 @@ erlTupleParser = ErlTuple <$> erlNestedParser (char '{') (char '}')
 erlNestedParser :: Parser a -> Parser b -> Parser [SimpleErlangTerm]
 erlNestedParser open close =
   between
-    (spaces>>open>>spaces)
-    (spaces>>close>>spaces)
+    (open >> spaces)
+    (close >> spaces)
     (commaSep erlTermParser)
 
 commaSep :: Parser a -> Parser [a]

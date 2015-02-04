@@ -106,7 +106,7 @@ spec = do
        (parseErlTerm "test" " [ hello, 'world'        ] " `shouldBe` Right (ErlList [ErlAtom "hello", ErlAtom "world"]))
 
     it "parses an empty tuple"
-       (parseErlTerm "test" " [  ] " `shouldBe` Right (ErlList []))
+       (parseErlTerm "test" " {  } " `shouldBe` Right (ErlTuple []))
 
     it "parses a tuple of atoms"
        (parseErlTerm "test" " { hello, 'world' } " `shouldBe` Right (ErlTuple [ErlAtom "hello", ErlAtom "world"]))
