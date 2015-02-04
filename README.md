@@ -6,7 +6,7 @@ configuration images, from a set of scripts and input files and templates
 B9 creates bootable virtual machine images, without necessarily using
 virtualization itself.
 
-In essence b9 is a tool for *creation*, *configuration* and *sharing* of VM images and
+In essence B9 is a tool for *creation*, *configuration* and *sharing* of VM images and
 all peripheral artifacts, it creates:
 
 * VMDK/QCOW2/Raw exported of VM images
@@ -56,13 +56,13 @@ put along side with other build files (e.g. Makefiles, maven poms, ...).
 
 ## Compilation from Source
 
-To build b9 first install:
+To build B9 first install:
 
 *  `ghc` version 7.6 or higher
 *  `cabal-install` version 1.16 or higher
 
 B9 uses stackage and cabal sandboxes. The build result can be found in
-`.cabal-sandbox/bin/'. To run a complete fresh build, execute:
+`.cabal-sandbox/bin/`. To run a complete fresh build, execute:
 
     ./installDeps.sh
     cabal install
@@ -77,12 +77,12 @@ To execute a ghci-repl run:
 
 To execute unit tests run:
 
-   ./build_and_test.sh
+    ./build_and_test.sh
 
 
 ## Installation
 
-To run b9 install
+To be able to use B9 install
 
 * lxc
 * libvirt with lxc support (libvirt-driver-lxc, libvirt-daemon-lxc,...)
@@ -100,19 +100,21 @@ To run b9 install
 
 B9 has been tested with libvirt version 1.2.12.
 
-Then make sure that both `libvirtd.service` and `lxc.service` are running and
-that the `nbd` kernel module is loaded.
+Make sure that all neccessary daemons, e.g. `libvirtd.service`, `lxc.service`,..
+are active, that SELinux is configured correctly and that the `nbd` kernel
+module is loaded.
 
-If needed create a libvirt network configuration before running 'b9c' the first
-time.
+If neccessary create a libvirt network configuration, e.g. by using
+the GUI front-end`virt-manager`.
 
-Depending upon the libvirt/lxc configuration of the system it might be nessary to
-allow the user, that will execute `b9c`, password-less `sudo` for the commands:
+Depending upon the libvirt and lxc configuration of the system it might be
+nessary to allow the user, that will execute `b9c`, password-less `sudo` for
+these commands:
 
-* `virsh`,
-* `rm`,
-* `cat`,
-* `cp`,
+* `virsh`
+* `rm`
+* `cat`
+* `cp`
 * `mv`
 
 After installing B9 (either from a binary package or by building from source)
@@ -126,7 +128,7 @@ changed using command line arguments. Execute:
 
 for a list of command line parameters and commands.
 
-`b9c`'s command line arguments follow this pattern:
+`b9c` command line arguments always follow this pattern:
 
     b9c <global-options> <command> <command-options> -- <build-script-extra-args>
 
@@ -134,9 +136,10 @@ for a list of command line parameters and commands.
 To enable B9 to work correctly on your machine edit the config file and make
 necessary adaptions.
 
-## B9 main configuration file
+## B9 configuration file
 
-This is an example configuration file:
+This is an example of a B9 configuration file, by default found in
+`~/.b9/b9.conf`:
 
     [global]
     # optional alternative directory for temporary build files. If 'Nothing'
@@ -154,37 +157,48 @@ This is an example configuration file:
     [libvirt-lxc]
     connection: lxc:///
     emulator_path: /usr/lib/libvirt/libvirt_lxc
+    # contains `Just "libvirt-network-name"` or `Nothing` for your libvirt
+    # default network settings
     network: Nothing
     use_sudo: True
     virsh_path: /usr/bin/virsh
 
-It is likely necessary to configure `libvirt-lxc`:
+Some of the options can also be specified on the command line.
 
-* `network` contains `Just "libvirt-network-name"` or `Nothing` for your libvirt
-    default network settings
+# Writing B9 build files
 
-# Writing b9 build files
+If you really need to write these file, you are basically f'ed.
 
-If you really need to write these file, you are basically f'ed, unless of course
-I finish writing this documentation.
+For now, look at existing config files and read the sources, if anything,
+make sure to read at least the chapter _Anger-Management_ before throwing stuff
+around.
 
-Until then, look at existing config files and read the sources.
-Yes, I *am* actually sorry. TODO finish.
+More documentation is comming soon!
 
 ## General Structure
 
-A b9 configuration describes a single `ArtifactGenerator`. It generates files
+A B9 configuration describes a single `ArtifactGenerator`. It generates files
 belonging to a VM, such as qcow2/raw/vmdk-image file(s) and e.g. cloud-init ISO
 image files.
 
-Just to recap: a `.b9` build file _is_ always ever only a literl `ArtifactGenerator`.
+Just to recap: a `something.b9` build file _is_ always ever only a mere
+`ArtifactGenerator` literal, no matter how many `Let`, `Each`, `Artifacts`,
+etc... you see flying around there.
 
-To get any _real_ artifact out of an artifact generator use:
+## Creating artifacts
+
+To get any _real_ artifact out of an artifact generator use the `Artifact`
+constructor. It takes *2* parameters an arbitrary id and a describtion of what
+the artifact consists of:
 
      Artifact (IID "some_instance_id")
               (VmImages ... | CloudInit ...)
 
-### Defining `ArtifactGenerator`s that Produce VM-image-files
+An artifact can either be a (set of) VM-disk-image(s) likely in combination
+with some shell script to install software, etc *or* a static collection of
+files put on a cloud-init image(VFAT or ISO or directory).
+
+### Defining artifact generators that produce vm image files
 
 To produce vm image files, e.g. with some software installed use the `VmImages`
 artifact generator. It has only *2* parameters:
@@ -199,10 +213,22 @@ Of course it must be wrapped in an `Artifact` definition, so we get this structu
      Artifact (IID "my_first_image")
        (VmImages [...] (...))
 
+#### ImageTargets
 
-TODO continue
+The first argument to `VmImages` is a list of `ImageTarget`. Each describes
+a single VM-disk-image. The syntax is:
 
-### Parameterized `ArtifactGenerator`s
+    ImageTarget
+      ImageDestination
+      ImageSource
+      MountPoint
+
+* An `ImageDestination` specifies if/where to put the output image.
+* An `ImageSource` specifies how the image is created or from where it is taken.
+* A `MountPoint` specifies where to mount the image during the execution of an
+  optional `VmBuild`-script.
+
+### Parameterized artifact generators
 
 B9 supports `$varnam` variable interpolation in all strings anywhere in an
 `ArtifactGenerator`:
