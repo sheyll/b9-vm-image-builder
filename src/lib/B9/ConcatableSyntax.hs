@@ -13,7 +13,7 @@ import Control.Monad.IO.Class
 import System.Directory
 import Text.Printf
 
--- | Image you would want to create a cloud-init 'user-data' file from a set of
+-- | Imagine you would want to create a cloud-init 'user-data' file from a set of
 -- 'user-data' snippets which each are valid 'user-data' file, i.e. they contain
 -- yaml syntax and e.g. a 'writefiles' section. Now the goal is, for b9 to be
 -- able to merge these snippets into one, such that all writefiles sections are
