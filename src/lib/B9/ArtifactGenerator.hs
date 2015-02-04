@@ -1,4 +1,4 @@
-module B9.ArtifactGenerator
+ module B9.ArtifactGenerator
   (ArtifactGenerator(..)
   ,ArtifactSource(..)
   ,InstanceId(..)
