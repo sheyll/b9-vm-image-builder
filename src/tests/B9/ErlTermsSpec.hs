@@ -111,9 +111,6 @@ spec = do
     it "parses a tuple of atoms"
        (parseErlTerm "test" " { hello, 'world' } " `shouldBe` Right (ErlTuple [ErlAtom "hello", ErlAtom "world"]))
 
-    it "parses all rendered terms"
-       (property parsesRenderedTerms)
-
   describe "renderErlTerm" $ do
     it "renders an empty binary as \"<<>>\""
        (renderErlTerm (ErlBinary "") `shouldBe` "<<>>")
@@ -134,6 +131,11 @@ spec = do
 
     it "renders an empty tuple"
        (renderErlTerm (ErlTuple []) `shouldBe` "{}")
+
+  describe "renderErlTerm and parseErlTerm" $
+
+    it "parseErlTerm parses all terms rendered by renderErlTerm"
+       (property parsesRenderedTerms)
 
 parsesRenderedTerms :: SimpleErlangTerm -> Bool
 parsesRenderedTerms term =
