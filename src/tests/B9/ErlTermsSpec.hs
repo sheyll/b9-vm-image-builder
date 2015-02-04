@@ -99,6 +99,18 @@ spec = do
     it "parses an empty binary"
        (parseErlTerm "test" "<<>>" `shouldBe` Right (ErlBinary ""))
 
+    it "parses an empty list"
+       (parseErlTerm "test" "[]" `shouldBe` Right (ErlList []))
+
+    it "parses a list of atoms"
+       (parseErlTerm "test" " [ hello, 'world'        ] " `shouldBe` Right (ErlList [ErlAtom "hello", ErlAtom "world"]))
+
+    it "parses an empty tuple"
+       (parseErlTerm "test" " [  ] " `shouldBe` Right (ErlList []))
+
+    it "parses a tuple of atoms"
+       (parseErlTerm "test" " { hello, 'world' } " `shouldBe` Right (ErlTuple [ErlAtom "hello", ErlAtom "world"]))
+
     it "parses all rendered terms"
        (property parsesRenderedTerms)
 
@@ -116,6 +128,12 @@ spec = do
     it "renders a string and escapes special characters"
        (renderErlTerm (ErlString "' $s\"<\\.0_=@\ESC''")
        `shouldBe` "\"' $s\\\"<\\\\.0_=@\\x{1b}''\"")
+
+    it "renders an empty list"
+       (renderErlTerm (ErlList []) `shouldBe` "[]")
+
+    it "renders an empty tuple"
+       (renderErlTerm (ErlTuple []) `shouldBe` "{}")
 
 parsesRenderedTerms :: SimpleErlangTerm -> Bool
 parsesRenderedTerms term =

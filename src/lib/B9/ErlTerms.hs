@@ -12,6 +12,7 @@ import Control.Applicative ((<$>), pure, (<*>))
 import Text.Show.Pretty
 import Control.Monad
 import Text.Printf
+import qualified Text.PrettyPrint as PP
 
 data SimpleErlangTerm = ErlString String
                       | ErlFloat Double
@@ -19,8 +20,8 @@ data SimpleErlangTerm = ErlString String
                       | ErlAtom String
                       | ErlChar Char
                       | ErlBinary String
-                      | ErlTuple [SimpleErlangTerm]
                       | ErlList [SimpleErlangTerm]
+                      | ErlTuple [SimpleErlangTerm]
                       deriving (Eq,Ord,Read,Show,Data,Typeable)
 
 parseErlTerm :: String -> B.ByteString -> Either String SimpleErlangTerm
@@ -28,21 +29,27 @@ parseErlTerm src content =
   either (Left . ppShow) Right (parse erlTermParser src content)
 
 renderErlTerm :: SimpleErlangTerm -> B.ByteString
-renderErlTerm (ErlString str) = B.pack $ "\"" ++ toErlStringString str ++ "\""
-renderErlTerm (ErlNatural n) = B.pack (printf "%i" n)
-renderErlTerm (ErlFloat f) = B.pack (show f)
-renderErlTerm (ErlChar c) = B.pack ("$" ++ toErlAtomChar c)
-renderErlTerm (ErlAtom a) = B.pack quotedStr
-  where
-    quotedStr = if all (`elem` (['a'..'z']++['A'..'Z']++['0'..'9']++"@_")) a'
-                then a'
-                else "'"++a'++"'"
+renderErlTerm = B.pack . PP.render . prettyPrintErlTerm
 
+prettyPrintErlTerm :: SimpleErlangTerm -> PP.Doc
+prettyPrintErlTerm (ErlString str) = PP.doubleQuotes (PP.text (toErlStringString str))
+prettyPrintErlTerm (ErlNatural n) = PP.integer n
+prettyPrintErlTerm (ErlFloat f) = PP.double f
+prettyPrintErlTerm (ErlChar c) = PP.text ("$" ++ toErlAtomChar c)
+prettyPrintErlTerm (ErlAtom a) = PP.text quotedAtom
+  where
+    quotedAtom =
+      if all (`elem` (['a'..'z']++['A'..'Z']++['0'..'9']++"@_")) a'
+        then a'
+        else "'"++a'++"'"
     a' = toErlAtomString a
-renderErlTerm (ErlBinary []) = B.pack "<<>>"
-renderErlTerm (ErlBinary b) = B.pack ("<<\"" ++ toErlStringString b ++ "\">>")
-renderErlTerm _ =
-  error "TODO"
+
+prettyPrintErlTerm (ErlBinary []) = PP.text "<<>>"
+prettyPrintErlTerm (ErlBinary b) = PP.text ("<<\"" ++ toErlStringString b ++ "\">>")
+prettyPrintErlTerm (ErlList xs) =
+  PP.brackets (PP.sep (PP.punctuate PP.comma (prettyPrintErlTerm <$> xs)))
+prettyPrintErlTerm (ErlTuple xs) =
+  PP.braces (PP.sep (PP.punctuate PP.comma (prettyPrintErlTerm <$> xs)))
 
 toErlStringString :: String -> String
 toErlStringString = join . map toErlStringChar
@@ -79,6 +86,8 @@ instance Arbitrary SimpleErlangTerm where
                     ,sized aErlAtomUnquoted
                     ,sized aErlAtomQuoted
                     ,sized aErlBinary
+                    ,sized aErlList
+                    ,sized aErlTuple
                     ]
     where
       aErlString n =
@@ -123,6 +132,11 @@ instance Arbitrary SimpleErlangTerm where
             zs <- listOf (elements "0")
             v <- choose (0,255) :: Gen Int
             return (printf "\\x{%s%x}" zs v)
+      aErlList n =
+        ErlList <$> resize (n `div` 2) (listOf arbitrary)
+      aErlTuple n =
+        ErlTuple <$> resize (n `div` 2) (listOf arbitrary)
+
 
 erlTermParser :: Parser SimpleErlangTerm
 erlTermParser = erlAtomParser
@@ -131,6 +145,8 @@ erlTermParser = erlAtomParser
                 <|> erlBinaryParser
                 <|> try erlFloatParser
                 <|> erlNaturalParser
+                <|> try erlListParser
+                <|> erlTupleParser
 
 erlAtomParser :: Parser SimpleErlangTerm
 erlAtomParser =
@@ -247,6 +263,28 @@ erlCharEscaped =
 erlBinaryParser :: Parser SimpleErlangTerm
 erlBinaryParser =
   do string "<<"
+     spaces
      ErlString str <- option (ErlString "") erlStringParser
      string ">>"
+     spaces
      return (ErlBinary str)
+
+erlListParser :: Parser SimpleErlangTerm
+erlListParser = ErlList <$> erlNestedParser (char '[') (char ']')
+
+erlTupleParser :: Parser SimpleErlangTerm
+erlTupleParser = ErlTuple <$> erlNestedParser (char '{') (char '}')
+
+erlNestedParser :: Parser a -> Parser b -> Parser [SimpleErlangTerm]
+erlNestedParser open close =
+  between
+    (spaces>>open>>spaces)
+    (spaces>>close>>spaces)
+    (commaSep erlTermParser)
+
+commaSep :: Parser a -> Parser [a]
+commaSep p = do r <- p
+                spaces
+                rest <- option [] (char ',' >> spaces >> commaSep p)
+                return (r:rest)
+            <|> return []
