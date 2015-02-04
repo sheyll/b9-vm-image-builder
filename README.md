@@ -1,22 +1,32 @@
-B9 - A Benign VM-Build Tool
-===========================
+# B9 - A Benign VM-Build Tool
 
-A set of Linux tools for using and creating VM Images from a build script using
-Libvirt-LXC.
+Use B9 to compile your software into a deployable set of Linux-VM- or
+configuration images, from a set of scripts and input files and templates
 
-B9 creates/converts/assembles virtual disk images and executes scripts in LXC
-containers into which these images are mounted.
+B9 creates bootable virtual machine images, without necessarily using
+virtualization itself.
 
-Use B9 to compile your software on an isolated 32bit Archlinux, or to build a
-custom, bootable virtual machine on a qcow2 image containing for DevOps-style
-deployment.
+In essence b9 is a tool for *creation*, *configuration* and *sharing* of VM images and
+all peripheral artifacts, it creates:
+
+* VMDK/QCOW2/Raw exported of VM images
+* Converted, extracted and resized vm images derived from existing vm images
+* Empty VM images with extended 4 file system
+* Cloud-Config Images
+* Text files from template files with variable interpolation
+* Erlang OTP sys.config files
+* beqemu-life-installer compatible VM images
+
+B9 creates/converts/assembles virtual disk images as well as any number of
+config-input files and executes scripts in LXC containers into which these
+images are mounted.
 
 The input is in both cases a single, text-based configuration file wich can be
 put along side with other build files (e.g. Makefiles, maven poms, ...).
 
-Some Basic Features:
---------------------
-* Tailored for bot software compilation environments and VM image creation
+## Some Random Features:
+
+* Tailored for both software compilation environments and VM image creation
 * Creation of cloud-init (NoCloud) ISO images, VFAT images and directories
 * Assembly and creation of arbitrary files with safe variable interpolation
 * Creation of multiple images/machines/cloud-configs based on creation rules
@@ -44,43 +54,255 @@ Some Basic Features:
 * Configurable remote (ssh with pubkey auth + rsync) image shareing
 * Local caching of shared images
 
-Underlying Software:
---------------------
+## Compilation from Source
 
-B9 uses Linux, LibVirt, LXC and Qemu/KVM and is written in Haskell.
+To build b9 first install:
+
+*  `ghc` version 7.6 or higher
+*  `cabal-install` version 1.16 or higher
+
+B9 uses stackage and cabal sandboxes. The build result can be found in
+`.cabal-sandbox/bin/'. To run a complete fresh build, execute:
+
+    ./installDeps.sh
+    cabal install
+
+To launch b9c run:
+
+    ./build_and_run.sh
+
+To execute a ghci-repl run:
+
+    cabal repl
+
+To execute unit tests run:
+
+   ./build_and_test.sh
 
 
-Examples
-========
+## Installation
 
-Make a Custom Fedora Cloud Image
---------------------------------
-TODO
+To run b9 install
 
-Usage Example: Build an Archlinux Package
------------------------------------------
-TODO
+* lxc
+* libvirt with lxc support (libvirt-driver-lxc, libvirt-daemon-lxc,...)
+* virsh
+* qemu
+* ext4 tools
+* genisoimage
+* mtools
+* vfat tools
+* ssh
+* rsync
+* bash
+* wget
+* sudo
 
-Installation and System-Setup
-=============================
-TODO
+B9 has been tested with libvirt version 1.2.12.
 
-Reference
-=========
-TODO
+Then make sure that both `libvirtd.service` and `lxc.service` are running and
+that the `nbd` kernel module is loaded.
 
-Invokation
------------
-TODO
+If needed create a libvirt network configuration before running 'b9c' the first
+time.
 
-B9 Projects
-------------
-TODO
+Depending upon the libvirt/lxc configuration of the system it might be nessary to
+allow the user, that will execute `b9c`, password-less `sudo` for the commands:
 
-Configuration
--------------
-TODO
+* `virsh`,
+* `rm`,
+* `cat`,
+* `cp`,
+* `mv`
 
-B9 Library
-----------
-TODO
+After installing B9 (either from a binary package or by building from source)
+all its glory is availbe through a single executable called `b9c`.
+
+When `b9c` is started for the first time, it creates a configuration file in
+the users home directory called `~/.b9/b9.conf`. The path to that file can be
+changed using command line arguments. Execute:
+
+    b9c -h
+
+for a list of command line parameters and commands.
+
+`b9c`'s command line arguments follow this pattern:
+
+    b9c <global-options> <command> <command-options> -- <build-script-extra-args>
+
+
+To enable B9 to work correctly on your machine edit the config file and make
+necessary adaptions.
+
+## B9 main configuration file
+
+This is an example configuration file:
+
+    [global]
+    # optional alternative directory for temporary build files. If 'Nothing'
+    # the current directory is used.
+    build_dir_root: Just "/home/sven/tmp"
+    environment_vars: []
+    exec_env: LibVirtLXC
+    keep_temp_dirs: False
+    # if set to 'Just "filename"
+    log_file: Nothing
+    profile_file: Nothing
+    unique_build_dirs: True
+    verbosity: Just LogInfo
+
+    [libvirt-lxc]
+    connection: lxc:///
+    emulator_path: /usr/lib/libvirt/libvirt_lxc
+    network: Nothing
+    use_sudo: True
+    virsh_path: /usr/bin/virsh
+
+It is likely necessary to configure `libvirt-lxc`:
+
+* `network` contains `Just "libvirt-network-name"` or `Nothing` for your libvirt
+    default network settings
+
+# Writing b9 build files
+
+If you really need to write these file, you are basically f'ed, unless of course
+I finish writing this documentation.
+
+Until then, look at existing config files and read the sources.
+Yes, I *am* actually sorry. TODO finish.
+
+## General Structure
+
+A b9 configuration describes a single `ArtifactGenerator`. It generates files
+belonging to a VM, such as qcow2/raw/vmdk-image file(s) and e.g. cloud-init ISO
+image files.
+
+Just to recap: a `.b9` build file _is_ always ever only a literl `ArtifactGenerator`.
+
+To get any _real_ artifact out of an artifact generator use:
+
+     Artifact (IID "some_instance_id")
+              (VmImages ... | CloudInit ...)
+
+### Defining `ArtifactGenerator`s that Produce VM-image-files
+
+To produce vm image files, e.g. with some software installed use the `VmImages`
+artifact generator. It has only *2* parameters:
+
+
+     VmImages
+        [ ... disk image targets ... ]
+        ( ... installation script ...)
+
+Of course it must be wrapped in an `Artifact` definition, so we get this structure:
+
+     Artifact (IID "my_first_image")
+       (VmImages [...] (...))
+
+
+TODO continue
+
+### Parameterized `ArtifactGenerator`s
+
+B9 supports `$varnam` variable interpolation in all strings anywhere in an
+`ArtifactGenerator`:
+* All filenames and paths
+* All id strings and names
+* Template files included via e.g. `Template`
+* In every string in `VmScript`s (e.g. in `Run "${cmd}" ["${world}"]`)
+* Also in all included template files (e.g. included via `Template`)
+
+Parameters can be defined using `Let`, `Each` and special command line
+arguments.
+
+To pass parameters via the command line, append them after the argument delimiter
+option `--` which ends the list of regular b9c arguments:
+
+    b9c -v build -f file1.b9 .. -- arg_1 arg_2 ...
+
+The parameters are bound to `${arg_1}`, `${arg_2}`, that is variables indicating
+the corresponding *position* on the command line.
+
+To define variables using `Let`, write:
+
+    Let [key-value-pairs, ...]
+        [artifactgenerators, ...]
+
+All key-value bindings defined in the first list are available in every artifact
+generator contained in the second list (_body_).
+
+A key-value binding, e.g. `("hostname", "www.acme.org")`, consist of two strings
+on parens seperated by a `,` (comma). The left string is the key, and the right
+string is the value.
+
+This `("webserver", "www.${domainname}")` is an example to show that the *value*
+may also contain a variable reference. (Of course, only to variabled defined
+*before*)
+
+## Anger-Management
+
+B9 build files contain a single literal `ArtifactGenerator` value
+in Haskell syntax. B9 currently 'parses' the config file without any
+error checking, so writing config files is VERY frustrating without
+some tricks:
+
+### Trick 1
+
+Start with a working file and run
+
+    b9c reformat -f <filename>
+
+after each modification. The `reformat` command only parses and - hence the
+name - (re-) formats/pretty-prints the files passed with `-f` options.
+
+You will immediately know if a modification broke the file.
+
+NOTE: If your build file refers to any `${arg_...}` positional arguments pass
+them to `reformat` using `--` followed by the argument list.
+
+### Trick 2
+
+Obtain and build the sources of B9, start an interactive haskell shell with the
+B9 code loaded and try to paste the contents of the config file to see if ghci
+accepts it. Use the ghci macros `:{` and `:}` to begin and end a multi-line input
+and paste the raw contents of the config file in question in between.
+
+
+    $ cabal install
+    $ cabal repl
+
+    ... (many lines omitted) ...
+
+    *B9> :{
+    *B9| Artifact (IID "filer")
+    *B9|   (VmImages [ ImageTarget
+    *B9|                 (LocalFile (Image "EXPORT/machines/filer/disks/0.vmdk" Vmdk Ext4)
+    *B9|                             KeepSize)
+    *B9|                 (From "fedora-20-prod" KeepSize)
+    *B9|                 (MountPoint "/")
+    *B9|             , ImageTarget
+    *B9|                 (LocalFile (Image "EXPORT/machines/filer/disks/1.vmdk" Vmdk Ext4)
+    *B9|                             KeepSize)
+    *B9|                 (EmptyImage "audio_files" Ext4 Raw (ImageSize 64 GB))
+    *B9|                 (MountPoint "/export/lb/audio")
+    *B9|             ]
+    *B9|             (VmScript X86_64
+    *B9|               [ SharedDirectoryRO "./filer" (MountPoint "/mnt/build_root")
+    *B9|               , SharedDirectoryRO "../_common/upload" (MountPoint "/mnt/common")]
+    *B9|               (Begin
+    *B9|                  [ Run "dhclient" []
+    *B9|                  , In "/mnt/build_root" [ Run "./machine-" [] ]
+    *B9|                  , In "/mnt/common" [ Run "./post_export.sh" [] ]
+    *B9|                  ])))
+    *B9| :}
+
+    Artifact (IID "filer") (VmImages
+    [ImageTarget (LocalFile (Image "EXPORT/machines/filer/disks/0.vmdk" Vmdk Ext4) KeepSize)
+    (From "fedora-20-prod" KeepSize) (MountPoint "/"),ImageTarget
+    (LocalFile (Image "EXPORT/machines/filer/disks/1.vmdk" Vmdk Ext4) KeepSize)
+    (EmptyImage "audio_files" Ext4 Raw (ImageSize 64 GB)) (MountPoint "/export/lb/audio")]
+    (VmScript X86_64
+    [SharedDirectoryRO "./filer" (MountPoint "/mnt/build_root"),
+    SharedDirectoryRO "../_common/upload" (MountPoint "/mnt/common")]
+    (Begin [Run "dhclient" [],In "/mnt/build_root" [Run "./machine-" []],In
+    "/mnt/common" [Run "./post_export.sh" []]])))
