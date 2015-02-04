@@ -1,6 +1,7 @@
 -- Instances of 'B9.ConcatableSyntax' for some commonly used
 -- syntax types.
-module B9.PropLists (YamlPList (..)) where
+module B9.PropLists (YamlUserData (..)
+                    ,OTPSysConfig (..)) where
 
 import Data.Yaml
 import qualified Data.ByteString as B
@@ -15,19 +16,49 @@ import Data.Semigroup
 import B9.ErlTerms
 import B9.ConcatableSyntax
 
-newtype YamlPList = YamlPList Data.Yaml.Value
+-- | A wrapper type around erlang terms with a Semigroup instance useful for
+-- combining sys.config files with OTP-application configurations in a list of
+-- the form of a proplist.
+newtype OTPSysConfig = OTPSysConfig SimpleErlangTerm
   deriving (Eq,Show)
 
-instance Semigroup YamlPList where
-  (YamlPList (Object o1)) <> (YamlPList (Object o2)) =
-    YamlPList (Object (unionWith combine o1 o2))
+instance Semigroup OTPSysConfig where
+  (OTPSysConfig v1) <> (OTPSysConfig v2) = OTPSysConfig (combine v1 v2)
     where
-      combine (Array a1) (Array a2) = Array (a1 ++ a2)
-      combine _ v2 = v2
+      combine (ErlList pl1) (ErlList pl2) = ErlList (pl1 <> pl2)
+      combine (ErlList pl1) t2 = ErlList (pl1 <> [t2])
+      combine t1 (ErlList pl2) = ErlList ([t1] <> pl2)
+      combine t1 t2 = ErlList [t1,t2]
 
-instance ConcatableSyntax YamlPList where
+instance ConcatableSyntax OTPSysConfig where
+  decodeSyntax str = do
+    t <- parseErlTerm "" str
+    return (OTPSysConfig t)
+
+  encodeSyntax (OTPSysConfig t) =
+    renderErlTerm t
+
+-- | A wrapper type around yaml values with a Semigroup instance useful for
+-- combining yaml documents describing system configuration like e.g. user-data.
+newtype YamlUserData = YamlUserData Data.Yaml.Value
+  deriving (Eq,Show)
+
+instance Semigroup YamlUserData where
+  (YamlUserData v1) <> (YamlUserData v2) = YamlUserData (combine v1 v2)
+    where
+      combine :: Data.Yaml.Value
+              -> Data.Yaml.Value
+              -> Data.Yaml.Value
+      combine (Object o1) (Object o2) =
+        Object (unionWith combine o1 o2)
+      combine (Array a1) (Array a2) =
+        Array (a1 ++ a2)
+      combine t1 t2 =
+        array [t1,t2]
+
+instance ConcatableSyntax YamlUserData where
   decodeSyntax str = do
     o <- decodeEither str
-    return (YamlPList o)
+    return (YamlUserData o)
 
-  encodeSyntax (YamlPList o) = encode o
+  encodeSyntax (YamlUserData o) = encode o
