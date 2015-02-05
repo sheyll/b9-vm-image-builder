@@ -2,15 +2,11 @@
 module B9.PropListsSpec (spec) where
 
 import Control.Applicative
-import Control.Monad
 import Data.List
 import Test.Hspec
 import Test.QuickCheck
-import Data.Maybe
 import Data.Semigroup
-import qualified Data.ByteString.Char8 as B
-import Text.Printf
-import Data.Text
+import Data.Text ()
 import Data.Yaml
 
 import B9.ConcatableSyntax
@@ -135,7 +131,7 @@ spec = do
            (Right combined) = decodeSyntax "[{ok,value},a,b,c]"
        in p <> l `shouldBe` combined
 
-    it "merges plist with distinct keys to a plist with all keys" $
+    it "merges lists with distinct elements to lists containing the elements of both lists" $
        let p1 = OTPSysConfig
                   (ErlList
                      [ErlTuple [ErlAtom "k_p1"
@@ -151,3 +147,62 @@ spec = do
                            ,ErlTuple [ErlAtom "k_p2"
                                      ,ErlList [ErlNatural 1]]])
        in p1 <> p2 `shouldBe` expected
+
+    it "merges two property lists into a prop list that has the lenght\
+       \ of the left + the right proplist - the number of entries sharing\
+       \ the same key" (property mergedPropListsHaveCorrectLength)
+
+data ErlPropListTestData =
+  ErlPropListTestData { plistLeft :: [SimpleErlangTerm]
+                      , plistRight :: [SimpleErlangTerm]
+                      , commonKeys :: [SimpleErlangTerm]
+                      } deriving (Eq,Ord,Show)
+
+mergedPropListsHaveCorrectLength :: ErlPropListTestData -> Bool
+mergedPropListsHaveCorrectLength (ErlPropListTestData l r common) =
+  let (OTPSysConfig (ErlList merged)) =
+       OTPSysConfig (ErlList l) <> OTPSysConfig (ErlList r)
+      expectedLen = length l + length r - length common
+  in length merged == expectedLen
+
+instance Arbitrary ErlPropListTestData where
+   arbitrary = do
+     someKeys <- nub <$> listOf arbitraryPlistKey
+     numLeftOnly <- choose (0, length someKeys - 1)
+     let keysLeftOnly = take numLeftOnly someKeys
+     numCommon <- choose (0, length someKeys - numLeftOnly - 1)
+     let keysCommon = take numCommon (drop numLeftOnly someKeys)
+     let keysRightOnly = drop (numLeftOnly + numCommon) someKeys
+     let numRightOnly = length someKeys - numLeftOnly - numCommon
+     valuesLeft <- vectorOf (numLeftOnly + numCommon) arbitraryPlistValue
+     valuesRight <- vectorOf (numRightOnly + numCommon) arbitraryPlistValue
+     return ErlPropListTestData {
+       plistLeft = zipWith toPair (keysLeftOnly <> keysCommon) valuesLeft
+     , plistRight = zipWith toPair (keysRightOnly <> keysCommon) valuesRight
+     , commonKeys = keysCommon
+     }
+    where
+        toPair a b = ErlTuple [a,b]
+        arbitraryPlist = ErlList <$> listOf arbitraryPlistEntry
+        arbitraryPlistEntry = toPair <$> arbitraryPlistKey
+                                     <*> arbitraryPlistValue
+        arbitraryPlistKey =
+          ErlAtom <$> ((:) <$> letterLower <*> listOf nameChar)
+
+        arbitraryPlistValue = oneof [arbitraryLiteral
+                                    ,arbitraryList
+                                    ,arbitraryPlist
+                                    ,arbitraryTuple]
+        arbitraryTuple = ErlTuple <$> listOf arbitraryPlistValue
+        arbitraryList = ErlList <$> listOf arbitraryPlistValue
+        arbitraryLiteral =
+          oneof [arbitraryPlistKey,arbitraryString,arbitraryNumber]
+        arbitraryString = ErlString <$> listOf (oneof [letter,digit])
+        arbitraryNumber = oneof [arbitraryNatural, arbitraryFloat]
+        arbitraryNatural = ErlNatural <$> arbitrary
+        arbitraryFloat = ErlFloat <$> arbitrary
+        letter = oneof [letterUpper,letterLower]
+        letterUpper = elements ['A' .. 'Z']
+        letterLower = elements ['a' .. 'z']
+        digit = elements ['0' .. '9']
+        nameChar = oneof [letter,digit,pure '_',pure '@']
