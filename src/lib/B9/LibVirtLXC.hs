@@ -8,6 +8,7 @@ import Control.Monad.IO.Class ( liftIO )
 import System.Directory
 import System.FilePath
 import Text.Printf ( printf )
+import Data.Char (toLower)
 
 import B9.ShellScript
 import B9.B9Monad
@@ -71,7 +72,51 @@ data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Bool
                                          , emulator :: FilePath
                                          , virshURI :: FilePath
                                          , networkId :: Maybe String
+                                         , guestCapabilities :: [LXCGuestCapability]
                                          } deriving (Read, Show)
+
+-- | Available linux capabilities for lxc containers. This maps directly to the
+-- capabilities defined in 'man 7 capabilities'.
+data LXCGuestCapability =
+       CAP_MKNOD
+     | CAP_AUDIT_CONTROL
+     | CAP_AUDIT_READ
+     | CAP_AUDIT_WRITE
+     | CAP_BLOCK_SUSPEND
+     | CAP_CHOWN
+     | CAP_DAC_OVERRIDE
+     | CAP_DAC_READ_SEARCH
+     | CAP_FOWNER
+     | CAP_FSETID
+     | CAP_IPC_LOCK
+     | CAP_IPC_OWNER
+     | CAP_KILL
+     | CAP_LEASE
+     | CAP_LINUX_IMMUTABLE
+     | CAP_MAC_ADMIN
+     | CAP_MAC_OVERRIDE
+     | CAP_NET_ADMIN
+     | CAP_NET_BIND_SERVICE
+     | CAP_NET_BROADCAST
+     | CAP_NET_RAW
+     | CAP_SETGID
+     | CAP_SETFCAP
+     | CAP_SETPCAP
+     | CAP_SETUID
+     | CAP_SYS_ADMIN
+     | CAP_SYS_BOOT
+     | CAP_SYS_CHROOT
+     | CAP_SYS_MODULE
+     | CAP_SYS_NICE
+     | CAP_SYS_PACCT
+     | CAP_SYS_PTRACE
+     | CAP_SYS_RAWIO
+     | CAP_SYS_RESOURCE
+     | CAP_SYS_TIME
+     | CAP_SYS_TTY_CONFIG
+     | CAP_SYSLOG
+     | CAP_WAKE_ALARM
+  deriving (Read, Show)
 
 defaultLibVirtLXCConfig :: LibVirtLXCConfig
 defaultLibVirtLXCConfig = LibVirtLXCConfig
@@ -80,6 +125,15 @@ defaultLibVirtLXCConfig = LibVirtLXCConfig
                           "/usr/lib/libvirt/libvirt_lxc"
                           "lxc:///"
                           Nothing
+                          [CAP_MKNOD
+                          ,CAP_SYS_ADMIN
+                          ,CAP_SYS_CHROOT
+                          ,CAP_SETGID
+                          ,CAP_SETUID
+                          ,CAP_NET_BIND_SERVICE
+                          ,CAP_SETPCAP
+                          ,CAP_SYS_PTRACE
+                          ,CAP_SYS_MODULE]
 
 cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
@@ -93,6 +147,8 @@ virshURIK :: String
 virshURIK = "connection"
 networkIdK :: String
 networkIdK = "network"
+guestCapabilitiesK :: String
+guestCapabilitiesK = "guest_capabilities"
 
 configureLibVirtLXC :: B9 LibVirtLXCConfig
 configureLibVirtLXC = do
@@ -111,7 +167,8 @@ setDefaultConfig = either (error . show) id eitherCp
       cp3 <- set cp2 cfgFileSection virshPathK $ virshPath c
       cp4 <- set cp3 cfgFileSection emulatorK $ emulator c
       cp5 <- set cp4 cfgFileSection virshURIK $ virshURI c
-      setshow cp5 cfgFileSection networkIdK $ networkId c
+      cp6 <- setshow cp5 cfgFileSection networkIdK $ networkId c
+      setshow cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
 
 readLibVirtConfig :: B9 LibVirtLXCConfig
 readLibVirtConfig = do
@@ -124,6 +181,8 @@ readLibVirtConfig = do
     , emulator = geto emulatorK $ emulator defaultLibVirtLXCConfig
     , virshURI = geto virshURIK $ virshURI defaultLibVirtLXCConfig
     , networkId = geto networkIdK $ networkId defaultLibVirtLXCConfig
+    , guestCapabilities = geto guestCapabilitiesK $
+                          guestCapabilities defaultLibVirtLXCConfig
     }
 
 initScript :: String
@@ -148,7 +207,7 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   \  <vcpu placement='static'>" ++ cpuCountStr e ++ "</vcpu>\n\
   \  <features>\n\
   \   <capabilities policy='default'>\n\
-  \     <mknod state='on'/>\n\
+  \     "++ renderGuestCapabilityEntries cfg  ++"\n\
   \   </capabilities>\n\
   \  </features>\n\
   \  <os>\n\
@@ -174,7 +233,12 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   \  </devices>\n\
   \</domain>\n"
 
-
+renderGuestCapabilityEntries :: LibVirtLXCConfig -> String
+renderGuestCapabilityEntries = unlines . map render . guestCapabilities
+  where
+    render :: LXCGuestCapability -> String
+    render cap = let capStr = toLower <$> drop (length "CAP_") (show cap)
+                 in printf "<%s state='on'/>" capStr
 
 osArch :: ExecEnv -> String
 osArch e = case cpuArch (envResources e) of
