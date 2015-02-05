@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module B9.DiskImageBuilder (materializeImageSource
+                           ,substImageTarget
                            ,preferredDestImageTypes
                            ,preferredSourceImageTypes
                            ,resolveImageSource
@@ -30,14 +31,41 @@ import Data.Function
 import Control.Applicative
 import Text.Show.Pretty (ppShow)
 import Data.List
+import Data.Data
+import Data.Generics.Schemes
+import Data.Generics.Aliases
 
 import B9.B9Monad
 import B9.Repository
 import B9.RepositoryIO
 import B9.DiskImages
-import B9.ConfigUtils
 import qualified B9.PartitionTable as P
+import B9.ConfigUtils
 
+-- | Replace $... variables inside an 'ImageTarget'
+substImageTarget :: [(String,String)] -> ImageTarget -> ImageTarget
+substImageTarget env p = everywhere gsubst p
+  where gsubst :: forall a. Data a => a -> a
+        gsubst = mkT substMountPoint
+                   `extT` substImage
+                     `extT` substImageSource
+                       `extT` substDiskTarget
+
+        substMountPoint NotMounted = NotMounted
+        substMountPoint (MountPoint x) = MountPoint (sub x)
+
+        substImage (Image fp t fs) = Image (sub fp) t fs
+
+        substImageSource (From n s) = From (sub n) s
+        substImageSource (EmptyImage l f t s) = EmptyImage (sub l) f t s
+        substImageSource s = s
+
+        substDiskTarget (Share n t s) = Share (sub n) t s
+        substDiskTarget (LiveInstallerImage name outDir resize) =
+          LiveInstallerImage (sub name) (sub outDir) resize
+        substDiskTarget s = s
+
+        sub = subst env
 
 -- | Resolve an ImageSource to an 'Image'. Note however that this source will
 -- may not exist as is the case for 'EmptyImage'.

@@ -18,21 +18,12 @@ data VmScript = VmScript CPUArch [SharedDirectory] Script | NoVmScript
 substVmScript :: [(String,String)] -> VmScript -> VmScript
 substVmScript env p = everywhere gsubst p
   where gsubst :: forall a. Data a => a -> a
-        gsubst = mkT substVmScript_
-                  `extT` substMountPoint
-                    `extT` substImage
-                       `extT` substSharedDir
-                         `extT` substScript
-                           `extT` substImageSource
-                             `extT` substDiskTarget
-
-        substVmScript_ :: VmScript -> VmScript
-        substVmScript_ = id
+        gsubst = mkT substMountPoint
+                   `extT` substSharedDir
+                     `extT` substScript
 
         substMountPoint NotMounted = NotMounted
         substMountPoint (MountPoint x) = MountPoint (sub x)
-
-        substImage (Image fp t fs) = Image (sub fp) t fs
 
         substSharedDir (SharedDirectory fp mp) =
           SharedDirectory (sub fp) mp
@@ -44,12 +35,5 @@ substVmScript env p = everywhere gsubst p
         substScript (Run fp args) = Run (sub fp) (map sub args)
         substScript (As fp s) = As (sub fp) s
         substScript s = s
-
-        substImageSource (From n s) = From (sub n) s
-        substImageSource (EmptyImage l f t s) = EmptyImage (sub l) f t s
-        substImageSource s = s
-
-        substDiskTarget (Share n t s) = Share (sub n) t s
-        substDiskTarget s = s
 
         sub = subst env

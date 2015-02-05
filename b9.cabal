@@ -86,9 +86,11 @@ test-suite spec
   type:              exitcode-stdio-1.0
   ghc-options:       -Wall
   hs-source-dirs:    src/tests
+  default-language:  Haskell2010
   main-is:           Spec.hs
   other-modules:     B9.ErlTermsSpec
                    , B9.PropListsSpec
+                   , B9.ArtifactGeneratorImplSpec
   build-depends:     base >=4.7 && <4.8
                    , b9
                    , hspec

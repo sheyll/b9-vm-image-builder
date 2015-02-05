@@ -2,14 +2,12 @@
 module B9.ErlTermsSpec (spec) where
 
 import Control.Applicative
-import Control.Monad
 import Data.List
 import Test.Hspec
 import Test.QuickCheck
 import Data.Maybe
 import B9.ErlTerms
 import qualified Data.ByteString.Char8 as B
-import Text.Printf
 
 spec :: Spec
 spec = do

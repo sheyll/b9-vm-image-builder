@@ -4,7 +4,6 @@ import Data.Semigroup
 import Data.Data
 import System.FilePath
 
-
 -- | Build target for disk images.
 data ImageTarget = ImageTarget
                      ImageDestination
@@ -138,6 +137,3 @@ sharedImagesRootDirectory = "b9_shared_images"
 
 sharedImageFileExtension :: String
 sharedImageFileExtension  = "b9si"
-
---sharedImageType :: ImageType
---sharedImageType = Raw

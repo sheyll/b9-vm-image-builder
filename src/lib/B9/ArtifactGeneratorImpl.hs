@@ -1,12 +1,16 @@
-module B9.ArtifactGeneratorImpl (assemble) where
+module B9.ArtifactGeneratorImpl where
 
 import B9.ArtifactGenerator
 import B9.B9Monad
 import B9.B9Config
 import B9.VmBuilder
+import B9.Vm
+import B9.DiskImageBuilder
 import B9.ConfigUtils hiding (tell)
 
 import Data.Data
+import Data.Generics.Schemes
+import Data.Generics.Aliases
 import Data.List
 import Data.Function
 import Control.Arrow
@@ -159,11 +163,21 @@ execCGParser = runReaderT . execWriterT . runCGParser
 execIGEnv :: InstanceGenerator Environment
           -> Either String (InstanceGenerator [SourceGenerator])
 execIGEnv (IG iid (Environment env sources) assembly) = do
-  IG iid <$> sourceGens <*> substAssembly assembly
+  IG iid <$> sourceGens <*> pure (substAssembly env assembly)
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
-    substAssembly (CloudInit ts f) = CloudInit ts <$> substE env f
-    substAssembly vmImages = Right vmImages -- TODO
+
+substAssembly :: [(String,String)] -> ArtifactAssembly -> ArtifactAssembly
+substAssembly env p = everywhere gsubst p
+  where gsubst :: forall a. Data a => a -> a
+        gsubst = mkT substAssembly_
+                   `extT` (substImageTarget env)
+                     `extT` (substVmScript env)
+
+        substAssembly_ (CloudInit ts f) = CloudInit ts (sub f)
+        substAssembly_ vm = vm
+
+        sub = subst env
 
 toSourceGen :: [(String, String)]
             -> ArtifactSource
