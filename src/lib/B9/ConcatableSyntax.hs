@@ -13,15 +13,15 @@ import Control.Monad.IO.Class
 import System.Directory
 import Text.Printf
 
--- | Imagine you would want to create a cloud-init 'user-data' file from a set of
--- 'user-data' snippets which each are valid 'user-data' file, i.e. they contain
--- yaml syntax and e.g. a 'writefiles' section. Now the goal is, for b9 to be
--- able to merge these snippets into one, such that all writefiles sections are
--- combined into a single writefile section.  This type class is the greatest
--- commonon denominator of types describing a syntax that can be parsed,
--- concatenated e.g. like in the above example and rendered. The actual
--- concatenation operation is the append from Monoid, i.e. like monoid but
--- without the need for an empty element.
+-- | Imagine you would want to create a cloud-init 'user-data' file from a set
+-- of 'user-data' snippets which each are valid 'user-data' files in yaml syntax
+-- and e.g. a 'writefiles' section. Now the goal is, for b9 to be able to merge
+-- these snippets into one, such that all writefiles sections are combined into
+-- a single writefile section. Another example is OTP/Erlang sys.config files.
+-- This type class is the greatest commonon denominator of types describing a
+-- syntax that can be parsed, concatenated e.g. like in the above example and
+-- rendered. The actual concatenation operation is the append from Monoid,
+-- i.e. like monoid but without the need for an empty element.
 class Semigroup a => ConcatableSyntax a where
   decodeSyntax :: B.ByteString -> Either String a
   encodeSyntax :: a -> B.ByteString
@@ -33,9 +33,9 @@ decodeSyntaxFile :: (Functor m, ConcatableSyntax a, MonadIO m)
 decodeSyntaxFile fp = do
   exists <- liftIO (doesFileExist fp)
   if exists
-   then decodeSyntax <$> liftIO (B.readFile fp)
-   else return (Left (printf "decoding syntax file failed:\
-                             \ \'\' does not exist"))
+    then decodeSyntax <$> liftIO (B.readFile fp)
+    else return (Left (printf "decoding syntax file failed:\
+                              \ \'\' does not exist"))
 
 -- | Render some syntax to a file.
 encodeSyntaxFile :: (ConcatableSyntax a, MonadIO m)
