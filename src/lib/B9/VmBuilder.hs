@@ -17,13 +17,12 @@ import B9.Vm
 import B9.ArtifactGenerator
 import B9.ShellScript
 import qualified B9.LibVirtLXC as LXC
-import B9.Repository
 
-buildWithVm :: InstanceId -> [ImageTarget] -> FilePath -> VmScript -> B9 Bool
-buildWithVm iid imageTargets instanceDir vmScript = do
+buildWithVm :: [ImageTarget] -> FilePath -> VmScript -> B9 Bool
+buildWithVm imageTargets instanceDir vmScript = do
   vmBuildSupportedImageTypes <- getVmScriptSupportedImageTypes vmScript
   buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
-  success <- runVmScript iid imageTargets buildImages instanceDir vmScript
+  success <- runVmScript imageTargets buildImages instanceDir vmScript
   when success (createDestinationImages buildImages imageTargets)
   return success
 
@@ -61,29 +60,28 @@ createBuildImages imageTargets vmBuildSupportedImageTypes = do
       materializeImageSource imageSource buildImg
       return buildImgAbsolutePath
 
-runVmScript :: InstanceId
-            -> [ImageTarget]
+runVmScript ::  [ImageTarget]
             -> [Image]
             -> FilePath
             -> VmScript
             -> B9 Bool
-runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
+runVmScript _imageTargets _buildImages _instanceDir NoVmScript = return True
+runVmScript imageTargets buildImages instanceDir vmScript = do
   dbgL (printf "starting vm script with instanceDir '%s'" instanceDir)
   traceL (ppShow vmScript)
   execEnv <- setUpExecEnv
-  let (VmScript _ _ script) = vmScript
   success <- runInEnvironment execEnv script
   if success
     then infoL "EXECUTED BUILD SCRIPT"
     else errorL "BUILD SCRIPT FAILED"
   return success
   where
+    (VmScript domainname cpu shares script) = vmScript
     setUpExecEnv :: B9 ExecEnv
     setUpExecEnv = do
-      let (VmScript cpu shares _) = vmScript
       let mountedImages = buildImages `zip` (itImageMountPoint <$> imageTargets)
       sharesAbs <- createSharedDirs instanceDir shares
-      return (ExecEnv iid
+      return (ExecEnv domainname
                       mountedImages
                       sharesAbs
                       (Resources AutomaticRamSize 8 cpu))

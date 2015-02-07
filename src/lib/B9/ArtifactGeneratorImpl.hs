@@ -65,8 +65,8 @@ parseArtifactGenerator g =
       allBindings <- eachBindingSet g kvs
       mapM_ ($ mapM_ parseArtifactGenerator gs)
              (withBindings <$> allBindings)
-    Artifact iid assembly ->
-      writeInstanceGenerator iid assembly
+    Artifact assembly ->
+      writeInstanceGenerator assembly
     EmptyArtifact ->
       return ()
 
@@ -121,13 +121,10 @@ eachBindingSet g kvs = do
                                        (ppShow g)))
 
 
-writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
-writeInstanceGenerator (IID iidStrT) assembly = do
-  env@(Environment bindings _) <- ask
-  iid <- either (throwError . CGError) (return . IID) (substE bindings iidStrT)
-  let env' = addBindings [(instanceIdKey, iidStr)] env
-      IID iidStr = iid
-  tell [IG iid env' assembly]
+writeInstanceGenerator :: ArtifactAssembly -> CGParser ()
+writeInstanceGenerator assembly = do
+  env <- ask
+  tell [IG env assembly]
 
 -- | Monad for creating Instance generators.
 newtype CGParser a =
@@ -146,7 +143,7 @@ data Environment = Environment { agEnv :: [(String, String)]
                                , agSources :: [ArtifactSource] }
   deriving (Read, Show, Typeable, Data, Eq)
 
-data InstanceGenerator e = IG InstanceId e ArtifactAssembly
+data InstanceGenerator e = IG e ArtifactAssembly
   deriving (Read, Show, Typeable, Data, Eq)
 
 newtype CGError = CGError String
@@ -162,8 +159,8 @@ execCGParser = runReaderT . execWriterT . runCGParser
 
 execIGEnv :: InstanceGenerator Environment
           -> Either String (InstanceGenerator [SourceGenerator])
-execIGEnv (IG iid (Environment env sources) assembly) = do
-  IG iid <$> sourceGens <*> pure (substAssembly env assembly)
+execIGEnv (IG (Environment env sources) assembly) = do
+  IG <$> sourceGens <*> pure (substAssembly env assembly)
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
 
@@ -194,13 +191,11 @@ toSourceGen env src =
       return [SGConcat env [SGFrom SGF f'] KeepPerm (takeFileName f')]
     Files fs ->
       join <$> mapM (toSourceGen env . File) fs
-    Join _str src' -> do
+    Join _str t src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       t' <- substE env t
       let froms = join (sgGetFroms <$> sgs)
       return [SGConcat env froms KeepPerm t']
-    SetName fname src' ->
-      return (map setSGConcatName )
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs
@@ -208,7 +203,7 @@ toSourceGen env src =
       sgs <- join <$> mapM (toSourceGen env) src'
       fromDir' <- substE env fromDir
       return (setSGFromDirectory fromDir' <$> sgs)
-    IntoDirectory toDir src' -> do
+    ToDirectory toDir src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       toDir' <- substE env toDir
       return (setSGToDirectory toDir' <$> sgs)
@@ -225,19 +220,20 @@ createAssembledArtifacts igs = do
 generateSources :: FilePath
                 -> InstanceGenerator [SourceGenerator]
                 -> B9 (InstanceGenerator FilePath)
-generateSources outDir (IG iid sgs assembly) = do
-  uiid@(IID uiidStr) <- generateUniqueIID iid
-  dbgL (printf "generating sources for %s" uiidStr)
-  let instanceDir = outDir </> uiidStr
-  traceL (printf "generating sources for %s:\n%s\n" uiidStr (ppShow sgs))
+generateSources outDir (IG sgs assembly) = do
+  uuid <-  randomUUID
+  let uuidStr = printf "%v" uuid
+  dbgL (printf "generating assembly %v for %s" (ppShow assembly))
+  let instanceDir = outDir </> uuidStr
+  traceL (printf "generating sources for %s:\n%s\n" uuidStr (ppShow sgs))
   generateSourceTo instanceDir `mapM_` sgs
-  return (IG uiid instanceDir assembly)
+  return (IG instanceDir assembly)
 
 createTargets :: InstanceGenerator FilePath -> B9 AssembledArtifact
-createTargets (IG uiid@(IID uiidStr) instanceDir assembly) = do
-  targets <- createTarget uiid instanceDir assembly
-  dbgL (printf "assembled artifact %s" uiidStr)
-  return (AssembledArtifact uiid targets)
+createTargets (IG instanceDir assembly) = do
+  targets <- createTarget instanceDir assembly
+  dbgL (printf "assembled %s to '%s'" (ppShow assembly) instanceDir)
+  return (AssembledArtifact targets)
 
 generateUniqueIID :: InstanceId -> B9 InstanceId
 generateUniqueIID (IID iid) = do
@@ -313,12 +309,12 @@ setSGToDirectory toDir (SGConcat e fs p d) =
 
 -- | Create the actual target, either just a mountpoint, or an ISO or VFAT
 -- image.
-createTarget :: InstanceId -> FilePath -> ArtifactAssembly -> B9 [ArtifactTarget]
-createTarget iid instanceDir (VmImages imageTargets vmScript) = do
+createTarget :: FilePath -> ArtifactAssembly -> B9 [ArtifactTarget]
+createTarget instanceDir (VmImages imageTargets vmScript) = do
   dbgL (printf "Creating VM-Images in '%s'" instanceDir)
-  buildWithVm iid imageTargets instanceDir vmScript
+  buildWithVm imageTargets instanceDir vmScript
   return [VmImagesTarget]
-createTarget _ instanceDir (CloudInit types outPath) = do
+createTarget instanceDir (CloudInit types outPath) = do
   mapM create_ types
   where
     create_ CI_DIR = do
@@ -390,6 +386,6 @@ prop_GenerateNoInstanceGeneratorsForArtifactWithoutArtifactInstance =
                      Let _ gs -> gs
                      EachT _ _ gs -> gs
                      Each _ gs -> gs
-                     Artifact _ _ -> []
+                     Artifact _ -> []
                      EmptyArtifact -> []
       in any containsArtifactInstance nested

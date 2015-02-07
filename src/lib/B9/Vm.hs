@@ -12,7 +12,7 @@ import B9.ConfigUtils
 
 -- | Describe a virtual machine, i.e. a set up disk images to create and a shell
 -- script to put things together.
-data VmScript = VmScript CPUArch [SharedDirectory] Script | NoVmScript
+data VmScript = VmScript String CPUArch [SharedDirectory] Script | NoVmScript
   deriving (Read, Show, Typeable, Data, Eq)
 
 substVmScript :: [(String,String)] -> VmScript -> VmScript
@@ -21,6 +21,7 @@ substVmScript env p = everywhere gsubst p
         gsubst = mkT substMountPoint
                    `extT` substSharedDir
                      `extT` substScript
+                       `extT` substVmScript_
 
         substMountPoint NotMounted = NotMounted
         substMountPoint (MountPoint x) = MountPoint (sub x)
@@ -35,5 +36,8 @@ substVmScript env p = everywhere gsubst p
         substScript (Run fp args) = Run (sub fp) (map sub args)
         substScript (As fp s) = As (sub fp) s
         substScript s = s
+
+        substVmScript_ (VmScript name a ss s) = VmScript (sub name) a ss s
+        substVmScript_ s = s
 
         sub = subst env

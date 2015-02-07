@@ -25,13 +25,13 @@ import Test.QuickCheck
 -- | A single config generator specifies howto generate multiple output
 -- files/directories. It consists of a netsted set of variable bindings that are
 -- replaced inside the text files
-data ArtifactGenerator =
-    Sources [ArtifactSource] [ArtifactGenerator]
+data ArtifactGenerator
+  = Sources [ArtifactSource] [ArtifactGenerator]
   | Let [(String, String)] [ArtifactGenerator]
   | LetX [(String, [String])] [ArtifactGenerator]
   | EachT [String] [[String]] [ArtifactGenerator]
   | Each [(String,[String])] [ArtifactGenerator]
-  | Artifact InstanceId ArtifactAssembly
+  | Artifact ArtifactAssembly
   | EmptyArtifact
   deriving (Read, Show, Typeable, Data, Eq)
 
@@ -73,7 +73,7 @@ data ArtifactAssembly = CloudInit [CloudInitType] FilePath
                       | VmImages [ImageTarget] VmScript
   deriving (Read, Show, Typeable, Data, Eq)
 
-data AssembledArtifact = AssembledArtifact InstanceId [ArtifactTarget]
+data AssembledArtifact = AssembledArtifact [ArtifactTarget]
   deriving (Read, Show, Typeable, Data, Eq)
 
 data ArtifactTarget = CloudInitTarget CloudInitType FilePath
@@ -89,7 +89,6 @@ instance Arbitrary ArtifactGenerator where
                     , (halfSize arbitraryEachT) <*> (halfSize arbitrary)
                     , (halfSize arbitraryEach) <*> (halfSize arbitrary)
                     , Artifact <$> (smaller arbitrary)
-                               <*> (smaller arbitrary)
                     , pure EmptyArtifact
                     ]
 
@@ -127,8 +126,8 @@ instance Arbitrary ArtifactSource where
                                      <*> smaller arbitrary
                     , FromDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
                     , ToDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
-                    , Join <$> arbitrary <*> smaller arbitrary
-                    , SetName <$> smaller arbitraryFilePath <*> smaller arbitrary
+                    , Join <$> arbitrary <*> smaller arbitraryFilePath
+                           <*> smaller arbitrary
                     ]
 
 instance Arbitrary JoinStrategy where
@@ -138,7 +137,7 @@ instance Arbitrary InstanceId where
   arbitrary = IID <$> arbitraryFilePath
 
 instance Arbitrary ArtifactAssembly where
-  arbitrary = oneof [ CloudInit <$> arbitrary <*> arbitraryFilePath
+  arbitrary = oneof [ CloudInit <$> arbitrary <*>  arbitraryFilePath
                     , pure (VmImages [] NoVmScript)
                     ]
 
