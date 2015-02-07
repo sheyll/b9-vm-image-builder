@@ -85,6 +85,8 @@ spec =
            (Right (IG _ _ (VmImages [] actual))) = execIGEnv igEnv
        in actual `shouldBe` expected
 
+
+
 transientCOWImage :: FilePath -> FilePath -> ImageTarget
 transientCOWImage fileName mountPoint =
   ImageTarget Transient

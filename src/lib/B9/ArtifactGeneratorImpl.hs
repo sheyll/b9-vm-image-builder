@@ -194,11 +194,13 @@ toSourceGen env src =
       return [SGConcat env [SGFrom SGF f'] KeepPerm (takeFileName f')]
     Files fs ->
       join <$> mapM (toSourceGen env . File) fs
-    Concatenation t src' -> do
+    Join _str src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       t' <- substE env t
       let froms = join (sgGetFroms <$> sgs)
       return [SGConcat env froms KeepPerm t']
+    SetName fname src' ->
+      return (map setSGConcatName )
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs

@@ -3,6 +3,7 @@
   ,ArtifactSource(..)
   ,InstanceId(..)
   ,ArtifactTarget(..)
+  ,JoinStrategy (..)
   ,CloudInitType(..)
   ,ArtifactAssembly(..)
   ,AssembledArtifact(..)
@@ -44,15 +45,17 @@ instance Monoid ArtifactGenerator where
 -- listed will be included in any generated configuration. That's right: There's
 -- no "inlcude *.*". B9 will check that *all* files in the directory specified with 'FromDir' are referred to by nested 'ArtifactSource's.
 data ArtifactSource = Template FilePath
-                  | Templates [FilePath]
-                  | File FilePath
-                  | Files [FilePath]
-                  | SetPermissions Int Int Int [ArtifactSource]
-  --                | SetUserGroupID Int Int [ArtifactSource]
-                  | Concatenation FilePath [ArtifactSource]
-                  | FromDirectory FilePath [ArtifactSource]
-                  | IntoDirectory FilePath [ArtifactSource]
-    deriving (Read, Show, Typeable, Data, Eq)
+                    | Templates [FilePath]
+                    | File FilePath
+                    | Files [FilePath]
+                    | FromDirectory FilePath [ArtifactSource]
+                    | SetPermissions Int Int Int [ArtifactSource]
+                    | ToDirectory FilePath [ArtifactSource]
+                    | Join JoinStrategy FilePath [ArtifactSource]
+  deriving (Read, Show, Typeable, Data, Eq)
+
+data JoinStrategy = FileContents | ErlangPropLists | YamlObjects
+  deriving (Read, Show, Typeable, Data, Eq)
 
 newtype InstanceId = IID String
   deriving (Read, Show, Typeable, Data, Eq)
@@ -90,6 +93,7 @@ instance Arbitrary ArtifactGenerator where
                     , pure EmptyArtifact
                     ]
 
+arbitraryEachT :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEachT = sized $ \n ->
    EachT <$> vectorOf n (halfSize
                             (listOf1
@@ -98,6 +102,7 @@ arbitraryEachT = sized $ \n ->
                    , listOf1 (listOf (halfSize arbitrary))
                    ]
 
+arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEach = sized $ \n ->
    Each <$> listOf ((,) <$> (listOf1
                                (choose ('a', 'z')))
@@ -121,9 +126,13 @@ instance Arbitrary ArtifactSource where
                                      <*> choose (0,7)
                                      <*> smaller arbitrary
                     , FromDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
-                    , IntoDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
+                    , ToDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
+                    , Join <$> arbitrary <*> smaller arbitrary
+                    , SetName <$> smaller arbitraryFilePath <*> smaller arbitrary
                     ]
 
+instance Arbitrary JoinStrategy where
+  arbitrary = elements [FileContents,ErlangPropLists,YamlObjects]
 
 instance Arbitrary InstanceId where
   arbitrary = IID <$> arbitraryFilePath
