@@ -1,7 +1,7 @@
 -- Instances of 'B9.ConcatableSyntax' for some commonly used
 -- syntax types.
-module B9.PropLists (YamlUserData (..)
-                    ,OTPSysConfig (..)) where
+module B9.PropLists (YamlObject (..)
+                    ,ErlangPropList (..)) where
 
 import Data.Yaml
 import Data.Function
@@ -21,11 +21,11 @@ import B9.ConcatableSyntax
 -- | A wrapper type around erlang terms with a Semigroup instance useful for
 -- combining sys.config files with OTP-application configurations in a list of
 -- the form of a proplist.
-newtype OTPSysConfig = OTPSysConfig SimpleErlangTerm
+newtype ErlangPropList = ErlangPropList SimpleErlangTerm
   deriving (Eq,Show)
 
-instance Semigroup OTPSysConfig where
-  (OTPSysConfig v1) <> (OTPSysConfig v2) = OTPSysConfig (combine v1 v2)
+instance Semigroup ErlangPropList where
+  (ErlangPropList v1) <> (ErlangPropList v2) = ErlangPropList (combine v1 v2)
     where
       combine (ErlList l1) (ErlList l2) =
         ErlList (l1Only <> merged <> l2Only)
@@ -67,21 +67,21 @@ instance Semigroup OTPSysConfig where
       combine t1 (ErlList pl2) = ErlList ([t1] <> pl2)
       combine t1 t2 = ErlList [t1,t2]
 
-instance ConcatableSyntax OTPSysConfig where
+instance ConcatableSyntax ErlangPropList where
   decodeSyntax str = do
     t <- parseErlTerm "" str
-    return (OTPSysConfig t)
+    return (ErlangPropList t)
 
-  encodeSyntax (OTPSysConfig t) =
+  encodeSyntax (ErlangPropList t) =
     renderErlTerm t
 
 -- | A wrapper type around yaml values with a Semigroup instance useful for
 -- combining yaml documents describing system configuration like e.g. user-data.
-newtype YamlUserData = YamlUserData Data.Yaml.Value
+newtype YamlObject = YamlObject Data.Yaml.Value
   deriving (Eq,Show)
 
-instance Semigroup YamlUserData where
-  (YamlUserData v1) <> (YamlUserData v2) = YamlUserData (combine v1 v2)
+instance Semigroup YamlObject where
+  (YamlObject v1) <> (YamlObject v2) = YamlObject (combine v1 v2)
     where
       combine :: Data.Yaml.Value
               -> Data.Yaml.Value
@@ -93,9 +93,9 @@ instance Semigroup YamlUserData where
       combine t1 t2 =
         array [t1,t2]
 
-instance ConcatableSyntax YamlUserData where
+instance ConcatableSyntax YamlObject where
   decodeSyntax str = do
     o <- decodeEither str
-    return (YamlUserData o)
+    return (YamlObject o)
 
-  encodeSyntax (YamlUserData o) = encode o
+  encodeSyntax (YamlObject o) = encode o

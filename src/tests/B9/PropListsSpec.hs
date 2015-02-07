@@ -15,39 +15,39 @@ import B9.ErlTerms
 
 spec :: Spec
 spec = do
-  describe "YamlUserData" $ do
+  describe "YamlObject" $ do
 
     it "combines primitives by putting them in an array" $
-       let v1 = YamlUserData (toJSON True)
-           v2 = YamlUserData (toJSON (123::Int))
-           combined = YamlUserData (array [toJSON True
+       let v1 = YamlObject (toJSON True)
+           v2 = YamlObject (toJSON (123::Int))
+           combined = YamlObject (array [toJSON True
                                           ,toJSON (123::Int)])
        in (v1 <> v2) `shouldBe` combined
 
     it "combines objects with disjunct keys to an object \
        \containing all properties" $
-       let plist1 = YamlUserData (object ["k1" .= Number 1])
-           plist2 = YamlUserData (object ["k2" .= Number 2])
-           combined = YamlUserData (object ["k1" .= Number 1
+       let plist1 = YamlObject (object ["k1" .= Number 1])
+           plist2 = YamlObject (object ["k2" .= Number 2])
+           combined = YamlObject (object ["k1" .= Number 1
                                            ,"k2" .= Number 2])
        in (plist1 <> plist2) `shouldBe` combined
 
     it "combines arrays by concatenating them" $
-       let v1 = YamlUserData (array [toJSON ("x"::String)])
-           v2 = YamlUserData (array [toJSON ("y"::String)])
-           combined = YamlUserData (array [toJSON ("x"::String)
+       let v1 = YamlObject (array [toJSON ("x"::String)])
+           v2 = YamlObject (array [toJSON ("y"::String)])
+           combined = YamlObject (array [toJSON ("x"::String)
                                        ,toJSON ("y"::String)])
        in (v1 <> v2) `shouldBe` combined
 
     it "combines objects to a an object containing\
        \ all disjunct entries and combined entries\
        \ with the same keys" $
-       let o1 = YamlUserData (object ["k1" .= Number 1
+       let o1 = YamlObject (object ["k1" .= Number 1
                                      ,"k" .= Number 2])
-           o2 = YamlUserData (object ["k2" .= Number 3
+           o2 = YamlObject (object ["k2" .= Number 3
                                      ,"k" .= Number 4])
            combined =
-             YamlUserData (object ["k1" .= Number 1
+             YamlObject (object ["k1" .= Number 1
                                   ,"k2" .= Number 3
                                   ,"k" .= array [Number 2
                                                 ,Number 4]])
@@ -79,7 +79,7 @@ spec = do
                                   \runcmd:\n\
                                   \ - a b c\n"
 
-         ud = YamlUserData
+         ud = YamlObject
                 (object
                    ["runcmd" .=
                     array [toJSON ("x y z"::String)
@@ -101,46 +101,46 @@ spec = do
                              toJSON ("root:root"::String)]]])
       in ud1 <> ud2 `shouldBe` ud
 
-  describe "OTPSysConfig" $ do
+  describe "ErlangPropList" $ do
 
     it "implements ConcatableSyntax method decodeSyntax" $
        let v = decodeSyntax "ok"
-       in v `shouldBe` Right (OTPSysConfig (ErlAtom "ok"))
+       in v `shouldBe` Right (ErlangPropList (ErlAtom "ok"))
 
     it "implements ConcatableSyntax method encodeSyntax" $
-       let v = encodeSyntax (OTPSysConfig (ErlAtom "ok"))
+       let v = encodeSyntax (ErlangPropList (ErlAtom "ok"))
        in v `shouldBe` "ok"
 
     it "combines primitives by putting them in a list" $
-       let p1 = OTPSysConfig (ErlList [ErlAtom "a"])
-           p2 = OTPSysConfig (ErlList [ErlNatural 123])
-           combined = OTPSysConfig
+       let p1 = ErlangPropList (ErlList [ErlAtom "a"])
+           p2 = ErlangPropList (ErlList [ErlNatural 123])
+           combined = ErlangPropList
                         (ErlList [ErlAtom "a"
                                  ,ErlNatural 123])
        in (p1 <> p2) `shouldBe` combined
 
     it "combines a list and a primitve by extending the list" $
-       let (Right l) = decodeSyntax "[a,b,c]" :: Either String OTPSysConfig
+       let (Right l) = decodeSyntax "[a,b,c]" :: Either String ErlangPropList
            (Right p) = decodeSyntax "{ok,value}"
            (Right combined) = decodeSyntax "[a,b,c,{ok,value}]"
        in l <> p `shouldBe` combined
 
     it "combines a primitve and a list by extending the list" $
-       let (Right l) = decodeSyntax "[a,b,c]" :: Either String OTPSysConfig
+       let (Right l) = decodeSyntax "[a,b,c]" :: Either String ErlangPropList
            (Right p) = decodeSyntax "{ok,value}"
            (Right combined) = decodeSyntax "[{ok,value},a,b,c]"
        in p <> l `shouldBe` combined
 
     it "merges lists with distinct elements to lists containing the elements of both lists" $
-       let p1 = OTPSysConfig
+       let p1 = ErlangPropList
                   (ErlList
                      [ErlTuple [ErlAtom "k_p1"
                                ,ErlList [ErlNatural 1]]])
-           p2 = OTPSysConfig
+           p2 = ErlangPropList
                   (ErlList
                      [ErlTuple [ErlAtom "k_p2"
                                ,ErlList [ErlNatural 1]]])
-           expected = OTPSysConfig
+           expected = ErlangPropList
                         (ErlList
                            [ErlTuple [ErlAtom "k_p1"
                                      ,ErlList [ErlNatural 1]]
@@ -160,8 +160,8 @@ data ErlPropListTestData =
 
 mergedPropListsHaveCorrectLength :: ErlPropListTestData -> Bool
 mergedPropListsHaveCorrectLength (ErlPropListTestData l r common) =
-  let (OTPSysConfig (ErlList merged)) =
-       OTPSysConfig (ErlList l) <> OTPSysConfig (ErlList r)
+  let (ErlangPropList (ErlList merged)) =
+       ErlangPropList (ErlList l) <> ErlangPropList (ErlList r)
       expectedLen = length l + length r - length common
   in length merged == expectedLen
 
