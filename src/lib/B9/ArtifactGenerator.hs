@@ -1,156 +1,105 @@
  module B9.ArtifactGenerator
-  (ArtifactGenerator(..)
-  ,ArtifactSource(..)
-  ,InstanceId(..)
-  ,ArtifactTarget(..)
-  ,JoinStrategy (..)
-  ,CloudInitType(..)
-  ,ArtifactAssembly(..)
-  ,AssembledArtifact(..)
-  ,instanceIdKey
+  (Artifact (..)
   ,buildIdKey
   ,buildDateKey
   ) where
 
-
 import Data.Data
-import Data.Monoid
-import Control.Applicative
 
 import B9.DiskImages
+import B9.Generator
+import B9.ShellScript
 import B9.Vm
 
-import Test.QuickCheck
+-- | A generator specifies howto generate output files/directories. It consists
+-- of a possible netsted set of variable bindings that are replaced inside the
+-- text files. The `generate` function creates a list of variable substituted
+-- 'a'.
+type ArtifactGenerator = Generator Artifact
 
--- | A single config generator specifies howto generate multiple output
--- files/directories. It consists of a netsted set of variable bindings that are
--- replaced inside the text files
-data ArtifactGenerator
-  = Sources [ArtifactSource] [ArtifactGenerator]
-  | Let [(String, String)] [ArtifactGenerator]
-  | LetX [(String, [String])] [ArtifactGenerator]
-  | EachT [String] [[String]] [ArtifactGenerator]
-  | Each [(String,[String])] [ArtifactGenerator]
-  | Artifact ArtifactAssembly
-  | EmptyArtifact
+-- | An Artifact is some file system object, i.e. a directory or a regular
+-- file. The content and relevance of that file/directory is determined by the
+-- 'ArtifactSource'.
+data Artifact = Artifact FilePath ArtifactFile
+              | Directory FilePath [Artifact]
+              | VmImages [ImageTarget] VmScript -- ^ Create VmImages. The
+                                                -- filename if the artifact is
+                                                -- the directory to where
   deriving (Read, Show, Typeable, Data, Eq)
 
-instance Monoid ArtifactGenerator where
-  mempty = Let [] []
-  (Let [] []) `mappend` x = x
-  x `mappend` (Let [] []) = x
-  x `mappend` y = Let [] [x, y]
 
--- | Explicit is better than implicit: Only files that have explicitly been
--- listed will be included in any generated configuration. That's right: There's
--- no "inlcude *.*". B9 will check that *all* files in the directory specified with 'FromDir' are referred to by nested 'ArtifactSource's.
-data ArtifactSource = Template FilePath
-                    | Templates [FilePath]
-                    | File FilePath
-                    | Files [FilePath]
-                    | FromDirectory FilePath [ArtifactSource]
-                    | SetPermissions Int Int Int [ArtifactSource]
-                    | ToDirectory FilePath [ArtifactSource]
-                    | Join JoinStrategy FilePath [ArtifactSource]
+someFileFromWeb = Artifact "test.iso" (Content (Interpolated (FromURL "http://alexandria.lbaum.eu/index.html")))
+
+yyy = Artifact "test.iso"
+       (Container CI_ISO
+          [Artifact "user-data"
+                  (Content
+
+                    (Joined PlainText
+                      [Echo "# user-data"
+                      ,(JoinedG
+                          YamlObjects
+                          (   "x" := "hello"
+                           :> "i" := "0"
+                           :> "j" := "a"
+                           :> ["k","l"] :<- [["a", "b", "c"],["x", "y", "z"]]
+                              :< FromTemplate "user-data.rsyslog${j}"
+                              :< FromFile "user-data.mrfp${i}"))
+                      ,Echo "#blahBlub"
+                      ,Joined PlainText
+                              [ContentGenerator
+                                 ("brand" :<- ["lindenbaum", "dtag", "scs"]
+                                  :< FromTemplate "/brands/$brand/config.txt")]
+                      ,FromFile "/etc/passwd"
+                      ,Interpolated (FromStdOut (Run "date" []))
+                      ,Echo "OK embedding tar.gz now:"
+                      ,Embed
+                         (Container
+                            TarGz
+                            [Directory "subdir"
+                                        [Artifact "somefile"
+                                                  (Permissions
+                                                     (7,5,5)
+                                                     (Content (Echo "Hello World")))]])
+                      ])
+                    )])
+
+
+-- | An artifact source provides the content of an artifact. There are direct
+-- sources that refer files and higher order sources that represent a
+-- combination of other sources.
+data ArtifactFile = Content ArtifactContent
+                  | Container ContainerType [Artifact]
+                  | Permissions (Int,Int,Int) ArtifactFile
+                  | WithArtifactFileName String ArtifactFile
+                  | CreationCommand Script
+
+
   deriving (Read, Show, Typeable, Data, Eq)
 
-data JoinStrategy = FileContents | ErlangPropLists | YamlObjects
+data ContainerType = TarGz | CI_ISO | CI_VFAT
   deriving (Read, Show, Typeable, Data, Eq)
 
-newtype InstanceId = IID String
+data ArtifactContent = Interpolated ArtifactContent
+                     | FromFile FilePath
+                     | FromTemplate FilePath
+                     | FromURL String
+                     | Joined Syntax [ArtifactContent]
+                     | JoinedG Syntax (Generator ArtifactContent)
+                     | Echo String
+                     | Embed ArtifactFile
+                     | FromStdOut Script
+                     | FromStdIn
+                     | ContentGenerator (Generator ArtifactContent)
+
+
   deriving (Read, Show, Typeable, Data, Eq)
 
-instanceIdKey :: String
-instanceIdKey = "instance_id"
+data Syntax = ErlangTerms | YamlObjects | PlainText
+  deriving (Read, Show, Typeable, Data, Eq)
 
 buildIdKey :: String
 buildIdKey = "build_id"
 
 buildDateKey :: String
 buildDateKey = "build_date"
-
-data ArtifactAssembly = CloudInit [CloudInitType] FilePath
-                      | VmImages [ImageTarget] VmScript
-  deriving (Read, Show, Typeable, Data, Eq)
-
-data AssembledArtifact = AssembledArtifact [ArtifactTarget]
-  deriving (Read, Show, Typeable, Data, Eq)
-
-data ArtifactTarget = CloudInitTarget CloudInitType FilePath
-                    | VmImagesTarget
-  deriving (Read, Show, Typeable, Data, Eq)
-
-data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
-  deriving (Read, Show, Typeable, Data, Eq)
-
-instance Arbitrary ArtifactGenerator where
-  arbitrary = oneof [ Sources <$> (halfSize arbitrary) <*> (halfSize arbitrary)
-                    , Let <$> (halfSize arbitraryEnv) <*> (halfSize arbitrary)
-                    , (halfSize arbitraryEachT) <*> (halfSize arbitrary)
-                    , (halfSize arbitraryEach) <*> (halfSize arbitrary)
-                    , Artifact <$> (smaller arbitrary)
-                    , pure EmptyArtifact
-                    ]
-
-arbitraryEachT :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
-arbitraryEachT = sized $ \n ->
-   EachT <$> vectorOf n (halfSize
-                            (listOf1
-                               (choose ('a', 'z'))))
-         <*> oneof [ listOf (vectorOf n (halfSize arbitrary))
-                   , listOf1 (listOf (halfSize arbitrary))
-                   ]
-
-arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
-arbitraryEach = sized $ \n ->
-   Each <$> listOf ((,) <$> (listOf1
-                               (choose ('a', 'z')))
-                        <*> vectorOf n (halfSize
-                                          (listOf1
-                                             (choose ('a', 'z')))))
-
-arbitraryEnv = listOf ((,) <$> listOf1 (choose ('a', 'z')) <*> arbitrary)
-
-halfSize g = sized (flip resize g . (flip div 2))
-
-smaller g = sized (flip resize g . flip (-) 1 )
-
-instance Arbitrary ArtifactSource where
-  arbitrary = oneof [ Template <$> smaller arbitraryFilePath
-                    , Templates <$> smaller (listOf arbitraryFilePath)
-                    , File <$> smaller arbitraryFilePath
-                    , Files <$> smaller (listOf arbitraryFilePath)
-                    , SetPermissions <$> choose (0,7)
-                                     <*> choose (0,7)
-                                     <*> choose (0,7)
-                                     <*> smaller arbitrary
-                    , FromDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
-                    , ToDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
-                    , Join <$> arbitrary <*> smaller arbitraryFilePath
-                           <*> smaller arbitrary
-                    ]
-
-instance Arbitrary JoinStrategy where
-  arbitrary = elements [FileContents,ErlangPropLists,YamlObjects]
-
-instance Arbitrary InstanceId where
-  arbitrary = IID <$> arbitraryFilePath
-
-instance Arbitrary ArtifactAssembly where
-  arbitrary = oneof [ CloudInit <$> arbitrary <*>  arbitraryFilePath
-                    , pure (VmImages [] NoVmScript)
-                    ]
-
-instance Arbitrary CloudInitType where
-  arbitrary = elements [CI_ISO,CI_VFAT,CI_DIR]
-
-arbitraryFilePath =
-  listOf1 (frequency
-             [(50, oneof [choose ('a','z')
-                         ,choose ('A','Z')
-                         ,choose ('0', '9')
-                         ,pure '-'
-                         ,pure '_'])
-             ,(5, pure '/')
-             ,(1, pure ' ')
-             ,(1, pure '.')])

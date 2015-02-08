@@ -90,6 +90,8 @@ test-suite spec
   main-is:           Spec.hs
   other-modules:     B9.ErlTermsSpec
                    , B9.PropListsSpec
+                   , B9.VmSpec
+                   , B9.DiskImageBuilderSpec
                    , B9.ArtifactGeneratorImplSpec
   build-depends:     base >=4.7 && <4.8
                    , b9
