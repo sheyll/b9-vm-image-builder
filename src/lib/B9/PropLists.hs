@@ -3,13 +3,11 @@
 module B9.PropLists (YamlObject (..)
                     ,ErlangPropList (..)) where
 
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as E
 import Data.Yaml
 import Data.Function
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import Data.HashMap.Strict
-import Control.Applicative
-import Text.Show.Pretty
 import Data.Vector ((++))
 import Prelude hiding ((++))
 import Data.List (partition,sortBy)
@@ -98,4 +96,5 @@ instance ConcatableSyntax YamlObject where
     o <- decodeEither str
     return (YamlObject o)
 
-  encodeSyntax (YamlObject o) = encode o
+  encodeSyntax (YamlObject o) =
+    E.encodeUtf8 (T.pack "#cloud-config\n") <> encode o
