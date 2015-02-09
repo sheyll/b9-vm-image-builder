@@ -25,7 +25,7 @@ data SimpleErlangTerm = ErlString String
                       | ErlTuple [SimpleErlangTerm]
                       deriving (Eq,Ord,Read,Show,Data,Typeable)
 
--- | Parser a subset of valid Erlang terms. It parses no maps and binaries are
+-- | Parse a subset of valid Erlang terms. It parses no maps and binaries are
 -- restricted to either empty binaries or binaries with a string. The input
 -- encoding must be restricted to ascii compatible 8-bit characters
 -- (e.g. latin-1 or UTF8).
