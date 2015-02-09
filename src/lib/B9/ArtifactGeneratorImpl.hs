@@ -4,10 +4,15 @@ import B9.ArtifactGenerator
 import B9.B9Monad
 import B9.B9Config
 import B9.VmBuilder
+import B9.ConcatableSyntax
 import B9.Vm
 import B9.DiskImageBuilder
 import B9.ConfigUtils hiding (tell)
+import B9.PropLists
 
+import qualified Data.ByteString as B
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as E
 import Data.Data
 import Data.Generics.Schemes
 import Data.Generics.Aliases
@@ -38,7 +43,7 @@ assemble artGen = do
             []
   case execCGParser ag e of
     Left (CGError err) ->
-      error err
+      error (printf "error parsing: %s: %s" (ppShow artGen)  err)
     Right igs ->
       case execIGEnv `mapM` igs of
         Left err ->
@@ -186,19 +191,29 @@ toSourceGen env src =
   case src of
     Template f -> do
       f' <- substE env f
-      return [SGConcat env [SGFrom SGT f'] KeepPerm (takeFileName f')]
+      return [SGConcat Append env [SGFrom SGT f'] KeepPerm (takeFileName f')]
     Templates fs ->
       join <$> mapM (toSourceGen env . Template) fs
     File f -> do
       f' <- substE env f
-      return [SGConcat env [SGFrom SGF f'] KeepPerm (takeFileName f')]
+      return [SGConcat Append env [SGFrom SGF f'] KeepPerm (takeFileName f')]
     Files fs ->
       join <$> mapM (toSourceGen env . File) fs
     Concatenation t src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       t' <- substE env t
       let froms = join (sgGetFroms <$> sgs)
-      return [SGConcat env froms KeepPerm t']
+      return [SGConcat Append env froms KeepPerm t']
+    YamlObjects t src' -> do
+      sgs <- join <$> mapM (toSourceGen env) src'
+      t' <- substE env t
+      let froms = join (sgGetFroms <$> sgs)
+      return [SGConcat MergeYamlObjects env froms KeepPerm t']
+    ErlangTerms t src' -> do
+      sgs <- join <$> mapM (toSourceGen env) src'
+      t' <- substE env t
+      let froms = join (sgGetFroms <$> sgs)
+      return [SGConcat MergeErlangTerms env froms KeepPerm t']
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs
@@ -243,29 +258,43 @@ generateUniqueIID (IID iid) = do
   return (IID (printf "%s-%s" iid buildId))
 
 generateSourceTo :: FilePath -> SourceGenerator -> B9 ()
-generateSourceTo instanceDir (SGConcat env froms p to) = do
+generateSourceTo instanceDir g@(SGConcat strat env froms p to) = do
   let toAbs = instanceDir </> to
   ensureDir toAbs
-  case froms of
-    [from] ->
-      sgProcess env from toAbs
-    [] ->
-      error (printf "File '%s' has no sources." toAbs)
-    _froms -> do
-      let tmpTos = zipWith (<.>) (repeat toAbs) (show <$> [1..length froms])
-          tmpTosQ = intercalate " " (printf "'%s'" <$> tmpTos)
-      mapM_ (uncurry (sgProcess env)) (froms `zip` tmpTos)
-      cmd (printf "cat %s > '%s'" tmpTosQ toAbs)
-      cmd (printf "rm %s" tmpTosQ)
-  sgChangePerm toAbs p
+  sources <- mapM (sgReadSourceFile env) froms
+  case sgConcatSources strat sources of
+    Left e -> error (printf "error in %s: %s" (ppShow g) e)
+    Right result -> do
+      traceL (printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result)))
+      liftIO (B.writeFile toAbs result)
+      sgChangePerm toAbs p
 
-sgProcess :: [(String,String)] -> SGFrom -> FilePath -> B9 ()
-sgProcess _ (SGFrom SGF f) t = do
-  traceL (printf "copy '%s' to '%s'" f t)
-  liftIO (copyFile f t)
-sgProcess env (SGFrom SGT f) t = do
-  traceL (printf "translate '%s' to '%s'" f t)
-  substFile env f t
+sgConcatSources :: SGConcatStrategy -> [B.ByteString] -> Either String B.ByteString
+sgConcatSources strat srcs =
+  case strat of
+    Append ->
+      let out :: Either String B.ByteString
+          out = concatSources srcs
+      in out >>= return . encodeSyntax
+    MergeErlangTerms ->
+      let out :: Either String ErlangPropList
+          out = concatSources srcs
+      in out >>= return . encodeSyntax
+    MergeYamlObjects ->
+      let out :: Either String YamlObject
+          out = concatSources srcs
+      in out >>= return . encodeSyntax
+
+sgReadSourceFile :: [(String,String)] -> SGFrom -> B9 B.ByteString
+sgReadSourceFile _ (SGFrom SGF f) = do
+  traceL (printf "reading '%s'" f)
+  liftIO (B.readFile f)
+sgReadSourceFile env (SGFrom SGT f) = do
+  traceL (printf "reading template '%s'" f)
+  c <- liftIO (B.readFile f)
+  case substEB env c of
+    Left e -> error (printf "Error in '%s': %s" f e)
+    Right r -> return r
 
 sgChangePerm :: FilePath -> SGPerm -> B9 ()
 sgChangePerm _ KeepPerm = return ()
@@ -273,7 +302,7 @@ sgChangePerm f (SGSetPerm (o,g,a)) = cmd (printf "chmod 0%i%i%i '%s'" o g a f)
 
 -- | Internal data type simplifying the rather complex source generation by
 --   bioling down 'ArtifactSource's to a flat list of uniform 'SourceGenerator's.
-data SourceGenerator = SGConcat [(String,String)] [SGFrom] SGPerm FilePath
+data SourceGenerator = SGConcat SGConcatStrategy [(String,String)] [SGFrom] SGPerm FilePath
   deriving (Read, Show, Typeable, Data, Eq)
 data SGFrom = SGFrom SGType FilePath
   deriving (Read, Show, Typeable, Data, Eq)
@@ -282,13 +311,16 @@ data SGType = SGT | SGF
 data SGPerm = SGSetPerm (Int,Int,Int) | KeepPerm
   deriving (Read, Show, Typeable, Data, Eq)
 
+data SGConcatStrategy = Append | MergeErlangTerms | MergeYamlObjects
+  deriving (Read, Show, Typeable, Data, Eq)
+
 sgGetFroms :: SourceGenerator -> [SGFrom]
-sgGetFroms (SGConcat _ fs _ _) = fs
+sgGetFroms (SGConcat _ _ fs _ _) = fs
 
 setSGPerm :: Int -> Int -> Int -> SourceGenerator
           -> Either String SourceGenerator
-setSGPerm o g a (SGConcat env from KeepPerm dest) =
-  Right (SGConcat env from (SGSetPerm (o,g,a)) dest)
+setSGPerm o g a (SGConcat strat env from KeepPerm dest) =
+  Right (SGConcat strat env from (SGSetPerm (o,g,a)) dest)
 setSGPerm o g a sg
   | o < 0 || o > 7 =
     Left (printf "Bad 'owner' permission %i in \n%s" o (ppShow sg))
@@ -300,14 +332,14 @@ setSGPerm o g a sg
    Left (printf "Permission for source already defined:\n %s" (ppShow sg))
 
 setSGFromDirectory :: FilePath -> SourceGenerator -> SourceGenerator
-setSGFromDirectory fromDir (SGConcat e fs p d) =
-  SGConcat e (setSGFrom <$> fs) p d
+setSGFromDirectory fromDir (SGConcat s e fs p d) =
+  SGConcat s e (setSGFrom <$> fs) p d
   where
     setSGFrom (SGFrom t f) = SGFrom t (fromDir </> f)
 
 setSGToDirectory :: FilePath -> SourceGenerator -> SourceGenerator
-setSGToDirectory toDir (SGConcat e fs p d) =
-  SGConcat e fs p (toDir </> d)
+setSGToDirectory toDir (SGConcat s e fs p d) =
+  SGConcat s e fs p (toDir </> d)
 
 -- | Create the actual target, either just a mountpoint, or an ISO or VFAT
 -- image.

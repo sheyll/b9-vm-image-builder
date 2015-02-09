@@ -49,9 +49,11 @@ data ArtifactSource = Template FilePath
                   | Files [FilePath]
                   | SetPermissions Int Int Int [ArtifactSource]
   --                | SetUserGroupID Int Int [ArtifactSource]
-                  | Concatenation FilePath [ArtifactSource]
                   | FromDirectory FilePath [ArtifactSource]
                   | IntoDirectory FilePath [ArtifactSource]
+                  | Concatenation FilePath [ArtifactSource]
+                  | YamlObjects FilePath [ArtifactSource]
+                  | ErlangTerms FilePath [ArtifactSource]
     deriving (Read, Show, Typeable, Data, Eq)
 
 newtype InstanceId = IID String
