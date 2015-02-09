@@ -36,7 +36,7 @@ parseErlTerm src content =
 -- | Convert an abstract Erlang term to a pretty byte string preserving the
 -- encoding.
 renderErlTerm :: SimpleErlangTerm -> B.ByteString
-renderErlTerm = B.pack . PP.render . prettyPrintErlTerm
+renderErlTerm s = B.pack (PP.render (prettyPrintErlTerm s PP.<> PP.char '.'))
 
 prettyPrintErlTerm :: SimpleErlangTerm -> PP.Doc
 prettyPrintErlTerm (ErlString str) = PP.doubleQuotes (PP.text (toErlStringString str))
