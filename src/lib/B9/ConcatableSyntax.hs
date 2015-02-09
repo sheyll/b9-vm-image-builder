@@ -1,17 +1,8 @@
 module B9.ConcatableSyntax (ConcatableSyntax(..)
-                           ,SyntacticCat
-                           ,decodeSyntaxFile
-                           ,encodeSyntaxFile
-                           ,concatSyntaxFiles) where
+                           ,concatSources) where
 
 import qualified Data.ByteString as B
-import Data.Data
 import Data.Semigroup
-import Control.Monad
-import Control.Applicative
-import Control.Monad.IO.Class
-import System.Directory
-import Text.Printf
 
 -- | Imagine you would want to create a cloud-init 'user-data' file from a set
 -- of 'user-data' snippets which each are valid 'user-data' files in yaml syntax
@@ -26,43 +17,10 @@ class Semigroup a => ConcatableSyntax a where
   decodeSyntax :: B.ByteString -> Either String a
   encodeSyntax :: a -> B.ByteString
 
--- | Read syntax from a file and throw an exception on error.
-decodeSyntaxFile :: (Functor m, ConcatableSyntax a, MonadIO m)
-                 => FilePath
-                 -> m (Either String a)
-decodeSyntaxFile fp = do
-  exists <- liftIO (doesFileExist fp)
-  if exists
-    then decodeSyntax <$> liftIO (B.readFile fp)
-    else return (Left (printf "decoding syntax file failed:\
-                              \ \'\' does not exist"))
 
--- | Render some syntax to a file.
-encodeSyntaxFile :: (ConcatableSyntax a, MonadIO m)
-                 => FilePath
-                 -> a
-                 -> m ()
-encodeSyntaxFile fp s = do
-  exists <- liftIO (doesFileExist fp)
-  if exists
-    then fail (printf "cannot encode syntax to file: '%s'\
-         \the file already exists in the file system.")
-    else liftIO (B.writeFile fp (encodeSyntax s))
+instance ConcatableSyntax B.ByteString where
+  decodeSyntax = Right
+  encodeSyntax = id
 
--- | Read and decode the syntax in 'inputFiles', merge the syntax and write it
--- to 'outputFile' and return the merged value.
-concatSyntaxFiles :: (ConcatableSyntax a, Functor m, MonadIO m)
-                  => [FilePath]
-                  -> FilePath
-                  -> m (Either String a)
-concatSyntaxFiles inputFiles outputFile = do
-  inputs <- sequence <$> mapM decodeSyntaxFile inputFiles
-  let concatenated = liftM (foldl1 (<>)) inputs
-  either (const (return ()))
-         (encodeSyntaxFile outputFile)
-         concatenated
-  return concatenated
-
-data SyntacticCat a = SyntacticCat [a]
-                    | RenderSyntax FilePath (SyntacticCat a)
-                    deriving (Show,Read,Data,Typeable)
+concatSources :: (Semigroup a, ConcatableSyntax a) => [B.ByteString] -> Either String a
+concatSources srcs = mapM decodeSyntax srcs >>= return . (foldl1 (<>))
