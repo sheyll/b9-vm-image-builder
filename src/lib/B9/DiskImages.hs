@@ -7,33 +7,22 @@ import System.FilePath
 -- | Build target for disk images.
 data ImageTarget = ImageTarget
                      ImageDestination
-                     -- ^ where to put the created image after
-                     -- the build script ran.
                      ImageSource
-                     -- ^ where to get or how to create the image.
                      MountPoint
-                     -- ^ Where to mount the image during the
-                     -- build inside the execution
-                     -- environment.
                      deriving (Read, Show, Typeable, Data, Eq)
 
-itImageDestination :: ImageTarget -> ImageDestination
-itImageDestination (ImageTarget d _ _) = d
-
-itImageMountPoint :: ImageTarget -> MountPoint
-itImageMountPoint (ImageTarget _ _ m) = m
-
+-- | A mount point or `NotMounted`
 data MountPoint = MountPoint FilePath | NotMounted
                      deriving (Show, Read, Typeable, Data, Eq)
 
-type Mounted a = (a, MountPoint)
-
+-- | The destination of an image.
 data ImageDestination = Share String ImageType ImageResize
                       | LiveInstallerImage String FilePath ImageResize
                       | LocalFile Image ImageResize
                       | Transient
                       deriving (Read, Show, Typeable, Data,Eq)
 
+-- | Specification of how the image to build is obtained.
 data ImageSource = EmptyImage String FileSystem ImageType ImageSize
                  | CopyOnWrite Image
                  | SourceImage Image Partition ImageResize
@@ -53,7 +42,6 @@ data ImageType = Raw | QCow2 | Vmdk
 data FileSystem = NoFileSystem | Ext4 | ISO9660 | VFAT
                 deriving (Eq,Show,Read,Typeable,Data)
 
-
 data ImageSize = ImageSize Int SizeUnit
                  deriving (Eq, Show, Read, Typeable, Data)
 
@@ -66,6 +54,13 @@ data ImageResize = ResizeImage ImageSize
                  | KeepSize
                    deriving (Eq, Show, Read, Typeable, Data)
 
+type Mounted a = (a, MountPoint)
+
+itImageDestination :: ImageTarget -> ImageDestination
+itImageDestination (ImageTarget d _ _) = d
+
+itImageMountPoint :: ImageTarget -> MountPoint
+itImageMountPoint (ImageTarget _ _ m) = m
 isPartitioned :: Partition -> Bool
 isPartitioned p | p == NoPT = False
                 | otherwise = True
