@@ -63,6 +63,7 @@ library
                    , unordered-containers
                    , vector >= 0.10.12.2
                    , yaml
+                   , bifunctors
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
                     , DeriveDataTypeable
