@@ -19,6 +19,7 @@ module B9.ConfigUtils ( allOn
                       , maybeConsultSystemPath
                       , subst
                       , substE
+                      , substEB
                       , substFile
                       , substPath
                       ) where
@@ -27,7 +28,8 @@ import Data.Monoid
 import Data.Function ( on )
 import Data.Typeable
 import Control.Applicative
-import Control.Arrow
+import Control.Arrow hiding (second)
+import Data.Bifunctor
 import Control.Exception
 import Control.Monad.IO.Class
 import System.Directory
@@ -38,7 +40,6 @@ import System.FilePath
 import Text.Printf
 import Data.ConfigFile
 import Data.Text.Template (render,templateSafe,renderA)
-import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString as B
@@ -166,23 +167,30 @@ subst env templateStr =
 
 -- String template substitution via dollar
 substE :: [(String,String)] -> String -> Either String String
-substE env templateStr = do
+substE env templateStr =
+  second (T.unpack . E.decodeUtf8)
+         (substEB env (E.encodeUtf8 (T.pack templateStr)))
+
+-- String template substitution via dollar
+substEB :: [(String,String)] -> B.ByteString -> Either String B.ByteString
+substEB env templateStr = do
   t <- template'
   res <- renderA t env'
-  return (LT.unpack res)
+  return (LB.toStrict (LE.encodeUtf8 res))
   where
     env' t = case lookup (T.unpack t) env of
                Just v -> Right (T.pack v)
                Nothing -> Left ("Invalid template parameter: \""
                                 ++ (T.unpack t) ++ "\" in: \""
-                                ++ templateStr
+                                ++ (show templateStr)
                                 ++ "\".\nValid variables:\n" ++ ppShow env)
 
-    template' = case templateSafe (T.pack templateStr) of
+    template' = case templateSafe (E.decodeUtf8 templateStr) of
       Left (row,col) -> Left ("Invalid template, error at row: "
                              ++ show row ++ ", col: " ++ show col
-                             ++ " in: \"" ++ templateStr)
+                             ++ " in: \"" ++ (show templateStr))
       Right t -> Right t
+
 
 substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
 substFile assocs src dest = do
