@@ -14,6 +14,7 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.ErlTerms
                   , module B9.PropLists
                   , module B9.ConcatableSyntax
+                  , module B9.Generator
                   , buildArtifacts
                   ) where
 
@@ -37,8 +38,9 @@ import B9.VmBuilder
 import B9.ErlTerms
 import B9.PropLists
 import B9.ConcatableSyntax
+import B9.Generator
 
-buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
+buildArtifacts :: Generator Artifact -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
   withB9Config cfgParser cliCfg $ \cfg ->
     run cfgParser cfg $ do

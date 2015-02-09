@@ -56,7 +56,7 @@ runBuildArtifacts buildFiles _cfgFile cp conf = do
 runFormatBuildFiles :: [FilePath] ->  BuildAction
 runFormatBuildFiles buildFiles _cfgFile _cp _conf = do
    generators <- mapM consult buildFiles
-   let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
+   let generatorsFormatted = map ppShow (generators :: [Generator Artifact])
    putStrLn `mapM` (generatorsFormatted)
    (uncurry writeFile) `mapM` (buildFiles `zip` generatorsFormatted)
    return True

@@ -2,12 +2,8 @@ module B9.DiskImageBuilderSpec (spec) where
 import Test.Hspec
 import Data.Text ()
 
-import B9.ArtifactGenerator
-import B9.ArtifactGeneratorImpl
 import B9.DiskImages
-import B9.ExecEnv
-import B9.Vm
-import B9.ShellScript
+import B9.DiskImageBuilder
 
 spec :: Spec
 spec =
@@ -25,7 +21,7 @@ spec =
        let e = [("variable","value")]
            src = transientSharedImage "${variable}" ""
            expected = transientSharedImage "value" ""
-           actial = substImageTarget e src
+           actual = substImageTarget e src
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in the name of a shared image" $

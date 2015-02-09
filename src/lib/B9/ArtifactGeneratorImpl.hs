@@ -6,6 +6,7 @@ import B9.B9Config
 import B9.VmBuilder
 import B9.Vm
 import B9.DiskImageBuilder
+import B9.Generator
 import B9.ConfigUtils hiding (tell)
 
 import Data.Data
@@ -25,7 +26,7 @@ import Text.Printf
 import Text.Show.Pretty (ppShow)
 
 -- | Run an artifact generator to produce the artifacts.
-assemble :: ArtifactGenerator -> B9 ()
+assemble :: Generator Artifact -> B9 ()
 assemble = undefined
 
 --  assemble artGen = do
