@@ -20,45 +20,61 @@ type ArtifactGenerator = Generator Artifact
 -- | An Artifact is some file system object, i.e. a directory or a regular
 -- file. The content and relevance of that file/directory is determined by the
 -- 'ArtifactSource'.
-data Artifact = Artifact FilePath ArtifactFile
-              | Directory FilePath [Artifact]
+data Artifact = Target FilePath ArtifactFile
               | VmImages [ImageTarget] VmScript -- ^ Create VmImages. The
                                                 -- filename if the artifact is
                                                 -- the directory to where
+              | WithIntermediateTarget String ArtifactFile [Artifact]
   deriving (Read, Show, Typeable, Data, Eq)
 
 
 -- | An artifact source provides the content of an artifact. There are direct
 -- sources that refer files and higher order sources that represent a
 -- combination of other sources.
-data ArtifactFile = Content ArtifactContent
-                  | Container ContainerType [Artifact]
+data ArtifactFile = Contains ArtifactContent
+                  | SourceCommand Script
+                  | SourceFile FilePath
+                  | SourceURL String
                   | Permissions (Int,Int,Int) ArtifactFile
-                  | WithArtifactFileName String ArtifactFile
-                  | CreationCommand Script
-
-
+                  | Container ContainerType [Artifact]
+                  | IntermediateArtifact String
   deriving (Read, Show, Typeable, Data, Eq)
 
-data ContainerType = TarGz | CI_ISO | CI_VFAT
+data ArtifactContent = Literal String
+                     | ContentsOf ArtifactFile
+                     | Interpolated ArtifactContent
+                     | Merged Syntax [ArtifactContent]
+                     | OutputOf Script
+                     | CurrentDate String
+                     | CurrentBuildId
+                     | LiteralFileSize ArtifactFile
   deriving (Read, Show, Typeable, Data, Eq)
 
-data ArtifactContent = Interpolated ArtifactContent
-                     | FromFile FilePath
-                     | FromTemplate FilePath
-                     | FromURL String
-                     | Joined Syntax [ArtifactContent]
-                     | JoinedG Syntax (Generator ArtifactContent)
-                     | Echo String
-                     | Embed ArtifactFile
-                     | FromStdOut Script
-                     | FromStdIn
-                     | ContentGenerator (Generator ArtifactContent)
-
-
-  deriving (Read, Show, Typeable, Data, Eq)
+xxx :: ArtifactGenerator
+xxx = Build
+        [WithIntermediateTarget
+           "etc.tar.gz"
+           (Container TarGz [Target "/etc" (Container Directory [Target "passwd" (Contains (Literal "blub"))])])
+           [Target
+               "user-data"
+               (Contains
+                     (Merged
+                        PlainText
+                        [Literal "#cloud-config content-type:multi-part\n"
+                        ,Literal "#part 1 yaml user-data"
+                        ,Merged YamlObjects [Interpolated (ContentsOf (SourceFile "common-user-data"))
+                                            ,Interpolated (ContentsOf (SourceURL "http://xxx/v3-user-data"))]
+                        ,Literal "#part 2 content-type: application/tar-gz, content-length: "
+                        ,LiteralFileSize (IntermediateArtifact "etc.tar.gz")
+                        ,Literal "\n"
+                        ,ContentsOf (IntermediateArtifact "etc.tar.gz")
+                        ])
+                  )]
+                  ]
 
 data Syntax = ErlangTerms | YamlObjects | PlainText
+  deriving (Read, Show, Typeable, Data, Eq)
+data ContainerType = TarGz | Xargs Script | DestinationImage | Directory
   deriving (Read, Show, Typeable, Data, Eq)
 
 buildIdKey :: String
