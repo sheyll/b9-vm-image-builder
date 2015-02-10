@@ -20,7 +20,7 @@ lxcDefaultRamSize :: RamSize
 lxcDefaultRamSize = RamSize 1 GB
 
 supportedImageTypes :: [ImageType]
-supportedImageTypes = [Raw, QCow2]
+supportedImageTypes = [Raw]
 
 runInEnvironment :: ExecEnv -> Script -> B9 Bool
 runInEnvironment env scriptIn =
