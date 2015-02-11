@@ -214,6 +214,9 @@ toSourceGen env src =
       t' <- substE env t
       let froms = join (sgGetFroms <$> sgs)
       return [SGConcat MergeErlangTerms env froms KeepPerm t']
+    YamlLiteral t y ->
+
+      return []
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs

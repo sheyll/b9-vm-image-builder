@@ -6,6 +6,7 @@
   ,CloudInitType(..)
   ,ArtifactAssembly(..)
   ,AssembledArtifact(..)
+  ,YamlValue (..)
   ,instanceIdKey
   ,buildIdKey
   ,buildDateKey
@@ -54,6 +55,13 @@ data ArtifactSource = Template FilePath
                   | Concatenation FilePath [ArtifactSource]
                   | YamlObjects FilePath [ArtifactSource]
                   | ErlangTerms FilePath [ArtifactSource]
+                  | YamlLiteral FilePath YamlValue
+    deriving (Read, Show, Typeable, Data, Eq)
+
+data YamlValue = YamlDict [(String, YamlValue)]
+               | YamlArray [YamlValue]
+               | YamlString String
+               | YamlEmbedString ArtifactSource
     deriving (Read, Show, Typeable, Data, Eq)
 
 newtype InstanceId = IID String
