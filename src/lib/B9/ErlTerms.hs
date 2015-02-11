@@ -146,15 +146,17 @@ instance Arbitrary SimpleErlangTerm where
 
 
 erlTermParser :: Parser SimpleErlangTerm
-erlTermParser = spaces
-                >> (erlAtomParser
-                    <|> erlCharParser
-                    <|> erlStringParser
-                    <|> erlBinaryParser
-                    <|> try erlFloatParser
-                    <|> erlNaturalParser
-                    <|> erlListParser
-                    <|> erlTupleParser)
+erlTermParser = between spaces (char '.') erlTermParser_
+
+erlTermParser_ :: Parser SimpleErlangTerm
+erlTermParser_ = erlAtomParser
+                 <|> erlCharParser
+                 <|> erlStringParser
+                 <|> erlBinaryParser
+                 <|> erlListParser
+                 <|> erlTupleParser
+                 <|> try erlFloatParser
+                 <|> erlNaturalParser
 
 erlAtomParser :: Parser SimpleErlangTerm
 erlAtomParser =
@@ -179,7 +181,7 @@ erlFloatParser = do
   sign <- option "" ((char '-' >> return "-") <|> (char '+' >> return ""))
   s1 <- many digit
   char '.'
-  s2 <- many digit
+  s2 <- many1 digit
   e <- do expSym <- choice [char 'e', char 'E']
           expSign <- option "" ((char '-' >> return "-") <|> (char '+' >> return "+"))
           expAbs <- many1 digit
@@ -288,7 +290,7 @@ erlNestedParser open close =
   between
     (open >> spaces)
     (close >> spaces)
-    (commaSep erlTermParser)
+    (commaSep erlTermParser_)
 
 commaSep :: Parser a -> Parser [a]
 commaSep p = do r <- p

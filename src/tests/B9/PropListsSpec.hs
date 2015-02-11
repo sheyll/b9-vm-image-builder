@@ -36,21 +36,21 @@ spec = do
        let v1 = YamlObject (array [toJSON ("x"::String)])
            v2 = YamlObject (array [toJSON ("y"::String)])
            combined = YamlObject (array [toJSON ("x"::String)
-                                       ,toJSON ("y"::String)])
+                                        ,toJSON ("y"::String)])
        in (v1 <> v2) `shouldBe` combined
 
     it "combines objects to a an object containing\
        \ all disjunct entries and combined entries\
        \ with the same keys" $
        let o1 = YamlObject (object ["k1" .= Number 1
-                                     ,"k" .= Number 2])
+                                   ,"k" .= Number 2])
            o2 = YamlObject (object ["k2" .= Number 3
-                                     ,"k" .= Number 4])
+                                   ,"k" .= Number 4])
            combined =
              YamlObject (object ["k1" .= Number 1
-                                  ,"k2" .= Number 3
-                                  ,"k" .= array [Number 2
-                                                ,Number 4]])
+                                ,"k2" .= Number 3
+                                ,"k" .= array [Number 2
+                                              ,Number 4]])
        in (o1 <> o2) `shouldBe` combined
 
     it "combines 'write_files' and 'runcmd' from typical 'user-data' files \
@@ -104,12 +104,12 @@ spec = do
   describe "ErlangPropList" $ do
 
     it "implements ConcatableSyntax method decodeSyntax" $
-       let v = decodeSyntax "ok"
+       let v = decodeSyntax "ok."
        in v `shouldBe` Right (ErlangPropList (ErlAtom "ok"))
 
     it "implements ConcatableSyntax method encodeSyntax" $
        let v = encodeSyntax (ErlangPropList (ErlAtom "ok"))
-       in v `shouldBe` "ok"
+       in v `shouldBe` "ok."
 
     it "combines primitives by putting them in a list" $
        let p1 = ErlangPropList (ErlList [ErlAtom "a"])
@@ -120,15 +120,15 @@ spec = do
        in (p1 <> p2) `shouldBe` combined
 
     it "combines a list and a primitve by extending the list" $
-       let (Right l) = decodeSyntax "[a,b,c]" :: Either String ErlangPropList
-           (Right p) = decodeSyntax "{ok,value}"
-           (Right combined) = decodeSyntax "[a,b,c,{ok,value}]"
+       let (Right l) = decodeSyntax "[a,b,c]." :: Either String ErlangPropList
+           (Right p) = decodeSyntax "{ok,value}."
+           (Right combined) = decodeSyntax "[a,b,c,{ok,value}]."
        in l <> p `shouldBe` combined
 
     it "combines a primitve and a list by extending the list" $
-       let (Right l) = decodeSyntax "[a,b,c]" :: Either String ErlangPropList
-           (Right p) = decodeSyntax "{ok,value}"
-           (Right combined) = decodeSyntax "[{ok,value},a,b,c]"
+       let (Right l) = decodeSyntax "[a,b,c]." :: Either String ErlangPropList
+           (Right p) = decodeSyntax "{ok,value}."
+           (Right combined) = decodeSyntax "[{ok,value},a,b,c]."
        in p <> l `shouldBe` combined
 
     it "merges lists with distinct elements to lists containing the elements of both lists" $
