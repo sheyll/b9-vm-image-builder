@@ -1,8 +1,14 @@
-module B9.ConcatableSyntax ( ConcatableSyntax (..)
-                           ) where
+module B9.Content.AST ( ConcatableSyntax (..)
+                      ) where
 
 import qualified Data.ByteString as B
 import Data.Semigroup
+import Data.Data
+import Control.Applicative
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+
+import B9.Content.StringTemplate
 
 -- | Imagine you would want to create a cloud-init 'user-data' file from a set
 -- of 'user-data' snippets which each are valid 'user-data' files in yaml syntax
@@ -17,7 +23,20 @@ class (Monoid a) => ConcatableSyntax a where
   decodeSyntax :: FilePath -> B.ByteString -> Either String a
   encodeSyntax :: a -> B.ByteString
 
-
 instance ConcatableSyntax B.ByteString where
   decodeSyntax _ = Right
   encodeSyntax   = id
+
+data AST c a = ASTObj [(String, AST c a)]
+             | ASTArr [AST c a]
+             | ASTMerge [AST c a]
+             | ASTEmbed c
+             | ASTString String
+             | ASTParse SourceFile
+             | AST a
+             | ASTNoOp
+  deriving (Read, Show, Typeable, Data, Eq)
+
+class (ConcatableSyntax a) => ASTish a where
+  fromAST :: (Applicative m, Monad m, MonadIO m, MonadReader Environment m) => AST c a -> m a
+  encodeAST :: (Applicative m, Monad m, MonadIO m, MonadReader Environment m) => AST c a -> m B.ByteString

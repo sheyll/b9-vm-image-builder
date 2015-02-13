@@ -17,19 +17,12 @@ module B9.ConfigUtils ( allOn
                       , getDirectoryFiles
                       , maybeConsult
                       , maybeConsultSystemPath
-                      , subst
-                      , substE
-                      , substEB
-                      , substFile
-                      , substPath
                       ) where
 
 import Data.Monoid
 import Data.Function ( on )
 import Data.Typeable
 import Control.Applicative
-import Control.Arrow hiding (second)
-import Data.Bifunctor
 import Control.Exception
 import Control.Monad.IO.Class
 import System.Directory
@@ -39,12 +32,6 @@ import Data.Word ( Word16, Word32 )
 import System.FilePath
 import Text.Printf
 import Data.ConfigFile
-import Data.Text.Template (render,templateSafe,renderA)
-import qualified Data.Text as T
-import qualified Data.ByteString.Lazy as LB
-import qualified Data.ByteString as B
-import Data.Text.Encoding as E
-import Data.Text.Lazy.Encoding as LE
 import Data.Data
 import Text.Show.Pretty (ppShow)
 
@@ -157,71 +144,3 @@ randomUUID = liftIO (UUID <$> ((,,,,,)
                                <*> randomIO
                                <*> randomIO
                                <*> randomIO))
-
--- String template substitution via dollar
-subst :: [(String,String)] -> String -> String
-subst env templateStr =
-  case substE env templateStr of
-    Left e -> error e
-    Right r -> r
-
--- String template substitution via dollar
-substE :: [(String,String)] -> String -> Either String String
-substE env templateStr =
-  second (T.unpack . E.decodeUtf8)
-         (substEB env (E.encodeUtf8 (T.pack templateStr)))
-
--- String template substitution via dollar
-substEB :: [(String,String)] -> B.ByteString -> Either String B.ByteString
-substEB env templateStr = do
-  t <- template'
-  res <- renderA t env'
-  return (LB.toStrict (LE.encodeUtf8 res))
-  where
-    env' t = case lookup (T.unpack t) env of
-               Just v -> Right (T.pack v)
-               Nothing -> Left ("Invalid template parameter: \""
-                                ++ (T.unpack t) ++ "\" in: \""
-                                ++ (show templateStr)
-                                ++ "\".\nValid variables:\n" ++ ppShow env)
-
-    template' = case templateSafe (E.decodeUtf8 templateStr) of
-      Left (row,col) -> Left ("Invalid template, error at row: "
-                             ++ show row ++ ", col: " ++ show col
-                             ++ " in: \"" ++ (show templateStr))
-      Right t -> Right t
-
-
-substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
-substFile assocs src dest = do
-  templateBs <- liftIO (B.readFile src)
-  let t = templateSafe (E.decodeUtf8 templateBs)
-  case t of
-    Left (r,c) ->
-      let badLine = unlines (take r (lines (T.unpack (E.decodeUtf8 templateBs))))
-          colMarker = replicate (c - 1) '-' ++ "^"
-      in error (printf "Template error in file '%s' line %i:\n\n%s\n%s\n"
-                       src r badLine colMarker)
-    Right template' -> do
-      let out = LE.encodeUtf8 (render template' envLookup)
-      liftIO (LB.writeFile dest out)
-      return ()
-  where
-    envT :: [(T.Text, T.Text)]
-    envT = (T.pack *** T.pack) <$> assocs
-    envLookup :: T.Text -> T.Text
-    envLookup x = maybe (err x) id (lookup x envT)
-    err x = error (printf "Invalid template parameter: '%s'\n\
-                          \In file: '%s'\n\
-                          \Valid variables:\n%s\n"
-                          (T.unpack x)
-                          src
-                          (ppShow assocs))
-
-substPath :: [(String, String)] -> SystemPath -> SystemPath
-substPath assocs src =
-          case src of
-            Path p -> Path (subst assocs p)
-            InHomeDir p -> InHomeDir (subst assocs p)
-            InB9UserDir p -> InB9UserDir (subst assocs p)
-            InTempDir p -> InTempDir (subst assocs p)

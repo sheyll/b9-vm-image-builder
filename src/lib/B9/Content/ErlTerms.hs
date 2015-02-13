@@ -1,6 +1,6 @@
-module B9.ErlTerms (parseErlTerm
-                   ,renderErlTerm
-                   ,SimpleErlangTerm(..)) where
+module B9.Content.ErlTerms (parseErlTerm
+                           ,renderErlTerm
+                           ,SimpleErlangTerm(..)) where
 
 import Data.Data
 import Data.Function

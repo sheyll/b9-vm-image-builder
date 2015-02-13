@@ -1,8 +1,8 @@
--- Instances of 'B9.ConcatableSyntax' for some commonly used
--- syntax types.
-module B9.PropLists (YamlObject (..)
-                    ,ErlangPropList (..)
-                    ) where
+-- A wrapper around erlang and yaml syntax with a proplist-like behaviour in the
+-- ConcatableSyntax instances
+module B9.Content.PropLists (YamlObject (..)
+                            ,ErlangPropList (..)
+                            ) where
 
 import Data.Data
 import qualified Data.Text as T
