@@ -18,38 +18,26 @@ module B9.ArtifactGenerator
 import Data.Data
 import Data.Monoid -- hiding ((<>))
 import Control.Applicative
-import Control.Monad.Reader
-import Control.Monad.IO.Class
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as E
-import Text.Printf
 
 import B9.DiskImages
 import B9.Vm
-
-import B9.ConcatableSyntax
-import B9.PropLists
-import B9.ConfigUtils
-import B9.ErlTerms
 import B9.Content.StringTemplate
+import B9.Content.Generator
 import B9.QCUtil
-
-import qualified Data.ByteString as B
 
 import Test.QuickCheck
 
 -- | A single config generator specifies howto generate multiple output
 -- files/directories. It consists of a netsted set of variable bindings that are
 -- replaced inside the text files
-data ArtifactGenerator =
-    Sources [ArtifactSource] [ArtifactGenerator]
-  | Let [(String, String)] [ArtifactGenerator]
-  | LetX [(String, [String])] [ArtifactGenerator]
-  | EachT [String] [[String]] [ArtifactGenerator]
-  | Each [(String,[String])] [ArtifactGenerator]
-  | Artifact InstanceId ArtifactAssembly
-  | EmptyArtifact
-  deriving (Read, Show, Typeable, Data, Eq)
+data ArtifactGenerator = Sources [ArtifactSource] [ArtifactGenerator]
+                       | Let [(String, String)] [ArtifactGenerator]
+                       | LetX [(String, [String])] [ArtifactGenerator]
+                       | EachT [String] [[String]] [ArtifactGenerator]
+                       | Each [(String,[String])] [ArtifactGenerator]
+                       | Artifact InstanceId ArtifactAssembly
+                       | EmptyArtifact
+                       deriving (Read, Show, Eq)
 
 instance Monoid ArtifactGenerator where
   mempty = Let [] []
@@ -60,14 +48,13 @@ instance Monoid ArtifactGenerator where
 -- | Explicit is better than implicit: Only files that have explicitly been
 -- listed will be included in any generated configuration. That's right: There's
 -- no "inlcude *.*". B9 will check that *all* files in the directory specified with 'FromDir' are referred to by nested 'ArtifactSource's.
-data ArtifactSource = Copy FilePath SourceFile
-                    | Create FilePath Content
+data ArtifactSource = FromFile FilePath SourceFile
+                    | FromContent FilePath Content
                     | SetPermissions Int Int Int [ArtifactSource]
-  --                | SetUserGroupID Int Int [ArtifactSource]
                     | FromDirectory FilePath [ArtifactSource]
                     | IntoDirectory FilePath [ArtifactSource]
                     | Concatenation FilePath [ArtifactSource]
-    deriving (Read, Show, Typeable, Data, Eq)
+    deriving (Read, Show, Eq)
 
 newtype InstanceId = IID String
   deriving (Read, Show, Typeable, Data, Eq)
@@ -105,6 +92,7 @@ instance Arbitrary ArtifactGenerator where
                     , pure EmptyArtifact
                     ]
 
+arbitraryEachT :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEachT = sized $ \n ->
    EachT <$> vectorOf n (halfSize
                             (listOf1
@@ -112,6 +100,7 @@ arbitraryEachT = sized $ \n ->
          <*> oneof [listOf (vectorOf n (halfSize arbitrary))
                    ,listOf1 (listOf (halfSize arbitrary))]
 
+arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEach = sized $ \n ->
    Each <$> listOf ((,) <$> (listOf1
                                (choose ('a', 'z')))
@@ -121,8 +110,10 @@ arbitraryEach = sized $ \n ->
 
 
 instance Arbitrary ArtifactSource where
-  arbitrary = oneof [ Embed <$> smaller arbitraryFilePath
-                            <*> smaller arbitrary
+  arbitrary = oneof [ FromFile <$> smaller arbitraryFilePath
+                               <*> smaller arbitrary
+                    , FromContent <$> smaller arbitraryFilePath
+                                  <*> smaller arbitrary
                     , SetPermissions <$> choose (0,7)
                                      <*> choose (0,7)
                                      <*> choose (0,7)

@@ -1,11 +1,13 @@
-module B9.MBR ( getPartition ) where
+module B9.MBR ( getPartition
+              , PrimaryPartition (..)
+              , MBR(..)
+              , CHS(..)) where
 
 import Control.Applicative
-import Control.Monad
 import Data.Binary.Get
 import Data.Word
+import Text.Printf
 import qualified Data.ByteString.Lazy as BL
-import System.IO
 
 getPartition :: Int -> FilePath -> IO (Word64, Word64)
 getPartition n f = decodeMBR <$> BL.readFile f
@@ -13,30 +15,38 @@ getPartition n f = decodeMBR <$> BL.readFile f
     decodeMBR input =
       let mbr = runGet getMBR input
           part = (case n of
-                   1 -> part1
-                   2 -> part2
-                   3 -> part3
-                   4 -> part4) mbr
-          start = fromIntegral (lbaStart part)
-          len = fromIntegral (sectors part)
+                   1 -> mbrPart1
+                   2 -> mbrPart2
+                   3 -> mbrPart3
+                   4 -> mbrPart4
+                   b -> error (printf "Error: Invalid partition index %i\
+                                     \ only partitions 1-4 are allowed.\
+                                     \ Image file: '%s'"
+                                     b
+                                     f))
+                 mbr
+          start = fromIntegral (primPartLbaStart part)
+          len = fromIntegral (primPartSectors part)
       in (start * sectorSize, len * sectorSize)
 
+sectorSize :: Word64
 sectorSize = 512
 
+bootCodeSize :: Int
 bootCodeSize = 446
 
-data MBR = MBR { part1 :: !PrimaryPartition
-               , part2 :: !PrimaryPartition
-               , part3 :: !PrimaryPartition
-               , part4 :: !PrimaryPartition
+data MBR = MBR { mbrPart1 :: !PrimaryPartition
+               , mbrPart2 :: !PrimaryPartition
+               , mbrPart3 :: !PrimaryPartition
+               , mbrPart4 :: !PrimaryPartition
                } deriving Show
 
-data PrimaryPartition = PrimaryPartition { status :: !Word8
-                                         , chsStart :: !CHS
-                                         , partType :: !Word8
-                                         , chsEnd :: !CHS
-                                         , lbaStart :: !Word32
-                                         , sectors :: !Word32
+data PrimaryPartition = PrimaryPartition { primPartStatus :: !Word8
+                                         , primPartChsStart :: !CHS
+                                         , primPartPartType :: !Word8
+                                         , primPartChsEnd :: !CHS
+                                         , primPartLbaStart :: !Word32
+                                         , primPartSectors :: !Word32
                                          } deriving Show
 
 data CHS = CHS { chsH :: !Word8

@@ -4,11 +4,12 @@ import B9.ArtifactGenerator
 import B9.B9Monad
 import B9.B9Config
 import B9.VmBuilder
-import B9.ConcatableSyntax
 import B9.Vm
 import B9.DiskImageBuilder
 import B9.ConfigUtils hiding (tell)
-import B9.PropLists
+import B9.Content.StringTemplate
+import B9.Content.Generator
+import B9.Content.AST
 
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -29,8 +30,6 @@ import System.Directory
 import Text.Printf
 import Text.Show.Pretty (ppShow)
 
-import Test.QuickCheck
-
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
 assemble artGen = do
@@ -38,7 +37,7 @@ assemble artGen = do
   buildId <- getBuildId
   buildDate <- getBuildDate
   let ag = parseArtifactGenerator artGen
-      e = Environment
+      e = CGEnv
             ((buildDateKey, buildDate):(buildIdKey, buildId):b9cfgEnvVars)
             []
   case execCGParser ag e of
@@ -81,7 +80,7 @@ withArtifactSources srcs = local (\ce -> ce {agSources = agSources ce ++ srcs})
 withBindings :: [(String,String)] -> CGParser () -> CGParser ()
 withBindings bs = local (addBindings bs)
 
-addBindings :: [(String, String)] -> Environment -> Environment
+addBindings :: [(String, String)] -> CGEnv -> CGEnv
 addBindings bs ce =
   let addBinding env (k,v) = nubBy ((==) `on` fst) ((k, subst env v):env)
       newEnv = foldl addBinding (agEnv ce) bs
@@ -128,7 +127,7 @@ eachBindingSet g kvs = do
 
 writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
 writeInstanceGenerator (IID iidStrT) assembly = do
-  env@(Environment bindings _) <- ask
+  env@(CGEnv bindings _) <- ask
   iid <- either (throwError . CGError) (return . IID) (substE bindings iidStrT)
   let env' = addBindings [(instanceIdKey, iidStr)] env
       IID iidStr = iid
@@ -136,20 +135,20 @@ writeInstanceGenerator (IID iidStrT) assembly = do
 
 -- | Monad for creating Instance generators.
 newtype CGParser a =
-  CGParser { runCGParser :: WriterT [InstanceGenerator Environment]
-                                   (ReaderT Environment
+  CGParser { runCGParser :: WriterT [InstanceGenerator CGEnv]
+                                   (ReaderT CGEnv
                                             (Either CGError))
                                    a
            }
   deriving ( Functor, Applicative, Monad
-           , MonadReader Environment
-           , MonadWriter [InstanceGenerator Environment]
+           , MonadReader CGEnv
+           , MonadWriter [InstanceGenerator CGEnv]
            , MonadError CGError
            )
 
-data Environment = Environment { agEnv :: [(String, String)]
-                               , agSources :: [ArtifactSource] }
-  deriving (Read, Show, Typeable, Data, Eq)
+data CGEnv = CGEnv { agEnv :: [(String, String)]
+                   , agSources :: [ArtifactSource] }
+  deriving (Read, Show, Eq)
 
 data InstanceGenerator e = IG InstanceId e ArtifactAssembly
   deriving (Read, Show, Typeable, Data, Eq)
@@ -161,13 +160,13 @@ cgError :: String -> CGParser a
 cgError msg = throwError (CGError msg)
 
 execCGParser :: CGParser ()
-             -> Environment
-             -> Either CGError [InstanceGenerator Environment]
+             -> CGEnv
+             -> Either CGError [InstanceGenerator CGEnv]
 execCGParser = runReaderT . execWriterT . runCGParser
 
-execIGEnv :: InstanceGenerator Environment
+execIGEnv :: InstanceGenerator CGEnv
           -> Either String (InstanceGenerator [SourceGenerator])
-execIGEnv (IG iid (Environment env sources) assembly) = do
+execIGEnv (IG iid (CGEnv env sources) assembly) = do
   IG iid <$> sourceGens <*> pure (substAssembly env assembly)
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
@@ -189,28 +188,18 @@ toSourceGen :: [(String, String)]
             -> Either String [SourceGenerator]
 toSourceGen env src =
   case src of
-    Embed t (Source conv f) -> do
+    FromFile t (Source conv f) -> do
       t' <- substE env t
       f' <- substE env f
-      let conv' = case conv of
-                    NoConversion -> SGF
-                    ExpandVariables -> SGT
-      return [SGConcat Append env [SGFrom conv' f'] KeepPerm t']
+      return [SGConcat env (SGFiles [Source conv f']) KeepPerm t']
+    FromContent t c -> do
+      t' <- substE env t
+      return [SGConcat env (SGContent c) KeepPerm t']
     Concatenation t src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       t' <- substE env t
       let froms = join (sgGetFroms <$> sgs)
-      return [SGConcat Append env froms KeepPerm t']
-    YamlObjects t src' -> do
-      sgs <- join <$> mapM (toSourceGen env) src'
-      t' <- substE env t
-      let froms = join (sgGetFroms <$> sgs)
-      return [SGConcat MergeYamlObjects env froms KeepPerm t']
-    ErlangTerms t src' -> do
-      sgs <- join <$> mapM (toSourceGen env) src'
-      t' <- substE env t
-      let froms = join (sgGetFroms <$> sgs)
-      return [SGConcat MergeErlangTerms env froms KeepPerm t']
+      return [SGConcat env (SGFiles froms) KeepPerm t']
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs
@@ -255,43 +244,22 @@ generateUniqueIID (IID iid) = do
   return (IID (printf "%s-%s" iid buildId))
 
 generateSourceTo :: FilePath -> SourceGenerator -> B9 ()
-generateSourceTo instanceDir g@(SGConcat strat env froms p to) = do
+generateSourceTo instanceDir (SGConcat env sgSource p to) = do
   let toAbs = instanceDir </> to
   ensureDir toAbs
-  sources <- mapM (sgReadSourceFile env) froms
-  case sgConcatSources strat sources of
-    Left e -> error (printf "error in %s: %s" (ppShow g) e)
-    Right result -> do
-      traceL (printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result)))
-      liftIO (B.writeFile toAbs result)
-      sgChangePerm toAbs p
+  result <- case sgSource of
+               SGFiles froms -> do
+                 sources <- mapM (sgReadSourceFile env) froms
+                 return (mconcat sources)
+               SGContent c -> do
+                  withEnvironment env (render c)
+  traceL (printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result)))
+  liftIO (B.writeFile toAbs result)
+  sgChangePerm toAbs p
 
-sgConcatSources :: SGConcatStrategy -> [B.ByteString] -> Either String B.ByteString
-sgConcatSources strat srcs =
-  case strat of
-    Append ->
-      let out :: Either String B.ByteString
-          out = concatSources srcs
-      in out >>= return . encodeSyntax
-    MergeErlangTerms ->
-      let out :: Either String ErlangPropList
-          out = concatSources srcs
-      in out >>= return . encodeSyntax
-    MergeYamlObjects ->
-      let out :: Either String YamlObject
-          out = concatSources srcs
-      in out >>= return . encodeSyntax
 
-sgReadSourceFile :: [(String,String)] -> SGFrom -> B9 B.ByteString
-sgReadSourceFile _ (SGFrom SGF f) = do
-  traceL (printf "reading '%s'" f)
-  liftIO (B.readFile f)
-sgReadSourceFile env (SGFrom SGT f) = do
-  traceL (printf "reading template '%s'" f)
-  c <- liftIO (B.readFile f)
-  case substEB env c of
-    Left e -> error (printf "Error in '%s': %s" f e)
-    Right r -> return r
+sgReadSourceFile :: [(String,String)] -> SourceFile -> B9 B.ByteString
+sgReadSourceFile env = withEnvironment env . readTemplateFile
 
 sgChangePerm :: FilePath -> SGPerm -> B9 ()
 sgChangePerm _ KeepPerm = return ()
@@ -299,25 +267,27 @@ sgChangePerm f (SGSetPerm (o,g,a)) = cmd (printf "chmod 0%i%i%i '%s'" o g a f)
 
 -- | Internal data type simplifying the rather complex source generation by
 --   bioling down 'ArtifactSource's to a flat list of uniform 'SourceGenerator's.
-data SourceGenerator = SGConcat SGConcatStrategy [(String,String)] [SGFrom] SGPerm FilePath
-  deriving (Read, Show, Typeable, Data, Eq)
-data SGFrom = SGFrom SGType FilePath
-  deriving (Read, Show, Typeable, Data, Eq)
+data SourceGenerator = SGConcat [(String,String)] SGSource SGPerm FilePath
+  deriving (Read, Show, Eq)
+
+data SGSource = SGFiles [SourceFile] | SGContent Content
+  deriving (Read, Show, Eq)
+
 data SGType = SGT | SGF
   deriving (Read, Show, Typeable, Data, Eq)
+
 data SGPerm = SGSetPerm (Int,Int,Int) | KeepPerm
   deriving (Read, Show, Typeable, Data, Eq)
 
-data SGConcatStrategy = Append | MergeErlangTerms | MergeYamlObjects
-  deriving (Read, Show, Typeable, Data, Eq)
 
-sgGetFroms :: SourceGenerator -> [SGFrom]
-sgGetFroms (SGConcat _ _ fs _ _) = fs
+sgGetFroms :: SourceGenerator -> [SourceFile]
+sgGetFroms (SGConcat _ (SGFiles fs) _ _) = fs
+sgGetFroms _ = []
 
 setSGPerm :: Int -> Int -> Int -> SourceGenerator
           -> Either String SourceGenerator
-setSGPerm o g a (SGConcat strat env from KeepPerm dest) =
-  Right (SGConcat strat env from (SGSetPerm (o,g,a)) dest)
+setSGPerm o g a (SGConcat env from KeepPerm dest) =
+  Right (SGConcat env from (SGSetPerm (o,g,a)) dest)
 setSGPerm o g a sg
   | o < 0 || o > 7 =
     Left (printf "Bad 'owner' permission %i in \n%s" o (ppShow sg))
@@ -329,14 +299,15 @@ setSGPerm o g a sg
    Left (printf "Permission for source already defined:\n %s" (ppShow sg))
 
 setSGFromDirectory :: FilePath -> SourceGenerator -> SourceGenerator
-setSGFromDirectory fromDir (SGConcat s e fs p d) =
-  SGConcat s e (setSGFrom <$> fs) p d
+setSGFromDirectory fromDir (SGConcat e (SGFiles fs) p d) =
+  SGConcat e (SGFiles (setSGFrom <$> fs)) p d
   where
-    setSGFrom (SGFrom t f) = SGFrom t (fromDir </> f)
+    setSGFrom (Source t f) = Source t (fromDir </> f)
+setSGFromDirectory _fromDir sg = sg
 
 setSGToDirectory :: FilePath -> SourceGenerator -> SourceGenerator
-setSGToDirectory toDir (SGConcat s e fs p d) =
-  SGConcat s e fs p (toDir </> d)
+setSGToDirectory toDir (SGConcat e fs p d) =
+  SGConcat e fs p (toDir </> d)
 
 -- | Create the actual target, either just a mountpoint, or an ISO or VFAT
 -- image.
@@ -400,23 +371,3 @@ createTarget _ instanceDir (CloudInit types outPath) = do
       liftIO (copyFile tmpFile vfatFile)
       infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile))
       return (CloudInitTarget CI_ISO vfatFile)
-
--- * tests
-
-test_GenerateNoInstanceGeneratorsForEmptyArtifact =
-  let (Right igs) = execCGParser (parseArtifactGenerator EmptyArtifact) undefined
-  in igs == []
-
-prop_GenerateNoInstanceGeneratorsForArtifactWithoutArtifactInstance =
-  forAll (arbitrary `suchThat` (not . containsArtifactInstance))
-         (\g -> execCGParser (parseArtifactGenerator g) undefined == Right [])
-  where
-    containsArtifactInstance g =
-      let nested = case g of
-                     Sources _ gs -> gs
-                     Let _ gs -> gs
-                     EachT _ _ gs -> gs
-                     Each _ gs -> gs
-                     Artifact _ _ -> []
-                     EmptyArtifact -> []
-      in any containsArtifactInstance nested

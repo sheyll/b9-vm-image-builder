@@ -25,7 +25,7 @@ import           Control.Exception ( bracket )
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.State
-import           Control.Monad.Trans.Class
+
 import qualified Data.ByteString.Char8 as B
 import           Data.Functor ()
 import           Data.Maybe

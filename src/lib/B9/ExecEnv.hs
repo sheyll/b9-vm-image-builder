@@ -12,7 +12,6 @@ import Data.Data
 import Data.Monoid
 
 import B9.DiskImages
-import B9.ConfigUtils
 
 data ExecEnv = ExecEnv { envName :: String
                        , envImageMounts :: [Mounted Image]
@@ -22,7 +21,7 @@ data ExecEnv = ExecEnv { envName :: String
 
 data SharedDirectory = SharedDirectory FilePath MountPoint
                      | SharedDirectoryRO FilePath MountPoint
-                     | InstanceDirectory MountPoint
+                     | SharedSources MountPoint
                      deriving (Read, Show, Typeable, Data,Eq)
 
 data Resources = Resources { maxMemory :: RamSize

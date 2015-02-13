@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module B9.ErlTermsSpec (spec) where
+module B9.Content.ErlTermsSpec (spec) where
 
 import Control.Applicative
 import Data.List
 import Test.Hspec
 import Test.QuickCheck
 import Data.Maybe
-import B9.ErlTerms
+import B9.Content.ErlTerms
 import qualified Data.ByteString.Char8 as B
 
 spec :: Spec

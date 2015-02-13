@@ -1,6 +1,12 @@
 module B9.Content.ErlTerms (parseErlTerm
                            ,renderErlTerm
-                           ,SimpleErlangTerm(..)) where
+                           ,SimpleErlangTerm(..)
+                           ,arbitraryErlSimpleAtom
+                           ,arbitraryErlString
+                           ,arbitraryErlNumber
+                           ,arbitraryErlNatural
+                           ,arbitraryErlFloat
+                           ,arbitraryErlNameChar) where
 
 import Data.Data
 import Data.Function
@@ -13,6 +19,8 @@ import Text.Show.Pretty
 import Control.Monad
 import Text.Printf
 import qualified Text.PrettyPrint as PP
+
+import B9.QCUtil
 
 -- | Simplified Erlang term representation.
 data SimpleErlangTerm = ErlString String
@@ -298,3 +306,27 @@ commaSep p = do r <- p
                 rest <- option [] (char ',' >> spaces >> commaSep p)
                 return (r:rest)
             <|> return []
+
+arbitraryErlSimpleAtom :: Gen SimpleErlangTerm
+arbitraryErlSimpleAtom = ErlAtom <$> ((:)
+                                      <$> arbitraryLetterLower
+                                      <*> listOf arbitraryErlNameChar)
+
+arbitraryErlString :: Gen SimpleErlangTerm
+arbitraryErlString = ErlString <$> listOf (oneof [arbitraryLetter
+                                                 ,arbitraryDigit])
+
+arbitraryErlNumber :: Gen SimpleErlangTerm
+arbitraryErlNumber = oneof [arbitraryErlNatural, arbitraryErlFloat]
+
+arbitraryErlNatural :: Gen SimpleErlangTerm
+arbitraryErlNatural = ErlNatural <$> arbitrary
+
+arbitraryErlFloat :: Gen SimpleErlangTerm
+arbitraryErlFloat = ErlFloat <$> arbitrary
+
+arbitraryErlNameChar :: Gen Char
+arbitraryErlNameChar = oneof [arbitraryLetter
+                             ,arbitraryDigit
+                             ,pure '_'
+                             ,pure '@']

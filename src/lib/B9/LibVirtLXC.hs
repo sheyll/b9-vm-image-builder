@@ -254,9 +254,13 @@ libVirtNetwork (Just n) =
 
 fsImage :: (Image, MountPoint) -> String
 fsImage (img, mnt) =
-  "<filesystem type='file' accessmode='passthrough'>\n  " ++
-  fsImgDriver img ++ "\n  " ++ fsImgSource img ++ "\n  " ++ fsTarget mnt ++
-  "\n</filesystem>"
+  case fsTarget mnt of
+    Just mntXml ->
+      "<filesystem type='file' accessmode='passthrough'>\n  " ++
+      fsImgDriver img ++ "\n  " ++ fsImgSource img ++ "\n  " ++ mntXml ++
+      "\n</filesystem>"
+    Nothing ->
+      ""
   where
     fsImgDriver (Image _img fmt _fs) =
       printf "<driver %s %s/>" driver fmt'
@@ -270,16 +274,27 @@ fsImage (img, mnt) =
 
 fsSharedDir :: SharedDirectory -> String
 fsSharedDir (SharedDirectory hostDir mnt) =
-  "<filesystem type='mount'>\n  " ++
-  "<source dir='" ++ hostDir ++ "'/>" ++ "\n  " ++ fsTarget mnt ++
-  "\n</filesystem>"
+  case fsTarget mnt of
+    Just mntXml ->
+      "<filesystem type='mount'>\n  " ++
+      "<source dir='" ++ hostDir ++ "'/>" ++ "\n  " ++ mntXml ++
+      "\n</filesystem>"
+    Nothing ->
+      ""
 fsSharedDir (SharedDirectoryRO hostDir mnt) =
-  "<filesystem type='mount'>\n  " ++
-  "<source dir='" ++ hostDir ++ "'/>" ++ "\n  " ++ fsTarget mnt ++
-  "\n  <readonly />\n</filesystem>"
+  case fsTarget mnt of
+    Just mntXml ->
+      "<filesystem type='mount'>\n  " ++
+      "<source dir='" ++ hostDir ++ "'/>" ++ "\n  " ++ mntXml ++
+      "\n  <readonly />\n</filesystem>"
+    Nothing ->
+      ""
+fsSharedDir (SharedSources _) =
+  error "Unreachable code reached!"
 
-fsTarget :: MountPoint -> String
-fsTarget (MountPoint dir) = "<target dir='" ++ dir ++ "'/>"
+fsTarget :: MountPoint -> Maybe String
+fsTarget (MountPoint dir) = Just $ "<target dir='" ++ dir ++ "'/>"
+fsTarget _ = Nothing
 
 memoryUnit :: ExecEnv -> String
 memoryUnit = toUnit . maxMemory . envResources

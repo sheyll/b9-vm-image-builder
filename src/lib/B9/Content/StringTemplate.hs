@@ -7,7 +7,8 @@ module B9.Content.StringTemplate (subst
                                  ,readTemplateFile
                                  ,SourceFile(..)
                                  ,SourceFileConversion(..)
-                                 ,Environment(..)) where
+                                 ,Environment(..)
+                                 ,withEnvironment) where
 
 import Data.Text.Template (render,templateSafe,renderA)
 import Data.Data
@@ -38,6 +39,9 @@ data SourceFileConversion = NoConversion | ExpandVariables
 
 data Environment = Environment [(String,String)]
 
+withEnvironment :: [(String,String)] -> ReaderT Environment m a -> m a
+withEnvironment env action = runReaderT action (Environment env)
+
 readTemplateFile :: (MonadIO m, MonadReader Environment m)
                  => SourceFile -> m B.ByteString
 readTemplateFile (Source conv f) = do
@@ -48,8 +52,15 @@ readTemplateFile (Source conv f) = do
                   NoConversion -> return c
                   ExpandVariables -> do
                     Environment env <- ask
-                    let (Right c') = substEB env c
-                    return c'
+                    case substEB env c of
+                      Left e ->
+                        error (printf "readTemplateFile '%s' failed: \n%s\n"
+                                       f
+                                       e)
+                      Right c' ->
+                        return c'
+
+
 -- String template substitution via dollar
 subst :: [(String,String)] -> String -> String
 subst env templateStr =

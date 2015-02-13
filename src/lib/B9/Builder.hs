@@ -12,9 +12,13 @@ module B9.Builder ( module B9.B9Monad
                   , module B9.ArtifactGeneratorImpl
                   , module B9.Vm
                   , module B9.VmBuilder
-                  , module B9.ErlTerms
-                  , module B9.PropLists
-                  , module B9.ConcatableSyntax
+                  , module B9.Content.AST
+                  , module B9.Content.StringTemplate
+                  , module B9.Content.ErlTerms
+                  , module B9.Content.ErlangPropList
+                  , module B9.Content.YamlObject
+                  , module B9.Content.Generator
+                  , module B9.QCUtil
                   , buildArtifacts
                   ) where
 
@@ -35,9 +39,14 @@ import B9.ArtifactGenerator
 import B9.ArtifactGeneratorImpl
 import B9.Vm
 import B9.VmBuilder
-import B9.ErlTerms
-import B9.PropLists
-import B9.ConcatableSyntax
+import B9.QCUtil
+
+import B9.Content.AST
+import B9.Content.StringTemplate
+import B9.Content.ErlTerms
+import B9.Content.ErlangPropList
+import B9.Content.YamlObject
+import B9.Content.Generator
 
 buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
@@ -62,7 +71,7 @@ withB9Config cfgParser cliCfg f = do
       let cfg = defaultB9Config <> parsedCfg <> cliCfg
           in f cfg
 
-
+{-
 xxx :: ArtifactGenerator
 xxx =
   Each
@@ -124,3 +133,4 @@ xxx =
                       (CloudInit [CI_DIR,CI_ISO] "${out_dir}/mrfp/cloud-init/${instance_id}")
             ]
    ]]
+-}

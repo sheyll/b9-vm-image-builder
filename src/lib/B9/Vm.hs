@@ -8,7 +8,7 @@ import Data.Generics.Aliases
 import B9.ShellScript
 import B9.DiskImages
 import B9.ExecEnv
-import B9.ConfigUtils
+import B9.Content.StringTemplate
 
 -- | Describe a virtual machine, i.e. a set up disk images to create and a shell
 -- script to put things together.

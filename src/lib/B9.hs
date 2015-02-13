@@ -14,24 +14,12 @@ module B9
        ) where
 
 import Control.Applicative
-import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Monoid
 import Data.List
 import Data.Maybe
-import Data.Word
 import Text.Show.Pretty (ppShow)
-import System.Directory ( createDirectoryIfMissing
-                        , createDirectory
-                        , setCurrentDirectory
-                        , getCurrentDirectory
-                        , canonicalizePath
-                        , renameFile
-                        , removeFile
-                        , copyFile
-                        , removeDirectoryRecursive
-                        )
 import System.Exit ( exitWith
                    , ExitCode (..) )
 import System.FilePath ( takeDirectory
@@ -39,10 +27,7 @@ import System.FilePath ( takeDirectory
                        , replaceExtension
                        , (</>)
                        , (<.>) )
-import System.Process ( callCommand )
-import System.Random ( randomIO )
 import Text.Printf ( printf )
-import Text.Show.Pretty (ppShow)
 
 import B9.Builder
 import qualified B9.LibVirtLXC as LibVirtLXC

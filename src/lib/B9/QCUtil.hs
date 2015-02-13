@@ -20,3 +20,15 @@ arbitraryFilePath = do
   body <- elements ["www","passwd","cert","opnsfe","runtime"]
   extension <- elements [".txt",".png",".ps",".erl",""]
   return (path ++ prefix ++ body ++ extension)
+
+arbitraryLetter :: Gen Char
+arbitraryLetter = oneof [arbitraryLetterUpper,arbitraryLetterLower]
+
+arbitraryLetterUpper :: Gen Char
+arbitraryLetterUpper = elements ['A' .. 'Z']
+
+arbitraryLetterLower :: Gen Char
+arbitraryLetterLower = elements ['a' .. 'z']
+
+arbitraryDigit :: Gen Char
+arbitraryDigit = elements ['0' .. '9']

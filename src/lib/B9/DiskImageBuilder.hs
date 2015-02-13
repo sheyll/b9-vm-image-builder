@@ -41,6 +41,8 @@ import B9.RepositoryIO
 import B9.DiskImages
 import qualified B9.PartitionTable as P
 import B9.ConfigUtils
+import B9.Content.StringTemplate
+
 
 -- | Replace $... variables inside an 'ImageTarget'
 substImageTarget :: [(String,String)] -> ImageTarget -> ImageTarget
@@ -222,8 +224,11 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
       let fsCmd = "mkfs.ext4"
       dbgL (printf "Creating file system %s" (show imgFs))
       cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
-    (_,NoFileSystem) ->
-      return ()
+    (it, fs) -> do
+      error (printf "Cannot create file system %s in image type %s"
+                    (show fs)
+                    (show it))
+
 
 createCOWImage :: Image -> Image -> B9 ()
 createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
@@ -418,10 +423,10 @@ getLatestSharedImageByNameFromCache :: String -> B9 SharedImage
 getLatestSharedImageByNameFromCache name = do
   imgs <- lookupSharedImages (== Cache) ((== name) . siName)
   case reverse imgs of
-    [] ->
-      error (printf "No image(s) named '%s' found." name)
     (Cache, sharedImage):_rest ->
       return sharedImage
+    _ ->
+      error (printf "No image(s) named '%s' found." name)
 
 -- | Return a list of all existing sharedImages from cached repositories.
 getSharedImages :: B9 [(Repository, [SharedImage])]

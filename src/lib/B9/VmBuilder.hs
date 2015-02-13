@@ -17,7 +17,7 @@ import B9.Vm
 import B9.ArtifactGenerator
 import B9.ShellScript
 import qualified B9.LibVirtLXC as LXC
-import B9.Repository
+
 
 buildWithVm :: InstanceId -> [ImageTarget] -> FilePath -> VmScript -> B9 Bool
 buildWithVm iid imageTargets instanceDir vmScript = do
@@ -97,7 +97,7 @@ createSharedDirs instanceDir sharedDirsIn = mapM createSharedDir sharedDirsIn
     createSharedDir (SharedDirectory d m) = do
       d' <- createAndCanonicalize d
       return $ SharedDirectory d' m
-    createSharedDir (InstanceDirectory mp) = do
+    createSharedDir (SharedSources mp) = do
       d' <- createAndCanonicalize instanceDir
       return $ SharedDirectoryRO d' mp
     createAndCanonicalize d = liftIO $ do

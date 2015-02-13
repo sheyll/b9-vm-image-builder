@@ -34,13 +34,13 @@ instance Monoid Script where
   s `mappend` (Begin ss') = Begin (s : ss')
   s `mappend` s' = Begin [s, s']
 
-data Cmd = Cmd { cmdPath :: String
-               , cmdArgs :: [String]
-               , cmdUser :: User
-               , cmdCwd :: Cwd
-               , cmdErrorChecking :: Bool
-               , cmdVerbosity :: CmdVerbosity
-               } deriving (Show, Read)
+data Cmd = Cmd String -- ^ cmdPath
+               [String] -- ^ cmdArgs
+               User -- ^ cmdUser
+               Cwd -- ^ cmdCwd
+               Bool -- ^ cmdErrorChecking
+               CmdVerbosity -- ^ cmdVerbosity
+               deriving (Show, Read)
 
 data CmdVerbosity = Debug | Verbose | OnlyStdErr | Quiet
                   deriving (Show, Read, Typeable, Data,Eq)
@@ -91,11 +91,12 @@ toBash cmds =
   intercalate "\n\n" $
   bashHeader ++ (cmdToBash <$> cmds)
 
+bashHeader :: [String]
 bashHeader = [ "#!/bin/bash"
              , "set -e" ]
 
 cmdToBash :: Cmd -> String
-cmdToBash c@(Cmd cmd args user cwd ignoreErrors verbosity) =
+cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
   intercalate "\n" $ disableErrorChecking
                      ++ pushd cwdQ
                      ++ execCmd
