@@ -189,16 +189,13 @@ toSourceGen :: [(String, String)]
             -> Either String [SourceGenerator]
 toSourceGen env src =
   case src of
-    Template f -> do
+    Embed t (Source conv f) -> do
+      t' <- substE env t
       f' <- substE env f
-      return [SGConcat Append env [SGFrom SGT f'] KeepPerm (takeFileName f')]
-    Templates fs ->
-      join <$> mapM (toSourceGen env . Template) fs
-    File f -> do
-      f' <- substE env f
-      return [SGConcat Append env [SGFrom SGF f'] KeepPerm (takeFileName f')]
-    Files fs ->
-      join <$> mapM (toSourceGen env . File) fs
+      let conv' = case conv of
+                    NoConversion -> SGF
+                    ExpandVariables -> SGT
+      return [SGConcat Append env [SGFrom conv' f'] KeepPerm t']
     Concatenation t src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       t' <- substE env t
@@ -214,9 +211,6 @@ toSourceGen env src =
       t' <- substE env t
       let froms = join (sgGetFroms <$> sgs)
       return [SGConcat MergeErlangTerms env froms KeepPerm t']
-    YamlLiteral t y ->
-
-      return []
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs

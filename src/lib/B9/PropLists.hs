@@ -1,8 +1,10 @@
 -- Instances of 'B9.ConcatableSyntax' for some commonly used
 -- syntax types.
 module B9.PropLists (YamlObject (..)
-                    ,ErlangPropList (..)) where
+                    ,ErlangPropList (..)
+                    ) where
 
+import Data.Data
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import Data.Yaml
@@ -11,7 +13,8 @@ import Data.HashMap.Strict
 import Data.Vector ((++))
 import Prelude hiding ((++))
 import Data.List (partition,sortBy)
-import Data.Semigroup
+import Data.Monoid
+import Text.Printf
 
 import B9.ErlTerms
 import B9.ConcatableSyntax
@@ -19,17 +22,22 @@ import B9.ConcatableSyntax
 -- | A wrapper type around erlang terms with a Semigroup instance useful for
 -- combining sys.config files with OTP-application configurations in a list of
 -- the form of a proplist.
-newtype ErlangPropList = ErlangPropList SimpleErlangTerm
-  deriving (Eq,Show)
+data ErlangPropList = ErlangPropList SimpleErlangTerm | EmptyErlangPropList
+  deriving (Read,Eq,Show,Data,Typeable)
 
-instance Semigroup ErlangPropList where
-  (ErlangPropList v1) <> (ErlangPropList v2) = ErlangPropList (combine v1 v2)
+instance Monoid ErlangPropList where
+  mempty = EmptyErlangPropList
+
+  EmptyErlangPropList `mappend` x = x
+  x `mappend` EmptyErlangPropList = x
+
+  (ErlangPropList v1) `mappend` (ErlangPropList v2) = ErlangPropList (combine v1 v2)
     where
       combine (ErlList l1) (ErlList l2) =
-        ErlList (l1Only <> merged <> l2Only)
+        ErlList (l1Only `mappend` merged `mappend` l2Only)
         where
-          l1Only = l1NonPairs <> l1NotL2
-          l2Only = l2NonPairs <> l2NotL1
+          l1Only = l1NonPairs `mappend` l1NotL2
+          l2Only = l2NonPairs `mappend` l2NotL1
           (l1Pairs,l1NonPairs) = partition isPair l1
           (l2Pairs,l2NonPairs) = partition isPair l2
           merged = zipWith merge il1 il2
@@ -40,10 +48,10 @@ instance Semigroup ErlangPropList where
             partitionByKey l1Sorted l2Sorted ([],[],[],[])
             where
               partitionByKey [] ys  (exs,cxs,cys,eys) =
-                (reverse exs,reverse cxs,reverse cys,reverse eys <> ys)
+                (reverse exs,reverse cxs,reverse cys,reverse eys `mappend` ys)
 
               partitionByKey xs []  (exs,cxs,cys,eys) =
-                (reverse exs <> xs,reverse cxs,reverse cys,reverse eys)
+                (reverse exs `mappend` xs,reverse cxs,reverse cys,reverse eys)
 
               partitionByKey (x:xs) (y:ys) (exs,cxs,cys,eys)
                 | equalKey x y = partitionByKey xs ys (exs,x:cxs,y:cys,eys)
@@ -61,13 +69,13 @@ instance Semigroup ErlangPropList where
           isPair (ErlTuple [_,_]) = True
           isPair _ = False
 
-      combine (ErlList pl1) t2 = ErlList (pl1 <> [t2])
-      combine t1 (ErlList pl2) = ErlList ([t1] <> pl2)
+      combine (ErlList pl1) t2 = ErlList (pl1 `mappend` [t2])
+      combine t1 (ErlList pl2) = ErlList ([t1] `mappend` pl2)
       combine t1 t2 = ErlList [t1,t2]
 
 instance ConcatableSyntax ErlangPropList where
-  decodeSyntax str = do
-    t <- parseErlTerm "" str
+  decodeSyntax src str = do
+    t <- parseErlTerm src str
     return (ErlangPropList t)
 
   encodeSyntax (ErlangPropList t) =
@@ -75,11 +83,16 @@ instance ConcatableSyntax ErlangPropList where
 
 -- | A wrapper type around yaml values with a Semigroup instance useful for
 -- combining yaml documents describing system configuration like e.g. user-data.
-newtype YamlObject = YamlObject Data.Yaml.Value
+data YamlObject = YamlObject Data.Yaml.Value | EmptyYamlObject
   deriving (Eq,Show)
 
-instance Semigroup YamlObject where
-  (YamlObject v1) <> (YamlObject v2) = YamlObject (combine v1 v2)
+instance Monoid YamlObject where
+  mempty = EmptyYamlObject
+
+  EmptyYamlObject `mappend` x = x
+  x `mappend` EmptyYamlObject = x
+
+  (YamlObject v1) `mappend` (YamlObject v2) = YamlObject (combine v1 v2)
     where
       combine :: Data.Yaml.Value
               -> Data.Yaml.Value
@@ -92,9 +105,14 @@ instance Semigroup YamlObject where
         array [t1,t2]
 
 instance ConcatableSyntax YamlObject where
-  decodeSyntax str = do
-    o <- decodeEither str
-    return (YamlObject o)
+  decodeSyntax src str = do
+    case decodeEither str of
+      Left e ->
+        Left (printf "YamlObject parse error in file '%s':\n%s\n"
+                      src
+                      e)
+      Right o ->
+        return (YamlObject o)
 
   encodeSyntax (YamlObject o) =
-    E.encodeUtf8 (T.pack "#cloud-config\n") <> encode o
+    E.encodeUtf8 (T.pack "#cloud-config\n") `mappend` encode o

@@ -1,5 +1,5 @@
-module B9.ConcatableSyntax (ConcatableSyntax(..)
-                           ,concatSources) where
+module B9.ConcatableSyntax ( ConcatableSyntax (..)
+                           ) where
 
 import qualified Data.ByteString as B
 import Data.Semigroup
@@ -13,14 +13,11 @@ import Data.Semigroup
 -- syntax that can be parsed, concatenated e.g. like in the above example and
 -- rendered. The actual concatenation operation is the append from Monoid,
 -- i.e. like monoid but without the need for an empty element.
-class Semigroup a => ConcatableSyntax a where
-  decodeSyntax :: B.ByteString -> Either String a
+class (Monoid a) => ConcatableSyntax a where
+  decodeSyntax :: FilePath -> B.ByteString -> Either String a
   encodeSyntax :: a -> B.ByteString
 
 
 instance ConcatableSyntax B.ByteString where
-  decodeSyntax = Right
-  encodeSyntax = id
-
-concatSources :: (Semigroup a, ConcatableSyntax a) => [B.ByteString] -> Either String a
-concatSources srcs = mapM decodeSyntax srcs >>= return . (foldl1 (<>))
+  decodeSyntax _ = Right
+  encodeSyntax   = id
