@@ -44,21 +44,29 @@ withEnvironment env action = runReaderT action (Environment env)
 
 readTemplateFile :: (MonadIO m, MonadReader Environment m)
                  => SourceFile -> m B.ByteString
-readTemplateFile (Source conv f) = do
-  c <- liftIO (B.readFile f)
-  convert c
+readTemplateFile (Source conv f') = do
+  Environment env <- ask
+  case substE env f' of
+    Left e ->
+      error (printf "Failed to substitute templates in source \
+                    \file name '%s'/\nError: %s\n"
+                    f' e)
+    Right f -> do
+      c <- liftIO (B.readFile f)
+      convert f c
+
   where
-    convert c = case conv of
-                  NoConversion -> return c
-                  ExpandVariables -> do
-                    Environment env <- ask
-                    case substEB env c of
-                      Left e ->
-                        error (printf "readTemplateFile '%s' failed: \n%s\n"
-                                       f
-                                       e)
-                      Right c' ->
-                        return c'
+    convert f c = case conv of
+                    NoConversion -> return c
+                    ExpandVariables -> do
+                      Environment env <- ask
+                      case substEB env c of
+                        Left e ->
+                          error (printf "readTemplateFile '%s' failed: \n%s\n"
+                                         f
+                                         e)
+                        Right c' ->
+                          return c'
 
 
 -- String template substitution via dollar
