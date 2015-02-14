@@ -151,10 +151,10 @@ data CGEnv = CGEnv { agEnv :: [(String, String)]
   deriving (Read, Show, Eq)
 
 data InstanceGenerator e = IG InstanceId e ArtifactAssembly
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Eq)
 
 newtype CGError = CGError String
-  deriving (Read, Show, Typeable, Data, Eq, Error)
+  deriving (Read, Show, Eq, Error)
 
 cgError :: String -> CGParser a
 cgError msg = throwError (CGError msg)
@@ -172,16 +172,11 @@ execIGEnv (IG iid (CGEnv env sources) assembly) = do
     sourceGens = join <$> mapM (toSourceGen env) sources
 
 substAssembly :: [(String,String)] -> ArtifactAssembly -> ArtifactAssembly
-substAssembly env p = everywhere gsubst p
-  where gsubst :: forall a. Data a => a -> a
-        gsubst = mkT substAssembly_
-                   `extT` (substImageTarget env)
-                     `extT` (substVmScript env)
-
-        substAssembly_ (CloudInit ts f) = CloudInit ts (sub f)
-        substAssembly_ vm = vm
-
-        sub = subst env
+substAssembly env (CloudInit ts f gs) =
+  CloudInit ts (subst env f) gs
+substAssembly env (VmImages imageTargets vmScript) =
+  VmImages (substImageTarget env <$> imageTargets)
+           (substVmScript env vmScript)
 
 toSourceGen :: [(String, String)]
             -> ArtifactSource
@@ -316,7 +311,8 @@ createTarget iid instanceDir (VmImages imageTargets vmScript) = do
   dbgL (printf "Creating VM-Images in '%s'" instanceDir)
   buildWithVm iid imageTargets instanceDir vmScript
   return [VmImagesTarget]
-createTarget _ instanceDir (CloudInit types outPath) = do
+createTarget _ instanceDir (CloudInit types outPath sources) = do
+  generateSourceTo instanceDir `mapM` sources
   mapM create_ types
   where
     create_ CI_DIR = do

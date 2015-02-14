@@ -68,19 +68,19 @@ buildIdKey = "build_id"
 buildDateKey :: String
 buildDateKey = "build_date"
 
-data ArtifactAssembly = CloudInit [CloudInitType] FilePath
+data ArtifactAssembly = CloudInit [CloudInitType] FilePath [ArtifactSource]
                       | VmImages [ImageTarget] VmScript
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Eq)
 
 data AssembledArtifact = AssembledArtifact InstanceId [ArtifactTarget]
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Eq)
 
 data ArtifactTarget = CloudInitTarget CloudInitType FilePath
                     | VmImagesTarget
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Eq)
 
 data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Eq)
 
 instance Arbitrary ArtifactGenerator where
   arbitrary = oneof [ Sources <$> (halfSize arbitrary) <*> (halfSize arbitrary)
@@ -126,7 +126,10 @@ instance Arbitrary InstanceId where
   arbitrary = IID <$> arbitraryFilePath
 
 instance Arbitrary ArtifactAssembly where
-  arbitrary = oneof [ CloudInit <$> arbitrary <*> arbitraryFilePath
+  arbitrary = oneof [ CloudInit
+                      <$> arbitrary
+                      <*> arbitraryFilePath
+                      <*> smaller arbitrary
                     , pure (VmImages [] NoVmScript)
                     ]
 
