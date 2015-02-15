@@ -136,8 +136,9 @@ ensureAbsoluteImageDirExists img@(Image path _ _) = do
 materializeImageSource :: ImageSource -> Image -> B9 ()
 materializeImageSource src dest =
   case src of
-   (EmptyImage fsLabel fsType imgType size) ->
-     createEmptyImage fsLabel fsType imgType size dest
+   (EmptyImage fsLabel fsType _imgType size) ->
+     let (Image _ imgType _) = dest
+     in createEmptyImage fsLabel fsType imgType size dest
    (SourceImage srcImg part resize) ->
      createImageFromImage srcImg part resize dest
    (CopyOnWrite backingImg) ->

@@ -1,5 +1,5 @@
 name:                b9
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Use light-weight containers to build heavy-weight VM images.
 description:         A set of Linux tools for using and creating VM Images from a declaretiv build script using Libvirt-LXC with a focus in compatibility to non-lxc hypervisors.
 license:             MIT
