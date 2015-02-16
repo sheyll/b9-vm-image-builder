@@ -314,7 +314,10 @@ setSGToDirectory toDir (SGConcat e fs p d) =
 createTarget :: InstanceId -> FilePath -> ArtifactAssembly -> B9 [ArtifactTarget]
 createTarget iid instanceDir (VmImages imageTargets vmScript) = do
   dbgL (printf "Creating VM-Images in '%s'" instanceDir)
-  buildWithVm iid imageTargets instanceDir vmScript
+  success <- buildWithVm iid imageTargets instanceDir vmScript
+  let err_msg = printf "Error creating 'VmImages' for instance '%s'" iidStr
+      (IID iidStr) = iid
+  unless success (errorL err_msg >> error err_msg)
   return [VmImagesTarget]
 createTarget _ instanceDir (CloudInit types outPath) = do
   mapM create_ types
