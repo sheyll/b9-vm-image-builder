@@ -107,7 +107,7 @@ cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
       where runuser = case user of
               NoUser -> []
               User "root" -> []
-              User u -> ["runuser", "-p", "-u", u]
+              User u -> ["runuser", "-p", "-u", u, "--"]
     pushd NoCwd = [ ]
     pushd (Cwd cwdPath) = [ unwords (["pushd", cwdPath] ++ redirectOutput) ]
     popd NoCwd = [ ]
