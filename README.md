@@ -1,6 +1,6 @@
 # B9 - A Benign VM-Build Tool
 
-[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg)](https://travis-ci.org/sheyll/b9-vm-image-builder)
+[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=master)](https://travis-ci.org/sheyll/b9-vm-image-builder)
 
 Use B9 to compile your software into a deployable set of Linux-VM- or
 configuration images, from a set of scripts and input files and templates
