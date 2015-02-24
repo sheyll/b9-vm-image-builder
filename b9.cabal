@@ -1,5 +1,5 @@
 name:                b9
-version:             0.2.1
+version:             0.2.2
 synopsis:            A build tool and library for virtual machines.
 description:         An experimental tool and library for creating, modifying, running
                      and sharing virtual machines.
@@ -14,7 +14,7 @@ copyright:           2015 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
 extra-source-files:  README.md, build_and_run.sh, build_and_test.sh, build_haddock.sh, installDeps.sh,
-                     run.sh, LICENSE, TODO.org, Setup.hs, b9.cabal, .gitignore, prepare_release.sh
+                     run.sh, LICENSE, TODO.org, Setup.hs, b9.cabal, .gitignore, prepare_release.sh, .travis.yml
 cabal-version:       >=1.10
 
 source-repository head
