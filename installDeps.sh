@@ -11,4 +11,6 @@ rm -f cabal.config
 wget http://www.stackage.org/lts/cabal.config
 cabal update -v
 cabal sandbox -v init
+cabal install happy alex haddock
+export PATH=$(pwd)/.cabal-sandbox/bin:$PATH
 cabal install -v --only-dependencies --enable-tests -j
