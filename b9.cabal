@@ -1,7 +1,7 @@
 name:                b9
-version:             0.1.0.1
-synopsis:            Use light-weight containers to build heavy-weight VM images.
-description:         A set of Linux tools for using and creating VM Images from a declaretiv build script using Libvirt-LXC with a focus in compatibility to non-lxc hypervisors.
+version:             0.2.0
+synopsis:            A build tool for virtual machines.
+description:         A tool for creating, modifying, running and sharing VM Images.
 license:             MIT
 license-file:        LICENSE
 author:              Sven Heyll <svh@posteo.de>
@@ -9,8 +9,13 @@ maintainer:          svh@posteo.de
 copyright:           2015 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
-extra-source-files:  README.md
+extra-source-files:  README.md, build_and_run.sh, build_and_test.sh, build_haddock.sh, installDeps.sh,
+                     run.sh, LICENSE, TODO.org, Setup.hs, b9.cabal, .gitignore, prepare_release.sh
 cabal-version:       >=1.10
+
+source-repository head
+  type:                 git
+  location:             git://github.com/sheyll/b9-vm-image-builder.git
 
 library
   exposed-modules:   B9
@@ -76,7 +81,7 @@ library
                     , GADTs
   hs-source-dirs:    src/lib
   default-language:  Haskell2010
-  ghc-options:       -O3 -threaded -with-rtsopts=-N -Wall
+  ghc-options:       -O3 -with-rtsopts=-N -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind
 
 executable b9c
