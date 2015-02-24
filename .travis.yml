@@ -1,4 +1,1 @@
 language: haskell
-ghc:
-  - 7.8
-script: ./prepare_release.sh
