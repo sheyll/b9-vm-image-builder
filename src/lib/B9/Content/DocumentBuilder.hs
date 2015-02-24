@@ -19,7 +19,7 @@ data Free m a = Do (m (Free m a)) | Done a
 
 instance (Functor m) => Monad (Free m) where
   return         = Done
-  (Do m) >>= f = Do (fmap (>>= f) m)
+  (Do m) >>= f   = Do (fmap (>>= f) m)
   (Done r) >>= f = f r
 
 instance Functor m => Functor (Free m) where

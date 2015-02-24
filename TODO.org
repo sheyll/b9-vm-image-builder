@@ -73,6 +73,17 @@
 ***** disk index
 ***** kexec infos
 ***** disk version?
+***** Maybe SshLogin
 * Improve Commands
 ** Use Shell-Escaping: http://hackage.haskell.org/package/shell-escape-0.1.2
-** Move 'ShellScripting' dependency into the exec env, thereby making the project independent of 'Bash'- scripting
+** Split/Move 'ShellScripting' dependency into the exec env, thereby making the project independent of 'Bash'- scripting
+** Add 'list-artifacts' command
+** Allow building of only a single artifact
+* More Backends
+** Add VM based backend: VirtualBox
+* Improve test coverage
+** Add test coverage profiling tool
+* Make B9 a real library
+** Restrict exposed modules
+** Add pure library functions for munging Artifacts
+* Add building of RPMs and ARCHLINUX packages
