@@ -9,6 +9,8 @@
 #
 set -eu
 
+PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
+
 ./installDeps.sh
 ./build_and_test.sh
 ./build_haddock.sh

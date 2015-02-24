@@ -4,5 +4,7 @@
 
 set -e
 
+PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
+
 cabal install
 ./run.sh $@

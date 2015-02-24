@@ -4,6 +4,8 @@
 
 set -e
 
+PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
+
 if [[ ! -x .cabal-sandbox/bin/b9c ]]; then
     cabal install
 fi

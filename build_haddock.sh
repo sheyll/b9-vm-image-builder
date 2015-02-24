@@ -4,4 +4,6 @@
 #
 set -xeu
 
+PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
+
 cabal haddock
