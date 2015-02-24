@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
--- EXPERIMENT!!!
-
+-- | EXPERIMENTAL MODULE - IGNORE !!!
 module B9.Content.DocumentBuilder where
 
 import Control.Applicative

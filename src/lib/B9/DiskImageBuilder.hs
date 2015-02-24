@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-| Effectful functions that create and convert disk image files. -}
 module B9.DiskImageBuilder (materializeImageSource
                            ,substImageTarget
                            ,preferredDestImageTypes

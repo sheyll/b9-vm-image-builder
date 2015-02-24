@@ -1,4 +1,7 @@
 {-# LANGUAGE GADTs #-}
+{-|
+Highest-level build functions and and B9-re-exports.
+-}
 module B9.Builder ( module B9.B9Monad
                   , module B9.ConfigUtils
                   , module B9.B9Config

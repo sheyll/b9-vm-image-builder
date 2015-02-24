@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-| Definition of 'Script' and functions to convert 'Script's to bash
+    scripts. -}
 module B9.ShellScript ( writeSh
                       , emptyScript
                       , CmdVerbosity (..)
@@ -34,12 +36,12 @@ instance Monoid Script where
   s `mappend` (Begin ss') = Begin (s : ss')
   s `mappend` s' = Begin [s, s']
 
-data Cmd = Cmd String -- ^ cmdPath
-               [String] -- ^ cmdArgs
-               User -- ^ cmdUser
-               Cwd -- ^ cmdCwd
-               Bool -- ^ cmdErrorChecking
-               CmdVerbosity -- ^ cmdVerbosity
+data Cmd = Cmd String
+               [String]
+               User
+               Cwd
+               Bool
+               CmdVerbosity
                deriving (Show, Read)
 
 data CmdVerbosity = Debug | Verbose | OnlyStdErr | Quiet

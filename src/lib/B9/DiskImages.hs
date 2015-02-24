@@ -1,3 +1,5 @@
+{-| Data types that describe all B9 relevant elements of virtual machine disk
+    images. -}
 module B9.DiskImages where
 
 import Data.Semigroup

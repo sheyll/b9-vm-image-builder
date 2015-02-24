@@ -1,3 +1,4 @@
+{-| Implementation of an execution environment that uses "libvirt-lxc". -}
 module B9.LibVirtLXC ( runInEnvironment
                      , supportedImageTypes
                      , setDefaultConfig

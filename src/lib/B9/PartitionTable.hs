@@ -1,3 +1,5 @@
+{-| Function to find the file offsets of primary partitions in raw disk
+    images. Currently only MBR partitions are supported. See 'B9.MBR' -}
 module B9.PartitionTable ( getPartition ) where
 
 import Control.Applicative

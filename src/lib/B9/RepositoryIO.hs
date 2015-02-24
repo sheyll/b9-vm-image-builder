@@ -1,3 +1,5 @@
+{-| Effectful functions executing shared image respository operations.
+    See "B9.Repository" -}
 module B9.RepositoryIO (repoSearch
                        ,pushToRepo
                        ,pullFromRepo

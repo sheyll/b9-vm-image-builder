@@ -1,5 +1,5 @@
--- A wrapper around erlang and yaml syntax with a proplist-like behaviour in the
--- ConcatableSyntax instances
+{-| A wrapper around erlang and yaml syntax with a proplist-like behaviour in
+    the ConcatableSyntax instances -}
 module B9.Content.YamlObject ( YamlObject (..)
                              ) where
 

@@ -1,3 +1,5 @@
+{-| Utility module to extract a primary partition from an MBR partition on a
+    raw image file. -}
 module B9.MBR ( getPartition
               , PrimaryPartition (..)
               , MBR(..)

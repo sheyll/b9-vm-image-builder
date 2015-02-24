@@ -1,3 +1,6 @@
+{-|
+Some QuickCheck utility functions.
+-}
 module B9.QCUtil where
 
 import Control.Applicative

@@ -1,4 +1,6 @@
 {-# Language DeriveDataTypeable #-}
+{-| Extensions to 'Data.ConfigFile' and utility functions for dealing with
+    configuration in general and reading/writing files. -}
 module B9.ConfigUtils ( allOn
                       , lastOn
                       , SystemPath (..)

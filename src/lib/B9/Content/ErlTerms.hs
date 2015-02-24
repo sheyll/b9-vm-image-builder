@@ -1,3 +1,4 @@
+{-| Erlang term parser and pretty printer. -}
 module B9.Content.ErlTerms (parseErlTerm
                            ,renderErlTerm
                            ,SimpleErlangTerm(..)

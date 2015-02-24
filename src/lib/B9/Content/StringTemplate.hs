@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-| Utility functions bnased on 'Data.Text.Template' to offer @ $var @ variable
+    expansion in string throughout a B9 artifact. -}
 module B9.Content.StringTemplate (subst
                                  ,substE
                                  ,substEB

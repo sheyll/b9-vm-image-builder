@@ -1,5 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-|
+Top-Level data types for B9 build artifacts.
+-}
 module B9.ArtifactGenerator
   (ArtifactGenerator(..)
   ,ArtifactSource(..)

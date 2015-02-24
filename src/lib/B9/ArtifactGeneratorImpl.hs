@@ -1,3 +1,6 @@
+{-|
+Mostly effectful functions to assemble artifacts.
+-}
 module B9.ArtifactGeneratorImpl where
 
 import B9.ArtifactGenerator

@@ -1,4 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-| Data types describing the execution environment
+    of virtual machine builds.
+    'ExecEnv', 'Resources' and 'SharedDirectory' describe how
+    "B9.LibVirtLXC" should configure and execute
+    build scripts, as defined in "B9.ShellScript" and "B9.Vm".
+    -}
 module B9.ExecEnv
        ( ExecEnv (..)
        , Resources (..)

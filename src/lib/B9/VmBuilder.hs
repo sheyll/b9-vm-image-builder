@@ -1,3 +1,5 @@
+{-| Effectful functions to execute and build virtual machine images using
+    an execution environment like e.g. libvirt-lxc. -}
 module B9.VmBuilder (buildWithVm) where
 
 import Data.List

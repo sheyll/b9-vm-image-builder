@@ -1,3 +1,9 @@
+{-| B9 has a concept of shared images. Images can be pulled and pushed to/from
+    remote locations via rsync+ssh. B9 also maintains a local cache; the whole
+    thing is supposed to be build-server-safe, that means no two builds shall
+    interfere with each other. This is accomplished by refraining from
+    automatic cache updates from/to remote repositories.
+    -}
 module B9.Repository (RemoteRepo(..)
                      ,remoteRepoRepoId
                      ,RepoCache(..)

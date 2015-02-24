@@ -1,4 +1,8 @@
 {-# Language DeriveDataTypeable #-}
+{-|
+Static B9 configuration. Read, write and merge configurable properties.
+The properties are independent of specific build targets.
+-}
 module B9.B9Config ( B9Config(..)
                    , defaultB9ConfigFile
                    , defaultB9Config

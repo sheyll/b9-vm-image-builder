@@ -1,3 +1,5 @@
+{-| The basic data structure that ties together syntax trees making them
+    composable and addressable in B9 artifacts. -}
 module B9.Content.Generator where
 
 import Data.Data

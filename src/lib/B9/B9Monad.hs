@@ -1,21 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module B9.B9Monad ( B9
-                  , run
-                  , traceL
-                  , dbgL
-                  , infoL
-                  , errorL
-                  , getConfigParser
-                  , getConfig
-                  , getBuildId
-                  , getBuildDate
-                  , getBuildDir
-                  , getExecEnvType
-                  , getSelectedRemoteRepo
-                  , getRemoteRepos
-                  , getRepoCache
-                  , cmd
-                  ) where
+{-| Definition of the B9 monad. It encapsulates logging, very basic command
+execution profiling, a reader for the "B9.B9Config" and access to the
+current build id, the current build directory and the artifact to build.
+
+This module is used by the _effectful_ functions in this library.
+-}
+module B9.B9Monad ( B9 , run , traceL , dbgL , infoL , errorL , getConfigParser
+, getConfig , getBuildId , getBuildDate , getBuildDir , getExecEnvType ,
+getSelectedRemoteRepo , getRemoteRepos , getRepoCache , cmd ) where
 
 import           B9.B9Config
 import           B9.ConfigUtils
