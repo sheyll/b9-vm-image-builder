@@ -1,11 +1,15 @@
 name:                b9
-version:             0.2.0
-synopsis:            A build tool for virtual machines.
-description:         A tool for creating, modifying, running and sharing VM Images.
+version:             0.2.1
+synopsis:            A build tool and library for virtual machines.
+description:         An experimental tool and library for creating, modifying, running
+                     and sharing virtual machines.
+                     This tools focuses on speed, reliability and correctness.
 license:             MIT
 license-file:        LICENSE
 author:              Sven Heyll <svh@posteo.de>
 maintainer:          svh@posteo.de
+homepage:            https://github.com/sheyll/b9-vm-image-builder
+bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
 copyright:           2015 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
