@@ -3,6 +3,9 @@ module Main where
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty
 
+import Paths_b9
+import Data.Version
+
 import B9
 
 main :: IO ()
@@ -29,7 +32,8 @@ parseCommandLine =
                             \ '~/.b9/b9.config'"
                 <> headerDoc (Just helpHeader)))
   where
-    helpHeader = linebreak <> text "B9 - a benign VM-Image build tool"
+    helpHeader = linebreak <> text ("B9 - a benign VM-Image build tool v. "
+                                    ++ b9Version)
 
 data B9Options = B9Options GlobalOpts
                            BuildAction
@@ -47,6 +51,11 @@ runB9 (B9Options globalOpts action vars) = do
       cfgFile = configFile globalOpts
   cp <- configure cfgFile cfgCli
   action cfgFile cp cfgWithArgs
+
+runShowVersion :: BuildAction
+runShowVersion _cfgFile _cp _conf = do
+  putStrLn b9Version
+  return True
 
 runBuildArtifacts :: [FilePath] ->  BuildAction
 runBuildArtifacts buildFiles _cfgFile cp conf = do
@@ -184,10 +193,13 @@ globals = toGlobalOpts
                     , cliB9Config = b9cfg' }
 
 cmds :: Parser BuildAction
-cmds = subparser (  command "build"
-                             (info (runBuildArtifacts <$> buildFileParser)
-                                   (progDesc "Merge all build file and\
-                                             \ generate all artifacts."))
+cmds = subparser (   command "version"
+                               (info (pure runShowVersion)
+                                     (progDesc "Show program version and exit."))
+                  <> command "build"
+                               (info (runBuildArtifacts <$> buildFileParser)
+                                     (progDesc "Merge all build file and\
+                                               \ generate all artifacts."))
                   <> command "push"
                         (info (runPush <$> sharedImageNameParser)
                               (progDesc "Push the lastest shared image\
@@ -228,7 +240,6 @@ buildVars :: Parser BuildVariables
 buildVars = zip (("arg_"++) . show <$> ([1..] :: [Int]))
             <$> many (strArgument idm)
 
-
 remoteRepoParser :: Parser RemoteRepo
 remoteRepoParser =
   helper <*>
@@ -258,3 +269,6 @@ sharedImageNameParser =
   (SharedImageName <$> strArgument
                          (help "Shared image name"
                          <> metavar "NAME"))
+
+b9Version :: String
+b9Version = showVersion version

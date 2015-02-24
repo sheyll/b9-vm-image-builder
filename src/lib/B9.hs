@@ -10,7 +10,9 @@ module B9
        , module Data.Maybe
        , module Text.Printf
        , module Text.Show.Pretty
+       , module Data.Version
        , configure
+       , b9_version
        ) where
 
 import Control.Applicative
@@ -28,6 +30,8 @@ import System.FilePath ( takeDirectory
                        , (</>)
                        , (<.>) )
 import Text.Printf ( printf )
+import Paths_b9 (version)
+import Data.Version
 
 import B9.Builder
 import qualified B9.LibVirtLXC as LibVirtLXC
@@ -41,3 +45,7 @@ configure :: MonadIO m => Maybe SystemPath -> B9Config -> m ConfigParser
 configure b9ConfigPath existingConfig = do
   writeInitialB9Config b9ConfigPath existingConfig LibVirtLXC.setDefaultConfig
   readB9Config b9ConfigPath
+
+-- | Return the cabal package version of the B9 library.
+b9_version :: Version
+b9_version = version

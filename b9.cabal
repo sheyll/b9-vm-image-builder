@@ -38,7 +38,7 @@ library
                    , B9.Content.Generator
                    , B9.Content.StringTemplate
                    , B9.QCUtil
-
+  other-modules:   Paths_b9
   -- other-extensions:
   build-depends:     ConfigFile >= 1.1.3 && <1.2
                    , QuickCheck
