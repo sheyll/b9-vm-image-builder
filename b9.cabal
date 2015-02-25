@@ -1,9 +1,13 @@
 name:                b9
-version:             0.2.2
-synopsis:            A build tool and library for virtual machines.
-description:         An experimental tool and library for creating, modifying, running
-                     and sharing virtual machines.
-                     This tools focuses on speed, reliability and correctness.
+version:             0.2.3
+synopsis:            A build tool and library for virtual machine images.
+description:         Create, modify, use and share virtual machine images;
+                     assemble and generate all associated files from templates.
+                     All assembled files can be accessed by vm-build scripts as
+                     shared directory in the build container, and/or
+                     can be written to directories, ISO- or VFAT-images.
+                     ISO/VFAT images are created so 'cloud-init' can recognize them.
+                     VM-Build are executed in LXC containers managed through libvirt.
 license:             MIT
 license-file:        LICENSE
 author:              Sven Heyll <svh@posteo.de>
