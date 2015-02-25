@@ -3,22 +3,41 @@ version:             0.2.4
 
 synopsis:            A tool and library for building virtual machine images.
 
-description:         Build virtual machine images for vm-deployments; resize, un-partition,
-                     create from scratch or convert disk image files in a variety of
-                     formats; assemble and generate all associated files from templates
-                     and regular files.
+description:         Build virtual machine images for vm-deployments; resize,
+                     un-partition, create from scratch or convert disk image
+                     files in a variety of formats; assemble and generate all
+                     associated files from templates and regular files.
 
-                     All assembled files can be accessed by vm-build scripts as
-                     shared directory in the build container, and/or
-                     can be written to directories, ISO- or VFAT-images.
-                     ISO/VFAT images are created so 'cloud-init' can recognize them.
-                     'VmScripts' maybe defined, which are executed in LXC containers,
-                     into which the images files and arbitrary directories from the host
-                     can be mounted into.
-                     B9 is also very well suited for building software in a containerized
-                     environment. Images can be marked as 'Transient' to indicate no
-                     further interest in the VM-image itself, which will then be discarded
+
+                     VM images can further be modifed through scripts, which are
+                     executed in LXC containers into which the vm-images as well
+                     as arbitrary directories from the host are mounted.
+
+
+                     All assembled files can also be accessed by vm build
+                     scripts through a special directory mounted in the build
+                     container, and/or can be written to directories, ISO- or
+                     VFAT-images.
+
+
+                     The ISO/VFAT images that B9 creates are compatible to
+                     'cloud-init's 'NoCloud' data source;
+
+
+                     B9 is also very well suited for compiling in a
+                     containerized environment. For these applications, the
+                     images can be marked as 'Transient' to indicate no further
+                     interest in the VM-image itself, and B9 will discard them
                      after the build.
+
+
+                     B9 will never over-write source files, not even large
+                     vm-image files - there is no intended way to modify a
+                     source vm-image file 'in-place'.
+
+
+                     B9 operates in random build directories, which are
+                     discarded when the build exists.
 
 license:             MIT
 license-file:        LICENSE
