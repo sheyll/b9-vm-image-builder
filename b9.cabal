@@ -1,15 +1,25 @@
 name:                b9
 version:             0.2.4
-synopsis:            A build tool and library for virtual machine images.
-description:         Create, modify, use and share virtual machine images;
-                     assemble and generate all associated files from templates.
+
+synopsis:            A tool and library for building virtual machine images.
+
+description:         Build virtual machine images for vm-deployments; resize, un-partition,
+                     create from scratch or convert disk image files in a variety of
+                     formats; assemble and generate all associated files from templates
+                     and regular files.
+
                      All assembled files can be accessed by vm-build scripts as
                      shared directory in the build container, and/or
                      can be written to directories, ISO- or VFAT-images.
                      ISO/VFAT images are created so 'cloud-init' can recognize them.
-                     'VmScripts' maybe defined, which will are executed in LXC containers,
+                     'VmScripts' maybe defined, which are executed in LXC containers,
                      into which the images files and arbitrary directories from the host
                      can be mounted into.
+                     B9 is also very well suited for building software in a containerized
+                     environment. Images can be marked as 'Transient' to indicate no
+                     further interest in the VM-image itself, which will then be discarded
+                     after the build.
+
 license:             MIT
 license-file:        LICENSE
 author:              Sven Heyll <svh@posteo.de>
