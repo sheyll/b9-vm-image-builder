@@ -32,22 +32,23 @@ runInEnvironment env scriptIn =
     setUp = do
       cfg <- configureLibVirtLXC
       buildId <- getBuildId
-      buildDir <- getBuildDir
+      buildBaseDir <- getBuildDir
       uuid <- randomUUID
       let scriptDirHost = buildDir </> "init-script"
           scriptDirGuest = "/" ++ buildId
+          domainFile = buildBaseDir </> uuid' <.> domainConfig
           domain = createDomain cfg env buildId uuid' scriptDirHost
                    scriptDirGuest
           uuid' = printf "%U" uuid
           script = Begin [scriptIn, successMarkerCmd scriptDirGuest]
-      domainFile <- (</> domainConfig) <$> getBuildDir
+          buildDir = buildBaseDir </> uuid'
       liftIO $ do createDirectoryIfMissing True scriptDirHost
                   writeSh (scriptDirHost </> initScript) script
                   writeFile domainFile domain
       return $ Context scriptDirHost uuid domainFile cfg
 
     successMarkerCmd scriptDirGuest =
-      As "root" [In scriptDirGuest [Run "touch" [successMarkerFile]]]
+      In scriptDirGuest [Run "touch" [successMarkerFile]]
 
     execute (Context scriptDirHost uuid domainFile cfg) = do
       let virsh = virshCommand cfg
