@@ -5,7 +5,11 @@
 
     This module re-exports the modules needed to build a tool around the
     library, e.g. see @src\/cli\/Main.hs@ as an example.
-   -}
+
+    "B9.ArtifactGenerator" is the module containing the basic data structure
+    used to describe a B9 build.
+
+-}
 
 module B9
        ( module B9.Builder

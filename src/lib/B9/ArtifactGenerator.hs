@@ -30,15 +30,79 @@ import B9.QCUtil
 
 import Test.QuickCheck
 
--- | A single config generator specifies howto generate multiple output
--- files/directories. It consists of a netsted set of variable bindings that are
--- replaced inside the text files
+{-| Artifacts represent the things B9 can build. A generator specifies howto
+generate parameterized, multiple artifacts. The general structure is:
+
+@
+   Let [ ... bindings ... ]
+       [ Sources
+           [ ... list all input files ... ]
+           [ Artifact ...
+           , Artifact ...
+           , Let [ ... ] [ ... ]
+           ]
+       ]
+@
+
+The reasons why 'Sources' takes a list of 'ArtifactGenerator's is that
+1. this makes the value easier to read/write for humans
+2. the sources are static files used in all children (e.g. company logo image)
+3. the sources are parameterized by variables that bound to different values
+   for each artifact, e.g. a template network config file which contains
+   the host IP address.
+
+To bind such variables use 'Let', 'Each', 'LetX' or 'EachT'.
+
+String subtitution of these variables is done by "B9.Content.StringTemplate".
+These variables can be used as value in nested 'Let's, in most file names/paths
+and in source files added with 'B9.Content.StringTemplate.SourceFile'
+
+-}
 data ArtifactGenerator = Sources [ArtifactSource] [ArtifactGenerator]
+                       -- ^ Add sources available to 'ArtifactAssembly's in
+                       -- nested artifact generators.
                        | Let [(String, String)] [ArtifactGenerator]
+                       -- ^ Bind variables, variables are avaible in nested
+                       -- generators.
                        | LetX [(String, [String])] [ArtifactGenerator]
-                       | EachT [String] [[String]] [ArtifactGenerator]
+                       -- ^ A 'Let' where each variable is assigned to each
+                       -- value; the nested generator is executed for each
+                       -- permutation.
+                       --
+                       -- @
+                       --     LetX [("x", ["1","2","3"]), ("y", ["a","b"])] [..]
+                       -- @
+                       -- Is equal to:
+                       --
+                       -- @
+                       --     Let [] [
+                       --       Let [("x", "1"), ("y", "a")] [..]
+                       --       Let [("x", "1"), ("y", "b")] [..]
+                       --       Let [("x", "2"), ("y", "a")] [..]
+                       --       Let [("x", "2"), ("y", "b")] [..]
+                       --       Let [("x", "3"), ("y", "a")] [..]
+                       --       Let [("x", "3"), ("y", "b")] [..]
+                       --     ]
+                       -- @
                        | Each [(String,[String])] [ArtifactGenerator]
+                       -- ^ Bind each variable to their first value, then each
+                       -- variable to the second value, etc ... and execute the
+                       -- nested generator in every step. 'LetX' represents a
+                       -- product of all variables, whereas 'Each' represents a
+                       -- sum of variable bindings - 'Each' is more like a /zip/
+                       -- whereas 'LetX' is more like a list comprehension.
+                       | EachT [String] [[String]] [ArtifactGenerator]
+                       -- ^ The transposed verison of 'Each': Bind the variables
+                       -- in the first list to each a set of values from the
+                       -- second argument; execute the nested generators for
+                       -- each binding
                        | Artifact InstanceId ArtifactAssembly
+                       -- ^ Generate an artifact defined by an
+                       -- 'ArtifactAssembly'; the assembly can access the files
+                       -- created from the 'Sources' and variables bound by
+                       -- 'Let'ish elements. An artifact has an instance id,
+                       -- that is a unique, human readable string describing the
+                       -- artifact to assemble.
                        | EmptyArtifact
                        deriving (Read, Show, Eq)
 
@@ -48,33 +112,68 @@ instance Monoid ArtifactGenerator where
   x `mappend` (Let [] []) = x
   x `mappend` y = Let [] [x, y]
 
--- | Explicit is better than implicit: Only files that have explicitly been
--- listed will be included in any generated configuration. That's right: There's
--- no "inlcude *.*". B9 will check that *all* files in the directory specified with 'FromDir' are referred to by nested 'ArtifactSource's.
+-- | Describe how input files for artifacts to build are obtained.  The general
+--   structure of each constructor is __FromXXX__ /destination/ /source/
 data ArtifactSource = FromFile FilePath SourceFile
+                     -- ^ Copy a 'B9.Content.StringTemplate.SourceFile'
+                     -- potentially replacing variabled defined in 'Let'-like
+                     -- parent elements.
                     | FromContent FilePath Content
+                     -- ^ Create a file from some 'Content'
                     | SetPermissions Int Int Int [ArtifactSource]
+                     -- ^ Set the unix /file permissions/ to all files generated
+                     -- by the nested list of 'ArtifactSource's.
                     | FromDirectory FilePath [ArtifactSource]
+                     -- ^ Assume a local directory as starting point for all
+                     -- relative source files in the nested 'ArtifactSource's.
                     | IntoDirectory FilePath [ArtifactSource]
+                     -- ^ Specify an output directory for all the files
+                     -- generated by the nested 'ArtifactSource's
                     | Concatenation FilePath [ArtifactSource]
+                     -- ^ __Deprecated__ Concatenate the files generated by the
+                     -- nested 'ArtifactSource's. The nested, generated files
+                     -- are not written when they are concatenated.
     deriving (Read, Show, Eq)
 
+-- | Identify an artifact. __Deprecated__ TODO: B9 does not check if all
+-- instances IDs are unique.
 newtype InstanceId = IID String
   deriving (Read, Show, Typeable, Data, Eq)
 
+-- | The variable containing the instance id. __Deprecated__
 instanceIdKey :: String
 instanceIdKey = "instance_id"
 
+-- | The variable containing the buildId that identifies each execution of
+-- B9. For more info about variable substitution in source files see
+-- 'B9.Content.StringTemplate'
 buildIdKey :: String
 buildIdKey = "build_id"
 
+-- | The variable containing the date and time a build was started. For more
+-- info about variable substitution in source files see
+-- 'B9.Content.StringTemplate'
 buildDateKey :: String
 buildDateKey = "build_date"
 
+-- | Define an __output__ of a build. Assemblies are nested into
+-- 'ArtifactGenerator's. They contain all the files defined by the 'Sources'
+-- they are nested into.
 data ArtifactAssembly = CloudInit [CloudInitType] FilePath
+                       -- ^ Generate a __cloud-init__ compatible directory, ISO-
+                       -- or VFAT image, as specified by the list of
+                       -- 'CloudInitType's. Every item will use the second
+                       -- argument to create an appropriate /file name/,
+                       -- e.g. for the 'CI_ISO' type the output is @second_param.iso@.
                       | VmImages [ImageTarget] VmScript
+                       -- ^ a set of VM-images that were created by executing a
+                       -- build script on them.
   deriving (Read, Show, Typeable, Data, Eq)
 
+-- | A type representing the targets assembled by
+-- 'B9.ArtifactGeneratorImpl.assemble' from an 'ArtifactAssembly'. There is a
+-- list of 'ArtifactTarget's because e.g. a single 'CloudInit' can produce upto
+-- three output files, a directory, an ISO image and a VFAT image.
 data AssembledArtifact = AssembledArtifact InstanceId [ArtifactTarget]
   deriving (Read, Show, Typeable, Data, Eq)
 

@@ -34,25 +34,43 @@ import B9.Content.StringTemplate
 import Test.QuickCheck
 import B9.QCUtil
 
+-- | Types of values that can be parsed/rendered from/to 'ByteString's. This
+-- class is used as basis for the 'ASTish' class.
 class (Semigroup a) => ConcatableSyntax a where
-  decodeSyntax :: FilePath -> B.ByteString -> Either String a
+  -- Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
+  decodeSyntax :: FilePath -- ^ An arbitrary string for error messages that corresponds
+                          -- to a possible input file.
+               -> B.ByteString -- ^ The raw input to parse
+               -> Either String a
+  -- Generate a string representation of @a@
   encodeSyntax :: a -> B.ByteString
 
 instance ConcatableSyntax B.ByteString where
   decodeSyntax _ = Right
   encodeSyntax   = id
 
--- | A simple AST wrapper for merging embeded ASTs
-data AST c a = ASTObj [(String, AST c a)]
-             | ASTArr [AST c a]
-             | ASTMerge [AST c a]
-             | ASTEmbed c
-             | ASTString String
-             | ASTParse SourceFile
-             | AST a
+-- | Describe how to create structured content that has a tree-like syntactic
+-- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines
+-- a /context/ into which the 'AST' is embeded,
+-- e.g. B9.Content.Generator.Content'. The second parameter defines a specifix
+-- syntax, e.g 'B9.Content.ErlangPropList' that the 'AST' value generates.
+data AST c a = ASTObj [(String, AST c a)] -- ^ Create an object similar to a
+                                          -- Json object.
+             | ASTArr [AST c a] -- ^ An array.
+             | ASTMerge [AST c a] -- ^ Merge the nested elements, this is a very
+                                  -- powerful tool that allows to combine
+                                  -- several inputs in a smart and safe way,
+                                  -- e.g. by merging the values of the same
+                                  -- fields in yaml objects.
+             | ASTEmbed c -- Embed some pure content.
+             | ASTString String -- A string literal.
+             | ASTParse SourceFile -- An 'AST' obtained from parsing a source
+                                   -- file that contains a string corresponding
+                                   -- to the type parameter @a@, e.g. 'YamlObject's
+             | AST a -- Embed a literal @a@.
   deriving (Read, Show, Typeable, Data, Eq)
 
--- | Structure data into an abstract syntax tree
+-- | Types of values that describe content, that can be created from an 'AST'.
 class (ConcatableSyntax a) => ASTish a where
   fromAST :: (CanRender c
             ,Applicative m
@@ -62,7 +80,7 @@ class (ConcatableSyntax a) => ASTish a where
           => AST c a
           -> m a
 
--- | Things that produce byte strings.
+-- | Types of values that can be /rendered/ into a 'ByteString'
 class CanRender c where
   render :: (Functor m
            ,Applicative m
