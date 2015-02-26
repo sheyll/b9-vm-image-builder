@@ -86,4 +86,8 @@
 * Make B9 a real library
 ** Restrict exposed modules
 ** Add pure library functions for munging Artifacts
+** Move SharedImage functions from DiskImageBuilder to a better place
+** Refactor the B9Monad.run function to not need a ConfigParser
+** Move 'Repository' from B9.RepositoryIO to B9.Repository
 * Add building of RPMs and ARCHLINUX packages
+* Use unique ids for vm image builds
