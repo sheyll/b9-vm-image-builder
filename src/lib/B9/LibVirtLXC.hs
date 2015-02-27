@@ -26,8 +26,8 @@ supportedImageTypes = [Raw]
 runInEnvironment :: ExecEnv -> Script -> B9 Bool
 runInEnvironment env scriptIn =
   if emptyScript scriptIn
-     then return True
-     else setUp >>= execute
+    then return True
+    else setUp >>= execute
   where
     setUp = do
       cfg <- configureLibVirtLXC
@@ -37,14 +37,14 @@ runInEnvironment env scriptIn =
       let scriptDirHost = buildDir </> "init-script"
           scriptDirGuest = "/" ++ buildId
           domainFile = buildBaseDir </> uuid' <.> domainConfig
-          domain = createDomain cfg env buildId uuid' scriptDirHost
-                   scriptDirGuest
+          domain = createDomain cfg env buildId uuid' scriptDirHost scriptDirGuest
           uuid' = printf "%U" uuid
           script = Begin [scriptIn, successMarkerCmd scriptDirGuest]
           buildDir = buildBaseDir </> uuid'
-      liftIO $ do createDirectoryIfMissing True scriptDirHost
-                  writeSh (scriptDirHost </> initScript) script
-                  writeFile domainFile domain
+      liftIO $ do
+        createDirectoryIfMissing True scriptDirHost
+        writeSh (scriptDirHost </> initScript) script
+        writeFile domainFile domain
       return $ Context scriptDirHost uuid domainFile cfg
 
     successMarkerCmd scriptDirGuest =
@@ -63,9 +63,12 @@ runInEnvironment env scriptIn =
 
     virshCommand :: LibVirtLXCConfig -> String
     virshCommand cfg = printf "%s%s -c %s" useSudo' virshPath' virshURI'
-      where useSudo' = if useSudo cfg then "sudo " else ""
-            virshPath' = virshPath cfg
-            virshURI' = virshURI cfg
+      where
+        useSudo' = if useSudo cfg
+                     then "sudo "
+                     else ""
+        virshPath' = virshPath cfg
+        virshURI' = virshURI cfg
 
 data Context = Context FilePath UUID FilePath LibVirtLXCConfig
 
@@ -79,63 +82,63 @@ data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Bool
 
 -- | Available linux capabilities for lxc containers. This maps directly to the
 -- capabilities defined in 'man 7 capabilities'.
-data LXCGuestCapability =
-       CAP_MKNOD
-     | CAP_AUDIT_CONTROL
-     | CAP_AUDIT_READ
-     | CAP_AUDIT_WRITE
-     | CAP_BLOCK_SUSPEND
-     | CAP_CHOWN
-     | CAP_DAC_OVERRIDE
-     | CAP_DAC_READ_SEARCH
-     | CAP_FOWNER
-     | CAP_FSETID
-     | CAP_IPC_LOCK
-     | CAP_IPC_OWNER
-     | CAP_KILL
-     | CAP_LEASE
-     | CAP_LINUX_IMMUTABLE
-     | CAP_MAC_ADMIN
-     | CAP_MAC_OVERRIDE
-     | CAP_NET_ADMIN
-     | CAP_NET_BIND_SERVICE
-     | CAP_NET_BROADCAST
-     | CAP_NET_RAW
-     | CAP_SETGID
-     | CAP_SETFCAP
-     | CAP_SETPCAP
-     | CAP_SETUID
-     | CAP_SYS_ADMIN
-     | CAP_SYS_BOOT
-     | CAP_SYS_CHROOT
-     | CAP_SYS_MODULE
-     | CAP_SYS_NICE
-     | CAP_SYS_PACCT
-     | CAP_SYS_PTRACE
-     | CAP_SYS_RAWIO
-     | CAP_SYS_RESOURCE
-     | CAP_SYS_TIME
-     | CAP_SYS_TTY_CONFIG
-     | CAP_SYSLOG
-     | CAP_WAKE_ALARM
+data LXCGuestCapability = CAP_MKNOD
+                        | CAP_AUDIT_CONTROL
+                        | CAP_AUDIT_READ
+                        | CAP_AUDIT_WRITE
+                        | CAP_BLOCK_SUSPEND
+                        | CAP_CHOWN
+                        | CAP_DAC_OVERRIDE
+                        | CAP_DAC_READ_SEARCH
+                        | CAP_FOWNER
+                        | CAP_FSETID
+                        | CAP_IPC_LOCK
+                        | CAP_IPC_OWNER
+                        | CAP_KILL
+                        | CAP_LEASE
+                        | CAP_LINUX_IMMUTABLE
+                        | CAP_MAC_ADMIN
+                        | CAP_MAC_OVERRIDE
+                        | CAP_NET_ADMIN
+                        | CAP_NET_BIND_SERVICE
+                        | CAP_NET_BROADCAST
+                        | CAP_NET_RAW
+                        | CAP_SETGID
+                        | CAP_SETFCAP
+                        | CAP_SETPCAP
+                        | CAP_SETUID
+                        | CAP_SYS_ADMIN
+                        | CAP_SYS_BOOT
+                        | CAP_SYS_CHROOT
+                        | CAP_SYS_MODULE
+                        | CAP_SYS_NICE
+                        | CAP_SYS_PACCT
+                        | CAP_SYS_PTRACE
+                        | CAP_SYS_RAWIO
+                        | CAP_SYS_RESOURCE
+                        | CAP_SYS_TIME
+                        | CAP_SYS_TTY_CONFIG
+                        | CAP_SYSLOG
+                        | CAP_WAKE_ALARM
   deriving (Read, Show)
 
 defaultLibVirtLXCConfig :: LibVirtLXCConfig
 defaultLibVirtLXCConfig = LibVirtLXCConfig
-                          True
-                          "/usr/bin/virsh"
-                          "/usr/lib/libvirt/libvirt_lxc"
-                          "lxc:///"
-                          Nothing
-                          [CAP_MKNOD
-                          ,CAP_SYS_ADMIN
-                          ,CAP_SYS_CHROOT
-                          ,CAP_SETGID
-                          ,CAP_SETUID
-                          ,CAP_NET_BIND_SERVICE
-                          ,CAP_SETPCAP
-                          ,CAP_SYS_PTRACE
-                          ,CAP_SYS_MODULE]
+                            True
+                            "/usr/bin/virsh"
+                            "/usr/lib/libvirt/libvirt_lxc"
+                            "lxc:///"
+                            Nothing
+                            [ CAP_MKNOD
+                            , CAP_SYS_ADMIN
+                            , CAP_SYS_CHROOT
+                            , CAP_SETGID
+                            , CAP_SETUID
+                            , CAP_NET_BIND_SERVICE
+                            , CAP_SETPCAP
+                            , CAP_SYS_PTRACE
+                            , CAP_SYS_MODULE
+                            ]
 
 cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
@@ -173,19 +176,26 @@ setDefaultConfig = either (error . show) id eitherCp
       setshow cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
 
 readLibVirtConfig :: B9 LibVirtLXCConfig
-readLibVirtConfig = do
-  cp <- getConfigParser
-  let geto :: (Get_C a, Read a) => OptionSpec -> a -> a
-      geto = getOptionOr cp cfgFileSection
-  return $ LibVirtLXCConfig {
-    useSudo = geto useSudoK $ useSudo defaultLibVirtLXCConfig
-    , virshPath = geto virshPathK $ virshPath defaultLibVirtLXCConfig
-    , emulator = geto emulatorK $ emulator defaultLibVirtLXCConfig
-    , virshURI = geto virshURIK $ virshURI defaultLibVirtLXCConfig
-    , networkId = geto networkIdK $ networkId defaultLibVirtLXCConfig
-    , guestCapabilities = geto guestCapabilitiesK $
-                          guestCapabilities defaultLibVirtLXCConfig
-    }
+readLibVirtConfig =
+  do
+    cp <- getConfigParser
+    let geto :: (Get_C a, Read a)
+             => OptionSpec -> a -> a
+        geto = getOptionOr cp cfgFileSection
+    return $
+      LibVirtLXCConfig { useSudo = geto useSudoK $
+                         useSudo defaultLibVirtLXCConfig
+                       , virshPath = geto virshPathK $
+                         virshPath defaultLibVirtLXCConfig
+                       , emulator = geto emulatorK $
+                         emulator defaultLibVirtLXCConfig
+                       , virshURI = geto virshURIK $
+                         virshURI defaultLibVirtLXCConfig
+                       , networkId = geto networkIdK $
+                         networkId defaultLibVirtLXCConfig
+                       , guestCapabilities = geto guestCapabilitiesK $
+                         guestCapabilities defaultLibVirtLXCConfig
+                       }
 
 initScript :: String
 initScript = "init.sh"
@@ -239,8 +249,9 @@ renderGuestCapabilityEntries :: LibVirtLXCConfig -> String
 renderGuestCapabilityEntries = unlines . map render . guestCapabilities
   where
     render :: LXCGuestCapability -> String
-    render cap = let capStr = toLower <$> drop (length "CAP_") (show cap)
-                 in printf "<%s state='on'/>" capStr
+    render cap =
+      let capStr = toLower <$> drop (length "CAP_") (show cap)
+      in printf "<%s state='on'/>" capStr
 
 osArch :: ExecEnv -> String
 osArch e = case cpuArch (envResources e) of
@@ -260,17 +271,18 @@ fsImage (img, mnt) =
     Just mntXml ->
       "<filesystem type='file' accessmode='passthrough'>\n  " ++
       fsImgDriver img ++ "\n  " ++ fsImgSource img ++ "\n  " ++ mntXml ++
-      "\n</filesystem>"
+                                                                "\n</filesystem>"
     Nothing ->
       ""
   where
     fsImgDriver (Image _img fmt _fs) =
       printf "<driver %s %s/>" driver fmt'
       where
-        (driver, fmt') = case fmt of
-          Raw -> ("type='loop'", "format='raw'")
-          QCow2 -> ("type='nbd'", "format='qcow2'")
-          Vmdk -> ("type='nbd'", "format='vmdk'")
+        (driver, fmt') =
+          case fmt of
+            Raw   -> ("type='loop'", "format='raw'")
+            QCow2 -> ("type='nbd'", "format='qcow2'")
+            Vmdk  -> ("type='nbd'", "format='vmdk'")
 
     fsImgSource (Image src _fmt _fs) = "<source file='" ++ src ++ "'/>"
 
@@ -302,11 +314,12 @@ memoryUnit :: ExecEnv -> String
 memoryUnit = toUnit . maxMemory . envResources
   where
     toUnit AutomaticRamSize = toUnit lxcDefaultRamSize
-    toUnit (RamSize _ u) = case u of
-                            GB -> "GiB"
-                            MB -> "MiB"
-                            KB -> "KiB"
-                            B -> "B"
+    toUnit (RamSize _ u) =
+      case u of
+        GB -> "GiB"
+        MB -> "MiB"
+        KB -> "KiB"
+        B  -> "B"
 memoryAmount :: ExecEnv -> String
 memoryAmount = show . toAmount . maxMemory . envResources
   where

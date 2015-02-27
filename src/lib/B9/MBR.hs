@@ -41,7 +41,8 @@ data MBR = MBR { mbrPart1 :: !PrimaryPartition
                , mbrPart2 :: !PrimaryPartition
                , mbrPart3 :: !PrimaryPartition
                , mbrPart4 :: !PrimaryPartition
-               } deriving Show
+               }
+  deriving Show
 
 data PrimaryPartition = PrimaryPartition { primPartStatus :: !Word8
                                          , primPartChsStart :: !CHS
@@ -49,19 +50,18 @@ data PrimaryPartition = PrimaryPartition { primPartStatus :: !Word8
                                          , primPartChsEnd :: !CHS
                                          , primPartLbaStart :: !Word32
                                          , primPartSectors :: !Word32
-                                         } deriving Show
+                                         }
+  deriving Show
 
 data CHS = CHS { chsH :: !Word8
                , chs_CUpper2_S :: !Word8
                , chs_CLower8 :: !Word8
-               } deriving Show
+               }
+  deriving Show
 
 getMBR :: Get MBR
 getMBR = skip bootCodeSize >>
-         MBR <$> getPart
-             <*> getPart
-             <*> getPart
-             <*> getPart
+         MBR <$> getPart <*> getPart <*> getPart <*> getPart
 
 getPart :: Get PrimaryPartition
 getPart = PrimaryPartition <$> getWord8
@@ -72,6 +72,4 @@ getPart = PrimaryPartition <$> getWord8
                            <*> getWord32le
 
 getCHS :: Get CHS
-getCHS = CHS <$> getWord8
-             <*> getWord8
-             <*> getWord8
+getCHS = CHS <$> getWord8 <*> getWord8 <*> getWord8

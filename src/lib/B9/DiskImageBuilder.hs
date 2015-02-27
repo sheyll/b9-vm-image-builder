@@ -47,74 +47,76 @@ import B9.Content.StringTemplate
 
 -- | Replace $... variables inside an 'ImageTarget'
 substImageTarget :: [(String,String)] -> ImageTarget -> ImageTarget
-substImageTarget env p = everywhere gsubst p
-  where gsubst :: forall a. Data a => a -> a
-        gsubst = mkT substMountPoint
-                   `extT` substImage
-                     `extT` substImageSource
-                       `extT` substDiskTarget
+substImageTarget env = everywhere gsubst
+  where
+    gsubst :: Data a => a -> a
+    gsubst = mkT substMountPoint
+             `extT` substImage
+             `extT` substImageSource
+             `extT` substDiskTarget
 
-        substMountPoint NotMounted = NotMounted
-        substMountPoint (MountPoint x) = MountPoint (sub x)
+    substMountPoint NotMounted = NotMounted
+    substMountPoint (MountPoint x) = MountPoint (sub x)
 
-        substImage (Image fp t fs) = Image (sub fp) t fs
+    substImage (Image fp t fs) = Image (sub fp) t fs
 
-        substImageSource (From n s) = From (sub n) s
-        substImageSource (EmptyImage l f t s) = EmptyImage (sub l) f t s
-        substImageSource s = s
+    substImageSource (From n s) = From (sub n) s
+    substImageSource (EmptyImage l f t s) = EmptyImage (sub l) f t s
+    substImageSource s = s
 
-        substDiskTarget (Share n t s) = Share (sub n) t s
-        substDiskTarget (LiveInstallerImage name outDir resize) =
-          LiveInstallerImage (sub name) (sub outDir) resize
-        substDiskTarget s = s
+    substDiskTarget (Share n t s) = Share (sub n) t s
+    substDiskTarget (LiveInstallerImage name outDir resize) =
+      LiveInstallerImage (sub name) (sub outDir) resize
+    substDiskTarget s = s
 
-        sub = subst env
+    sub = subst env
 
 -- | Resolve an ImageSource to an 'Image'. Note however that this source will
 -- may not exist as is the case for 'EmptyImage'.
 resolveImageSource :: ImageSource -> B9 Image
-resolveImageSource src = do
+resolveImageSource src =
   case src of
-   (EmptyImage fsLabel fsType imgType _size) ->
-     let img = Image fsLabel imgType fsType
-     in return (changeImageFormat imgType img)
-   (SourceImage srcImg _part _resize) ->
-     liftIO (ensureAbsoluteImageDirExists srcImg)
-   (CopyOnWrite backingImg) ->
-     liftIO (ensureAbsoluteImageDirExists backingImg)
-   (From name _resize) -> do
-     latestImage <- getLatestImageByName name
-     liftIO (ensureAbsoluteImageDirExists latestImage)
+    (EmptyImage fsLabel fsType imgType _size) ->
+      let img = Image fsLabel imgType fsType
+      in return (changeImageFormat imgType img)
+    (SourceImage srcImg _part _resize) ->
+      liftIO (ensureAbsoluteImageDirExists srcImg)
+    (CopyOnWrite backingImg) ->
+      liftIO (ensureAbsoluteImageDirExists backingImg)
+    (From name _resize) -> do
+      latestImage <- getLatestImageByName name
+      liftIO (ensureAbsoluteImageDirExists latestImage)
 
 -- | Return all valid image types sorted by preference.
 preferredDestImageTypes :: ImageSource -> B9 [ImageType]
 preferredDestImageTypes src =
   case src of
-   (CopyOnWrite (Image _file fmt _fs)) -> return [fmt]
-   (EmptyImage _label NoFileSystem fmt _size) ->
-     return (nub [fmt, Raw, QCow2, Vmdk])
-   (EmptyImage _label _fs _fmt _size) -> return [Raw]
-   (SourceImage _img (Partition _) _resize) -> return [Raw]
-   (SourceImage (Image _file fmt _fs) _pt resize) ->
-     return (nub [fmt, Raw, QCow2, Vmdk]
-             `intersect`
-             (allowedImageTypesForResize resize))
-   (From name resize) -> do
-     sharedImg <- getLatestImageByName name
-     preferredDestImageTypes (SourceImage sharedImg NoPT resize)
+    (CopyOnWrite (Image _file fmt _fs)) -> return [fmt]
+    (EmptyImage _label NoFileSystem fmt _size) ->
+      return (nub [fmt, Raw, QCow2, Vmdk])
+    (EmptyImage _label _fs _fmt _size) -> return [Raw]
+    (SourceImage _img (Partition _) _resize) -> return [Raw]
+    (SourceImage (Image _file fmt _fs) _pt resize) ->
+      return
+        (nub [fmt, Raw, QCow2, Vmdk]
+         `intersect`
+         allowedImageTypesForResize resize)
+    (From name resize) -> do
+      sharedImg <- getLatestImageByName name
+      preferredDestImageTypes (SourceImage sharedImg NoPT resize)
 
 preferredSourceImageTypes :: ImageDestination -> [ImageType]
 preferredSourceImageTypes dest =
   case dest of
     (Share _ fmt resize) ->
       nub [fmt, Raw, QCow2, Vmdk]
-      `intersect` (allowedImageTypesForResize resize)
+      `intersect` allowedImageTypesForResize resize
     (LocalFile (Image _ fmt _) resize) ->
       nub [fmt, Raw, QCow2, Vmdk]
-      `intersect` (allowedImageTypesForResize resize)
+      `intersect` allowedImageTypesForResize resize
     Transient ->
       [Raw, QCow2, Vmdk]
-    (LiveInstallerImage _name _repo _imgResize)  ->
+    (LiveInstallerImage _name _repo _imgResize) ->
       [Raw]
 
 allowedImageTypesForResize :: ImageResize -> [ImageType]
@@ -137,22 +139,23 @@ ensureAbsoluteImageDirExists img@(Image path _ _) = do
 materializeImageSource :: ImageSource -> Image -> B9 ()
 materializeImageSource src dest =
   case src of
-   (EmptyImage fsLabel fsType _imgType size) ->
-     let (Image _ imgType _) = dest
-     in createEmptyImage fsLabel fsType imgType size dest
-   (SourceImage srcImg part resize) ->
-     createImageFromImage srcImg part resize dest
-   (CopyOnWrite backingImg) ->
-     createCOWImage backingImg dest
-   (From name resize) -> do
-     sharedImg <- getLatestImageByName name
-     materializeImageSource (SourceImage sharedImg NoPT resize) dest
+    (EmptyImage fsLabel fsType _imgType size) ->
+      let (Image _ imgType _) = dest
+      in createEmptyImage fsLabel fsType imgType size dest
+    (SourceImage srcImg part resize) ->
+      createImageFromImage srcImg part resize dest
+    (CopyOnWrite backingImg) ->
+      createCOWImage backingImg dest
+    (From name resize) -> do
+      sharedImg <- getLatestImageByName name
+      materializeImageSource (SourceImage sharedImg NoPT resize) dest
 
 createImageFromImage :: Image -> Partition -> ImageResize -> Image -> B9 ()
 createImageFromImage src part size out = do
   importImage src out
   extractPartition part out
   resizeImage size out
+
   where
     extractPartition :: Partition -> Image -> B9 ()
     extractPartition NoPT _ = return ()
@@ -160,13 +163,20 @@ createImageFromImage src part size out = do
       (start, len, blockSize) <- liftIO (P.getPartition partIndex outFile)
       let tmpFile = outFile <.> "extracted"
       dbgL (printf "Extracting partition %i from '%s'" partIndex outFile)
-      cmd (printf "dd if='%s' of='%s' bs=%i skip=%i count=%i &> /dev/null"
-                   outFile tmpFile blockSize start len)
+      cmd
+        (printf
+           "dd if='%s' of='%s' bs=%i skip=%i count=%i &> /dev/null"
+           outFile
+           tmpFile
+           blockSize
+           start
+           len)
       cmd (printf "mv '%s' '%s'" tmpFile outFile)
-
     extractPartition (Partition partIndex) (Image outFile fmt _) =
-      error (printf "Extract partition %i from image '%s': Invalid format %s"
-                    partIndex outFile (imageFileExtension fmt))
+      error
+        (printf "Extract partition %i from \
+                \image '%s': Invalid format %s" partIndex outFile
+           (imageFileExtension fmt))
 
 createDestinationImage :: Image -> ImageDestination -> B9 ()
 createDestinationImage buildImg dest =
@@ -183,15 +193,16 @@ createDestinationImage buildImg dest =
       resizeImage imgResize buildImg
       let destImg = Image destFile Raw buildImgFs
           (Image _ _ buildImgFs) = buildImg
-          destFile = repo </> "machines" </> name </> "disks"</> "raw" </> "0.raw"
-          sizeFile = repo </> "machines" </> name </> "disks"</> "raw" </> "0.size"
-          versFile = repo </> "machines" </> name </> "disks"</> "raw" </> "VERSION"
+          destFile = repo </> "machines" </> name </> "disks" </> "raw" </> "0.raw"
+          sizeFile = repo </> "machines" </> name </> "disks" </> "raw" </> "0.size"
+          versFile = repo </> "machines" </> name </> "disks" </> "raw" </> "VERSION"
       exportAndRemoveImage buildImg destImg
-      cmd (printf "echo $(qemu-img info -f raw '%s' \
-                        \| gawk -e '/virtual size/ {print $4}' \
-                        \| tr -d '(') > '%s'"
-                  destFile
-                  sizeFile)
+      cmd
+        (printf
+           "echo $(qemu-img info -f raw '%s' | gawk -e '/virtual size/ \
+           \{print $4}' | tr -d '(') > '%s'"
+           destFile
+           sizeFile)
       buildDate <- getBuildDate
       buildId <- getBuildId
       liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
@@ -205,39 +216,44 @@ createEmptyImage :: String
                  -> Image
                  -> B9 ()
 createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
-  | fsType /= fsType' =
-  error (printf "Conflicting createEmptyImage parameters. Requested\
-                \ is file system %s but the destination image has %s."
-                (show fsType) (show fsType'))
-  | imgType /= imgType' =
-  error (printf "Conflicting createEmptyImage parameters. Requested\
-                \ is image type %s but the destination image has type %s."
-                (show imgType) (show imgType'))
+  | fsType /= fsType' = error
+                          (printf
+                             "Conflicting createEmptyImage parameters. \
+                             \Requested is file system %s but the destination \
+                             \image has %s."
+                             (show fsType)
+                             (show fsType'))
+  | imgType /= imgType' = error
+                            (printf
+                               "Conflicting createEmptyImage parameters. \
+                               \Requested is image type %s but the destination \
+                               \image has type %s."
+                               (show imgType)
+                               (show imgType'))
   | otherwise = do
-  let (Image imgFile imgFmt imgFs) = dest
-  dbgL (printf "Creating empty raw image '%s' with size %s" imgFile
-                (toQemuSizeOptVal imgSize))
-  cmd (printf "qemu-img create -f %s '%s' '%s'"
-              (imageFileExtension imgFmt)
-              imgFile
-              (toQemuSizeOptVal imgSize))
-  case (imgFmt, imgFs) of
-    (Raw, Ext4) -> do
-      let fsCmd = "mkfs.ext4"
-      dbgL (printf "Creating file system %s" (show imgFs))
-      cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
-    (it, fs) -> do
-      error (printf "Cannot create file system %s in image type %s"
-                    (show fs)
-                    (show it))
+      let (Image imgFile imgFmt imgFs) = dest
+      dbgL (printf "Creating empty raw image '%s' with size %s" imgFile (toQemuSizeOptVal imgSize))
+      cmd
+        (printf "qemu-img create -f %s '%s' '%s'" (imageFileExtension imgFmt) imgFile
+           (toQemuSizeOptVal imgSize))
+      case (imgFmt, imgFs) of
+        (Raw, Ext4) -> do
+          let fsCmd = "mkfs.ext4"
+          dbgL (printf "Creating file system %s" (show imgFs))
+          cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
+        (it, fs) ->
+          error (printf "Cannot create file system %s in image type %s" (show fs) (show it))
 
 
 createCOWImage :: Image -> Image -> B9 ()
 createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
-  dbgL (printf "Creating COW image '%s' backed by '%s'"
-               imgOut backingFile)
-  cmd (printf "qemu-img create -f %s -o backing_file='%s' '%s'"
-              (imageFileExtension imgFmt) backingFile imgOut)
+  dbgL (printf "Creating COW image '%s' backed by '%s'" imgOut backingFile)
+  cmd
+    (printf
+       "qemu-img create -f %s -o backing_file='%s' '%s'"
+       (imageFileExtension imgFmt)
+       backingFile
+       imgOut)
 
 -- | Resize an image, including the file system inside the image.
 resizeImage :: ImageResize -> Image -> B9 ()
@@ -259,8 +275,7 @@ resizeImage ShrinkToMinimum (Image img Raw Ext4) = do
   cmd (printf "resize2fs -f -M '%s'" img)
 
 resizeImage _ img =
-  error (printf "Invalid image type or filesystem, cannot resize image: %s"
-                (show img))
+  error (printf "Invalid image type or filesystem, cannot resize image: %s" (show img))
 
 
 -- | Import a disk image from some external source into the build directory
@@ -278,31 +293,37 @@ exportAndRemoveImage = convert True
 
 -- | Convert an image in the build directory to another format and return the new image.
 convertImage :: Image -> Image -> B9 ()
-convertImage imgIn imgOut = convert True imgIn imgOut
+convertImage = convert True
 
 -- | Convert/Copy/Move images
 convert :: Bool -> Image -> Image -> B9 ()
 convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
   | imgIn == imgOut = do
-    ensureDir imgOut
-    dbgL (printf "No need to convert: '%s'" imgIn)
-
+      ensureDir imgOut
+      dbgL (printf "No need to convert: '%s'" imgIn)
   | doMove && fmtIn == fmtOut = do
       ensureDir imgOut
       dbgL (printf "Moving '%s' to '%s'" imgIn imgOut)
       liftIO (renameFile imgIn imgOut)
-
   | otherwise = do
-    ensureDir imgOut
-    dbgL (printf "Converting %s to %s: '%s' to '%s'"
-                 (imageFileExtension fmtIn) (imageFileExtension fmtOut)
-                 imgIn imgOut)
-    cmd (printf "qemu-img convert -q -f %s -O %s '%s' '%s'"
-                (imageFileExtension fmtIn) (imageFileExtension fmtOut)
-                imgIn imgOut)
-    when doMove $ do
-      dbgL (printf "Removing '%s'" imgIn)
-      liftIO (removeFile imgIn)
+      ensureDir imgOut
+      dbgL
+        (printf
+           "Converting %s to %s: '%s' to '%s'"
+           (imageFileExtension fmtIn)
+           (imageFileExtension fmtOut)
+           imgIn
+           imgOut)
+      cmd
+        (printf
+           "qemu-img convert -q -f %s -O %s '%s' '%s'"
+           (imageFileExtension fmtIn)
+           (imageFileExtension fmtOut)
+           imgIn
+           imgOut)
+      when doMove $ do
+        dbgL (printf "Removing '%s'" imgIn)
+        liftIO (removeFile imgIn)
 
 toQemuSizeOptVal :: ImageSize -> String
 toQemuSizeOptVal (ImageSize amount u) = show amount ++ case u of
@@ -324,13 +345,9 @@ shareImage buildImg sname@(SharedImageName name) = do
 -- name and disk image.
 getSharedImageFromImageInfo :: SharedImageName -> Image -> B9 SharedImage
 getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
-   buildId <- getBuildId
-   date <- getBuildDate
-   return (SharedImage name
-                       (SharedImageDate date)
-                       (SharedImageBuildId buildId)
-                       imgType
-                       imgFS)
+  buildId <- getBuildId
+  date <- getBuildDate
+  return (SharedImage name (SharedImageDate date) (SharedImageBuildId buildId) imgType imgFS)
 
 -- | Convert the disk image and serialize the base image data structure.
 createSharedImageInCache :: Image -> SharedImageName -> B9 SharedImage
@@ -372,9 +389,9 @@ pullRemoteRepos :: B9 ()
 pullRemoteRepos = do
   repos <- getSelectedRepos
   mapM_ dl repos
+
   where
-     dl = pullGlob sharedImagesRootDirectory
-                       (FileExtension sharedImageFileExtension)
+    dl = pullGlob sharedImagesRootDirectory (FileExtension sharedImageFileExtension)
 
 -- | Pull the latest version of an image, either from the selected remote
 -- repo or from the repo that has the latest version.
@@ -386,28 +403,27 @@ pullLatestImage (SharedImageName name) = do
       repoIds = map remoteRepoRepoId repos
       hasName sharedImage = name == siName sharedImage
   candidates <- lookupSharedImages repoPredicate hasName
-  let (Remote repoId, image) = head (reverse candidates)
+  let (Remote repoId, image) = last candidates
   if null candidates
-     then do errorL (printf "No shared image named '%s'\
-                            \ on these remote repositories: '%s'"
-                            name
-                            (ppShow repoIds))
-             return False
-     else do dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
-             cacheDir <- getSharedImagesCacheDir
-             let (Image imgFile' _imgType _fs) = sharedImageImage image
-                 cachedImgFile = cacheDir </> imgFile'
-                 cachedInfoFile = cacheDir </> sharedImageFileName image
-                 repoImgFile = sharedImagesRootDirectory </> imgFile'
-                 repoInfoFile = sharedImagesRootDirectory
-                                </> sharedImageFileName image
-                 repo = fromJust (lookupRemoteRepo repos repoId)
-             pullFromRepo repo repoImgFile cachedImgFile
-             pullFromRepo repo repoInfoFile cachedInfoFile
-             infoL (printf "PULLED '%s' FROM '%s'"
-                           name
-                           repoId)
-             return True
+    then do
+      errorL
+        (printf "No shared image named '%s' on these remote repositories: '%s'" name
+           (ppShow repoIds))
+      return False
+    else do
+      dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
+      cacheDir <- getSharedImagesCacheDir
+      let (Image imgFile' _imgType _fs) = sharedImageImage image
+          cachedImgFile = cacheDir </> imgFile'
+          cachedInfoFile = cacheDir </> sharedImageFileName image
+          repoImgFile = sharedImagesRootDirectory </> imgFile'
+          repoInfoFile = sharedImagesRootDirectory
+                         </> sharedImageFileName image
+          repo = fromJust (lookupRemoteRepo repos repoId)
+      pullFromRepo repo repoImgFile cachedImgFile
+      pullFromRepo repo repoInfoFile cachedInfoFile
+      infoL (printf "PULLED '%s' FROM '%s'" name repoId)
+      return True
 
 
 -- | Return the 'Image' of the latest version of a shared image named 'name'
@@ -433,16 +449,17 @@ getLatestSharedImageByNameFromCache name = do
 -- | Return a list of all existing sharedImages from cached repositories.
 getSharedImages :: B9 [(Repository, [SharedImage])]
 getSharedImages = do
-  reposAndFiles <- repoSearch sharedImagesRootDirectory
-                              (FileExtension sharedImageFileExtension)
-  mapM (\(repo,files) -> ((repo,) . catMaybes) <$> mapM consult' files) reposAndFiles
+  reposAndFiles <- repoSearch sharedImagesRootDirectory (FileExtension sharedImageFileExtension)
+  mapM (\(repo, files) -> ((repo,) . catMaybes) <$> mapM consult' files) reposAndFiles
+
   where
     consult' f = do
       r <- liftIO (try (consult f))
       case r of
         Left (e :: SomeException) -> do
-          dbgL (printf "Failed to load shared image meta-data from '%s': '%s'"
-                       (takeFileName f) (show e))
+          dbgL
+            (printf "Failed to load shared image meta-data from '%s': '%s'" (takeFileName f)
+               (show e))
           dbgL (printf "Removing bad meta-data file '%s'" f)
           liftIO (removeFile f)
           return Nothing
@@ -455,22 +472,23 @@ lookupSharedImages :: (Repository -> Bool)
                    -> (SharedImage -> Bool)
                    -> B9 [(Repository, SharedImage)]
 lookupSharedImages repoPred imgPred = do
-   xs <- getSharedImages
-   let rs = [(r,s) | (r,ss) <- xs, s <- ss]
-       matchingRepo = filter (repoPred . fst) rs
-       matchingImg = filter (imgPred . snd) matchingRepo
-       sorted = sortBy (compare `on` snd) matchingImg
-   return (mconcat (pure <$> sorted))
+  xs <- getSharedImages
+  let rs = [(r, s) | (r, ss) <- xs
+                   , s <- ss]
+      matchingRepo = filter (repoPred . fst) rs
+      matchingImg = filter (imgPred . snd) matchingRepo
+      sorted = sortBy (compare `on` snd) matchingImg
+  return (mconcat (pure <$> sorted))
 
 -- | Return either all remote repos or just the single selected repo.
 getSelectedRepos :: B9 [RemoteRepo]
 getSelectedRepos = do
   allRepos <- getRemoteRepos
   selectedRepo <- getSelectedRemoteRepo
-  let repos = maybe allRepos     -- user has not selected a repo
-                    return       -- user has selected a repo, return it as
-                                 -- singleton list
-                    selectedRepo -- 'Maybe' a repo
+  let repos = maybe
+                allRepos
+                return
+                selectedRepo -- 'Maybe' a repo
   return repos
 
 -- | Return the path to the sub directory in the cache that contains files of

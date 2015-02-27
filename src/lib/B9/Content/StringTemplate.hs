@@ -1,36 +1,31 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-| Utility functions based on 'Data.Text.Template' to offer @ $var @ variable
     expansion in string throughout a B9 artifact. -}
-module B9.Content.StringTemplate (subst
-                                 ,substE
-                                 ,substEB
-                                 ,substFile
-                                 ,substPath
-                                 ,readTemplateFile
-                                 ,SourceFile(..)
-                                 ,SourceFileConversion(..)
-                                 ,Environment(..)
-                                 ,withEnvironment) where
+module B9.Content.StringTemplate
+       (subst, substE, substEB, substFile, substPath, readTemplateFile,
+        SourceFile(..), SourceFileConversion(..), Environment(..),
+        withEnvironment)
+       where
 
-import Data.Text.Template (render,templateSafe,renderA)
-import Data.Data
-import Data.Maybe
-import Control.Monad.Reader
-import qualified Data.Text as T
-import qualified Data.ByteString.Lazy as LB
+import           Control.Applicative
+import           Control.Arrow hiding (second)
+import           Control.Monad.Reader
+import           Data.Bifunctor
 import qualified Data.ByteString as B
-import Data.Text.Encoding as E
-import Data.Text.Lazy.Encoding as LE
-import Control.Arrow hiding (second)
-import Control.Applicative
-import Data.Bifunctor
-import Text.Show.Pretty (ppShow)
-import Test.QuickCheck
-import Text.Printf
+import qualified Data.ByteString.Lazy as LB
+import           Data.Data
+import           Data.Maybe
+import qualified Data.Text as T
+import           Data.Text.Encoding as E
+import           Data.Text.Lazy.Encoding as LE
+import           Data.Text.Template (render,templateSafe,renderA)
+import           Test.QuickCheck
+import           Text.Printf
+import           Text.Show.Pretty (ppShow)
 
-import B9.ConfigUtils
-import B9.QCUtil
+import           B9.ConfigUtils
 
+import           B9.QCUtil
 -- | A wrapper around a file path and a flag indicating if template variable
 -- expansion should be performed when reading the file contents.
 data SourceFile = Source SourceFileConversion FilePath
