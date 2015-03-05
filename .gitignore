@@ -12,3 +12,6 @@ TAGS
 /cabal.sandbox.config
 /upload_doc.sh
 
+# Intellij IDEA
+*.iml
+
