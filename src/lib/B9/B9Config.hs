@@ -42,13 +42,14 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , profileFile :: Maybe FilePath
                          , envVars :: BuildVariables
                          , uniqueBuildDirs :: Bool
-                         , repositoryCache :: SystemPath
+                         , repositoryCache :: Maybe SystemPath
                          , repository :: Maybe String
                          } deriving (Show)
 
+
 instance Monoid B9Config where
   mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True
-                    defaultRepositoryCache Nothing
+                    Nothing Nothing
   mappend c c' =
     B9Config { verbosity = getLast $ on mappend (Last . verbosity) c c'
              , logFile = getLast $ on mappend (Last . logFile) c c'
@@ -58,7 +59,7 @@ instance Monoid B9Config where
              , profileFile = getLast $ on mappend (Last . profileFile) c c'
              , envVars = on mappend envVars c c'
              , uniqueBuildDirs = getAll ((mappend `on` (All . uniqueBuildDirs)) c c')
-             , repositoryCache = repositoryCache c'
+             , repositoryCache = getLast $ on mappend (Last . repositoryCache) c c'
              , repository = getLast ((mappend `on` (Last . repository)) c c')
              }
 
@@ -72,7 +73,7 @@ defaultB9Config = B9Config { verbosity = Just LogInfo
                            , envVars = []
                            , uniqueBuildDirs = True
                            , repository = Nothing
-                           , repositoryCache = defaultRepositoryCache
+                           , repositoryCache = Just defaultRepositoryCache
                            }
 
 defaultRepositoryCache :: SystemPath

@@ -31,8 +31,8 @@ import           System.Locale ( defaultTimeLocale )
 import           System.Random ( randomIO )
 import           Text.Printf
 import           Control.Concurrent.Async (Concurrently (..))
-import           Data.Conduit             (($$))
-import qualified Data.Conduit.List        as CL
+import           Data.Conduit (($$))
+import qualified Data.Conduit.List as CL
 import           Data.Conduit.Process
 
 data BuildState = BuildState { bsBuildId :: String
@@ -57,54 +57,65 @@ run cfgParser cfg action = do
   buildId <- generateBuildId
   now <- getCurrentTime
   bracket (createBuildDir buildId) removeBuildDir (run' buildId now)
+
   where
     run' buildId now buildDir = do
       -- Check repositories
       repoCache <- initRepoCache (repositoryCache cfg)
       let remoteRepos = getConfiguredRemoteRepos cfgParser
       remoteRepos' <- mapM (initRemoteRepo repoCache) remoteRepos
-      let ctx = BuildState buildId buildDate cfgParser cfg buildDir
-                           selectedRemoteRepo remoteRepos' repoCache
-                           [] now True
+      let ctx = BuildState
+                  buildId
+                  buildDate
+                  cfgParser
+                  cfg
+                  buildDir
+                  selectedRemoteRepo
+                  remoteRepos'
+                  repoCache
+                  []
+                  now
+                  True
           buildDate = formatTime undefined "%F-%T" now
           selectedRemoteRepo = do
             sel <- repository cfg
             (lookupRemoteRepo remoteRepos sel
-             <|> error (printf "selected remote repo '%s' not configured,\
-                                \ valid remote repos are: '%s'"
-                                sel
-                                (show remoteRepos)))
+             <|> error
+                   (printf
+                      "selected remote repo '%s' not configured, valid remote repos are: '%s'"
+                      sel
+                      (show remoteRepos)))
       (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
       -- Write a profiling report
       when (isJust (profileFile cfg)) $
-        writeFile (fromJust (profileFile cfg))
-                  (unlines $ show <$> (reverse $ bsProf ctxOut))
+        writeFile (fromJust (profileFile cfg)) (unlines $ show <$> (reverse $ bsProf ctxOut))
       return r
 
     createBuildDir buildId = do
-      if uniqueBuildDirs cfg then do
-        let subDir = "BUILD-" ++ buildId
-        buildDir <- resolveBuildDir subDir
-        createDirectory buildDir
-        canonicalizePath buildDir
-       else do
-        let subDir = "BUILD-" ++ buildId
-        buildDir <- resolveBuildDir subDir
-        createDirectoryIfMissing True buildDir
-        canonicalizePath buildDir
+      if uniqueBuildDirs cfg
+        then do
+          let subDir = "BUILD-" ++ buildId
+          buildDir <- resolveBuildDir subDir
+          createDirectory buildDir
+          canonicalizePath buildDir
+        else do
+          let subDir = "BUILD-" ++ buildId
+          buildDir <- resolveBuildDir subDir
+          createDirectoryIfMissing True buildDir
+          canonicalizePath buildDir
+
       where
         resolveBuildDir f = do
           case buildDirRoot cfg of
-           Nothing ->
-             return f
-           Just root' -> do
-             createDirectoryIfMissing True root'
-             root <- canonicalizePath root'
-             return $ root </> f
+            Nothing ->
+              return f
+            Just root' -> do
+              createDirectoryIfMissing True root'
+              root <- canonicalizePath root'
+              return $ root </> f
 
     removeBuildDir buildDir =
-      when (uniqueBuildDirs cfg && not (keepTempDirs cfg))
-      $ removeDirectoryRecursive buildDir
+      when (uniqueBuildDirs cfg && not (keepTempDirs cfg)) $ removeDirectoryRecursive buildDir
 
     generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
 
@@ -164,16 +175,17 @@ cmdWithStdIn cmdStr = do
   (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
   cmdLogger <- getCmdLogger
   e <- liftIO $ runConcurrently $
-       Concurrently (cpOut $$ cmdLogger LogTrace) *>
-       Concurrently (cpErr $$ cmdLogger LogInfo) *>
-       Concurrently (waitForStreamingProcess cph)
+         Concurrently (cpOut $$ cmdLogger LogTrace) *>
+         Concurrently (cpErr $$ cmdLogger LogInfo) *>
+         Concurrently (waitForStreamingProcess cph)
   checkExitCode e
   return cpIn
+
   where
     getCmdLogger = do
       lv <- gets $ verbosity . bsCfg
       lf <- gets $ logFile . bsCfg
-      return $ \ level -> (CL.mapM_ (logImpl lv lf level . B.unpack))
+      return $ \level -> (CL.mapM_ (logImpl lv lf level . B.unpack))
 
     checkExitCode ExitSuccess =
       traceL $ "COMMAND SUCCESS"
@@ -213,19 +225,16 @@ formatLogMsg l msg = do
   return $ unlines $ printf "[%s] %s - %s" (printLevel l) time <$> lines msg
 
 printLevel :: LogLevel -> String
-printLevel l = case l of
-  LogNothing -> "NOTHING"
-  LogError   -> " ERROR "
-  LogInfo    -> " INFO  "
-  LogDebug   -> " DEBUG "
-  LogTrace   -> " TRACE "
+printLevel l =
+  case l of
+    LogNothing -> "NOTHING"
+    LogError   -> " ERROR "
+    LogInfo    -> " INFO  "
+    LogDebug   -> " DEBUG "
+    LogTrace   -> " TRACE "
 
 newtype B9 a = B9 { runB9 :: StateT BuildState IO a }
-  deriving ( Functor
-           , Applicative
-           , Monad
-           , MonadState BuildState
-           )
+  deriving (Functor, Applicative, Monad, MonadState BuildState)
 
 instance MonadIO B9 where
   liftIO m = do
@@ -234,6 +243,5 @@ instance MonadIO B9 where
     stop <- B9 $ liftIO getCurrentTime
     let durMS = IoActionDuration (stop `diffUTCTime` start)
     modify $
-      \ ctx ->
-       ctx { bsProf = durMS : bsProf ctx }
+      \ctx -> ctx { bsProf = durMS : bsProf ctx }
     return res
