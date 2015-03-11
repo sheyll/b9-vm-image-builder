@@ -183,11 +183,8 @@ globals = toGlobalOpts
                                       , uniqueBuildDirs = not notUnique
                                       , repository = repo
                                       }
-                   in case mRepoCache of
-                        Nothing -> b9cfg
-                        Just repoCache ->
-                          let rc = Path repoCache
-                          in b9cfg { repositoryCache = rc }
+                   in b9cfg { repositoryCache = Path <$> mRepoCache }
+
       in GlobalOpts { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
                     , cliB9Config = b9cfg' }
 
