@@ -91,3 +91,4 @@
 ** Move 'Repository' from B9.RepositoryIO to B9.Repository
 * Add building of RPMs and ARCHLINUX packages
 * Use unique ids for vm image builds
+* TODO Fix repo-cache configfile ignoration
