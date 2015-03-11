@@ -28,8 +28,7 @@ parseCommandLine =
                             \\n\
                             \Repository names passed to the command line are\
                             \ looked up in the B9 configuration file, which is\
-                            \ on Un*x like system per default located in: \
-                            \ '~/.b9/b9.config'"
+                            \ per default located in: '~/.b9/b9.conf'"
                 <> headerDoc (Just helpHeader)))
   where
     helpHeader = linebreak <> text ("B9 - a benign VM-Image build tool v. "
@@ -120,7 +119,7 @@ runAddRepo repo cfgFile cp _conf = do
 globals :: Parser GlobalOpts
 globals = toGlobalOpts
                <$> optional (strOption
-                             (help "Path to users b9-configuration"
+                             (help "Path to user's b9-configuration (default: ~/.b9/b9.conf)"
                              <> short 'c'
                              <> long "configuration-file"
                              <> metavar "FILENAME"))
