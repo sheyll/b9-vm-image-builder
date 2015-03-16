@@ -5,6 +5,7 @@ The properties are independent of specific build targets.
 -}
 module B9.B9Config ( B9Config(..)
                    , defaultB9ConfigFile
+                   , defaultRepositoryCache
                    , defaultB9Config
                    , getB9ConfigFile
                    , writeB9Config
