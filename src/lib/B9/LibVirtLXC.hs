@@ -17,9 +17,6 @@ import B9.DiskImages
 import B9.ExecEnv
 import B9.ConfigUtils
 
-lxcDefaultRamSize :: RamSize
-lxcDefaultRamSize = RamSize 1 GB
-
 supportedImageTypes :: [ImageType]
 supportedImageTypes = [Raw]
 
@@ -78,6 +75,7 @@ data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Bool
                                          , virshURI :: FilePath
                                          , networkId :: Maybe String
                                          , guestCapabilities :: [LXCGuestCapability]
+                                         , guestRamSize :: RamSize
                                          } deriving (Read, Show)
 
 -- | Available linux capabilities for lxc containers. This maps directly to the
@@ -139,6 +137,7 @@ defaultLibVirtLXCConfig = LibVirtLXCConfig
                             , CAP_SYS_PTRACE
                             , CAP_SYS_MODULE
                             ]
+                            (RamSize 1 GB)
 
 cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
@@ -154,6 +153,8 @@ networkIdK :: String
 networkIdK = "network"
 guestCapabilitiesK :: String
 guestCapabilitiesK = "guest_capabilities"
+guestRamSizeK :: String
+guestRamSizeK = "guest_ram_size"
 
 configureLibVirtLXC :: B9 LibVirtLXCConfig
 configureLibVirtLXC = do
@@ -173,7 +174,8 @@ setDefaultConfig = either (error . show) id eitherCp
       cp4 <- set cp3 cfgFileSection emulatorK $ emulator c
       cp5 <- set cp4 cfgFileSection virshURIK $ virshURI c
       cp6 <- setshow cp5 cfgFileSection networkIdK $ networkId c
-      setshow cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
+      cp7 <- setshow cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
+      setshow cp7 cfgFileSection guestRamSizeK $ guestRamSize c
 
 readLibVirtConfig :: B9 LibVirtLXCConfig
 readLibVirtConfig =
@@ -195,6 +197,8 @@ readLibVirtConfig =
                          networkId defaultLibVirtLXCConfig
                        , guestCapabilities = geto guestCapabilitiesK $
                          guestCapabilities defaultLibVirtLXCConfig
+                       , guestRamSize = geto guestRamSizeK $
+                         guestRamSize defaultLibVirtLXCConfig
                        }
 
 initScript :: String
@@ -214,8 +218,8 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   "<domain type='lxc'>\n\
   \  <name>" ++ buildId ++ "</name>\n\
   \  <uuid>" ++ uuid ++ "</uuid>\n\
-  \  <memory unit='" ++ memoryUnit e ++ "'>" ++ memoryAmount e ++ "</memory>\n\
-  \  <currentMemory unit='" ++ memoryUnit e ++ "'>" ++ memoryAmount e ++ "</currentMemory>\n\
+  \  <memory unit='" ++ memoryUnit cfg e ++ "'>" ++ memoryAmount cfg e ++ "</memory>\n\
+  \  <currentMemory unit='" ++ memoryUnit cfg e ++ "'>" ++ memoryAmount cfg e ++ "</currentMemory>\n\
   \  <vcpu placement='static'>" ++ cpuCountStr e ++ "</vcpu>\n\
   \  <features>\n\
   \   <capabilities policy='default'>\n\
@@ -310,20 +314,20 @@ fsTarget :: MountPoint -> Maybe String
 fsTarget (MountPoint dir) = Just $ "<target dir='" ++ dir ++ "'/>"
 fsTarget _ = Nothing
 
-memoryUnit :: ExecEnv -> String
-memoryUnit = toUnit . maxMemory . envResources
+memoryUnit :: LibVirtLXCConfig -> ExecEnv -> String
+memoryUnit cfg = toUnit . maxMemory . envResources
   where
-    toUnit AutomaticRamSize = toUnit lxcDefaultRamSize
+    toUnit AutomaticRamSize = toUnit (guestRamSize cfg)
     toUnit (RamSize _ u) =
       case u of
         GB -> "GiB"
         MB -> "MiB"
         KB -> "KiB"
         B  -> "B"
-memoryAmount :: ExecEnv -> String
-memoryAmount = show . toAmount . maxMemory . envResources
+memoryAmount :: LibVirtLXCConfig -> ExecEnv -> String
+memoryAmount cfg = show . toAmount . maxMemory . envResources
   where
-    toAmount AutomaticRamSize = toAmount lxcDefaultRamSize
+    toAmount AutomaticRamSize = toAmount (guestRamSize cfg)
     toAmount (RamSize n _) = n
 
 cpuCountStr :: ExecEnv -> String
