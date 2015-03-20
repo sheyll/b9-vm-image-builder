@@ -69,6 +69,7 @@ runVmScript :: InstanceId
             -> FilePath
             -> VmScript
             -> B9 Bool
+runVmScript _ _ _ _ NoVmScript = return True
 runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
   dbgL (printf "starting vm script with instanceDir '%s'" instanceDir)
   traceL (ppShow vmScript)
