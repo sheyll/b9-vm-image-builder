@@ -1,5 +1,5 @@
 name:                b9
-version:             0.4.1
+version:             0.5.1
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -112,6 +112,7 @@ library
                    , vector >= 0.10.12.2
                    , yaml
                    , bifunctors
+                   , free
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
                     , DeriveDataTypeable

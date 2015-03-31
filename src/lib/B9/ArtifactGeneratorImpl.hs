@@ -36,6 +36,13 @@ import Text.Show.Pretty (ppShow)
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
 assemble artGen = do
+  is <- evalArtifactGenerator artGen
+  createAssembledArtifacts is
+
+-- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
+-- that can be built with 'createAssembledArtifacts'.
+evalArtifactGenerator :: ArtifactGenerator -> B9 [InstanceGenerator [SourceGenerator]]
+evalArtifactGenerator artGen = do
   b9cfgEnvVars <- envVars <$> getConfig
   buildId <- getBuildId
   buildDate <- getBuildDate
@@ -53,8 +60,9 @@ assemble artGen = do
                                    (ppShow artGen)
                                    err)
         Right is ->
-          createAssembledArtifacts is
+          return is
 
+-- | Parse an artifacto generator inside a 'CGParser' monad.
 parseArtifactGenerator :: ArtifactGenerator -> CGParser ()
 parseArtifactGenerator g =
   case g of
@@ -77,6 +85,8 @@ parseArtifactGenerator g =
     EmptyArtifact ->
       return ()
 
+-- | Execute a 'CGParser' action in an environment that contains a list of
+-- 'ArtifactSource's.
 withArtifactSources :: [ArtifactSource] -> CGParser () -> CGParser ()
 withArtifactSources srcs = local (\ce -> ce {agSources = agSources ce ++ srcs})
 
