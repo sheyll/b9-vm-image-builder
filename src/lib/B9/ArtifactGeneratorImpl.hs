@@ -47,18 +47,14 @@ evalArtifactGenerator artGen = do
   buildId <- getBuildId
   buildDate <- getBuildDate
   let ag = parseArtifactGenerator artGen
-      e = CGEnv
-            ((buildDateKey, buildDate):(buildIdKey, buildId):b9cfgEnvVars)
-            []
+      e = CGEnv ((buildDateKey, buildDate) : (buildIdKey, buildId) : b9cfgEnvVars) []
   case execCGParser ag e of
     Left (CGError err) ->
-      error (printf "error parsing: %s: %s" (ppShow artGen)  err)
+      error (printf "error parsing: %s: %s" (ppShow artGen) err)
     Right igs ->
       case execIGEnv `mapM` igs of
         Left err ->
-          error (printf "Failed to parse:\n%s\nError: %s"
-                                   (ppShow artGen)
-                                   err)
+          error (printf "Failed to parse:\n%s\nError: %s" (ppShow artGen) err)
         Right is ->
           return is
 
@@ -74,12 +70,10 @@ parseArtifactGenerator g =
       withXBindings bs (mapM_ parseArtifactGenerator gs)
     EachT keySet valueSets gs -> do
       allBindings <- eachBindingSetT g keySet valueSets
-      mapM_ ($ mapM_ parseArtifactGenerator gs)
-            (withBindings <$> allBindings)
+      mapM_ ($ mapM_ parseArtifactGenerator gs) (withBindings <$> allBindings)
     Each kvs gs -> do
       allBindings <- eachBindingSet g kvs
-      mapM_ ($ mapM_ parseArtifactGenerator gs)
-             (withBindings <$> allBindings)
+      mapM_ ($ mapM_ parseArtifactGenerator gs) (withBindings <$> allBindings)
     Artifact iid assembly ->
       writeInstanceGenerator iid assembly
     EmptyArtifact ->
@@ -88,54 +82,60 @@ parseArtifactGenerator g =
 -- | Execute a 'CGParser' action in an environment that contains a list of
 -- 'ArtifactSource's.
 withArtifactSources :: [ArtifactSource] -> CGParser () -> CGParser ()
-withArtifactSources srcs = local (\ce -> ce {agSources = agSources ce ++ srcs})
+withArtifactSources srcs = local (\ce -> ce { agSources = agSources ce ++ srcs })
 
 withBindings :: [(String,String)] -> CGParser () -> CGParser ()
 withBindings bs = local (addBindings bs)
 
 addBindings :: [(String, String)] -> CGEnv -> CGEnv
 addBindings bs ce =
-  let addBinding env (k,v) = nubBy ((==) `on` fst) ((k, subst env v):env)
+  let addBinding env (k, v) = nubBy ((==) `on` fst) ((k, subst env v) : env)
       newEnv = foldl addBinding (agEnv ce) bs
   in ce { agEnv = newEnv }
 
 withXBindings :: [(String,[String])] -> CGParser () -> CGParser ()
 withXBindings bs cp = do
   (flip local cp) `mapM_` (addBindings <$> (allXBindings bs))
+
   where
-    allXBindings ((k,vs):rest) = [(k,v):c | v <- vs, c <- allXBindings rest]
+    allXBindings ((k, vs):rest) = [(k, v) : c | v <- vs
+                                              , c <- allXBindings rest]
     allXBindings [] = [[]]
 
 eachBindingSetT :: ArtifactGenerator
                 -> [String]
                 -> [[String]]
-                -> CGParser [[(String,String)]]
+                -> CGParser [[(String, String)]]
 eachBindingSetT g vars valueSets =
   if all ((== length vars) . length) valueSets
-     then return (zip vars <$> valueSets)
-     else (cgError (printf "Error in 'Each' binding during artifact \
+    then return (zip vars <$> valueSets)
+    else (cgError
+            (printf
+               "Error in 'Each' binding during artifact \
                            \generation in:\n '%s'.\n\nThe variable list\n\
                            \%s\n has %i entries, but this binding set\n%s\n\n\
                            \has a different number of entries!\n"
-                           (ppShow g)
-                           (ppShow vars)
-                           (length vars)
-                           (ppShow (head (dropWhile ((== length vars) . length)
-                                                    valueSets)))))
+               (ppShow g)
+               (ppShow vars)
+               (length vars)
+               (ppShow (head (dropWhile ((== length vars) . length) valueSets)))))
 
 eachBindingSet :: ArtifactGenerator
-                -> [(String,[String])]
-                -> CGParser [[(String,String)]]
+               -> [(String, [String])]
+               -> CGParser [[(String, String)]]
 eachBindingSet g kvs = do
   checkInput
   return bindingSets
+
   where
-    bindingSets = transpose [repeat k `zip` vs | (k, vs) <- kvs ]
+    bindingSets = transpose [repeat k `zip` vs | (k, vs) <- kvs]
     checkInput = when (1 /= (length $ nub $ length . snd <$> kvs))
-                      (cgError (printf "Error in 'Each' binding: \n%s\n\
+                   (cgError
+                      (printf
+                         "Error in 'Each' binding: \n%s\n\
                                        \All value lists must have the same\
                                        \length!"
-                                       (ppShow g)))
+                         (ppShow g)))
 
 
 writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
@@ -148,19 +148,11 @@ writeInstanceGenerator (IID iidStrT) assembly = do
 
 -- | Monad for creating Instance generators.
 newtype CGParser a =
-  CGParser { runCGParser :: WriterT [InstanceGenerator CGEnv]
-                                   (ReaderT CGEnv
-                                            (Either CGError))
-                                   a
-           }
-  deriving ( Functor, Applicative, Monad
-           , MonadReader CGEnv
-           , MonadWriter [InstanceGenerator CGEnv]
-           , MonadError CGError
-           )
+          CGParser
+            { runCGParser :: WriterT [InstanceGenerator CGEnv] (ReaderT CGEnv (Either CGError)) a }
+  deriving (Functor, Applicative, Monad, MonadReader CGEnv, MonadWriter [InstanceGenerator CGEnv], MonadError CGError)
 
-data CGEnv = CGEnv { agEnv :: [(String, String)]
-                   , agSources :: [ArtifactSource] }
+data CGEnv = CGEnv { agEnv :: [(String, String)], agSources :: [ArtifactSource] }
   deriving (Read, Show, Eq)
 
 data InstanceGenerator e = IG InstanceId e ArtifactAssembly
@@ -181,20 +173,22 @@ execIGEnv :: InstanceGenerator CGEnv
           -> Either String (InstanceGenerator [SourceGenerator])
 execIGEnv (IG iid (CGEnv env sources) assembly) = do
   IG iid <$> sourceGens <*> pure (substAssembly env assembly)
+
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
 
-substAssembly :: [(String,String)] -> ArtifactAssembly -> ArtifactAssembly
+substAssembly :: [(String, String)] -> ArtifactAssembly -> ArtifactAssembly
 substAssembly env p = everywhere gsubst p
-  where gsubst :: forall a. Data a => a -> a
-        gsubst = mkT substAssembly_
-                   `extT` (substImageTarget env)
-                     `extT` (substVmScript env)
+  where
+    gsubst :: Data a => a -> a
+    gsubst = mkT substAssembly_
+             `extT` (substImageTarget env)
+             `extT` (substVmScript env)
 
-        substAssembly_ (CloudInit ts f) = CloudInit ts (sub f)
-        substAssembly_ vm = vm
+    substAssembly_ (CloudInit ts f) = CloudInit ts (sub f)
+    substAssembly_ vm = vm
 
-        sub = subst env
+    sub = subst env
 
 toSourceGen :: [(String, String)]
             -> ArtifactSource
@@ -261,35 +255,38 @@ generateSourceTo instanceDir (SGConcat env sgSource p to) = do
   let toAbs = instanceDir </> to
   ensureDir toAbs
   result <- case sgSource of
-               SGFiles froms -> do
-                 sources <- mapM (sgReadSourceFile env) froms
-                 return (mconcat sources)
-               SGContent c -> do
-                  withEnvironment env (render c)
+              SGFiles froms -> do
+                sources <- mapM (sgReadSourceFile env) froms
+                return (mconcat sources)
+              SGContent c -> do
+                withEnvironment env (render c)
   traceL (printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result)))
   liftIO (B.writeFile toAbs result)
   sgChangePerm toAbs p
 
 
-sgReadSourceFile :: [(String,String)] -> SourceFile -> B9 B.ByteString
+sgReadSourceFile :: [(String, String)] -> SourceFile -> B9 B.ByteString
 sgReadSourceFile env = withEnvironment env . readTemplateFile
 
 sgChangePerm :: FilePath -> SGPerm -> B9 ()
 sgChangePerm _ KeepPerm = return ()
-sgChangePerm f (SGSetPerm (o,g,a)) = cmd (printf "chmod 0%i%i%i '%s'" o g a f)
+sgChangePerm f (SGSetPerm (o, g, a)) = cmd (printf "chmod 0%i%i%i '%s'" o g a f)
 
 -- | Internal data type simplifying the rather complex source generation by
 --   bioling down 'ArtifactSource's to a flat list of uniform 'SourceGenerator's.
-data SourceGenerator = SGConcat [(String,String)] SGSource SGPerm FilePath
+data SourceGenerator = SGConcat [(String, String)] SGSource SGPerm FilePath
   deriving (Read, Show, Eq)
 
-data SGSource = SGFiles [SourceFile] | SGContent Content
+data SGSource = SGFiles [SourceFile]
+              | SGContent Content
   deriving (Read, Show, Eq)
 
-data SGType = SGT | SGF
+data SGType = SGT
+            | SGF
   deriving (Read, Show, Typeable, Data, Eq)
 
-data SGPerm = SGSetPerm (Int,Int,Int) | KeepPerm
+data SGPerm = SGSetPerm (Int, Int, Int)
+            | KeepPerm
   deriving (Read, Show, Typeable, Data, Eq)
 
 
@@ -297,19 +294,22 @@ sgGetFroms :: SourceGenerator -> [SourceFile]
 sgGetFroms (SGConcat _ (SGFiles fs) _ _) = fs
 sgGetFroms _ = []
 
-setSGPerm :: Int -> Int -> Int -> SourceGenerator
+setSGPerm :: Int
+          -> Int
+          -> Int
+          -> SourceGenerator
           -> Either String SourceGenerator
 setSGPerm o g a (SGConcat env from KeepPerm dest) =
-  Right (SGConcat env from (SGSetPerm (o,g,a)) dest)
+  Right (SGConcat env from (SGSetPerm (o, g, a)) dest)
 setSGPerm o g a sg
   | o < 0 || o > 7 =
-    Left (printf "Bad 'owner' permission %i in \n%s" o (ppShow sg))
+      Left (printf "Bad 'owner' permission %i in \n%s" o (ppShow sg))
   | g < 0 || g > 7 =
-    Left (printf "Bad 'group' permission %i in \n%s" g (ppShow sg))
+      Left (printf "Bad 'group' permission %i in \n%s" g (ppShow sg))
   | a < 0 || a > 7 =
-    Left (printf "Bad 'all' permission %i in \n%s" a (ppShow sg))
+      Left (printf "Bad 'all' permission %i in \n%s" a (ppShow sg))
   | otherwise =
-   Left (printf "Permission for source already defined:\n %s" (ppShow sg))
+      Left (printf "Permission for source already defined:\n %s" (ppShow sg))
 
 setSGFromDirectory :: FilePath -> SourceGenerator -> SourceGenerator
 setSGFromDirectory fromDir (SGConcat e (SGFiles fs) p d) =
@@ -334,6 +334,7 @@ createTarget iid instanceDir (VmImages imageTargets vmScript) = do
   return [VmImagesTarget]
 createTarget _ instanceDir (CloudInit types outPath) = do
   mapM create_ types
+
   where
     create_ CI_DIR = do
       let ciDir = outPath
@@ -341,11 +342,12 @@ createTarget _ instanceDir (CloudInit types outPath) = do
       dbgL (printf "creating directory '%s'" ciDir)
       files <- getDirectoryFiles instanceDir
       traceL (printf "copying files: %s" (show files))
-      liftIO (mapM_
-                (\(f,t) -> do
-                   ensureDir t
-                   copyFile f t)
-                (((instanceDir </>) &&& (ciDir </>)) <$> files))
+      liftIO
+        (mapM_
+           (\(f, t) -> do
+              ensureDir t
+              copyFile f t)
+           (((instanceDir </>) &&& (ciDir </>)) <$> files))
       infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir))
       return (CloudInitTarget CI_DIR ciDir)
 
@@ -356,13 +358,15 @@ createTarget _ instanceDir (CloudInit types outPath) = do
       ensureDir tmpFile
       dbgL (printf "creating cloud init iso temp image '%s',\
                    \ destination file: '%s" tmpFile isoFile)
-      cmd (printf "genisoimage\
+      cmd
+        (printf
+           "genisoimage\
                   \ -output '%s'\
                   \ -volid cidata\
                   \ -rock\
                   \ -d '%s' 2>&1"
-                  tmpFile
-                  instanceDir)
+           tmpFile
+           instanceDir)
       dbgL (printf "moving iso image '%s' to '%s'" tmpFile isoFile)
       ensureDir isoFile
       liftIO (copyFile tmpFile isoFile)
@@ -379,9 +383,10 @@ createTarget _ instanceDir (CloudInit types outPath) = do
       traceL (printf "adding '%s'" (show files))
       cmd (printf "truncate --size 2M '%s'" tmpFile)
       cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
-      cmd (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
-                            : (printf "'%s'" <$> files))
-           ++ " ::")
+      cmd
+        (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
+                          : (printf "'%s'" <$> files))
+         ++ " ::")
       dbgL (printf "moving vfat image '%s' to '%s'" tmpFile vfatFile)
       ensureDir vfatFile
       liftIO (copyFile tmpFile vfatFile)

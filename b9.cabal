@@ -84,32 +84,32 @@ library
                    , B9.QCUtil
   other-modules:   Paths_b9
   -- other-extensions:
-  build-depends:     ConfigFile >= 1.1.3 && <1.2
+  build-depends:     ConfigFile
                    , QuickCheck
                    , aeson
-                   , async >=2.0.1 && <2.1
-                   , base >=4.6 && <4.8
-                   , binary >=0.7 && <0.8
-                   , bytestring >=0.10 && <0.11
-                   , conduit >=1.2 && <1.3
-                   , conduit-extra >=1.1 && <1.2
-                   , directory >=1.2 && <1.3
-                   , filepath >=1.3 && <1.4
-                   , mtl >=2.1 && <2.2
-                   , old-locale >=1.0 && <1.1
-                   , parsec >= 3.1.8
+                   , async
+                   , base
+                   , binary
+                   , bytestring
+                   , conduit
+                   , conduit-extra
+                   , directory
+                   , filepath
+                   , mtl
+                   , old-locale
+                   , parsec
                    , pretty-show
                    , pretty
-                   , process >=1.2 && <1.3
-                   , random >=1.0 && <1.2
+                   , process
+                   , random
                    , semigroups
-                   , syb >= 0.4.4 && <0.5
+                   , syb
                    , template
-                   , text >= 1.2.0.4
-                   , time >=1.4 && <1.5
-                   , transformers >=0.3 && <0.4
+                   , text
+                   , time
+                   , transformers
                    , unordered-containers
-                   , vector >= 0.10.12.2
+                   , vector
                    , yaml
                    , bifunctors
                    , free
@@ -129,9 +129,9 @@ executable b9c
   -- other-modules:
   -- other-extensions:
   build-depends:     b9
-                   , base >=4.6 && <4.8
-                   , bytestring >=0.10 && <0.11
-                   , optparse-applicative >= 0.11.0.1
+                   , base
+                   , bytestring
+                   , optparse-applicative
   hs-source-dirs:    src/cli
   default-language:  Haskell2010
   ghc-options:       -O3 -threaded -with-rtsopts=-N -Wall -Wall
@@ -147,7 +147,7 @@ test-suite spec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
                    , B9.ArtifactGeneratorImplSpec
-  build-depends:     base >=4.6 && <4.8
+  build-depends:     base
                    , b9
                    , hspec
                    , hspec-expectations

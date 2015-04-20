@@ -47,7 +47,7 @@ data SystemPath = Path FilePath
                 | InHomeDir FilePath
                 | InB9UserDir FilePath
                 | InTempDir FilePath
-                  deriving (Eq, Read, Show, Typeable, Data)
+  deriving (Eq, Read, Show, Typeable, Data)
 
 resolve :: MonadIO m => SystemPath -> m FilePath
 resolve (Path p) = return p
@@ -84,17 +84,18 @@ consult :: (MonadIO m, Read a) => FilePath -> m a
 consult f = liftIO $ do
   c <- readFile f
   case readEither c of
-   Left e ->
-     throwIO $ ReaderException f e
-   Right a ->
-     return a
+    Left e ->
+      throwIO $ ReaderException f e
+    Right a ->
+      return a
 
 maybeConsult :: (MonadIO m, Read a) => Maybe FilePath -> a -> m a
 maybeConsult Nothing defaultArg = return defaultArg
 maybeConsult (Just f) defaultArg = liftIO $ do
   exists <- doesFileExist f
   if exists
-    then do consult f
+    then do
+      consult f
     else return defaultArg
 
 maybeConsultSystemPath :: (MonadIO m, Read a) => Maybe SystemPath -> a -> m a
@@ -103,7 +104,8 @@ maybeConsultSystemPath (Just f) defaultArg = liftIO $ do
   f' <- resolve f
   exists <- doesFileExist f'
   if exists
-    then do consult f'
+    then do
+      consult f'
     else return defaultArg
 
 data IniFileException = IniFileException FilePath CPError
@@ -115,8 +117,8 @@ readIniFile cfgFile' = do
   cfgFile <- resolve cfgFile'
   cp' <- liftIO $ readfile emptyCP cfgFile
   case cp' of
-     Left e -> liftIO $ throwIO (IniFileException cfgFile e)
-     Right cp -> return cp
+    Left e   -> liftIO $ throwIO (IniFileException cfgFile e)
+    Right cp -> return cp
 
 getOption :: (Get_C a, Monoid a) => ConfigParser -> SectionSpec -> OptionSpec -> a
 getOption cp sec key = either (const mempty) id $ get cp sec key
@@ -139,10 +141,10 @@ instance PrintfArg UUID where
 
 
 randomUUID :: MonadIO m => m UUID
-randomUUID = liftIO (UUID <$> ((,,,,,)
-                               <$> randomIO
-                               <*> randomIO
-                               <*> randomIO
-                               <*> randomIO
-                               <*> randomIO
-                               <*> randomIO))
+randomUUID = liftIO
+               (UUID <$> ((,,,,,) <$> randomIO
+                                  <*> randomIO
+                                  <*> randomIO
+                                  <*> randomIO
+                                  <*> randomIO
+                                  <*> randomIO))
