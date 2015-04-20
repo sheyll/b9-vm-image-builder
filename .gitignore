@@ -6,7 +6,6 @@ TAGS
 /BUILD-*
 /dist
 /OUT
-/cabal.config
 
 /.cabal-sandbox/
 /cabal.sandbox.config

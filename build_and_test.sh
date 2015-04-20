@@ -7,6 +7,7 @@ set -exu
 
 PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
 
+cabal install -j --enable-tests --dependencies-only
 cabal configure --enable-tests --disable-optimization
 cabal build
 ./dist/build/spec/spec
