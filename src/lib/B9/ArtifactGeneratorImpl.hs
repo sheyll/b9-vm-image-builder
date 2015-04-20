@@ -36,27 +36,32 @@ import Text.Show.Pretty (ppShow)
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
 assemble artGen = do
-  is <- evalArtifactGenerator artGen
-  createAssembledArtifacts is
-
--- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
--- that can be built with 'createAssembledArtifacts'.
-evalArtifactGenerator :: ArtifactGenerator -> B9 [InstanceGenerator [SourceGenerator]]
-evalArtifactGenerator artGen = do
   b9cfgEnvVars <- envVars <$> getConfig
   buildId <- getBuildId
   buildDate <- getBuildDate
+  case evalArtifactGenerator buildId buildDate b9cfgEnvVars artGen of
+    Left err -> error err
+    Right is -> createAssembledArtifacts is
+
+-- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
+-- that can be built with 'createAssembledArtifacts'.
+evalArtifactGenerator :: String
+                      -> String
+                      -> BuildVariables
+                      -> ArtifactGenerator
+                      -> Either String [InstanceGenerator [SourceGenerator]]
+evalArtifactGenerator buildId buildDate b9cfgEnvVars artGen =
   let ag = parseArtifactGenerator artGen
       e = CGEnv ((buildDateKey, buildDate) : (buildIdKey, buildId) : b9cfgEnvVars) []
-  case execCGParser ag e of
+  in case execCGParser ag e of
     Left (CGError err) ->
-      error (printf "error parsing: %s: %s" (ppShow artGen) err)
+      Left (printf "error parsing: %s: %s" (ppShow artGen) err)
     Right igs ->
       case execIGEnv `mapM` igs of
-        Left err ->
-          error (printf "Failed to parse:\n%s\nError: %s" (ppShow artGen) err)
-        Right is ->
-          return is
+       Left err ->
+         Left (printf "Failed to parse:\n%s\nError: %s" (ppShow artGen) err)
+       Right is ->
+         Right is
 
 -- | Parse an artifacto generator inside a 'CGParser' monad.
 parseArtifactGenerator :: ArtifactGenerator -> CGParser ()
