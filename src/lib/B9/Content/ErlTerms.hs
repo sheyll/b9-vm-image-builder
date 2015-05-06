@@ -106,25 +106,27 @@ instance Arbitrary SimpleErlangTerm where
                     ,sized aErlTuple
                     ]
     where
+      decrSize 0 = resize 0
+      decrSize n = resize (n - 1)
       aErlString n =
-        ErlString <$> resize (n-1) (listOf (choose (toEnum 0,toEnum 255)))
+        ErlString <$> decrSize n (listOf (choose (toEnum 0,toEnum 255)))
       aErlFloat n = do
-        f <- resize (n-1) arbitrary :: Gen Float
+        f <- decrSize n arbitrary :: Gen Float
         let d = fromRational (toRational f)
         return (ErlFloat d)
       aErlNatural n =
-        ErlNatural <$> resize (n-1) arbitrary
+        ErlNatural <$> decrSize n arbitrary
       aErlChar n =
-        ErlChar <$> resize (n-1) (choose (toEnum 0, toEnum 255))
+        ErlChar <$> decrSize n (choose (toEnum 0, toEnum 255))
       aErlAtomUnquoted n = do
         f <- choose ('a','z')
-        rest <- resize (n-1) aErlNameString
+        rest <- decrSize n aErlNameString
         return (ErlAtom (f:rest))
       aErlAtomQuoted n = do
-        cs <- resize (n-1) aParsableErlString
+        cs <- decrSize n aParsableErlString
         return (ErlAtom ("'" ++ cs ++ "'"))
       aErlBinary n =
-        ErlBinary <$> resize (n-1) (listOf (choose (toEnum 0,toEnum 255)))
+        ErlBinary <$> decrSize n (listOf (choose (toEnum 0,toEnum 255)))
       aParsableErlString = oneof [aErlNameString
                                  ,aErlEscapedCharString
                                  ,aErlControlCharString
