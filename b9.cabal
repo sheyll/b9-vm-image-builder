@@ -88,7 +88,7 @@ library
                    , QuickCheck
                    , aeson
                    , async
-                   , base
+                   , base >= 4.7 && < 5
                    , binary
                    , bytestring
                    , conduit
@@ -129,7 +129,7 @@ executable b9c
   -- other-modules:
   -- other-extensions:
   build-depends:     b9
-                   , base
+                   , base >= 4.7 && < 5
                    , bytestring
                    , optparse-applicative
   hs-source-dirs:    src/cli
@@ -147,7 +147,7 @@ test-suite spec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
                    , B9.ArtifactGeneratorImplSpec
-  build-depends:     base
+  build-depends:     base >= 4.7 && < 5
                    , b9
                    , hspec
                    , hspec-expectations
