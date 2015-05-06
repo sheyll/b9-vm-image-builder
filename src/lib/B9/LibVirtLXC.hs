@@ -49,8 +49,8 @@ runInEnvironment env scriptIn =
 
     execute (Context scriptDirHost uuid domainFile cfg) = do
       let virsh = virshCommand cfg
-      cmd $ printf "%s create '%s'" virsh domainFile
-      cmd $ printf "%s console %U" virsh uuid
+      cmd $ printf "%s create '%s' --console --autodestroy" virsh domainFile
+      -- cmd $ printf "%s console %U" virsh uuid
       checkSuccessMarker scriptDirHost
 
     checkSuccessMarker scriptDirHost =
