@@ -14,3 +14,5 @@ PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
 ./build_and_test.sh
 ./build_haddock.sh
 cabal check
+cabal sdist
+
