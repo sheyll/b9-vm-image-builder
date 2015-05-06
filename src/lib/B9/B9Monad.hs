@@ -27,7 +27,6 @@ import           Data.Word ( Word32 )
 import           System.Directory
 import           System.Exit
 import           System.FilePath
--- import qualified System.Locale ( defaultTimeLocale )
 import           System.Random ( randomIO )
 import           Text.Printf
 import           Control.Concurrent.Async (Concurrently (..))

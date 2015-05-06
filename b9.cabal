@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.2
+version:             0.5.3
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -48,7 +48,7 @@ bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
 copyright:           2015 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
-extra-source-files:  README.md, build_and_run.sh, build_and_test.sh, build_haddock.sh,
+extra-source-files:  README.md, build_and_test.sh, build_haddock.sh,
                      LICENSE, TODO.org, Setup.hs, b9.cabal, .gitignore, prepare_release.sh, .travis.yml, CONTRIBUTORS
 cabal-version:       >=1.10
 
@@ -96,7 +96,7 @@ library
                    , directory
                    , filepath
                    , mtl
-                   , old-locale
+                   , time >= 1.5.0 && < 2
                    , parsec
                    , pretty-show
                    , pretty
@@ -106,7 +106,6 @@ library
                    , syb
                    , template
                    , text
-                   , time
                    , transformers
                    , unordered-containers
                    , vector

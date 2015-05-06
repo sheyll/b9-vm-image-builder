@@ -9,8 +9,7 @@
 #
 set -eu
 
-PATH="$(pwd)/.cabal-sandbox/bin:$PATH"
-
+cabal clean
 ./build_and_test.sh
 ./build_haddock.sh
 cabal check
