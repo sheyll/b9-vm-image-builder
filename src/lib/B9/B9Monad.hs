@@ -59,8 +59,9 @@ run cfgParser cfg action = do
 
   where
     run' buildId now buildDir = do
+      maybe empty setCurrentDirectory (buildDirRoot cfg)
       -- Check repositories
-      repoCache <- initRepoCache (maybe defaultRepositoryCache id (repositoryCache cfg))
+      repoCache <- initRepoCache (fromMaybe defaultRepositoryCache (repositoryCache cfg))
       let remoteRepos = getConfiguredRemoteRepos cfgParser
       remoteRepos' <- mapM (initRemoteRepo repoCache) remoteRepos
       let ctx = BuildState

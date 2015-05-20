@@ -28,6 +28,8 @@ module B9.Builder ( module B9.B9Monad
 import Data.Monoid
 import Text.Printf ( printf )
 import Text.Show.Pretty (ppShow)
+import Control.Monad.IO.Class
+import System.Directory
 
 import B9.B9Monad
 import B9.ConfigUtils
@@ -55,6 +57,7 @@ buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
   withB9Config cfgParser cliCfg $ \cfg ->
     run cfgParser cfg $ do
+      traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
       infoL "BUILDING ARTIFACTS"
       getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
       assemble artifactGenerator
