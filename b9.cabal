@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.5
+version:             0.5.6
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -120,7 +120,7 @@ library
                     , GADTs
   hs-source-dirs:    src/lib
   default-language:  Haskell2010
-  ghc-options:       -O2 -with-rtsopts=-N -Wall -fno-warn-unused-imports
+  ghc-options:       -with-rtsopts=-N -Wall -fno-warn-unused-imports
                      -fwarn-unused-binds -fno-warn-unused-do-bind
 
 executable b9c
@@ -133,7 +133,7 @@ executable b9c
                    , optparse-applicative
   hs-source-dirs:    src/cli
   default-language:  Haskell2010
-  ghc-options:       -O2 -threaded -with-rtsopts=-N -Wall -fno-warn-unused-imports
+  ghc-options:       -threaded -with-rtsopts=-N -Wall -fno-warn-unused-imports
                      -fwarn-unused-binds -fno-warn-unused-do-bind
 
 test-suite spec
