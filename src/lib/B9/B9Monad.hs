@@ -28,6 +28,7 @@ import           System.Directory
 import           System.Exit
 import           System.FilePath
 import           System.Random ( randomIO )
+import qualified System.IO as SysIO
 import           Text.Printf
 import           Control.Concurrent.Async (Concurrently (..))
 import           Data.Conduit (($$))
@@ -39,6 +40,7 @@ data BuildState = BuildState { bsBuildId :: String
                              , bsCfgParser :: ConfigParser
                              , bsCfg :: B9Config
                              , bsBuildDir :: FilePath
+                             , bsLogFileHandle :: Maybe SysIO.Handle
                              , bsSelectedRemoteRepo :: Maybe RemoteRepo
                              , bsRemoteRepos :: [RemoteRepo]
                              , bsRepoCache :: RepoCache
@@ -55,10 +57,17 @@ run :: ConfigParser -> B9Config -> B9 a -> IO a
 run cfgParser cfg action = do
   buildId <- generateBuildId
   now <- getCurrentTime
-  bracket (createBuildDir buildId) removeBuildDir (run' buildId now)
+  withBuildDir buildId (withLogFile . run' buildId now)
 
   where
-    run' buildId now buildDir = do
+    withLogFile f =
+      maybe (f Nothing)
+            (\logf -> SysIO.withFile logf SysIO.AppendMode (f . Just))
+            (logFile cfg)
+
+    withBuildDir buildId = bracket (createBuildDir buildId) removeBuildDir
+
+    run' buildId now buildDir logFileHandle = do
       maybe empty setCurrentDirectory (buildDirRoot cfg)
       -- Check repositories
       repoCache <- initRepoCache (fromMaybe defaultRepositoryCache (repositoryCache cfg))
@@ -70,6 +79,7 @@ run cfgParser cfg action = do
                   cfgParser
                   cfg
                   buildDir
+                  logFileHandle
                   selectedRemoteRepo
                   remoteRepos'
                   repoCache
@@ -79,19 +89,20 @@ run cfgParser cfg action = do
           buildDate = formatTime undefined "%F-%T" now
           selectedRemoteRepo = do
             sel <- repository cfg
-            (lookupRemoteRepo remoteRepos sel
+            lookupRemoteRepo remoteRepos sel
              <|> error
                    (printf
                       "selected remote repo '%s' not configured, valid remote repos are: '%s'"
                       sel
-                      (show remoteRepos)))
+                      (show remoteRepos))
       (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
       -- Write a profiling report
       when (isJust (profileFile cfg)) $
-        writeFile (fromJust (profileFile cfg)) (unlines $ show <$> (reverse $ bsProf ctxOut))
+        writeFile (fromJust (profileFile cfg))
+                  (unlines $ show <$> reverse (bsProf ctxOut))
       return r
 
-    createBuildDir buildId = do
+    createBuildDir buildId =
       if uniqueBuildDirs cfg
         then do
           let subDir = "BUILD-" ++ buildId
@@ -105,7 +116,7 @@ run cfgParser cfg action = do
           canonicalizePath buildDir
 
       where
-        resolveBuildDir f = do
+        resolveBuildDir f =
           case buildDirRoot cfg of
             Nothing ->
               return f
@@ -184,11 +195,11 @@ cmdWithStdIn cmdStr = do
   where
     getCmdLogger = do
       lv <- gets $ verbosity . bsCfg
-      lf <- gets $ logFile . bsCfg
-      return $ \level -> (CL.mapM_ (logImpl lv lf level . B.unpack))
+      lfh <- gets bsLogFileHandle
+      return $ \level -> CL.mapM_ (logImpl lv lfh level . B.unpack)
 
     checkExitCode ExitSuccess =
-      traceL $ "COMMAND SUCCESS"
+      traceL "COMMAND SUCCESS"
     checkExitCode ec@(ExitFailure e) = do
       errorL $ printf "COMMAND '%s' FAILED: %i!" cmdStr e
       liftIO $ exitWith ec
@@ -208,15 +219,17 @@ errorL = b9Log LogError
 b9Log :: LogLevel -> String -> B9 ()
 b9Log level msg = do
   lv <- gets $ verbosity . bsCfg
-  lf <- gets $ logFile . bsCfg
+  lfh <- gets bsLogFileHandle
   modify $ \ ctx -> ctx { bsProf = LogEvent level msg : bsProf ctx }
-  B9 $ liftIO $ logImpl lv lf level msg
+  B9 $ liftIO $ logImpl lv lfh level msg
 
-logImpl :: Maybe LogLevel -> Maybe FilePath -> LogLevel -> String -> IO ()
-logImpl minLevel mf level msg = do
+logImpl :: Maybe LogLevel -> Maybe SysIO.Handle -> LogLevel -> String -> IO ()
+logImpl minLevel mh level msg = do
   lm <- formatLogMsg level msg
   when (isJust minLevel && level >= fromJust minLevel) (putStr lm)
-  when (isJust mf) (appendFile (fromJust mf) lm)
+  when (isJust mh) $ do
+    SysIO.hPutStr (fromJust mh) lm
+    SysIO.hFlush (fromJust mh)
 
 formatLogMsg :: LogLevel -> String -> IO String
 formatLogMsg l msg = do
