@@ -68,7 +68,7 @@ run cfgParser cfg action = do
     withBuildDir buildId = bracket (createBuildDir buildId) removeBuildDir
 
     run' buildId now buildDir logFileHandle = do
-      maybe empty setCurrentDirectory (buildDirRoot cfg)
+      maybe (print "Keeping PWD as CWD") setCurrentDirectory (buildDirRoot cfg)
       -- Check repositories
       repoCache <- initRepoCache (fromMaybe defaultRepositoryCache (repositoryCache cfg))
       let remoteRepos = getConfiguredRemoteRepos cfgParser
