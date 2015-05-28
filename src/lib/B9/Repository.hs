@@ -63,10 +63,10 @@ remoteRepoCheckSshPrivKey :: MonadIO m => RemoteRepo -> m RemoteRepo
 remoteRepoCheckSshPrivKey (RemoteRepo rId rp (SshPrivKey keyFile) h u) = do
   exists <- liftIO (doesFileExist keyFile)
   keyFile' <- liftIO (canonicalizePath keyFile)
-  when (not exists)
-       (error (printf "SSH Key file '%s' for repository '%s' is missing."
-                      keyFile'
-                      rId))
+  unless exists
+         (error (printf "SSH Key file '%s' for repository '%s' is missing."
+                        keyFile'
+                        rId))
   return (RemoteRepo rId rp (SshPrivKey keyFile') h u)
 
 -- | Initialize the repository; load the corresponding settings from the config
@@ -135,12 +135,12 @@ getConfiguredRemoteRepos cp = map parseRepoSection repoSections
       where
         getsec :: Get_C a =>  OptionSpec -> Either CPError a
         getsec = get cp section
-        parseResult = do
+        parseResult =
           RemoteRepo repoId
             <$> getsec repoRemotePathK
             <*> (SshPrivKey <$> getsec repoRemoteSshKeyK)
-            <*> (SshRemoteHost <$> ((,) <$> (getsec repoRemoteSshHostK)
-                                        <*> (getsec repoRemoteSshPortK)))
+            <*> (SshRemoteHost <$> ((,) <$> getsec repoRemoteSshHostK
+                                        <*> getsec repoRemoteSshPortK))
             <*> (SshRemoteUser <$> getsec repoRemoteSshUserK)
           where
             repoId = let prefixLen = length section - suffixLen

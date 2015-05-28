@@ -94,8 +94,7 @@ maybeConsult Nothing defaultArg = return defaultArg
 maybeConsult (Just f) defaultArg = liftIO $ do
   exists <- doesFileExist f
   if exists
-    then do
-      consult f
+    then consult f
     else return defaultArg
 
 maybeConsultSystemPath :: (MonadIO m, Read a) => Maybe SystemPath -> a -> m a
@@ -104,8 +103,7 @@ maybeConsultSystemPath (Just f) defaultArg = liftIO $ do
   f' <- resolve f
   exists <- doesFileExist f'
   if exists
-    then do
-      consult f'
+    then consult f'
     else return defaultArg
 
 data IniFileException = IniFileException FilePath CPError

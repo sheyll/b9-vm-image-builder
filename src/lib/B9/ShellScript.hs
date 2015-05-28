@@ -72,9 +72,9 @@ toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
   where
     toLLC :: Script -> Reader Ctx [Cmd]
     toLLC NoOP = return []
-    toLLC (In d cs) = local (\ ctx -> ctx { ctxCwd = (Cwd d) })
+    toLLC (In d cs) = local (\ ctx -> ctx{ctxCwd = Cwd d})
                       (toLLC (Begin cs))
-    toLLC (As u cs) = local (\ ctx -> ctx { ctxUser = (User u) })
+    toLLC (As u cs) = local (\ ctx -> ctx{ctxUser = User u})
                       (toLLC (Begin cs))
     toLLC (IgnoreErrors b cs) = local (\ ctx -> ctx { ctxIgnoreErrors = b })
                                 (toLLC (Begin cs))

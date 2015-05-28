@@ -10,7 +10,7 @@ import B9.Content.YamlObject
 import B9.Content.AST
 
 spec :: Spec
-spec = do
+spec =
   describe "YamlObject" $ do
 
     it "combines primitives by putting them in an array" $

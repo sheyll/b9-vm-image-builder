@@ -137,7 +137,7 @@ siName (SharedImage (SharedImageName n) _ _ _ _) = n
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
   compare (SharedImage n d b _ _) (SharedImage n' d' b' _ _) =
-    (compare n n') <> (compare d d') <> (compare b b')
+    compare n n' <> compare d d' <> compare b b'
 
 newtype SharedImageName = SharedImageName String deriving (Eq,Ord,Read,Show)
 newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show)

@@ -1,4 +1,3 @@
-{-# Language DeriveDataTypeable #-}
 {-|
 Static B9 configuration. Read, write and merge configurable properties.
 The properties are independent of specific build targets.
@@ -18,6 +17,7 @@ module B9.B9Config ( B9Config(..)
                    ) where
 
 import Data.Monoid
+import Data.Maybe (fromMaybe)
 import Control.Monad
 import Control.Exception
 import Data.Function (on)
@@ -106,12 +106,12 @@ cfgFileSection = "global"
 
 getB9ConfigFile :: MonadIO m => Maybe SystemPath -> m FilePath
 getB9ConfigFile mCfgFile = do
-  cfgFile <- resolve (maybe defaultB9ConfigFile id mCfgFile)
+  cfgFile <- resolve (fromMaybe defaultB9ConfigFile mCfgFile)
   ensureDir cfgFile
   return cfgFile
 
 writeB9Config :: MonadIO m
-                 => (Maybe SystemPath)
+                 => Maybe SystemPath
                  -> ConfigParser
                  -> m ()
 writeB9Config cfgFileIn cp = do
@@ -119,7 +119,7 @@ writeB9Config cfgFileIn cp = do
   liftIO (writeFile cfgFile (to_string cp))
 
 writeInitialB9Config :: MonadIO m
-                        => (Maybe SystemPath)
+                        => Maybe SystemPath
                         -> B9Config
                         -> ConfigParser
                         -> m ()
@@ -131,7 +131,7 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
   cfgFile <- resolve cfgPath
   ensureDir cfgFile
   exists <- liftIO $ doesFileExist cfgFile
-  when (not exists) $
+  unless exists $
     let res = do
           let cp = emptyCP
               c = defaultB9Config <> cliCfg
@@ -151,7 +151,7 @@ writeInitialB9Config (Just cfgPath) cliCfg cpNonGlobal = do
      Left e -> liftIO (throwIO (IniFileException cfgFile e))
      Right cp -> liftIO (writeFile cfgFile (to_string cp))
 
-readB9Config :: MonadIO m => (Maybe SystemPath) -> m ConfigParser
+readB9Config :: MonadIO m => Maybe SystemPath -> m ConfigParser
 readB9Config Nothing = readB9Config (Just defaultB9ConfigFile)
 readB9Config (Just cfgFile) = readIniFile cfgFile
 

@@ -92,7 +92,7 @@ runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
                       (Resources AutomaticRamSize 8 cpu))
 
 createSharedDirs :: FilePath -> [SharedDirectory] -> B9 [SharedDirectory]
-createSharedDirs instanceDir sharedDirsIn = mapM createSharedDir sharedDirsIn
+createSharedDirs instanceDir = mapM createSharedDir
   where
     createSharedDir (SharedDirectoryRO d m) = do
       d' <- createAndCanonicalize d

@@ -38,7 +38,7 @@ instance Read YamlObject where
 
 instance Show YamlObject where
   show (YamlObject o) =
-    "YamlObject " <> (show $ T.unpack $ E.decodeUtf8 $ encode o)
+    "YamlObject " <> show (T.unpack $ E.decodeUtf8 $ encode o)
 
 instance Semigroup YamlObject where
 
@@ -59,7 +59,7 @@ instance Semigroup YamlObject where
         array [t1,t2]
 
 instance ConcatableSyntax YamlObject where
-  decodeSyntax src str = do
+  decodeSyntax src str =
     case decodeEither str of
       Left e ->
         Left (printf "YamlObject parse error in file '%s':\n%s\n"
@@ -87,7 +87,7 @@ instance ASTish YamlObject where
         return (foldl1 (<>) ys)
       ASTEmbed c ->
          YamlObject . toJSON . T.unpack . E.decodeUtf8 <$> render c
-      ASTString str -> do
+      ASTString str ->
         return (YamlObject (toJSON str))
       ASTParse src@(Source _ srcPath) -> do
         c <- readTemplateFile src

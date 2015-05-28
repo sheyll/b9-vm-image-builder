@@ -99,9 +99,7 @@ addBindings bs ce =
   in ce { agEnv = newEnv }
 
 withXBindings :: [(String,[String])] -> CGParser () -> CGParser ()
-withXBindings bs cp = do
-  (flip local cp) `mapM_` (addBindings <$> (allXBindings bs))
-
+withXBindings bs cp = (`local` cp) `mapM_` (addBindings <$> allXBindings bs)
   where
     allXBindings ((k, vs):rest) = [(k, v) : c | v <- vs
                                               , c <- allXBindings rest]
@@ -114,7 +112,7 @@ eachBindingSetT :: ArtifactGenerator
 eachBindingSetT g vars valueSets =
   if all ((== length vars) . length) valueSets
     then return (zip vars <$> valueSets)
-    else (cgError
+    else cgError
             (printf
                "Error in 'Each' binding during artifact \
                            \generation in:\n '%s'.\n\nThe variable list\n\
@@ -123,7 +121,7 @@ eachBindingSetT g vars valueSets =
                (ppShow g)
                (ppShow vars)
                (length vars)
-               (ppShow (head (dropWhile ((== length vars) . length) valueSets)))))
+               (ppShow (head (dropWhile ((== length vars) . length) valueSets))))
 
 eachBindingSet :: ArtifactGenerator
                -> [(String, [String])]
@@ -134,7 +132,7 @@ eachBindingSet g kvs = do
 
   where
     bindingSets = transpose [repeat k `zip` vs | (k, vs) <- kvs]
-    checkInput = when (1 /= (length $ nub $ length . snd <$> kvs))
+    checkInput = when (1 /= length (nub $ length . snd <$> kvs))
                    (cgError
                       (printf
                          "Error in 'Each' binding: \n%s\n\
@@ -176,19 +174,17 @@ execCGParser = runReaderT . execWriterT . runCGParser
 
 execIGEnv :: InstanceGenerator CGEnv
           -> Either String (InstanceGenerator [SourceGenerator])
-execIGEnv (IG iid (CGEnv env sources) assembly) = do
-  IG iid <$> sourceGens <*> pure (substAssembly env assembly)
+execIGEnv (IG iid (CGEnv env sources) assembly) = IG iid <$> sourceGens <*> pure (substAssembly env assembly)
 
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
 
 substAssembly :: [(String, String)] -> ArtifactAssembly -> ArtifactAssembly
-substAssembly env p = everywhere gsubst p
+substAssembly env = everywhere gsubst
   where
     gsubst :: Data a => a -> a
-    gsubst = mkT substAssembly_
-             `extT` (substImageTarget env)
-             `extT` (substVmScript env)
+    gsubst = mkT substAssembly_ `extT` substImageTarget env
+             `extT` substVmScript env
 
     substAssembly_ (CloudInit ts f) = CloudInit ts (sub f)
     substAssembly_ vm = vm
@@ -263,7 +259,7 @@ generateSourceTo instanceDir (SGConcat env sgSource p to) = do
               SGFiles froms -> do
                 sources <- mapM (sgReadSourceFile env) froms
                 return (mconcat sources)
-              SGContent c -> do
+              SGContent c ->
                 withEnvironment env (render c)
   traceL (printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result)))
   liftIO (B.writeFile toAbs result)
@@ -337,9 +333,7 @@ createTarget iid instanceDir (VmImages imageTargets vmScript) = do
       (IID iidStr) = iid
   unless success (errorL err_msg >> error err_msg)
   return [VmImagesTarget]
-createTarget _ instanceDir (CloudInit types outPath) = do
-  mapM create_ types
-
+createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
   where
     create_ CI_DIR = do
       let ciDir = outPath
@@ -383,14 +377,13 @@ createTarget _ instanceDir (CloudInit types outPath) = do
       let vfatFile = outPath <.> "vfat"
           tmpFile = buildDir </> takeFileName vfatFile
       ensureDir tmpFile
-      files <- (map (instanceDir </>)) <$> getDirectoryFiles instanceDir
+      files <- map (instanceDir </>) <$> getDirectoryFiles instanceDir
       dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
       traceL (printf "adding '%s'" (show files))
       cmd (printf "truncate --size 2M '%s'" tmpFile)
       cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
       cmd
-        (intercalate " " ((printf "mcopy -oi '%s' " tmpFile)
-                          : (printf "'%s'" <$> files))
+        (unwords (printf "mcopy -oi '%s' " tmpFile : (printf "'%s'" <$> files))
          ++ " ::")
       dbgL (printf "moving vfat image '%s' to '%s'" tmpFile vfatFile)
       ensureDir vfatFile

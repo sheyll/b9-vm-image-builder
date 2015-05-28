@@ -185,12 +185,12 @@ data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
   deriving (Read, Show, Typeable, Data, Eq)
 
 instance Arbitrary ArtifactGenerator where
-  arbitrary = oneof [ Sources <$> (halfSize arbitrary) <*> (halfSize arbitrary)
-                    , Let <$> (halfSize arbitraryEnv) <*> (halfSize arbitrary)
-                    , (halfSize arbitraryEachT) <*> (halfSize arbitrary)
-                    , (halfSize arbitraryEach) <*> (halfSize arbitrary)
-                    , Artifact <$> (smaller arbitrary)
-                               <*> (smaller arbitrary)
+  arbitrary = oneof [ Sources <$> halfSize arbitrary <*> halfSize arbitrary
+                    , Let <$> halfSize arbitraryEnv <*> halfSize arbitrary
+                    , halfSize arbitraryEachT <*> halfSize arbitrary
+                    , halfSize arbitraryEach <*> halfSize arbitrary
+                    , Artifact <$> smaller arbitrary
+                               <*> smaller arbitrary
                     , pure EmptyArtifact
                     ]
 
@@ -204,8 +204,8 @@ arbitraryEachT = sized $ \n ->
 
 arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEach = sized $ \n ->
-   Each <$> listOf ((,) <$> (listOf1
-                               (choose ('a', 'z')))
+   Each <$> listOf ((,) <$> listOf1
+                               (choose ('a', 'z'))
                         <*> vectorOf n (halfSize
                                           (listOf1
                                              (choose ('a', 'z')))))

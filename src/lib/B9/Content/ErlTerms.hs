@@ -246,32 +246,30 @@ erlCharEscaped =
 
       <|>
       do char 'x'
-         (do ds <- between (char '{') (char '}') (fmap hexVal <$> many1 hexDigit)
-             let val = foldl (\acc v -> acc * 16 + v) 0 ds
-             return (toEnum val)
+         do ds <- between (char '{') (char '}') (fmap hexVal <$> many1 hexDigit)
+            let val = foldl (\acc v -> acc * 16 + v) 0 ds
+            return (toEnum val)
           <|>
           do x1 <- hexVal <$> hexDigit
              x2 <- hexVal <$> hexDigit;
-             return (toEnum ((x1*16)+x2)))
+             return (toEnum ((x1*16)+x2))
 
       <|>
       do o1 <- octVal <$> octDigit
-         (do o2 <- octVal <$>  octDigit
-             (do o3 <- octVal <$>  octDigit
-                 return (toEnum ((((o1*8)+o2)*8)+o3))
-              <|>
-              return (toEnum ((o1*8)+o2)))
-          <|>
-          return (toEnum o1))
+         do o2 <- octVal <$> octDigit
+            do o3 <- octVal <$> octDigit
+               return (toEnum ((((o1*8)+o2)*8)+o3))
+              <|> return (toEnum ((o1*8)+o2))
+          <|> return (toEnum o1)
 
       <|>
       choice (zipWith escapedChar codes replacements))
   where
     escapedChar code replacement = char code >> return replacement
     codes =
-      ['0'   , 'b'  , 'd'  , 'e'  , 'f' , 'n' , 'r' , 's' , 't' , 'v' ,'\\','\"','\'']
+      "0bdefnrstv\\\"'"
     replacements =
-      ['\NUL', '\BS','\DEL','\ESC','\FF','\LF','\CR','\SP','\HT','\VT','\\','\"','\'']
+      "\NUL\b\DEL\ESC\f\n\r \t\v\\\"'"
     ccodes =
       ['a' .. 'z'] ++ ['A' .. 'Z']
     creplacements =

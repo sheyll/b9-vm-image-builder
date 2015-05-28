@@ -13,8 +13,7 @@ import B9.Content.ErlangPropList
 import B9.Content.AST
 
 spec :: Spec
-spec = do
-
+spec =
   describe "ErlangPropList" $ do
 
     it "implements ConcatableSyntax method decodeSyntax" $

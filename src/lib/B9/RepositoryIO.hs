@@ -50,7 +50,7 @@ repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
           traceL (printf "reading contents of directory '%s'" dir)
           ensureDir (dir ++ "/")
           files <- liftIO (getDirectoryContents dir)
-          return ((dir </>) <$> (filter (matchGlob glob) files))
+          return ((dir </>) <$> filter (matchGlob glob) files)
 
 -- | Push a file from the cache to a remote repository
 pushToRepo :: RemoteRepo -> FilePath -> FilePath -> B9 ()

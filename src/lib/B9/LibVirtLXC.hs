@@ -47,7 +47,7 @@ runInEnvironment env scriptIn =
     successMarkerCmd scriptDirGuest =
       In scriptDirGuest [Run "touch" [successMarkerFile]]
 
-    execute (Context scriptDirHost uuid domainFile cfg) = do
+    execute (Context scriptDirHost _uuid domainFile cfg) = do
       let virsh = virshCommand cfg
       cmd $ printf "%s create '%s' --console --autodestroy" virsh domainFile
       -- cmd $ printf "%s console %U" virsh uuid
@@ -184,7 +184,7 @@ readLibVirtConfig =
     let geto :: (Get_C a, Read a)
              => OptionSpec -> a -> a
         geto = getOptionOr cp cfgFileSection
-    return $
+    return
       LibVirtLXCConfig { useSudo = geto useSudoK $
                          useSudo defaultLibVirtLXCConfig
                        , virshPath = geto virshPathK $
@@ -237,8 +237,8 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
   \  <devices>\n\
   \    <emulator>" ++ emulator cfg ++ "</emulator>\n"
   ++ unlines (libVirtNetwork (networkId cfg) ++
-              (fsImage <$> (envImageMounts e)) ++
-              (fsSharedDir <$> (envSharedDirectories e))) ++ "\n" ++
+              (fsImage <$> envImageMounts e) ++
+              (fsSharedDir <$> envSharedDirectories e)) ++ "\n" ++
   "    <filesystem type='mount'>\n\
   \      <source dir='" ++ scriptDirHost ++ "'/>\n\
   \      <target dir='" ++ scriptDirGuest ++ "'/>\n\
