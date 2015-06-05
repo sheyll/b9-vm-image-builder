@@ -1,4 +1,4 @@
-{-| B9 is a library and build tool with primitive operations to run a
+{-| B9 is a library and build tool with primitive operations to rmrun a
     build script inside a virtual machine and to create and convert
     virtual machine image files as well as related ISO and VFAT disk images
     for e.g. cloud-init configuration sources.

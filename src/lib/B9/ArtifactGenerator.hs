@@ -184,6 +184,21 @@ data ArtifactTarget = CloudInitTarget CloudInitType FilePath
 data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
   deriving (Read, Show, Typeable, Data, Eq)
 
+-- | Return the files that the artifact assembly consist of.
+getAssemblyOutputFiles :: ArtifactAssembly -> [FilePath]
+getAssemblyOutputFiles (VmImages ts _) =
+  concatMap (getImageDestinationOutputFiles . itImageDestination) ts
+getAssemblyOutputFiles (CloudInit ts o) =
+  concatMap (getCloudInitOutputFiles o) ts
+  where
+    getCloudInitOutputFiles baseName t
+      | t == CI_ISO  = [baseName <.> "iso"]
+      | t == CI_VFAT = [baseName <.> "vfat"]
+      | t == CI_DIR  = [baseName </> "meta-data"
+                      ,baseName </> "user-data"]
+
+-- * QuickCheck instances
+
 instance Arbitrary ArtifactGenerator where
   arbitrary = oneof [ Sources <$> halfSize arbitrary <*> halfSize arbitrary
                     , Let <$> halfSize arbitraryEnv <*> halfSize arbitrary

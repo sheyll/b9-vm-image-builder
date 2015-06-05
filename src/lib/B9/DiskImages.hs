@@ -92,6 +92,18 @@ data ImageResize = ResizeImage ImageSize
 
 type Mounted a = (a, MountPoint)
 
+-- | Return the files generated for a local or a live image; shared and transient images
+-- are treated like they have no ouput files because the output files are manged
+-- by B9.
+getImageDestinationOutputFiles :: ImageTarget -> [FilePath]
+getImageDestinationOutputFiles (ImageTarget d _ _) =
+  case d of
+   LiveInstallerImage liName liPath _ ->
+     let path = liPath </> "machines" </> liName </> "disks" </> "raw"
+     in [path </> "0.raw", path </> "0.size", path </> "VERSION"]
+   LocalFile (Image lfPath _ _) _ -> [lfPath]
+   _ -> []
+
 itImageDestination :: ImageTarget -> ImageDestination
 itImageDestination (ImageTarget d _ _) = d
 

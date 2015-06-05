@@ -33,6 +33,16 @@ import System.Directory
 import Text.Printf
 import Text.Show.Pretty (ppShow)
 
+-- | Return a list of relative paths for the /local/ files to be generated
+-- by the ArtifactGenerator. This excludes 'Shared' and Transient image targets.
+getArtifactOutputFiles :: ArtifactGenerator -> Either String [FilePath]
+getArtifactOutputFiles g =
+  concatMap getAssemblyOutputFiles
+  <$> map takeAssembly
+  <$> evalArtifactGenerator undefined undefined [] g
+  where
+    takeAssembly (IG _ _ a) = a
+
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
 assemble artGen = do
