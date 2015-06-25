@@ -15,12 +15,14 @@ module B9.ArtifactGenerator
   ,instanceIdKey
   ,buildIdKey
   ,buildDateKey
+  ,getAssemblyOutputFiles
   ) where
 
 
 import Data.Data
 import Data.Monoid -- hiding ((<>))
 import Control.Applicative
+import System.FilePath ((<.>), (</>))
 
 import B9.DiskImages
 import B9.Vm
@@ -187,7 +189,7 @@ data CloudInitType = CI_ISO | CI_VFAT | CI_DIR
 -- | Return the files that the artifact assembly consist of.
 getAssemblyOutputFiles :: ArtifactAssembly -> [FilePath]
 getAssemblyOutputFiles (VmImages ts _) =
-  concatMap (getImageDestinationOutputFiles . itImageDestination) ts
+  concatMap getImageDestinationOutputFiles ts
 getAssemblyOutputFiles (CloudInit ts o) =
   concatMap (getCloudInitOutputFiles o) ts
   where
