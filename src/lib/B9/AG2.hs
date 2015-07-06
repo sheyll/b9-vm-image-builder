@@ -22,7 +22,6 @@ data AssemblySources = ASources
 data AssemblyTargets = ATargets
 data AssemblyState = AState
 
-
 data XAsm x = XAddSource FilePath FilePath x
 
 data XCnt x = XSourceFile FilePath (XCntParser x)
@@ -31,7 +30,6 @@ data XCnt x = XSourceFile FilePath (XCntParser x)
             | XList [x]
 
 type XCntParser a = String -> Either String a
-
 
 data B9Assembly next = VM_IMAGE ImageType ImageResize next
                      | SRC ArtifactSource next

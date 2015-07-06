@@ -5,15 +5,15 @@ files required by virtual machines. This module is about creating and merging
 files containing parsable syntactic structures, such as most configuration files
 do.
 
-Imagine you would want to create a cloud-init 'user-data' file from a set
-of 'user-data' snippets which each are valid 'user-data' files in yaml syntax
-and e.g. a 'writefiles' section. Now the goal is, for b9 to be able to merge
-these snippets into one, such that all writefiles sections are combined into
-a single writefile section. Another example is OTP/Erlang sys.config files.
-This type class is the greatest commonon denominator of types describing a
-syntax that can be parsed, concatenated e.g. like in the above example and
-rendered. The actual concatenation operation is the append from Monoid,
-i.e. like monoid but without the need for an empty element.
+Imagine you would want to create a cloud-init 'user-data' file from a set of
+'user-data' snippets which each are valid 'user-data' files in yaml syntax and
+e.g. a 'write_files' section. Now the goal is, for b9 to be able to merge these
+snippets into one, such that all writefiles sections are combined into a single
+writefile section. Another example is OTP/Erlang sys.config files.  This type
+class is the greatest commonon denominator of types describing a syntax that can
+be parsed, concatenated e.g. like in the above example and rendered. The actual
+concatenation operation is the append from Monoid, i.e. like monoid but without
+the need for an empty element.
 -}
 
 module B9.Content.AST ( ConcatableSyntax (..)
