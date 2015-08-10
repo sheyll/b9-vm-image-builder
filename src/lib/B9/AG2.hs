@@ -49,8 +49,6 @@ testUC1 inFiles outFile =
 testUC2 outFile =
   fileTarget outFile <*> sharedImage "fedora-20-prod"
 
-sharedImage :: String ->
-
 
 -- UC3: A Vm Image modified by a custom MonadIO action
 
