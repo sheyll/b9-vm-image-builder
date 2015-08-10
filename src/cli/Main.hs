@@ -5,6 +5,8 @@ import Options.Applicative.Help.Pretty
 
 import Paths_b9
 import Data.Version
+import Data.List (groupBy)
+import Data.Function (on)
 
 import B9
 
@@ -89,6 +91,21 @@ runPull mName _cfgFile cp conf =
   where
     conf' = conf { keepTempDirs = False }
     maybePullImage = maybe (return True) pullLatestImage mName
+
+runGc :: BuildAction
+runGc _cfgFile cp conf = impl
+  where
+    conf' = conf { keepTempDirs = False }
+    impl = do
+      imgs <- xxx <$> run cp conf' (lookupSharedImages (== Cache) (const True))
+      if null imgs
+        then putStrLn "\n\nNO IMAGES TO DELETE\n"
+        else putStrLn "IMAGES TO DELETE:"
+      mapM_ (putStrLn . ppShow) imgs
+      return True
+
+xxx :: [(a, SharedImage)] -> [FilePath]
+xxx = map (("PATH/" ++) . sharedImageFileName) . concatMap (tail . reverse) . filter ((> 1) . length) . groupBy ((==) `on` siName) . map snd
 
 runListSharedImages :: BuildAction
 runListSharedImages _cfgFile cp conf = impl
@@ -204,7 +221,7 @@ cmds = subparser (   command "version"
                   <> command "pull"
                              (info (runPull <$> optional sharedImageNameParser)
                                    (progDesc "Either pull shared image meta\
-                                             \ data from all repositories,\
+                                            \ data from all repositories,\
                                              \ or only from just a selected one.\
                                              \ If additionally the name of a\
                                              \ shared images was specified,\
@@ -212,6 +229,10 @@ cmds = subparser (   command "version"
                                              \ from either the selected repo,\
                                              \ or from the repo with the most\
                                              \ recent version."))
+                  <> command "gc"
+                             (info (pure runGc)
+                                   (progDesc "Remove old versions of shared images\
+                                             \ from the local cache."))
                   <> command "list"
                              (info (pure runListSharedImages)
                                    (progDesc "List shared images."))
