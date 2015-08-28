@@ -134,7 +134,7 @@ ensureAbsoluteImageDirExists img@(Image path _ _) = do
   return $ changeImageDirectory dirAbs img
 
 -- | Create an image from an image source. The destination image must have a
--- compatible image type and filesyste. The directory of the image MUST be
+-- compatible image type and filesystem. The directory of the image MUST be
 -- present and the image file itself MUST NOT alredy exist.
 materializeImageSource :: ImageSource -> Image -> B9 ()
 materializeImageSource src dest =
