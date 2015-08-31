@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.8
+version:             0.5.9
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -112,6 +112,7 @@ library
                    , yaml
                    , bifunctors
                    , free
+                   , boxes
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
                     , DeriveDataTypeable
@@ -129,6 +130,7 @@ executable b9c
   -- other-extensions:
   build-depends:     b9
                    , base >= 4.7 && < 5
+                   , directory
                    , bytestring
                    , optparse-applicative
   hs-source-dirs:    src/cli

@@ -1,12 +1,17 @@
 module Main where
 
-import Options.Applicative hiding (action)
-import Options.Applicative.Help.Pretty
+import Options.Applicative             hiding (action)
+import Options.Applicative.Help.Pretty hiding ((</>))
 
-import Paths_b9
+import Control.Exception
+import Data.Function                   (on)
+import Data.List                       (groupBy)
+import Data.Maybe
 import Data.Version
-import Data.List (groupBy)
-import Data.Function (on)
+import Paths_b9
+import Prelude                         hiding (catch)
+import System.Directory
+import System.IO.Error                 hiding (catch)
 
 import B9
 
@@ -92,32 +97,120 @@ runPull mName _cfgFile cp conf =
     conf' = conf { keepTempDirs = False }
     maybePullImage = maybe (return True) pullLatestImage mName
 
-runGc :: BuildAction
-runGc _cfgFile cp conf = impl
+runRun :: SharedImageName -> [String] -> BuildAction
+runRun (SharedImageName name) cmdAndArgs _cfgFile cp conf = impl
   where
-    conf' = conf { keepTempDirs = False }
-    impl = do
-      imgs <- xxx <$> run cp conf' (lookupSharedImages (== Cache) (const True))
-      if null imgs
-        then putStrLn "\n\nNO IMAGES TO DELETE\n"
-        else putStrLn "IMAGES TO DELETE:"
-      mapM_ (putStrLn . ppShow) imgs
-      return True
+    conf' =
+        conf
+        { keepTempDirs = False
+        , interactive = True
+        }
+    impl = buildArtifacts runCmdAndArgs cp conf'
+      where
+        runCmdAndArgs =
+            Artifact
+                (IID ("run-" ++ name))
+                (VmImages
+                     [ ImageTarget
+                           Transient
+                           (From name KeepSize)
+                           (MountPoint "/")]
+                     (VmScript
+                          X86_64
+                          [SharedDirectory "." (MountPoint "/mnt/CWD")]
+                          (Run (head cmdAndArgs') (tail cmdAndArgs'))))
+        cmdAndArgs' =
+            if null cmdAndArgs
+                then ["/usr/bin/zsh"]
+                else cmdAndArgs
 
-xxx :: [(a, SharedImage)] -> [FilePath]
-xxx = map (("PATH/" ++) . sharedImageFileName) . concatMap (tail . reverse) . filter ((> 1) . length) . groupBy ((==) `on` siName) . map snd
+
+runGcLocalRepoCache :: BuildAction
+runGcLocalRepoCache _cfgFile cp conf = impl
+  where
+    conf' =
+        conf
+        { keepTempDirs = False
+        }
+    impl =
+        run cp conf' $
+        do toDelete <-
+               (obsoleteSharedmages . map snd) <$>
+               lookupSharedImages (== Cache) (const True)
+           imgDir <- getSharedImagesCacheDir
+           let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
+               infoFiles = sharedImageFileName <$> toDelete
+               imgFiles = (imageFileName . sharedImageImage) <$> toDelete
+           if null filesToDelete
+               then liftIO $
+                    do putStrLn "\n\nNO IMAGES TO DELETE\n"
+                       return True
+               else liftIO $
+                    do putStrLn "DELETING FILES:"
+                       putStrLn (unlines filesToDelete)
+                       mapM_ removeIfExists filesToDelete
+                       return True
+    obsoleteSharedmages :: [SharedImage] -> [SharedImage]
+    obsoleteSharedmages =
+        concatMap (tail . reverse) .
+        filter ((> 1) . length) . groupBy ((==) `on` siName)
+    removeIfExists :: FilePath -> IO ()
+    removeIfExists fileName = removeFile fileName `catch` handleExists
+      where
+        handleExists e
+          | isDoesNotExistError e = return ()
+          | otherwise = throwIO e
+
+runGcRemoteRepoCache :: BuildAction
+runGcRemoteRepoCache _cfgFile cp conf = impl
+  where
+    conf' =
+        conf
+        { keepTempDirs = False
+        }
+    impl =
+        run cp conf' $
+        do repos <- getSelectedRepos
+           cache <- getRepoCache
+           mapM_ (cleanRemoteRepo cache) repos
+           return True
 
 runListSharedImages :: BuildAction
 runListSharedImages _cfgFile cp conf = impl
   where
-    conf' = conf { keepTempDirs = False }
-    impl = do
-      imgs <- run cp conf' getSharedImages
-      if null imgs
-        then putStrLn "\n\nNO SHAREABLE IMAGES\n"
-        else putStrLn "SHAREABLE IMAGES:"
-      mapM_ (putStrLn . ppShow) imgs
-      return True
+    conf' =
+        conf
+        { keepTempDirs = False
+        }
+    impl =
+        run cp conf' $
+        do remoteRepo <- getSelectedRemoteRepo
+           let repoPred =
+                   maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
+           allRepos <- getRemoteRepos
+           if isNothing remoteRepo
+               then liftIO $
+                    do putStrLn "Showing local shared images only."
+                       putStrLn $
+                           "\nTo view the contents of a remote repo add \n\
+                        \the '-r' switch with one of the remote \n\
+                        \repository ids."
+               else liftIO $
+                    putStrLn
+                        ("Showing shared images on: " ++
+                         remoteRepoRepoId (fromJust remoteRepo))
+           when (not (null allRepos)) $
+               liftIO $
+               do putStrLn "\nAvailable remote repositories:"
+                  mapM_ (putStrLn . (" * " ++) . remoteRepoRepoId) allRepos
+           imgs <- lookupSharedImages repoPred (const True)
+           if null imgs
+               then liftIO $ putStrLn "\n\nNO SHARED IMAGES\n"
+               else liftIO $
+                    do putStrLn ""
+                       putStrLn $ prettyPrintSharedImages $ map snd imgs
+           return True
+
 
 runAddRepo :: RemoteRepo -> BuildAction
 runAddRepo repo cfgFile cp _conf = do
@@ -206,42 +299,78 @@ globals = toGlobalOpts
                     , cliB9Config = b9cfg' }
 
 cmds :: Parser BuildAction
-cmds = subparser (   command "version"
-                               (info (pure runShowVersion)
-                                     (progDesc "Show program version and exit."))
-                  <> command "build"
-                               (info (runBuildArtifacts <$> buildFileParser)
-                                     (progDesc "Merge all build file and\
-                                               \ generate all artifacts."))
-                  <> command "push"
-                        (info (runPush <$> sharedImageNameParser)
-                              (progDesc "Push the lastest shared image\
+cmds =
+    subparser
+        (command
+             "version"
+             (info
+                  (pure runShowVersion)
+                  (progDesc "Show program version and exit.")) <>
+         command
+             "build"
+             (info
+                  (runBuildArtifacts <$> buildFileParser)
+                  (progDesc
+                       "Merge all build file and\
+                                               \ generate all artifacts.")) <>
+         command
+             "run"
+             (info
+                  (runRun <$> sharedImageNameParser <*> many (strArgument idm))
+                  (progDesc
+                       "Run a command on the lastest version of the\
+                                        \ specified shared image. All modifications\
+                                        \ are lost on exit.")) <>
+         command
+             "push"
+             (info
+                  (runPush <$> sharedImageNameParser)
+                  (progDesc
+                       "Push the lastest shared image\
                                         \ from cache to the selected \
-                                        \ remote repository."))
-                  <> command "pull"
-                             (info (runPull <$> optional sharedImageNameParser)
-                                   (progDesc "Either pull shared image meta\
-                                            \ data from all repositories,\
+                                        \ remote repository.")) <>
+         command
+             "pull"
+             (info
+                  (runPull <$> optional sharedImageNameParser)
+                  (progDesc
+                       "Either pull shared image meta\
+                                             \ data from all repositories,\
                                              \ or only from just a selected one.\
                                              \ If additionally the name of a\
                                              \ shared images was specified,\
                                              \ pull the newest version\
                                              \ from either the selected repo,\
                                              \ or from the repo with the most\
-                                             \ recent version."))
-                  <> command "gc"
-                             (info (pure runGc)
-                                   (progDesc "Remove old versions of shared images\
-                                             \ from the local cache."))
-                  <> command "list"
-                             (info (pure runListSharedImages)
-                                   (progDesc "List shared images."))
-                  <> command "add-repo"
-                             (info (runAddRepo <$> remoteRepoParser)
-                                   (progDesc "Add a remote repo."))
-                  <> command "reformat"
-                             (info (runFormatBuildFiles <$> buildFileParser)
-                                   (progDesc "Re-Format all build files.")))
+                                             \ recent version.")) <>
+         command
+             "clean-local"
+             (info
+                  (pure runGcLocalRepoCache)
+                  (progDesc
+                       "Remove old versions of shared images\
+                                             \ from the local cache.")) <>
+         command
+             "clean-remote"
+             (info
+                  (pure runGcRemoteRepoCache)
+                  (progDesc
+                       "Remove cached meta-data of a remote repository. \
+                       \If no '-r' is given, clean the meta data of ALL \
+                       \remote repositories.")) <>
+         command
+             "list"
+             (info (pure runListSharedImages) (progDesc "List shared images.")) <>
+         command
+             "add-repo"
+             (info
+                  (runAddRepo <$> remoteRepoParser)
+                  (progDesc "Add a remote repo.")) <>
+         command
+             "reformat"
+             (info
+                  (runFormatBuildFiles <$> buildFileParser)
+                  (progDesc "Re-Format all build files.")))
 
 buildFileParser :: Parser [FilePath]
 buildFileParser = helper <*>

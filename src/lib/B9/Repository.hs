@@ -11,6 +11,7 @@ module B9.Repository (RemoteRepo(..)
                      ,SshRemoteUser(..)
                      ,initRepoCache
                      ,initRemoteRepo
+                     ,cleanRemoteRepo
                      ,remoteRepoCheckSshPrivKey
                      ,remoteRepoCacheDir
                      ,localRepoDir
@@ -77,10 +78,27 @@ initRemoteRepo :: MonadIO m
                -> RemoteRepo
                -> m RemoteRepo
 initRemoteRepo cache repo = do
+  -- TODO logging traceL $ printf "Initializing remote repo: %s" (remoteRepoRepoId repo)
   repo' <- remoteRepoCheckSshPrivKey repo
   let (RemoteRepo repoId _ _ _ _) = repo'
   ensureDir (remoteRepoCacheDir cache repoId ++ "/")
   return repo'
+
+-- | Empty the repository; load the corresponding settings from the config
+-- file, check that the priv key exists and create the correspondig cache
+-- directory.
+cleanRemoteRepo :: MonadIO m
+                  => RepoCache
+                  -> RemoteRepo
+                  -> m ()
+cleanRemoteRepo cache repo = do
+  let repoId = remoteRepoRepoId repo
+      repoDir = remoteRepoCacheDir cache repoId ++ "/"
+  -- TODO logging infoL $ printf "Cleaning remote repo: %s" repoId
+  ensureDir repoDir
+  -- TODO logging traceL $ printf "Deleting directory: %s" repoDir
+  liftIO $ removeDirectoryRecursive repoDir
+  ensureDir repoDir
 
 -- | Return the cache directory for a remote repository relative to the root
 -- cache dir.

@@ -16,6 +16,8 @@ module B9.DiskImageBuilder (materializeImageSource
                            ,pushSharedImageLatestVersion
                            ,lookupSharedImages
                            ,getSharedImages
+                           ,getSharedImagesCacheDir
+                           ,getSelectedRepos
                            ,pullRemoteRepos
                            ,pullLatestImage
                            ,) where
@@ -84,7 +86,7 @@ resolveImageSource src =
     (CopyOnWrite backingImg) ->
       liftIO (ensureAbsoluteImageDirExists backingImg)
     (From name _resize) -> do
-      latestImage <- getLatestImageByName name
+      latestImage <- getLatestImageByName (SharedImageName name)
       liftIO (ensureAbsoluteImageDirExists latestImage)
 
 -- | Return all valid image types sorted by preference.
@@ -102,7 +104,7 @@ preferredDestImageTypes src =
          `intersect`
          allowedImageTypesForResize resize)
     (From name resize) -> do
-      sharedImg <- getLatestImageByName name
+      sharedImg <- getLatestImageByName (SharedImageName name)
       preferredDestImageTypes (SourceImage sharedImg NoPT resize)
 
 preferredSourceImageTypes :: ImageDestination -> [ImageType]
@@ -147,7 +149,7 @@ materializeImageSource src dest =
     (CopyOnWrite backingImg) ->
       createCOWImage backingImg dest
     (From name resize) -> do
-      sharedImg <- getLatestImageByName name
+      sharedImg <- getLatestImageByName (SharedImageName name)
       materializeImageSource (SourceImage sharedImg NoPT resize) dest
 
 createImageFromImage :: Image -> Partition -> ImageResize -> Image -> B9 ()
@@ -364,8 +366,8 @@ createSharedImageInCache img sname@(SharedImageName name) = do
 -- | Publish the latest version of a shared image identified by name to the
 -- selected repository from the cache.
 pushSharedImageLatestVersion :: SharedImageName -> B9 ()
-pushSharedImageLatestVersion (SharedImageName imgName) = do
-  sharedImage <- getLatestSharedImageByNameFromCache imgName
+pushSharedImageLatestVersion name@(SharedImageName imgName) = do
+  sharedImage <- getLatestSharedImageByNameFromCache name
   dbgL (printf "PUSHING '%s'" (ppShow sharedImage))
   pushToSelectedRepo sharedImage
   infoL (printf "PUSHED '%s'" imgName)
@@ -396,7 +398,7 @@ pullRemoteRepos = do
 -- | Pull the latest version of an image, either from the selected remote
 -- repo or from the repo that has the latest version.
 pullLatestImage :: SharedImageName -> B9 Bool
-pullLatestImage (SharedImageName name) = do
+pullLatestImage name@(SharedImageName dbgName) = do
   repos <- getSelectedRepos
   let repoPredicate Cache = False
       repoPredicate (Remote repoId) = repoId `elem` repoIds
@@ -407,7 +409,7 @@ pullLatestImage (SharedImageName name) = do
   if null candidates
     then do
       errorL
-        (printf "No shared image named '%s' on these remote repositories: '%s'" name
+        (printf "No shared image named '%s' on these remote repositories: '%s'" dbgName
            (ppShow repoIds))
       return False
     else do
@@ -422,13 +424,13 @@ pullLatestImage (SharedImageName name) = do
           repo = fromJust (lookupRemoteRepo repos repoId)
       pullFromRepo repo repoImgFile cachedImgFile
       pullFromRepo repo repoInfoFile cachedInfoFile
-      infoL (printf "PULLED '%s' FROM '%s'" name repoId)
+      infoL (printf "PULLED '%s' FROM '%s'" dbgName repoId)
       return True
 
 
 -- | Return the 'Image' of the latest version of a shared image named 'name'
 -- from the local cache.
-getLatestImageByName :: String -> B9 Image
+getLatestImageByName :: SharedImageName -> B9 Image
 getLatestImageByName name = do
   sharedImage <- getLatestSharedImageByNameFromCache name
   cacheDir <- getSharedImagesCacheDir
@@ -437,14 +439,14 @@ getLatestImageByName name = do
   return image
 
 -- | Return the latest version of a shared image named 'name' from the local cache.
-getLatestSharedImageByNameFromCache :: String -> B9 SharedImage
-getLatestSharedImageByNameFromCache name = do
+getLatestSharedImageByNameFromCache :: SharedImageName -> B9 SharedImage
+getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
   imgs <- lookupSharedImages (== Cache) ((== name) . siName)
   case reverse imgs of
     (Cache, sharedImage):_rest ->
       return sharedImage
     _ ->
-      error (printf "No image(s) named '%s' found." name)
+      error (printf "No image(s) named '%s' found." dbgName)
 
 -- | Return a list of all existing sharedImages from cached repositories.
 getSharedImages :: B9 [(Repository, [SharedImage])]

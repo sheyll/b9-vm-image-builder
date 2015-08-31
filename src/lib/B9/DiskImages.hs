@@ -5,6 +5,7 @@ module B9.DiskImages where
 import Data.Semigroup
 import Data.Data
 import System.FilePath
+import qualified Text.PrettyPrint.Boxes as Boxes
 
 -- | Build target for disk images; the destination, format and size of the image
 -- to generate, as well as how to create or obtain the image before a
@@ -92,6 +93,10 @@ data ImageResize = ResizeImage ImageSize
 
 type Mounted a = (a, MountPoint)
 
+-- | Return the name of the file corresponding to an `Image`
+imageFileName :: Image -> FilePath
+imageFileName (Image f _ _) = f
+
 -- | Return the files generated for a local or a live image; shared and transient images
 -- are treated like they have no ouput files because the output files are manged
 -- by B9.
@@ -143,8 +148,16 @@ data SharedImage = SharedImage SharedImageName
   deriving (Eq,Read,Show)
 
 -- | Return the name of a shared image.
-siName :: SharedImage -> String
-siName (SharedImage (SharedImageName n) _ _ _ _) = n
+siName :: SharedImage -> SharedImageName
+siName (SharedImage n _ _ _ _) = n
+
+-- | Return the date of a shared image.
+siDate :: SharedImage -> SharedImageDate
+siDate (SharedImage _ n _ _ _) = n
+
+-- | Return the build id of a shared image.
+siBuildId :: SharedImage -> SharedImageBuildId
+siBuildId (SharedImage _ _ n _ _) = n
 
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
@@ -154,6 +167,22 @@ instance Ord SharedImage where
 newtype SharedImageName = SharedImageName String deriving (Eq,Ord,Read,Show)
 newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show)
 newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Show)
+
+-- | Print the contents of the shared image in one line
+prettyPrintSharedImages :: [SharedImage] -> String
+prettyPrintSharedImages imgs = Boxes.render table
+  where
+    table = Boxes.hsep 1 Boxes.left cols
+      where
+        cols = [nameC, dateC, idC]
+          where
+            nameC = col "Name" ((\(SharedImageName n) -> n) . siName)
+            dateC = col "Date" ((\(SharedImageDate n) -> n) . siDate)
+            idC = col "ID" ((\(SharedImageBuildId n) -> n) . siBuildId)
+            col title accessor =
+              (Boxes.text title) Boxes.// (Boxes.vcat Boxes.left cells)
+              where
+                cells = Boxes.text <$> accessor <$> imgs
 
 -- | Return the disk image of an sharedImage
 sharedImageImage :: SharedImage -> Image

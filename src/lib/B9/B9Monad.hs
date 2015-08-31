@@ -68,10 +68,11 @@ run cfgParser cfg action = do
     withBuildDir buildId = bracket (createBuildDir buildId) removeBuildDir
 
     run' buildId now buildDir logFileHandle = do
-      maybe (print "Keeping PWD as CWD") setCurrentDirectory (buildDirRoot cfg)
+      maybe (return ()) setCurrentDirectory (buildDirRoot cfg)
       -- Check repositories
       repoCache <- initRepoCache (fromMaybe defaultRepositoryCache (repositoryCache cfg))
       let remoteRepos = getConfiguredRemoteRepos cfgParser
+          buildDate = formatTime undefined "%F-%T" now
       remoteRepos' <- mapM (initRemoteRepo repoCache) remoteRepos
       let ctx = BuildState
                   buildId
@@ -85,8 +86,7 @@ run cfgParser cfg action = do
                   repoCache
                   []
                   now
-                  True
-          buildDate = formatTime undefined "%F-%T" now
+                  (interactive cfg)
           selectedRemoteRepo = do
             sel <- repository cfg
             lookupRemoteRepo remoteRepos sel
@@ -171,28 +171,34 @@ cmd :: String -> B9 ()
 cmd str = do
   inheritStdIn <- gets bsInheritStdIn
   if inheritStdIn
-     then interactive str
-     else nonInteractive str
+     then interactiveCmd str
+     else nonInteractiveCmd str
 
-interactive :: String -> B9 ()
-interactive str = void (cmdWithStdIn str :: B9 Inherited)
+interactiveCmd :: String -> B9 ()
+interactiveCmd str = void (cmdWithStdIn True str :: B9 Inherited)
 
-nonInteractive :: String -> B9 ()
-nonInteractive str = void (cmdWithStdIn str :: B9 ClosedStream)
+nonInteractiveCmd :: String -> B9 ()
+-- TODO if we use 'ClosedStream' we get an error from 'virsh console'
+-- complaining about a missing controlling tty. Original source line:
+-- nonInteractiveCmd str = void (cmdWithStdIn False str :: B9 ClosedStream)
+nonInteractiveCmd str = void (cmdWithStdIn False str :: B9 Inherited)
 
-cmdWithStdIn :: (InputSource stdin) => String -> B9 stdin
-cmdWithStdIn cmdStr = do
+cmdWithStdIn :: (InputSource stdin) => Bool -> String -> B9 stdin
+cmdWithStdIn toStdOut cmdStr = do
   traceL $ "COMMAND: " ++ cmdStr
-  (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
   cmdLogger <- getCmdLogger
+  let outPipe = if toStdOut then CL.mapM_ B.putStr
+                else cmdLogger LogTrace
+  (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
   e <- liftIO $ runConcurrently $
-         Concurrently (cpOut $$ cmdLogger LogTrace) *>
+         Concurrently (cpOut $$ outPipe) *>
          Concurrently (cpErr $$ cmdLogger LogInfo) *>
          Concurrently (waitForStreamingProcess cph)
   checkExitCode e
   return cpIn
 
   where
+
     getCmdLogger = do
       lv <- gets $ verbosity . bsCfg
       lfh <- gets bsLogFileHandle

@@ -5,6 +5,7 @@ module B9.RepositoryIO (repoSearch
                        ,pullFromRepo
                        ,pullGlob
                        ,Repository(..)
+                       ,toRemoteRepository
                        ,FilePathGlob(..)) where
 
 import B9.Repository
@@ -20,6 +21,10 @@ import Text.Printf (printf)
 
 data Repository = Cache | Remote String
   deriving (Eq, Ord, Read, Show)
+
+-- | Convert a `RemoteRepo` down to a mere `Repository`
+toRemoteRepository :: RemoteRepo -> Repository
+toRemoteRepository = Remote . remoteRepoRepoId
 
 -- | Find files which are in 'subDir' and match 'glob' in the repository
 -- cache. NOTE: This operates on the repository cache, but does not enforce a

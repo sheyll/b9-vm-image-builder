@@ -45,12 +45,13 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , uniqueBuildDirs :: Bool
                          , repositoryCache :: Maybe SystemPath
                          , repository :: Maybe String
+                         , interactive :: Bool
                          } deriving (Show)
 
 
 instance Monoid B9Config where
   mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True
-                    Nothing Nothing
+                    Nothing Nothing False
   mappend c c' =
     B9Config { verbosity = getLast $ on mappend (Last . verbosity) c c'
              , logFile = getLast $ on mappend (Last . logFile) c c'
@@ -62,6 +63,7 @@ instance Monoid B9Config where
              , uniqueBuildDirs = getAll ((mappend `on` (All . uniqueBuildDirs)) c c')
              , repositoryCache = getLast $ on mappend (Last . repositoryCache) c c'
              , repository = getLast ((mappend `on` (Last . repository)) c c')
+             , interactive = getAny ((mappend `on` (Any . interactive)) c c')
              }
 
 defaultB9Config :: B9Config
@@ -75,6 +77,7 @@ defaultB9Config = B9Config { verbosity = Just LogInfo
                            , uniqueBuildDirs = True
                            , repository = Nothing
                            , repositoryCache = Just defaultRepositoryCache
+                           , interactive = False
                            }
 
 defaultRepositoryCache :: SystemPath
@@ -170,6 +173,7 @@ parseB9Config cp =
                  <*> getr uniqueBuildDirsK
                  <*> getr repositoryCacheK
                  <*> getr repositoryK
+                 <*> pure False
   in case getB9Config of
        Left err ->
          Left (printf "Failed to parse B9 configuration file: '%s'" (show err))
