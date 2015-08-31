@@ -2,9 +2,10 @@
 images.-}
 module B9.DiskImages where
 
-import Data.Semigroup
-import Data.Data
-import System.FilePath
+import           Control.Applicative
+import           Data.Data
+import           Data.Semigroup
+import           System.FilePath
 import qualified Text.PrettyPrint.Boxes as Boxes
 
 -- | Build target for disk images; the destination, format and size of the image
