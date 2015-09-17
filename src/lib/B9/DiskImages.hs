@@ -116,34 +116,31 @@ type Mounted a = (a, MountPoint)
 -- | 'SharedImage' holds all data necessary to describe an __instance__ of a shared
 --    image identified by a 'SharedImageName'. Shared images are stored in
 --    'B9.Repository's.
-data SharedImage = SharedImage SharedImageName
-                               -- ^ The name of the image is the de-facto
-                               -- identifier for push, pull, 'From' and 'Share'.
-                               -- B9 always selects the newest version the
-                               -- shared image identified by that name when
-                               -- using a shared image as an 'ImageSource'
-                               SharedImageDate
-                               -- ^ The exact time that build job __started__
-                               SharedImageBuildId
-                               -- ^ Every B9 build running in a 'B9Monad'
-                               --   contains a random unique id that is
-                               --   generated once per build (no matter how many
-                               --   artifacts are created in that build) This
-                               --   field contains the build id of the build
-                               --   that created the shared image instance.
-                               ImageType
-                               -- ^ The image file type use for the image.
-                               FileSystem
-                               -- ^ The file system contained in the image.
-  deriving (Eq,Read,Show)
+data SharedImage =
+    SharedImage SharedImageName
+                SharedImageDate
+                SharedImageBuildId
+                ImageType
+                FileSystem
+    deriving (Eq,Read,Show)
 
--- | A wrapper around a string that identifies a 'SharedImage'
+-- | The name of the image is the de-facto identifier for push, pull, 'From' and
+--   'Share'.  B9 always selects the newest version the shared image identified
+--   by that name when using a shared image as an 'ImageSource'. This is a
+--   wrapper around a string that identifies a 'SharedImage'
 newtype SharedImageName = SharedImageName String deriving (Eq,Ord,Read,Show)
--- | A wrapper around a string contains the build date of a 'SharedImage'; this
--- is purely additional convenience and typesafety
+
+-- | The exact time that build job __started__.
+--   This is a wrapper around a string contains the build date of a
+--   'SharedImage'; this is purely additional convenience and typesafety
 newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show)
--- | A wrapper around a string contains the build id of a 'SharedImage'; this
--- is purely additional convenience and typesafety
+
+-- | Every B9 build running in a 'B9Monad'
+--   contains a random unique id that is generated once per build (no matter how
+--   many artifacts are created in that build) This field contains the build id
+--   of the build that created the shared image instance.  This is A wrapper
+--   around a string contains the build id of a 'SharedImage'; this is purely
+--   additional convenience and typesafety
 newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Show)
 
 -- | Shared images are orderd by name, build date and build id
