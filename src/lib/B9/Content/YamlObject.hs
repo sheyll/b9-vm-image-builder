@@ -3,26 +3,27 @@
 module B9.Content.YamlObject ( YamlObject (..)
                              ) where
 
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as E
-import Data.Yaml
-import Data.Function
-import Data.HashMap.Strict hiding (singleton)
-import Data.Vector ((++), singleton)
-import Prelude hiding ((++))
-import Data.Semigroup
-import Control.Applicative
-import Text.Printf
+import           Control.Applicative
+import           Data.Data
+import           Data.Function
+import           Data.HashMap.Strict       hiding (singleton)
+import           Data.Semigroup
+import qualified Data.Text                 as T
+import qualified Data.Text.Encoding        as E
+import           Data.Vector               ((++), singleton)
+import           Data.Yaml
+import           Prelude                   hiding ((++))
+import           Text.Printf
 
-import B9.Content.AST
-import B9.Content.StringTemplate
+import           B9.Content.AST
+import           B9.Content.StringTemplate
 
-import Test.QuickCheck
+import           Test.QuickCheck
 
 -- | A wrapper type around yaml values with a Semigroup instance useful for
 -- combining yaml documents describing system configuration like e.g. user-data.
 data YamlObject = YamlObject Data.Yaml.Value
-  deriving (Eq)
+  deriving (Eq, Data, Typeable)
 
 instance Read YamlObject where
   readsPrec _ = readsYamlObject

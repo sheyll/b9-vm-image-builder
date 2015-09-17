@@ -18,7 +18,7 @@ data Content = RenderErlang (AST Content ErlangPropList)
              | RenderYaml (AST Content YamlObject)
              | FromString String
              | FromTextFile SourceFile
-  deriving (Read, Show, Typeable, Eq)
+  deriving (Read, Show, Typeable, Eq, Data, Typeable)
 
 instance Arbitrary Content where
   arbitrary = oneof [FromTextFile <$> smaller arbitrary

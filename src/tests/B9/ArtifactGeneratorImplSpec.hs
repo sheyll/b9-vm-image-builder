@@ -15,24 +15,24 @@ spec =
 
      it "replaces '$...' variables in SourceImage Image file paths" $
        let e = CGEnv [("variable","value")] []
-           src = vmImagesArtifact "" [transientCOWImage "${variable}" ""] NoVmScript
-           expected = transientCOWImage "value" ""
+           src = vmImagesArtifact "" [transientCOW "${variable}" ""] NoVmScript
+           expected = transientCOW "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
            (Right (IG _ _ (VmImages [actual] _))) = execIGEnv igEnv
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in SourceImage 'From' names" $
        let e = CGEnv [("variable","value")] []
-           src = vmImagesArtifact "" [transientSharedImage "${variable}" ""] NoVmScript
-           expected = transientSharedImage "value" ""
+           src = vmImagesArtifact "" [transientShared "${variable}" ""] NoVmScript
+           expected = transientShared "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
            (Right (IG _ _ (VmImages [actual] _))) = execIGEnv igEnv
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in the name of a shared image" $
        let e = CGEnv [("variable","value")] []
-           src = vmImagesArtifact "" [shareCOWImage "${variable}" ""] NoVmScript
-           expected = shareCOWImage "value" ""
+           src = vmImagesArtifact "" [shareCOW "${variable}" ""] NoVmScript
+           expected = shareCOW "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
            (Right (IG _ _ (VmImages [actual] _))) = execIGEnv igEnv
        in actual `shouldBe` expected
@@ -85,20 +85,20 @@ spec =
            (Right (IG _ _ (VmImages [] actual))) = execIGEnv igEnv
        in actual `shouldBe` expected
 
-transientCOWImage :: FilePath -> FilePath -> ImageTarget
-transientCOWImage fileName mountPoint =
+transientCOW :: FilePath -> FilePath -> ImageTarget
+transientCOW fileName mountPoint =
   ImageTarget Transient
               (CopyOnWrite (Image fileName QCow2 Ext4))
               (MountPoint mountPoint)
 
-transientSharedImage :: FilePath -> FilePath -> ImageTarget
-transientSharedImage name mountPoint =
+transientShared :: FilePath -> FilePath -> ImageTarget
+transientShared name mountPoint =
   ImageTarget Transient
               (From name KeepSize)
               (MountPoint mountPoint)
 
-shareCOWImage :: FilePath -> FilePath -> ImageTarget
-shareCOWImage destName mountPoint =
+shareCOW :: FilePath -> FilePath -> ImageTarget
+shareCOW destName mountPoint =
   ImageTarget (Share destName QCow2 KeepSize)
               (CopyOnWrite (Image "cowSource" QCow2 Ext4))
               (MountPoint mountPoint)
