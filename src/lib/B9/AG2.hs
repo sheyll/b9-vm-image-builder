@@ -1,74 +1,282 @@
 -- | __EXPERIMENTAL__ dont look!
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 module B9.AG2 where
 
 
-import Data.Data
-import Control.Monad.Trans.RWS.Lazy
-import Data.Monoid -- hiding ((<>))
-import Control.Applicative
-import Control.Applicative.Free
+-- import B9.ArtifactGenerator hiding (Let)
 
-import B9.DiskImages
-import B9.Vm
+import Control.Monad
 import B9.Content.StringTemplate
-import B9.Content.Generator
-import B9.QCUtil
+import B9.DiskImages
+import B9.B9Config
+import B9.ExecEnv                (CPUArch(..), SharedDirectory(..))
 
-import Test.QuickCheck
+import B9.ShellScript
+-- import B9.Vm
 
-type AssemblyM m = RWST AssemblySources AssemblyTargets AssemblyState m
+import Control.Monad.Free
 
-data AssemblySources = ASources
-data AssemblyTargets = ATargets
-data AssemblyState = AState
+import Text.Printf
 
-data XAsm x = XAddSource FilePath FilePath x
+data Let =
+    Let String
+        String
+        deriving (Show)
 
-data XCnt x = XSourceFile FilePath (XCntParser x)
-            | XString String x
-            | XObject [(String, x)]
-            | XList [x]
+data IncludeFile =
+    IncludeFile FilePath
+                SourceFile
+    deriving (Show)
 
-type XCntParser a = String -> Either String a
+data ExportCloudInit =
+    ExportCloudInit FilePath
+    deriving (Show)
 
-data B9Assembly next = VM_IMAGE ImageType ImageResize next
-                     | SRC ArtifactSource next
-                     | LET String String next
-                     | OUTPUT_FILE FilePath next
-                     | SHARED_IMAGE ImageResize next
-                     | FILESYSTEM FileSystemProgram next
+data Mount =
+    Mount ExecEnv
+          ImportedImage
+          MountPoint
+    deriving (Show)
 
-data FileSystemAssembly file next = FROM ImageSource
-                                  | ADD_FILE file next
+data ImportImg =
+    ImportImg ImageSource
+    deriving (Show)
 
--- UC1: Vm image from a set of files
-testUC1 inFiles outFile =
-  fileTarget outFile <*> (diskImage Raw KeepSize <*> (emptyFileSystem "my_fs_label" Ext4 64 GB <> additionalFiles "/" inFiles))
+data ExportImg =
+    ExportImg ImportedImage
+              ImageDestination
+    deriving (Show)
 
--- UC2: Vm Image based in shared image.
-testUC2 outFile =
-  fileTarget outFile <*> sharedImage "fedora-20-prod"
+data ImportedImage =
+    ImportedImage ImageSource
+                  Image
+    deriving (Show)
+
+data ExecEnv =
+    ExecEnv String
+            ExecEnvType
+            CPUArch
+    deriving (Show)
+
+data Exec =
+    Exec ExecEnv
+         Script
+    deriving (Show)
+
+data BuildStep
+    = LetBS
+    | IncludeFileBS
+    | ExportCloudInitBS
+    | ImportImgBS
+    | ExportImgBS
+    | MountBS
+    | ExecEnvBS
+    | ExecBS
+
+data SBuildStep (bs :: BuildStep) where
+        SLetBS :: SBuildStep 'LetBS
+        SIncludeFileBS :: SBuildStep 'IncludeFileBS
+        SExportCloudInitBS :: SBuildStep 'ExportCloudInitBS
+        SImportImgBS :: SBuildStep 'ImportImgBS
+        SExportImgBS :: SBuildStep 'ExportImgBS
+        SMountBS :: SBuildStep 'MountBS
+        SExecEnvBS :: SBuildStep 'ExecEnvBS
+        SExecBS :: SBuildStep 'ExecBS
 
 
--- UC3: A Vm Image modified by a custom MonadIO action
+type family BuildStepResult (a :: BuildStep) :: *
+
+type instance BuildStepResult 'LetBS = ()
+type instance BuildStepResult 'IncludeFileBS = ()
+type instance BuildStepResult 'ExportCloudInitBS = ()
+type instance BuildStepResult 'ImportImgBS = ImportedImage
+type instance BuildStepResult 'ExportImgBS = ()
+type instance BuildStepResult 'MountBS = ()
+type instance BuildStepResult 'ExecEnvBS = ExecEnv
+type instance BuildStepResult 'ExecBS = ()
+
+type family BuildStepSyntax (bs :: BuildStep) :: *
+
+type instance BuildStepSyntax 'LetBS = Let
+type instance BuildStepSyntax 'IncludeFileBS = IncludeFile
+type instance BuildStepSyntax 'ExportCloudInitBS = ExportCloudInit
+type instance BuildStepSyntax 'ImportImgBS = ImportImg
+type instance BuildStepSyntax 'ExportImgBS = ExportImg
+type instance BuildStepSyntax 'MountBS = Mount
+type instance BuildStepSyntax 'ExecEnvBS = ExecEnv
+type instance BuildStepSyntax 'ExecBS = Exec
+
+data VmBuild next :: * where
+        VmBuild :: (Show (BuildStepSyntax bs)) =>
+          SBuildStep bs ->
+            BuildStepSyntax bs ->
+              (BuildStepResult bs -> next) -> VmBuild next
+
+instance Functor VmBuild where
+    fmap f (VmBuild sbs bs g) = VmBuild sbs bs (f . g)
+
+type VmBuildAlgebra a = Free VmBuild a
 
 
--- data Artifact c = VmImage ImageDestination c
---                 | VmBuild [ImageArtifact c] VmScript
---
---
--- data ArtifactContent c = Txt String
---                        | FS FSType FSResize FSSource (FileSet c)
---                        | PipeThroughCmd String c
---                        | OutputOfCmd String
---                        | DiskImage ImageType ImageResize c
---                        | LXCRun VmScript c
---                        | MBRPartition MBRBootFlag (Maybe c) (Maybe c) (Maybe c) (Maybe c)
---
--- data MBRBootFlag = NoBootablePartition
---                  | Partition1Bootable
---                  | Partition2Bootable
---                  | Partition3Bootable
---                  | Partition4Bootable
---
--- data VmBuildImage c = VmBuildImage ImageDestination MountPoint c
+vmDo
+    :: (Show (BuildStepSyntax bs)) => SBuildStep bs
+    -> BuildStepSyntax bs
+    -> VmBuildAlgebra (BuildStepResult bs)
+vmDo sbs bs = liftF $ VmBuild sbs bs id
+
+bind :: String -> String -> VmBuildAlgebra ()
+bind var val = vmDo SLetBS (Let var val)
+
+includeFile :: FilePath -> SourceFile -> VmBuildAlgebra ()
+includeFile f src = vmDo SIncludeFileBS (IncludeFile f src)
+
+exportCloudInit :: FilePath -> VmBuildAlgebra ()
+exportCloudInit dst = vmDo SExportCloudInitBS (ExportCloudInit dst)
+
+imageSource :: ImageSource -> VmBuildAlgebra ImportedImage
+imageSource = vmDo SImportImgBS . ImportImg
+
+createImage :: String
+           -> FileSystem
+           -> ImageType
+           -> ImageSize
+           -> VmBuildAlgebra ImportedImage
+createImage s fs it is = imageSource $ EmptyImage s fs it is
+
+importImage :: FilePath
+             -> ImageType
+             -> FileSystem
+             -> Partition
+             -> ImageResize
+             -> VmBuildAlgebra ImportedImage
+importImage f it fs pt is = imageSource $ SourceImage (Image f it fs) pt is
+
+from :: String -> VmBuildAlgebra ImportedImage
+from = fromResized KeepSize
+
+fromResized :: ImageResize -> String -> VmBuildAlgebra ImportedImage
+fromResized r s = imageSource $ From s r
+
+imageDestination :: ImportedImage -> ImageDestination -> VmBuildAlgebra ()
+imageDestination img dst = vmDo SExportImgBS (ExportImg img dst)
+
+share :: ImportedImage -> String -> VmBuildAlgebra ()
+share img name = imageDestination img $ Share name QCow2 KeepSize
+
+exportLiveInstallerImage :: ImportedImage
+                         -> String
+                         -> FilePath
+                         -> ImageResize
+                         -> VmBuildAlgebra ()
+exportLiveInstallerImage img imgName outDir resize =
+    imageDestination img $ LiveInstallerImage imgName outDir resize
+
+exportImage :: ImportedImage
+            -> FilePath
+            -> ImageType
+            -> FileSystem
+            -> ImageResize
+            -> VmBuildAlgebra ()
+exportImage img name it fs resize =
+    imageDestination img $ LocalFile (Image name it fs) resize
+
+mount :: ExecEnv -> ImportedImage -> FilePath -> VmBuildAlgebra ()
+mount e src mp = vmDo SMountBS (Mount e src (MountPoint mp))
+
+lxc :: String -> VmBuildAlgebra ExecEnv
+lxc name = boot name LibVirtLXC X86_64
+
+boot :: String -> ExecEnvType -> CPUArch -> VmBuildAlgebra ExecEnv
+boot name execEnvType arch = vmDo SExecEnvBS (ExecEnv name execEnvType arch)
+
+exec :: ExecEnv -> Script -> VmBuildAlgebra ()
+exec e script = vmDo SExecBS (Exec e script)
+
+-- run stuff
+
+testv1 :: VmBuildAlgebra ()
+testv1 = do
+    bind "x" "3"
+    includeFile "httpd.conf" $ Source NoConversion "httpd.conf.in"
+    exportCloudInit "blah-ci"
+    env <- lxc "container-id"
+    rootImage env "fedora" "testv1-root"
+    dataImage env "testv1-data"
+    exec env (Run "ls" [])
+
+-- * Some utility vm builder lego
+
+rootImage env nameFrom nameExport =
+    mountAndShareSharedImage env nameFrom  nameExport "/"
+
+dataImage env nameExport =
+    mountAndShareNewImage env "data" 64 nameExport "/data"
+
+mountAndShareSharedImage env nameFrom nameExport mountPoint = do
+    img <- from nameFrom
+    share img nameExport
+    mount env img mountPoint
+    return img
+
+mountAndShareNewImage env fsLabel sizeGB nameExport mountPoint = do
+    img <- createImage fsLabel Ext4 QCow2 (ImageSize sizeGB GB)
+    share img nameExport
+    mount env img mountPoint
+    return img
+
+teleconfAndDbHost = installHost True (\env -> installTeleconf env >> installDb env)
+
+installHost :: Bool -> (ExecEnv -> VmBuildAlgebra ()) -> VmBuildAlgebra ()
+installHost withData service = do
+  env <- lxc "h1"
+  -- prod image
+  rootImg <- from "fedora"
+  mount env rootImg "/"
+  share rootImg "app-root"
+
+  when withData $ do
+    dataImg <- createImage "data" Ext4 QCow2 (ImageSize 32 GB)
+    mount env dataImg "/data"
+    share dataImg "app-data"
+
+  -- run installer(s)
+  service env
+
+class ServiceComponent a  where
+    installServer :: a -> Maybe (ExecEnv -> VmBuildAlgebra ())
+    createCloudInit :: a -> Maybe (VmBuildAlgebra ())
+
+installTeleconf :: ExecEnv -> VmBuildAlgebra ()
+installTeleconf env = do
+    exec env (Run "tc" [])
+    exec env (Run "tc" [])
+    exec env (Run "tc" [])
+    exec env (Run "tc" [])
+
+installDb env = do
+    exec env (Run "dbc" [])
+    exec env (Run "dbc" [])
+    exec env (Run "dbc" [])
+    exec env (Run "dbc" [])
+
+evalVmBuildAlgebra
+    :: (Monad m)
+    => (forall (bs :: BuildStep). Show (BuildStepSyntax bs)=> (SBuildStep bs) -> (BuildStepSyntax bs) -> m (BuildStepResult bs))
+    -> VmBuildAlgebra a
+    -> m a
+evalVmBuildAlgebra f =
+    foldFree
+        (\(VmBuild sbs bs fnext) ->
+              do res <- f sbs bs
+                 return $ fnext res)
+
+
+printAlg :: Show (BuildStepSyntax bs) => (SBuildStep bs) -> (BuildStepSyntax bs) -> IO (BuildStepResult bs)
+printAlg sbs bs = do
+  printf "%s\n" (show bs)
+  return undefined
