@@ -82,6 +82,7 @@ library
                    , B9.Content.Generator
                    , B9.Content.StringTemplate
                    , B9.QCUtil
+                   , B9.DSL
   other-modules:   Paths_b9
   -- other-extensions:
   build-depends:     ConfigFile
@@ -103,6 +104,7 @@ library
                    , process
                    , random
                    , semigroups
+                   , singletons
                    , syb
                    , template
                    , text
@@ -119,9 +121,14 @@ library
                     , RankNTypes
                     , FlexibleContexts
                     , GADTs
+                    , DataKinds
+                    , KindSignatures
+                    , TypeFamilies
+                    , DeriveFunctor
+                    , TemplateHaskell
   hs-source-dirs:    src/lib
   default-language:  Haskell2010
-  ghc-options:       -with-rtsopts=-N -Wall -fno-warn-unused-imports
+  ghc-options:       -with-rtsopts=-N -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind
   if impl(ghc >= 7.8.2) && impl(ghc < 7.10)
      ghc-options: -fno-warn-amp
@@ -137,7 +144,7 @@ executable b9c
                    , optparse-applicative
   hs-source-dirs:    src/cli
   default-language:  Haskell2010
-  ghc-options:       -threaded -with-rtsopts=-N -Wall -fno-warn-unused-imports
+  ghc-options:       -threaded -with-rtsopts=-N -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind
   if impl(ghc >= 7.8.2) && impl(ghc < 7.10)
      ghc-options: -fno-warn-amp
@@ -166,4 +173,4 @@ test-suite spec
                    , text
                    , semigroups
   if impl(ghc >= 7.8.2) && impl(ghc < 7.10)
-     ghc-options: -fno-warn-amp
+     ghc-options: -fno-warn-amp -fno-warn-unused-do-bind
