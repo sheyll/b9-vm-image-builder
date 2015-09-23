@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-unused-binds #-}
 module B9.DSL(B9DSL) where
 
 import B9.ArtifactGenerator (ArtifactSource(..), CloudInitType(..))
@@ -14,17 +13,7 @@ import B9.ShellScript (Script(..))
 import Control.Monad (when)
 import Control.Monad.Free (Free(..), liftF, foldFree)
 import Data.Functor (void)
-import Data.Singletons.TH (singletons)
 import Text.Printf (printf)
-
-$(singletons [d|
-  data Artifact
-    = StaticContent
-    | VmImage
-    | MountedImage
-    | CloudInit
-    | MountedHostDirectory
-  |])
 
 data BuildStep next :: * where
         Let :: String -> String -> next -> BuildStep next
@@ -70,6 +59,20 @@ type family Imported (a :: Artifact) :: * where
 type family Target (a :: Artifact) :: * where
         Target 'VmImage = (Tagged ImageSource, ImageDestination)
         Target 'CloudInit = ([CloudInitType], FilePath)
+
+data Artifact
+    = StaticContent
+    | VmImage
+    | MountedImage
+    | CloudInit
+    | MountedHostDirectory
+
+data SArtifact (k :: Artifact) where
+        SStaticContent :: SArtifact 'StaticContent
+        SVmImage :: SArtifact 'VmImage
+        SMountedImage :: SArtifact 'MountedImage
+        SCloudInit :: SArtifact 'CloudInit
+        SMountedHostDirectory :: SArtifact 'MountedHostDirectory
 
 -- * Content generation and static file inclusion
 
@@ -245,11 +248,11 @@ teleconfAndDbHost =
 
 installTeleconf :: ExecEnv -> B9DSL ()
 installTeleconf e = do
-  sh "tc" e
-  sh "tc" e
-  sh "tc" e
-  sh "tc" e
-  sh "tc" e
+    sh "tc" e
+    sh "tc" e
+    sh "tc" e
+    sh "tc" e
+    sh "tc" e
 
 installDb :: ExecEnv -> B9DSL ()
 installDb e = do
