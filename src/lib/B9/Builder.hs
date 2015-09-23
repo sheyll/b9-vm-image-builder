@@ -30,28 +30,6 @@ import Text.Show.Pretty (ppShow)
 import Control.Monad.IO.Class
 import System.Directory
 
-import B9.B9Monad
-import B9.ConfigUtils
-import B9.B9Config
-import B9.ExecEnv
-import B9.DiskImages
-import B9.DiskImageBuilder
-import B9.ShellScript
-import B9.Repository
-import B9.RepositoryIO
-import B9.ArtifactGenerator
-import B9.ArtifactGeneratorImpl
-import B9.Vm
-import B9.VmBuilder
-import B9.QCUtil
-
-import B9.Content.AST
-import B9.Content.StringTemplate
-import B9.Content.ErlTerms
-import B9.Content.ErlangPropList
-import B9.Content.YamlObject
-import B9.Content.Generator
-
 buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
   withB9Config cfgParser cliCfg $ \cfg ->
