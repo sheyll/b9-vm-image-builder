@@ -73,37 +73,42 @@ instance ConcatableSyntax YamlObject where
     E.encodeUtf8 (T.pack "#cloud-config\n") <> encode o
 
 instance ASTish YamlObject where
-  fromAST ast =
-    case ast of
-      ASTObj pairs -> do
-        ys <- mapM fromASTPair pairs
-        return (YamlObject (object ys))
-      ASTArr asts -> do
-        ys <- mapM fromAST asts
-        let ys' = (\(YamlObject o) -> o) <$> ys
-        return (YamlObject (array ys'))
-      ASTMerge [] -> error "ASTMerge MUST NOT be used with an empty list!"
-      ASTMerge asts -> do
-        ys <- mapM fromAST asts
-        return (foldl1 (<>) ys)
-      ASTEmbed c ->
-         YamlObject . toJSON . T.unpack . E.decodeUtf8 <$> render c
-      ASTString str ->
-        return (YamlObject (toJSON str))
-      ASTParse src@(Source _ srcPath) -> do
-        c <- readTemplateFile src
-        case decodeSyntax srcPath c of
-          Right s -> return s
-          Left e -> error (printf "could not parse yaml \
-                                  \source file: '%s'\n%s\n"
-                                  srcPath
-                                  e)
-      AST a -> pure a
-    where
-      fromASTPair (key, value) = do
-        (YamlObject o) <- fromAST value
-        let key' = T.pack key
-        return $ key' .= o
+    fromAST ast =
+        case ast of
+            ASTObj pairs -> do
+                ys <- mapM fromASTPair pairs
+                return (YamlObject (object ys))
+            ASTArr asts -> do
+                ys <- mapM fromAST asts
+                let ys' =
+                        (\(YamlObject o) ->
+                              o) <$>
+                        ys
+                return (YamlObject (array ys'))
+            ASTMerge [] ->
+                error "ASTMerge MUST NOT be used with an empty list!"
+            ASTMerge asts -> do
+                ys <- mapM fromAST asts
+                return (foldl1 (<>) ys)
+            ASTEmbed c ->
+                YamlObject . toJSON . T.unpack . E.decodeUtf8 <$> render c
+            ASTString str -> return (YamlObject (toJSON str))
+            ASTParse src@(Source _ srcPath) -> do
+                c <- readTemplateFile src
+                case decodeSyntax srcPath c of
+                    Right s -> return s
+                    Left e ->
+                        error
+                            (printf
+                                 "could not parse yaml source file: '%s'\n%s\n"
+                                 srcPath
+                                 e)
+            AST a -> pure a
+      where
+        fromASTPair (key,value) = do
+            (YamlObject o) <- fromAST value
+            let key' = T.pack key
+            return $ key' .= o
 
 
 instance Arbitrary YamlObject where

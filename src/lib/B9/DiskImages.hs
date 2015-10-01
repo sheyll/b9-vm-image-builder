@@ -3,7 +3,9 @@ images.-}
 module B9.DiskImages where
 
 import           B9.QCUtil
-import           Control.Applicative
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 import           Data.Data
 import           Data.Maybe
 import           Data.Semigroup

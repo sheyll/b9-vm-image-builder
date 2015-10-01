@@ -7,7 +7,9 @@ module B9.Content.StringTemplate
         withEnvironment)
        where
 
-import           Control.Applicative
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 import           Control.Arrow hiding (second)
 import           Control.Monad.Reader
 import           Data.Bifunctor
@@ -102,29 +104,37 @@ substEB env templateStr = do
 
 substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
 substFile assocs src dest = do
-  templateBs <- liftIO (B.readFile src)
-  let t = templateSafe (E.decodeUtf8 templateBs)
-  case t of
-    Left (r,c) ->
-      let badLine = unlines (take r (lines (T.unpack (E.decodeUtf8 templateBs))))
-          colMarker = replicate (c - 1) '-' ++ "^"
-      in error (printf "Template error in file '%s' line %i:\n\n%s\n%s\n"
-                       src r badLine colMarker)
-    Right template' -> do
-      let out = LE.encodeUtf8 (render template' envLookup)
-      liftIO (LB.writeFile dest out)
-      return ()
+    templateBs <- liftIO (B.readFile src)
+    let t = templateSafe (E.decodeUtf8 templateBs)
+    case t of
+        Left (r,c) ->
+            let badLine =
+                    unlines
+                        (take r (lines (T.unpack (E.decodeUtf8 templateBs))))
+                colMarker = replicate (c - 1) '-' ++ "^"
+            in error
+                   (printf
+                        "Template error in file '%s' line %i:\n\n%s\n%s\n"
+                        src
+                        r
+                        badLine
+                        colMarker)
+        Right template' -> do
+            let out = LE.encodeUtf8 (render template' envLookup)
+            liftIO (LB.writeFile dest out)
+            return ()
   where
     envT :: [(T.Text, T.Text)]
     envT = (T.pack *** T.pack) <$> assocs
     envLookup :: T.Text -> T.Text
     envLookup x = fromMaybe (err x) (lookup x envT)
-    err x = error (printf "Invalid template parameter: '%s'\n\
-                          \In file: '%s'\n\
-                          \Valid variables:\n%s\n"
-                          (T.unpack x)
-                          src
-                          (ppShow assocs))
+    err x =
+        error
+            (printf
+                 "Invalid template parameter: '%s'\nIn file: '%s'\n Valid variables:\n%s\n"
+                 (T.unpack x)
+                 src
+                 (ppShow assocs))
 
 substPath :: [(String, String)] -> SystemPath -> SystemPath
 substPath assocs src =

@@ -124,10 +124,7 @@ eachBindingSetT g vars valueSets =
     then return (zip vars <$> valueSets)
     else cgError
             (printf
-               "Error in 'Each' binding during artifact \
-                           \generation in:\n '%s'.\n\nThe variable list\n\
-                           \%s\n has %i entries, but this binding set\n%s\n\n\
-                           \has a different number of entries!\n"
+               "Error in 'Each' binding during artifact generation in:\n '%s'.\n\nThe variable list\n%s\n has %i entries, but this binding set\n%s\n\nhas a different number of entries!\n"
                (ppShow g)
                (ppShow vars)
                (length vars)
@@ -137,18 +134,17 @@ eachBindingSet :: ArtifactGenerator
                -> [(String, [String])]
                -> CGParser [[(String, String)]]
 eachBindingSet g kvs = do
-  checkInput
-  return bindingSets
-
+    checkInput
+    return bindingSets
   where
-    bindingSets = transpose [repeat k `zip` vs | (k, vs) <- kvs]
-    checkInput = when (1 /= length (nub $ length . snd <$> kvs))
-                   (cgError
-                      (printf
-                         "Error in 'Each' binding: \n%s\n\
-                                       \All value lists must have the same\
-                                       \length!"
-                         (ppShow g)))
+    bindingSets = transpose [repeat k `zip` vs | (k,vs) <- kvs]
+    checkInput =
+        when
+            (1 /= length (nub $ length . snd <$> kvs))
+            (cgError
+                 (printf
+                      "Error in 'Each' binding: \n%s\nAll value lists must have the same length!"
+                      (ppShow g)))
 
 
 writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
@@ -185,7 +181,6 @@ execCGParser = runReaderT . execWriterT . runCGParser
 execIGEnv :: InstanceGenerator CGEnv
           -> Either String (InstanceGenerator [SourceGenerator])
 execIGEnv (IG iid (CGEnv env sources) assembly) = IG iid <$> sourceGens <*> pure (substAssembly env assembly)
-
   where
     sourceGens = join <$> mapM (toSourceGen env) sources
 
@@ -365,15 +360,10 @@ createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
       let isoFile = outPath <.> "iso"
           tmpFile = buildDir </> takeFileName isoFile
       ensureDir tmpFile
-      dbgL (printf "creating cloud init iso temp image '%s',\
-                   \ destination file: '%s" tmpFile isoFile)
+      dbgL (printf "creating cloud init iso temp image '%s', destination file: '%s" tmpFile isoFile)
       cmd
         (printf
-           "genisoimage\
-                  \ -output '%s'\
-                  \ -volid cidata\
-                  \ -rock\
-                  \ -d '%s' 2>&1"
+           "genisoimage -output '%s' -volid cidata -rock -d '%s' 2>&1"
            tmpFile
            instanceDir)
       dbgL (printf "moving iso image '%s' to '%s'" tmpFile isoFile)

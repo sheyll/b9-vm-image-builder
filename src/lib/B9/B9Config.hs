@@ -16,7 +16,6 @@ module B9.B9Config ( B9Config(..)
                    , BuildVariables
                    ) where
 
-import Data.Monoid
 import Data.Maybe (fromMaybe)
 import Control.Monad
 import Control.Exception
@@ -24,7 +23,10 @@ import Data.Function (on)
 import Control.Monad.IO.Class
 import System.Directory
 import Text.Printf
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+import Data.Monoid
 
 import B9.ConfigUtils
 

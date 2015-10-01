@@ -3,7 +3,9 @@
 module B9.Content.Generator where
 
 import Data.Data
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 
 import B9.Content.AST
 import B9.Content.ErlangPropList

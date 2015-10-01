@@ -9,7 +9,9 @@ import qualified Data.Text.Encoding as E
 import Data.Function
 import Data.List (partition,sortBy)
 import Data.Semigroup
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Text.Printf
 
 import B9.Content.ErlTerms
@@ -80,27 +82,32 @@ instance ConcatableSyntax ErlangPropList where
   encodeSyntax (ErlangPropList t)  = renderErlTerm t
 
 instance ASTish ErlangPropList where
-  fromAST (AST a) = pure a
-  fromAST (ASTObj pairs) = ErlangPropList . ErlList <$> mapM makePair pairs
-    where
-      makePair (k, ast) = do
-        (ErlangPropList second) <- fromAST ast
-        return $ ErlTuple [ErlAtom k, second]
-  fromAST (ASTArr xs) =
-        ErlangPropList . ErlList
-    <$> mapM (\x -> do (ErlangPropList x') <- fromAST x
-                       return x')
-             xs
-  fromAST (ASTString s) = pure $ ErlangPropList $ ErlString s
-  fromAST (ASTEmbed c) =
-    ErlangPropList . ErlString . T.unpack . E.decodeUtf8 <$> render c
-  fromAST (ASTMerge []) = error "ASTMerge MUST NOT be used with an empty list!"
-  fromAST (ASTMerge asts) = foldl1 (<>) <$> mapM fromAST asts
-  fromAST (ASTParse src@(Source _ srcPath)) = do
-    c <- readTemplateFile src
-    case decodeSyntax srcPath c of
-      Right s -> return s
-      Left e -> error (printf "could not parse erlang \
-                              \source file: '%s'\n%s\n"
-                              srcPath
-                              e)
+    fromAST (AST a) = pure a
+    fromAST (ASTObj pairs) = ErlangPropList . ErlList <$> mapM makePair pairs
+      where
+        makePair (k,ast) = do
+            (ErlangPropList second) <- fromAST ast
+            return $ ErlTuple [ErlAtom k, second]
+    fromAST (ASTArr xs) =
+        ErlangPropList . ErlList <$>
+        mapM
+            (\x ->
+                  do (ErlangPropList x') <- fromAST x
+                     return x')
+            xs
+    fromAST (ASTString s) = pure $ ErlangPropList $ ErlString s
+    fromAST (ASTEmbed c) =
+        ErlangPropList . ErlString . T.unpack . E.decodeUtf8 <$> render c
+    fromAST (ASTMerge []) =
+        error "ASTMerge MUST NOT be used with an empty list!"
+    fromAST (ASTMerge asts) = foldl1 (<>) <$> mapM fromAST asts
+    fromAST (ASTParse src@(Source _ srcPath)) = do
+        c <- readTemplateFile src
+        case decodeSyntax srcPath c of
+            Right s -> return s
+            Left e ->
+                error
+                    (printf
+                         "could not parse erlang source file: '%s'\n%s\n"
+                         srcPath
+                         e)

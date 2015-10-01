@@ -2,7 +2,9 @@
     images. Currently only MBR partitions are supported. See 'B9.MBR' -}
 module B9.PartitionTable ( getPartition ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Data.Word ( Word64 )
 
 import qualified B9.MBR as MBR

@@ -5,7 +5,9 @@ module B9.MBR ( getPartition
               , MBR(..)
               , CHS(..)) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Data.Binary.Get
 import Data.Word
 import Text.Printf
@@ -15,21 +17,23 @@ getPartition :: Int -> FilePath -> IO (Word64, Word64)
 getPartition n f = decodeMBR <$> BL.readFile f
   where
     decodeMBR input =
-      let mbr = runGet getMBR input
-          part = (case n of
-                   1 -> mbrPart1
-                   2 -> mbrPart2
-                   3 -> mbrPart3
-                   4 -> mbrPart4
-                   b -> error (printf "Error: Invalid partition index %i\
-                                     \ only partitions 1-4 are allowed.\
-                                     \ Image file: '%s'"
-                                     b
-                                     f))
-                 mbr
-          start = fromIntegral (primPartLbaStart part)
-          len = fromIntegral (primPartSectors part)
-      in (start * sectorSize, len * sectorSize)
+        let mbr = runGet getMBR input
+            part =
+                (case n of
+                     1 -> mbrPart1
+                     2 -> mbrPart2
+                     3 -> mbrPart3
+                     4 -> mbrPart4
+                     b ->
+                         error
+                             (printf
+                                  "Error: Invalid partition index %i only partitions 1-4 are allowed. Image file: '%s'"
+                                  b
+                                  f))
+                    mbr
+            start = fromIntegral (primPartLbaStart part)
+            len = fromIntegral (primPartSectors part)
+        in (start * sectorSize, len * sectorSize)
 
 sectorSize :: Word64
 sectorSize = 512

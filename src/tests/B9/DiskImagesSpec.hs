@@ -20,8 +20,7 @@ spec =
                      itImageDestination
                          (snd (splitToIntermediateSharedImage target name)))
        it
-           "puts the intermediate shared image name into both the \
-            \intermediate and the export target" $
+           "puts the intermediate shared image name into both the intermediate and the export target" $
            property
                (\target name ->
                      let (intermediateTarget,exportTarget) =

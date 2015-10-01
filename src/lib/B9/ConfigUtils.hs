@@ -24,7 +24,9 @@ module B9.ConfigUtils ( allOn
 import Data.Monoid
 import Data.Function ( on )
 import Data.Typeable
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Exception
 import Control.Monad.IO.Class
 import System.Directory

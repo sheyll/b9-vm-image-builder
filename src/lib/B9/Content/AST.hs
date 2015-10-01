@@ -25,7 +25,9 @@ module B9.Content.AST ( ConcatableSyntax (..)
 import qualified Data.ByteString as B
 import Data.Semigroup
 import Data.Data
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 

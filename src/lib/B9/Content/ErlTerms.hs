@@ -15,7 +15,9 @@ import qualified Data.ByteString.Char8 as B
 import Text.Parsec.ByteString
 import Text.Parsec
 import Test.QuickCheck
-import Control.Applicative ((<$>), pure, (<*>))
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 import Text.Show.Pretty
 import Control.Monad
 import Text.Printf

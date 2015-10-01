@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module B9.Content.ErlangPropListSpec (spec) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Data.List
 import Test.Hspec
 import Test.QuickCheck
@@ -61,9 +63,7 @@ spec =
                                      ,ErlList [ErlNatural 1]]])
        in p1 <> p2 `shouldBe` expected
 
-    it "merges two property lists into a prop list that has the lenght\
-       \ of the left + the right proplist - the number of entries sharing\
-       \ the same key" (property mergedPropListsHaveCorrectLength)
+    it "merges two property lists into a prop list that has the lenght of the left + the right proplist - the number of entries sharing the same key" (property mergedPropListsHaveCorrectLength)
 
 data ErlPropListTestData =
   ErlPropListTestData { plistLeft :: [SimpleErlangTerm]

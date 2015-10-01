@@ -215,39 +215,11 @@ createDomain :: LibVirtLXCConfig
              -> FilePath
              -> String
 createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
-  "<domain type='lxc'>\n\
-  \  <name>" ++ buildId ++ "</name>\n\
-  \  <uuid>" ++ uuid ++ "</uuid>\n\
-  \  <memory unit='" ++ memoryUnit cfg e ++ "'>" ++ memoryAmount cfg e ++ "</memory>\n\
-  \  <currentMemory unit='" ++ memoryUnit cfg e ++ "'>" ++ memoryAmount cfg e ++ "</currentMemory>\n\
-  \  <vcpu placement='static'>" ++ cpuCountStr e ++ "</vcpu>\n\
-  \  <features>\n\
-  \   <capabilities policy='default'>\n\
-  \     "++ renderGuestCapabilityEntries cfg  ++"\n\
-  \   </capabilities>\n\
-  \  </features>\n\
-  \  <os>\n\
-  \    <type arch='" ++ osArch e ++ "'>exe</type>\n\
-  \    <init>" ++ scriptDirGuest </> initScript ++ "</init>\n\
-  \  </os>\n\
-  \  <clock offset='utc'/>\n\
-  \  <on_poweroff>destroy</on_poweroff>\n\
-  \  <on_reboot>restart</on_reboot>\n\
-  \  <on_crash>destroy</on_crash>\n\
-  \  <devices>\n\
-  \    <emulator>" ++ emulator cfg ++ "</emulator>\n"
+  "<domain type='lxc'>\n  <name>" ++ buildId ++ "</name>\n  <uuid>" ++ uuid ++ "</uuid>\n  <memory unit='" ++ memoryUnit cfg e ++ "'>" ++ memoryAmount cfg e ++ "</memory>\n  <currentMemory unit='" ++ memoryUnit cfg e ++ "'>" ++ memoryAmount cfg e ++ "</currentMemory>\n  <vcpu placement='static'>" ++ cpuCountStr e ++ "</vcpu>\n  <features>\n   <capabilities policy='default'>\n     "++ renderGuestCapabilityEntries cfg  ++"\n   </capabilities>\n  </features>\n  <os>\n    <type arch='" ++ osArch e ++ "'>exe</type>\n    <init>" ++ scriptDirGuest </> initScript ++ "</init>\n  </os>\n  <clock offset='utc'/>\n  <on_poweroff>destroy</on_poweroff>\n  <on_reboot>restart</on_reboot>\n  <on_crash>destroy</on_crash>\n  <devices>\n    <emulator>" ++ emulator cfg ++ "</emulator>\n"
   ++ unlines (libVirtNetwork (networkId cfg) ++
               (fsImage <$> envImageMounts e) ++
               (fsSharedDir <$> envSharedDirectories e)) ++ "\n" ++
-  "    <filesystem type='mount'>\n\
-  \      <source dir='" ++ scriptDirHost ++ "'/>\n\
-  \      <target dir='" ++ scriptDirGuest ++ "'/>\n\
-  \    </filesystem>\n\
-  \    <console>\n\
-  \      <target type='lxc' port='0'/>\n\
-  \    </console>\n\
-  \  </devices>\n\
-  \</domain>\n"
+  "    <filesystem type='mount'>\n      <source dir='" ++ scriptDirHost ++ "'/>\n      <target dir='" ++ scriptDirGuest ++ "'/>\n    </filesystem>\n    <console>\n      <target type='lxc' port='0'/>\n    </console>\n  </devices>\n</domain>\n"
 
 renderGuestCapabilityEntries :: LibVirtLXCConfig -> String
 renderGuestCapabilityEntries = unlines . map render . guestCapabilities

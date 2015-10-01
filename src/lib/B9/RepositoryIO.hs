@@ -81,28 +81,22 @@ pullFromRepo repo@(RemoteRepo repoId
 
 -- | Push a file from the cache to a remote repository
 pullGlob :: FilePath -> FilePathGlob -> RemoteRepo -> B9 ()
-pullGlob subDir glob repo@(RemoteRepo repoId
-                                      rootDir
-                                      _key
-                                      (SshRemoteHost (host, _port))
-                                      (SshRemoteUser user)) = do
-  cache <- getRepoCache
-  infoL (printf "SYNCING REPO METADATA '%s'" repoId)
-  let c = printf "rsync -rtv\
-                 \ --include '%s'\
-                 \ --exclude '*.*'\
-                 \ -e 'ssh %s'\
-                 \ '%s@%s:%s/' '%s/'"
-                 (globToPattern glob)
-                 (sshOpts repo)
-                 user
-                 host
-                 (rootDir </> subDir)
-                 destDir
-      destDir = repoCacheDir </> subDir
-      repoCacheDir = remoteRepoCacheDir cache repoId
-  ensureDir destDir
-  cmd c
+pullGlob subDir glob repo@(RemoteRepo repoId rootDir _key (SshRemoteHost (host,_port)) (SshRemoteUser user)) = do
+    cache <- getRepoCache
+    infoL (printf "SYNCING REPO METADATA '%s'" repoId)
+    let c =
+            printf
+                "rsync -rtv --include '%s' --exclude '*.*' -e 'ssh %s' '%s@%s:%s/' '%s/'"
+                (globToPattern glob)
+                (sshOpts repo)
+                user
+                host
+                (rootDir </> subDir)
+                destDir
+        destDir = repoCacheDir </> subDir
+        repoCacheDir = remoteRepoCacheDir cache repoId
+    ensureDir destDir
+    cmd c
 
 -- | Express a pattern for file paths, used when searching repositories.
 data FilePathGlob = FileExtension String

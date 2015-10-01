@@ -10,9 +10,10 @@ module B9.ShellScript ( writeSh
                       ) where
 
 import Data.Data
-import Data.Monoid
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 import Control.Monad.Reader
-import Control.Applicative ( (<$>) )
 import Data.List ( intercalate )
 import System.Directory ( getPermissions
                         , setPermissions

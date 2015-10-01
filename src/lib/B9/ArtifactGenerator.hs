@@ -12,8 +12,10 @@ module B9.ArtifactGenerator
 
 
 import Data.Data
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
 import Control.Applicative
+#endif
 import System.FilePath ((<.>), (</>))
 
 import B9.DiskImages

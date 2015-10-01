@@ -1,7 +1,18 @@
-module B9.DSL(B9DSL) where
+-- | Experimental new, hopefully typesafe. domain specific language for
+--   description of VM-builds.
+{-# LANGUAGE FlexibleInstances #-}
+module B9.DSL
+       (B9DSL, doc, doc', (#), Documentation(..), ($=), include, includeTemplate, writeContent,
+        exportCloudInit, imageSource, createImage, importImage, from,
+        fromResized, imageDestination, share, exportLiveInstallerImage,
+        exportImage, mount, lxc, lxc32, boot, exec, sh, rootImage,
+        dataImage, mountAndShareSharedImage, mountAndShareNewImage, runDSL,
+        printDSL, printBuildStep, dslExample)
+       where
 
 import B9.ArtifactGenerator (ArtifactSource(..), CloudInitType(..))
 import B9.B9Config (ExecEnvType(..))
+import B9.Content.Generator(Content)
 import B9.Content.StringTemplate
        (SourceFile(..), SourceFileConversion(..))
 import B9.DiskImages
@@ -10,7 +21,11 @@ import B9.DiskImages
         SizeUnit(..))
 import B9.ExecEnv (CPUArch(..), SharedDirectory(..))
 import B9.ShellScript (Script(..))
-import Control.Monad (when)
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+import Data.Monoid
+import Control.Monad
+#endif
 import Control.Monad.Free (Free(..), liftF, foldFree)
 import Data.Functor (void)
 import Text.Printf (printf)
@@ -34,11 +49,15 @@ instance Functor BuildStep where
 
 type B9DSL a = Free BuildStep a
 
-data Tagged a =
-    Tagged String
+data Tagged a b =
+    Tagged b
 
-instance Show (Tagged a) where
-    show (Tagged s) = s
+instance Show b => Show (Tagged a b) where
+    show (Tagged s) = show s
+
+data Documentation
+    = Doc String
+    | DocIncluded Content
 
 data ExecEnv =
     ExecEnv String
@@ -49,15 +68,16 @@ data ExecEnv =
 type family Source (a :: Artifact) :: * where
         Source 'StaticContent = ArtifactSource
         Source 'VmImage = ImageSource
-        Source 'MountedImage = (ExecEnv, Tagged ImageSource, FilePath)
-        Source 'MountedHostDirectory = (ExecEnv, FilePath, FilePath)
+        Source 'MountedImage = (ExecEnv, Tagged ImageSource String, FilePath)
+        Source 'MountedHostDirectory = (ExecEnv, FilePath, FilePath, MountOpts String)
+        Source 'SelfDocumentation = Documentation
 
 type family Imported (a :: Artifact) :: * where
-        Imported 'VmImage = (Tagged ImageSource)
+        Imported 'VmImage = Tagged ImageSource String
         Imported a = ()
 
 type family Target (a :: Artifact) :: * where
-        Target 'VmImage = (Tagged ImageSource, ImageDestination)
+        Target 'VmImage = (Tagged ImageSource String, ImageDestination)
         Target 'CloudInit = ([CloudInitType], FilePath)
 
 data Artifact
@@ -66,6 +86,7 @@ data Artifact
     | MountedImage
     | CloudInit
     | MountedHostDirectory
+    | SelfDocumentation
 
 data SArtifact (k :: Artifact) where
         SStaticContent :: SArtifact 'StaticContent
@@ -73,14 +94,39 @@ data SArtifact (k :: Artifact) where
         SMountedImage :: SArtifact 'MountedImage
         SCloudInit :: SArtifact 'CloudInit
         SMountedHostDirectory :: SArtifact 'MountedHostDirectory
+        SSelfDocumentation :: SArtifact 'SelfDocumentation
+
+-- * For documentation of the actual build/deployment itself either embed a
+--   string or a file, template parameters e.g. ${xxx} can be also used.
+
+doc :: String -> B9DSL ()
+doc str = liftF $ Import SSelfDocumentation (Doc str) id
+
+doc' :: Content -> B9DSL ()
+doc' c = liftF $ Import SSelfDocumentation (DocIncluded c) id
+
+(#) :: B9DSL a -> String -> B9DSL a
+m # str = do
+  doc str
+  m
 
 -- * Content generation and static file inclusion
 
-bind :: String -> String -> B9DSL ()
-bind var val = liftF $ Let var val ()
+($=) :: String -> String -> B9DSL ()
+var $= val = liftF $ Let var val ()
 
-includeFile :: FilePath -> SourceFile -> B9DSL ()
-includeFile dest src = liftF $ Import SStaticContent (FromFile dest src) id
+-- TODO split file inclusion from file content generation. i.e. add newFile
+-- ... and then add an 'appendFile' function. new file should be typed according
+-- to its contents so that only compatible content can be appended
+
+include :: FilePath -> FilePath -> B9DSL ()
+include dest src = liftF $ Import SStaticContent (FromFile dest (Source NoConversion src)) id
+
+includeTemplate :: FilePath -> FilePath -> B9DSL ()
+includeTemplate dest src = liftF $ Import SStaticContent (FromFile dest (Source ExpandVariables src)) id
+
+writeContent :: FilePath -> Content -> B9DSL ()
+writeContent dst src = liftF $ Import SStaticContent (FromContent dst src) id
 
 -- * cloud init
 
@@ -142,8 +188,50 @@ exportImage img name it fs resize =
 
 -- * Mounting
 
-mount :: Imported 'VmImage -> FilePath -> ExecEnv -> B9DSL ()
-mount src mp e = liftF $ Import SMountedImage (e, src, mp) id
+class DSLCanMount a  where
+    type MountArtifact a :: Artifact
+    data MountOpts a
+    defaultMountOpts :: a -> MountOpts a
+    mountArtifactS :: a -> SArtifact (MountArtifact a)
+    mountArtifact :: MountOpts a
+                  -> ExecEnv
+                  -> a
+                  -> FilePath
+                  -> Source (MountArtifact a)
+
+-- * Host directory
+instance DSLCanMount String where
+  type MountArtifact String = 'MountedHostDirectory
+  data MountOpts String = ReadOnly | ReadWrite deriving Show
+  defaultMountOpts _ = ReadOnly
+  mountArtifactS _ = SMountedHostDirectory
+  mountArtifact opts e src dest = (e, src, dest, opts)
+
+instance DSLCanMount (Tagged ImageSource String) where
+  type MountArtifact (Tagged ImageSource String) = 'MountedImage
+  data MountOpts (Tagged ImageSource String) = MountImgNoOptions deriving Show
+  defaultMountOpts _ = MountImgNoOptions
+  mountArtifactS _ = SMountedImage
+  mountArtifact opts e src dest = (e, src, dest)
+
+mount
+    :: DSLCanMount src
+    => ExecEnv -> src -> FilePath -> B9DSL (Imported (MountArtifact src))
+mount = mount' (defaultMountOpts undefined)
+
+mount'
+    :: DSLCanMount src
+    => MountOpts src
+    -> ExecEnv
+    -> src
+    -> FilePath
+    -> B9DSL (Imported (MountArtifact src))
+mount' mopts e src dest =
+    liftF $
+    Import
+        (mountArtifactS src)
+        (mountArtifact mopts e src dest)
+        id
 
 -- * Execution environment
 
@@ -156,13 +244,15 @@ lxc32 name = boot name LibVirtLXC I386
 boot :: String -> ExecEnvType -> CPUArch -> B9DSL ExecEnv
 boot name et arch = liftF $ DefineExecEnv name et arch id
 
--- * Script Execution
+-- * Script Execution (inside a container)
 
 exec :: Script -> ExecEnv -> B9DSL ()
 exec script e = liftF $ Exec e script ()
 
 sh :: String -> ExecEnv -> B9DSL ()
 sh s = exec (Run s [])
+
+-- TODO generalize exec to work with 'includedFiles'
 
 -- * Some utility vm builder lego
 
@@ -178,21 +268,30 @@ mountAndShareSharedImage :: String -> String -> String -> ExecEnv -> B9DSL (Impo
 mountAndShareSharedImage nameFrom nameExport mountPoint env = do
     img <- from nameFrom
     share img nameExport
-    mount img mountPoint env
+    mount env img mountPoint
     return img
 
 mountAndShareNewImage :: String -> Int -> String -> FilePath -> ExecEnv -> B9DSL (Imported 'VmImage)
 mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
     img <- createImage fsLabel Ext4 QCow2 (ImageSize sizeGB GB)
     share img nameExport
-    mount img mountPoint env
+    mount env img mountPoint
     return img
 
+-- * DSL Interpreter
+
+#if MIN_VERSION_base(4,8,0)
 runDSL
     :: Monad m
     => (forall a. BuildStep a -> m a) -> B9DSL b -> m b
+#else
+runDSL
+    :: (Monad m, Functor m)
+    => (forall a. BuildStep a -> m a) -> B9DSL b -> m b
+#endif
 runDSL = foldFree
 
+-- | Print the DSL to IO
 printDSL :: B9DSL a -> IO ()
 printDSL = void . runDSL printBuildStep
 
@@ -212,6 +311,12 @@ printBuildStep (Import SMountedImage src k) = do
 printBuildStep (Import SMountedHostDirectory src k) = do
     printf "mount host directory %s\n" (show src)
     return (k ())
+printBuildStep (Import SSelfDocumentation (Doc str) k) = do
+    printf "-- %s\n" str
+    return (k ())
+printBuildStep (Import SSelfDocumentation (DocIncluded c) k) = do
+    printf "-- %s\n" (show c)
+    return (k ())
 printBuildStep (Export SVmImage dst next) = do
     printf "export image %s\n" (show dst)
     return next
@@ -230,43 +335,14 @@ printBuildStep _other = do
 
 -- * Tests and experiments
 
-installHost :: Bool -> (ExecEnv -> B9DSL ()) -> B9DSL ()
-installHost withData service = do
-    e <- lxc "h1"
-    -- prod image
-    rootImage "fedora" "app" e
-    when withData $ dataImage "app-data" e
-    -- run installer(s)
-    service e
-
-teleconfAndDbHost :: B9DSL ()
-teleconfAndDbHost =
-    installHost
-        True
-        (\e ->
-              installTeleconf e >> installDb e)
-
-installTeleconf :: ExecEnv -> B9DSL ()
-installTeleconf e = do
-    sh "tc" e
-    sh "tc" e
-    sh "tc" e
-    sh "tc" e
-    sh "tc" e
-
-installDb :: ExecEnv -> B9DSL ()
-installDb e = do
-    exec (Run "dbc" []) e
-    exec (Run "dbc" []) e
-    exec (Run "dbc" []) e
-    exec (Run "dbc" []) e
-
-testv1 :: B9DSL ()
-testv1 = do
-    bind "x" "3"
-    includeFile "httpd.conf" $ Source NoConversion "httpd.conf.in"
-    exportCloudInit "blah-ci"
+dslExample :: B9DSL ()
+dslExample = do
+    "x" $= "3"
+    includeTemplate "httpd.conf" "httpd.conf.in" # "overwrite all of httpd!"
+    exportCloudInit "blah-ci"                    # "export the cloud-init stuff"
     e <- lxc "container-id"
+    doc "From here there be dragons:"
+    mount e "/tmp" "/mnt/HOST_TMP"
     rootImage "fedora" "testv1-root" e
     dataImage "testv1-data" e
     sh "ls -la" e

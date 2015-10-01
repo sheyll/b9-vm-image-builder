@@ -9,10 +9,12 @@ import Data.List                       (groupBy)
 import Data.Maybe
 import Data.Version
 import Paths_b9
-import Prelude                         hiding (catch)
 import System.Directory
+import System.IO.Error                 hiding (isDoesNotExistErrorType)
+#if !MIN_VERSION_base(4,8,0)
 import System.IO.Error                 hiding (catch)
-
+import Prelude                         hiding (catch)
+#endif
 import B9
 
 main :: IO ()
@@ -30,15 +32,7 @@ parseCommandLine =
              (helper <*> (B9Options <$> globals <*> cmds <*> buildVars))
              (fullDesc <>
               progDesc
-                  "Build and run VM-Images inside LXC containers.\
-                            \ Custom arguments follow after '--' and are\
-                            \ accessable in many strings in build files \
-                            \ trough shell like variable references, i.e. \
-                            \'${arg_N}' referes to positional argument $N.\n\
-                            \\n\
-                            \Repository names passed to the command line are\
-                            \ looked up in the B9 configuration file, which is\
-                            \ per default located in: '~/.b9/b9.conf'" <>
+                  "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'" <>
               headerDoc (Just helpHeader)))
   where
     helpHeader =
@@ -100,8 +94,7 @@ runPush name _cfgFile cp conf = impl
             (if not (isJust (repository conf'))
                  then do
                      errorL
-                         "No repository specified! \
-                            \ Use '-r' to specify a repo BEFORE 'push'."
+                         "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
                      return False
                  else do
                      pushSharedImageLatestVersion name
@@ -239,9 +232,7 @@ runAddRepo repo cfgFile cp _conf = do
         Left er ->
             error
                 (printf
-                     "Failed to add remote repo '%s'\
-                     \ to b9 configuration. The \
-                     \error was: \"%s\"."
+                     "Failed to add remote repo '%s' to b9 configuration. The error was: \"%s\"."
                      (show repo)
                      (show er))
         Right cpWithRepo -> writeB9Config cfgFile cpWithRepo
@@ -342,54 +333,37 @@ cmds =
              "build"
              (info
                   (runBuildArtifacts <$> buildFileParser)
-                  (progDesc
-                       "Merge all build file and\
-                                               \ generate all artifacts.")) <>
+                  (progDesc "Merge all build file and generate all artifacts.")) <>
          command
              "run"
              (info
                   (runRun <$> sharedImageNameParser <*> many (strArgument idm))
                   (progDesc
-                       "Run a command on the lastest version of the\
-                                        \ specified shared image. All modifications\
-                                        \ are lost on exit.")) <>
+                       "Run a command on the lastest version of the specified shared image. All modifications are lost on exit.")) <>
          command
              "push"
              (info
                   (runPush <$> sharedImageNameParser)
                   (progDesc
-                       "Push the lastest shared image\
-                                        \ from cache to the selected \
-                                        \ remote repository.")) <>
+                       "Push the lastest shared image from cache to the selected  remote repository.")) <>
          command
              "pull"
              (info
                   (runPull <$> optional sharedImageNameParser)
                   (progDesc
-                       "Either pull shared image meta\
-                                             \ data from all repositories,\
-                                             \ or only from just a selected one.\
-                                             \ If additionally the name of a\
-                                             \ shared images was specified,\
-                                             \ pull the newest version\
-                                             \ from either the selected repo,\
-                                             \ or from the repo with the most\
-                                             \ recent version.")) <>
+                       "Either pull shared image meta data from all repositories, or only from just a selected one. If additionally the name of a shared images was specified, pull the newest version from either the selected repo, or from the repo with the most recent version.")) <>
          command
              "clean-local"
              (info
                   (pure runGcLocalRepoCache)
                   (progDesc
-                       "Remove old versions of shared images\
-                                             \ from the local cache.")) <>
+                       "Remove old versions of shared images from the local cache.")) <>
          command
              "clean-remote"
              (info
                   (pure runGcRemoteRepoCache)
                   (progDesc
-                       "Remove cached meta-data of a remote repository. \
-                       \If no '-r' is given, clean the meta data of ALL \
-                       \remote repositories.")) <>
+                       "Remove cached meta-data of a remote repository. If no '-r' is given, clean the meta data of ALL remote repositories.")) <>
          command
              "list"
              (info (pure runListSharedImages) (progDesc "List shared images.")) <>
@@ -410,8 +384,7 @@ buildFileParser =
     some
         (strOption
              (help
-                  "Build file to load, specify multiple build\
-                \ files (each witch '-f') to build them all in a single run." <>
+                  "Build file to load, specify multiple build files (each witch '-f') to build them all in a single run." <>
               short 'f' <>
               long "project-file" <>
               metavar "FILENAME" <>
@@ -432,9 +405,7 @@ remoteRepoParser =
      (SshPrivKey <$>
       strArgument
           (help
-               "Path to the SSH private\
-                                         \ key file used for \
-                                         \ authorization." <>
+               "Path to the SSH private key file used for  authorization." <>
            metavar "SSH_PRIV_KEY_FILE")) <*>
      (SshRemoteHost <$>
       ((,) <$> strArgument (help "Repo hostname or IP" <> metavar "HOST") <*>

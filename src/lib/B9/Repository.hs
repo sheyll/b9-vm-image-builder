@@ -21,7 +21,9 @@ module B9.Repository (RemoteRepo(..)
 
 import Control.Monad
 import Control.Monad.IO.Class
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Data.Data
 import Data.List
 import Data.ConfigFile

@@ -154,62 +154,67 @@ materializeImageSource src dest =
 
 createImageFromImage :: Image -> Partition -> ImageResize -> Image -> B9 ()
 createImageFromImage src part size out = do
-  importImage src out
-  extractPartition part out
-  resizeImage size out
-
+    importImage src out
+    extractPartition part out
+    resizeImage size out
   where
     extractPartition :: Partition -> Image -> B9 ()
     extractPartition NoPT _ = return ()
     extractPartition (Partition partIndex) (Image outFile Raw _) = do
-      (start, len, blockSize) <- liftIO (P.getPartition partIndex outFile)
-      let tmpFile = outFile <.> "extracted"
-      dbgL (printf "Extracting partition %i from '%s'" partIndex outFile)
-      cmd
-        (printf
-           "dd if='%s' of='%s' bs=%i skip=%i count=%i &> /dev/null"
-           outFile
-           tmpFile
-           blockSize
-           start
-           len)
-      cmd (printf "mv '%s' '%s'" tmpFile outFile)
+        (start,len,blockSize) <- liftIO (P.getPartition partIndex outFile)
+        let tmpFile = outFile <.> "extracted"
+        dbgL (printf "Extracting partition %i from '%s'" partIndex outFile)
+        cmd
+            (printf
+                 "dd if='%s' of='%s' bs=%i skip=%i count=%i &> /dev/null"
+                 outFile
+                 tmpFile
+                 blockSize
+                 start
+                 len)
+        cmd (printf "mv '%s' '%s'" tmpFile outFile)
     extractPartition (Partition partIndex) (Image outFile fmt _) =
-      error
-        (printf "Extract partition %i from \
-                \image '%s': Invalid format %s" partIndex outFile
-           (imageFileExtension fmt))
+        error
+            (printf
+                 "Extract partition %i from image '%s': Invalid format %s"
+                 partIndex
+                 outFile
+                 (imageFileExtension fmt))
 
 createDestinationImage :: Image -> ImageDestination -> B9 ()
 createDestinationImage buildImg dest =
-  case dest of
-    (Share name imgType imgResize) -> do
-      resizeImage imgResize buildImg
-      let shareableImg = changeImageFormat imgType buildImg
-      exportAndRemoveImage buildImg shareableImg
-      void (shareImage shareableImg (SharedImageName name))
-    (LocalFile destImg imgResize) -> do
-      resizeImage imgResize buildImg
-      exportAndRemoveImage buildImg destImg
-    (LiveInstallerImage name repo imgResize) -> do
-      resizeImage imgResize buildImg
-      let destImg = Image destFile Raw buildImgFs
-          (Image _ _ buildImgFs) = buildImg
-          destFile = repo </> "machines" </> name </> "disks" </> "raw" </> "0.raw"
-          sizeFile = repo </> "machines" </> name </> "disks" </> "raw" </> "0.size"
-          versFile = repo </> "machines" </> name </> "disks" </> "raw" </> "VERSION"
-      exportAndRemoveImage buildImg destImg
-      cmd
-        (printf
-           "echo $(qemu-img info -f raw '%s' | gawk -e '/virtual size/ \
-           \{print $4}' | tr -d '(') > '%s'"
-           destFile
-           sizeFile)
-      buildDate <- getBuildDate
-      buildId <- getBuildId
-      liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
-    Transient ->
-      return ()
+    case dest of
+        (Share name imgType imgResize) -> do
+            resizeImage imgResize buildImg
+            let shareableImg = changeImageFormat imgType buildImg
+            exportAndRemoveImage buildImg shareableImg
+            void (shareImage shareableImg (SharedImageName name))
+        (LocalFile destImg imgResize) -> do
+            resizeImage imgResize buildImg
+            exportAndRemoveImage buildImg destImg
+        (LiveInstallerImage name repo imgResize) -> do
+            resizeImage imgResize buildImg
+            let destImg = Image destFile Raw buildImgFs
+                (Image _ _ buildImgFs) = buildImg
+                destFile =
+                    repo </> "machines" </> name </> "disks" </> "raw" </>
+                    "0.raw"
+                sizeFile =
+                    repo </> "machines" </> name </> "disks" </> "raw" </>
+                    "0.size"
+                versFile =
+                    repo </> "machines" </> name </> "disks" </> "raw" </>
+                    "VERSION"
+            exportAndRemoveImage buildImg destImg
+            cmd
+                (printf
+                     "echo $(qemu-img info -f raw '%s' | gawk -e '/virtual size/ {print $4}' | tr -d '(') > '%s'"
+                     destFile
+                     sizeFile)
+            buildDate <- getBuildDate
+            buildId <- getBuildId
+            liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
+        Transient -> return ()
 
 createEmptyImage :: String
                  -> FileSystem
@@ -218,33 +223,42 @@ createEmptyImage :: String
                  -> Image
                  -> B9 ()
 createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
-  | fsType /= fsType' = error
-                          (printf
-                             "Conflicting createEmptyImage parameters. \
-                             \Requested is file system %s but the destination \
-                             \image has %s."
-                             (show fsType)
-                             (show fsType'))
-  | imgType /= imgType' = error
-                            (printf
-                               "Conflicting createEmptyImage parameters. \
-                               \Requested is image type %s but the destination \
-                               \image has type %s."
-                               (show imgType)
-                               (show imgType'))
+  | fsType /= fsType' =
+      error
+          (printf
+               "Conflicting createEmptyImage parameters. Requested is file system %s but the destination image has %s."
+               (show fsType)
+               (show fsType'))
+  | imgType /= imgType' =
+      error
+          (printf
+               "Conflicting createEmptyImage parameters. Requested is image type %s but the destination image has type %s."
+               (show imgType)
+               (show imgType'))
   | otherwise = do
       let (Image imgFile imgFmt imgFs) = dest
-      dbgL (printf "Creating empty raw image '%s' with size %s" imgFile (toQemuSizeOptVal imgSize))
+      dbgL
+          (printf
+               "Creating empty raw image '%s' with size %s"
+               imgFile
+               (toQemuSizeOptVal imgSize))
       cmd
-        (printf "qemu-img create -f %s '%s' '%s'" (imageFileExtension imgFmt) imgFile
-           (toQemuSizeOptVal imgSize))
+          (printf
+               "qemu-img create -f %s '%s' '%s'"
+               (imageFileExtension imgFmt)
+               imgFile
+               (toQemuSizeOptVal imgSize))
       case (imgFmt, imgFs) of
-        (Raw, Ext4) -> do
-          let fsCmd = "mkfs.ext4"
-          dbgL (printf "Creating file system %s" (show imgFs))
-          cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
-        (it, fs) ->
-          error (printf "Cannot create file system %s in image type %s" (show fs) (show it))
+          (Raw,Ext4) -> do
+              let fsCmd = "mkfs.ext4"
+              dbgL (printf "Creating file system %s" (show imgFs))
+              cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
+          (it,fs) ->
+              error
+                  (printf
+                       "Cannot create file system %s in image type %s"
+                       (show fs)
+                       (show it))
 
 
 createCOWImage :: Image -> Image -> B9 ()
