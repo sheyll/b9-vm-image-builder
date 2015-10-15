@@ -2,25 +2,34 @@
     composable and addressable in B9 artifacts. -}
 module B9.Content.Generator where
 
-import Data.Data
+import           Control.Parallel.Strategies
+import           Data.Binary
+import           Data.Data
+import           Data.Hashable
+import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
+import           Control.Applicative
 #endif
 
-import B9.Content.AST
-import B9.Content.ErlangPropList
-import B9.Content.StringTemplate
-import B9.Content.YamlObject
+import           B9.Content.AST
+import           B9.Content.ErlangPropList
+import           B9.Content.StringTemplate
+import           B9.Content.YamlObject
 import qualified Data.ByteString.Char8 as B
 
-import Test.QuickCheck
-import B9.QCUtil
+import           Test.QuickCheck
+import           B9.QCUtil
 
-data Content = RenderErlang (AST Content ErlangPropList)
-             | RenderYaml (AST Content YamlObject)
-             | FromString String
-             | FromTextFile SourceFile
-  deriving (Read, Show, Typeable, Eq, Data)
+data Content
+    = RenderErlang (AST Content ErlangPropList)
+    | RenderYaml (AST Content YamlObject)
+    | FromString String
+    | FromTextFile SourceFile
+    deriving (Read,Show,Typeable,Eq,Data,Generic)
+
+instance Hashable Content
+instance Binary Content
+instance NFData Content
 
 instance Arbitrary Content where
   arbitrary = oneof [FromTextFile <$> smaller arbitrary

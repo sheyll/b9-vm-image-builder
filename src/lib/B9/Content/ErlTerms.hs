@@ -9,32 +9,42 @@ module B9.Content.ErlTerms (parseErlTerm
                            ,arbitraryErlFloat
                            ,arbitraryErlNameChar) where
 
-import Data.Data
-import Data.Function
+import           Control.Parallel.Strategies
+import           Data.Binary
 import qualified Data.ByteString.Char8 as B
-import Text.Parsec.ByteString
-import Text.Parsec
-import Test.QuickCheck
+import           Data.Data
+import           Data.Function
+import           Data.Hashable
+import           GHC.Generics (Generic)
+import           Test.QuickCheck
+import           Text.Parsec
+import           Text.Parsec.ByteString
 #if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
+import           Control.Applicative
 #endif
-import Text.Show.Pretty
-import Control.Monad
-import Text.Printf
+import           Text.Show.Pretty
+import           Control.Monad
+import           Text.Printf
 import qualified Text.PrettyPrint as PP
 
-import B9.QCUtil
+import           B9.QCUtil
 
 -- | Simplified Erlang term representation.
-data SimpleErlangTerm = ErlString String
-                      | ErlFloat Double
-                      | ErlNatural Integer
-                      | ErlAtom String
-                      | ErlChar Char
-                      | ErlBinary String
-                      | ErlList [SimpleErlangTerm]
-                      | ErlTuple [SimpleErlangTerm]
-                      deriving (Eq,Ord,Read,Show,Data,Typeable)
+data SimpleErlangTerm
+    = ErlString String
+    | ErlFloat Double
+    | ErlNatural Integer
+    | ErlAtom String
+    | ErlChar Char
+    | ErlBinary String
+    | ErlList [SimpleErlangTerm]
+    | ErlTuple [SimpleErlangTerm]
+    deriving (Eq,Ord,Read,Show,Data,Typeable,Generic)
+
+instance Hashable SimpleErlangTerm
+instance Binary SimpleErlangTerm
+instance NFData SimpleErlangTerm
+
 
 -- | Parse a subset of valid Erlang terms. It parses no maps and binaries are
 -- restricted to either empty binaries or binaries with a string. The input

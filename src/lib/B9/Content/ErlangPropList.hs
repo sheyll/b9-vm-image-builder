@@ -3,28 +3,37 @@
 module B9.Content.ErlangPropList ( ErlangPropList (..)
                                  ) where
 
-import Data.Data
+import           Control.Parallel.Strategies
+import           Data.Binary
+import           Data.Data
+import           Data.Function
+import           Data.Hashable
+import           Data.List (partition,sortBy)
+import           Data.Semigroup
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
-import Data.Function
-import Data.List (partition,sortBy)
-import Data.Semigroup
+import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
+import           Control.Applicative
 #endif
-import Text.Printf
+import           Text.Printf
 
-import B9.Content.ErlTerms
-import B9.Content.AST
-import B9.Content.StringTemplate
+import           B9.Content.ErlTerms
+import           B9.Content.AST
+import           B9.Content.StringTemplate
 
-import Test.QuickCheck
+import           Test.QuickCheck
 
 -- | A wrapper type around erlang terms with a Semigroup instance useful for
 -- combining sys.config files with OTP-application configurations in a list of
 -- the form of a proplist.
-data ErlangPropList = ErlangPropList SimpleErlangTerm
-  deriving (Read,Eq,Show,Data,Typeable)
+data ErlangPropList =
+    ErlangPropList SimpleErlangTerm
+    deriving (Read,Eq,Show,Data,Typeable,Generic)
+
+instance Hashable ErlangPropList
+instance Binary ErlangPropList
+instance NFData ErlangPropList
 
 instance Arbitrary ErlangPropList where
   arbitrary = ErlangPropList <$> arbitrary

@@ -4,15 +4,20 @@ module B9.Content.YamlObject ( YamlObject (..)
                              ) where
 
 import           Control.Applicative
+import           Control.Parallel.Strategies
+import           Data.Binary (Binary(..))
 import           Data.Data
 import           Data.Function
-import           Data.HashMap.Strict       hiding (singleton)
+import           Data.HashMap.Strict hiding (singleton)
+import           Data.Hashable
+import           Data.Maybe
 import           Data.Semigroup
-import qualified Data.Text                 as T
-import qualified Data.Text.Encoding        as E
-import           Data.Vector               ((++), singleton)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as E
+import           Data.Vector ((++), singleton)
 import           Data.Yaml
-import           Prelude                   hiding ((++))
+import           GHC.Generics (Generic)
+import           Prelude hiding ((++))
 import           Text.Printf
 
 import           B9.Content.AST
@@ -22,8 +27,19 @@ import           Test.QuickCheck
 
 -- | A wrapper type around yaml values with a Semigroup instance useful for
 -- combining yaml documents describing system configuration like e.g. user-data.
-data YamlObject = YamlObject Data.Yaml.Value
-  deriving (Eq, Data, Typeable)
+data YamlObject =
+    YamlObject Data.Yaml.Value
+    deriving (Eq,Data,Typeable,Generic)
+
+instance Hashable YamlObject
+instance Binary YamlObject
+instance NFData YamlObject
+
+instance Binary Data.Yaml.Value where
+  put = put . encode
+  get = do
+    v <- get
+    return $ fromJust $ decode v
 
 instance Read YamlObject where
   readsPrec _ = readsYamlObject

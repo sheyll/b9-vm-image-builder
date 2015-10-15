@@ -3,10 +3,14 @@ images.-}
 module B9.DiskImages where
 
 import           B9.QCUtil
+import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
+import           Control.Applicative
 #endif
+import           Control.Parallel.Strategies
+import           Data.Binary
 import           Data.Data
+import           Data.Hashable
 import           Data.Maybe
 import           Data.Semigroup
 import           System.FilePath
@@ -24,11 +28,19 @@ data ImageTarget = ImageTarget
                      ImageDestination
                      ImageSource
                      MountPoint
-                     deriving (Read, Show, Typeable, Data, Eq)
+                     deriving (Read, Show, Typeable, Data, Eq,Generic)
+
+instance Hashable ImageTarget
+instance Binary ImageTarget
+instance NFData ImageTarget
 
 -- | A mount point or 'NotMounted'
 data MountPoint = MountPoint FilePath | NotMounted
-                     deriving (Show, Read, Typeable, Data, Eq)
+                     deriving (Show, Read, Typeable, Data, Eq,Generic)
+
+instance Hashable MountPoint
+instance Binary MountPoint
+instance NFData MountPoint
 
 -- | The destination of an image.
 data ImageDestination = Share String ImageType ImageResize
@@ -45,7 +57,11 @@ data ImageDestination = Share String ImageType ImageResize
                       -- objective of the b9 build is not an image file, but
                       -- rather some artifact produced by executing by a
                       -- containerize build.
-                      deriving (Read, Show, Typeable, Data,Eq)
+                      deriving (Read, Show, Typeable, Data,Eq,Generic)
+
+instance Hashable ImageDestination
+instance Binary ImageDestination
+instance NFData ImageDestination
 
 -- | Specification of how the image to build is obtained.
 data ImageSource = EmptyImage String FileSystem ImageType ImageSize
@@ -61,37 +77,65 @@ data ImageSource = EmptyImage String FileSystem ImageType ImageSize
                   -- the partition table and extract it using @dd@.
                  | From String ImageResize
                   -- ^ Use an image previously shared by via 'Share'.
-                 deriving (Show,Read,Typeable,Data,Eq)
+                 deriving (Show,Read,Typeable,Data,Eq,Generic)
+
+instance Hashable ImageSource
+instance Binary ImageSource
+instance NFData ImageSource
 
 -- | The partition to extract.
 data Partition = NoPT -- ^ There is no partition table on the image
                | Partition Int -- ^ Extract partition @n@ @n@ must be in @0..3@
-  deriving (Eq, Show, Read, Typeable, Data)
+  deriving (Eq, Show, Read, Typeable, Data,Generic)
+
+instance Hashable Partition
+instance Binary Partition
+instance NFData Partition
 
 -- | A vm disk image file consisting of a path to the image file, and the type
 -- and file system.
 data Image = Image FilePath ImageType FileSystem
-           deriving (Eq, Show, Read, Typeable, Data)
+           deriving (Eq, Show, Read, Typeable, Data,Generic)
+
+instance Hashable Image
+instance Binary Image
+instance NFData Image
 
 -- | An image type defines the actual /file format/ of a file containing file
 -- systems. These are like /virtual harddrives/
 data ImageType = Raw | QCow2 | Vmdk
-               deriving (Eq,Read,Typeable,Data,Show)
+               deriving (Eq,Read,Typeable,Data,Show,Generic)
+
+instance Hashable ImageType
+instance Binary ImageType
+instance NFData ImageType
 
 -- | The file systems that b9 can use and convert.
 data FileSystem = NoFileSystem | Ext4 | ISO9660 | VFAT
-                deriving (Eq,Show,Read,Typeable,Data)
+                deriving (Eq,Show,Read,Typeable,Data,Generic)
+
+instance Hashable FileSystem
+instance Binary FileSystem
+instance NFData FileSystem
 
 -- | A data type for image file or file system size; instead of passing 'Int's
 -- around this also captures a size unit so that the 'Int' can be kept small
 data ImageSize = ImageSize Int SizeUnit
-                 deriving (Eq, Show, Read, Typeable, Data)
+                 deriving (Eq, Show, Read, Typeable, Data, Generic)
+
+instance Hashable ImageSize
+instance Binary ImageSize
+instance NFData ImageSize
 
 -- | Enumeration of size multipliers. The exact semantics may vary depending on
 -- what external tools look at these. E.g. the size unit is convert to a size
 -- parameter of the @qemu-img@ command line tool.
 data SizeUnit = B | KB | MB | GB
-              deriving (Eq, Show, Read, Ord, Typeable, Data)
+              deriving (Eq, Show, Read, Ord, Typeable, Data, Generic)
+
+instance Hashable SizeUnit
+instance Binary SizeUnit
+instance NFData SizeUnit
 
 -- | How to resize an image file.
 data ImageResize = ResizeImage ImageSize
@@ -107,7 +151,11 @@ data ImageResize = ResizeImage ImageSize
                    -- smallest size to fit the contents of the file system.
                  | KeepSize
                    -- ^ Do not change the image size.
-                   deriving (Eq, Show, Read, Typeable, Data)
+                   deriving (Eq, Show, Read, Typeable, Data, Generic)
+
+instance Hashable ImageResize
+instance Binary ImageResize
+instance NFData ImageResize
 
 -- | A type alias that indicates that something of type @a@ is mount at a
 -- 'MountPoint'
@@ -124,18 +172,22 @@ data SharedImage =
                 SharedImageBuildId
                 ImageType
                 FileSystem
-    deriving (Eq,Read,Show)
+    deriving (Eq,Read,Show,Typeable,Data,Generic)
+
+instance Hashable SharedImage
+instance Binary SharedImage
+instance NFData SharedImage
 
 -- | The name of the image is the de-facto identifier for push, pull, 'From' and
 --   'Share'.  B9 always selects the newest version the shared image identified
 --   by that name when using a shared image as an 'ImageSource'. This is a
 --   wrapper around a string that identifies a 'SharedImage'
-newtype SharedImageName = SharedImageName String deriving (Eq,Ord,Read,Show)
+newtype SharedImageName = SharedImageName String deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
 
 -- | The exact time that build job __started__.
 --   This is a wrapper around a string contains the build date of a
 --   'SharedImage'; this is purely additional convenience and typesafety
-newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show)
+newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
 
 -- | Every B9 build running in a 'B9Monad'
 --   contains a random unique id that is generated once per build (no matter how
@@ -143,7 +195,7 @@ newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show)
 --   of the build that created the shared image instance.  This is A wrapper
 --   around a string contains the build id of a 'SharedImage'; this is purely
 --   additional convenience and typesafety
-newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Show)
+newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
 
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where

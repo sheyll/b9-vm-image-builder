@@ -8,14 +8,18 @@ module B9.Content.StringTemplate
        where
 
 #if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
+import           Control.Applicative
 #endif
 import           Control.Arrow hiding (second)
 import           Control.Monad.Reader
 import           Data.Bifunctor
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
+import           Control.Parallel.Strategies
+import           GHC.Generics (Generic)
+import           Data.Binary
 import           Data.Data
+import           Data.Hashable
 import           Data.Maybe
 import qualified Data.Text as T
 import           Data.Text.Encoding as E
@@ -30,13 +34,27 @@ import           B9.ConfigUtils
 import           B9.QCUtil
 -- | A wrapper around a file path and a flag indicating if template variable
 -- expansion should be performed when reading the file contents.
-data SourceFile = Source SourceFileConversion FilePath
-    deriving (Read, Show, Typeable, Data, Eq)
+data SourceFile =
+    Source SourceFileConversion
+           FilePath
+    deriving (Read,Show,Typeable,Data,Eq,Generic)
 
-data SourceFileConversion = NoConversion | ExpandVariables
-  deriving (Read, Show, Typeable, Data, Eq)
+instance Hashable SourceFile
+instance Binary SourceFile
+instance NFData SourceFile
 
-data Environment = Environment [(String,String)]
+data SourceFileConversion
+    = NoConversion
+    | ExpandVariables
+    deriving (Read,Show,Typeable,Data,Eq,Generic)
+
+instance Hashable SourceFileConversion
+instance Binary SourceFileConversion
+instance NFData SourceFileConversion
+
+newtype Environment =
+    Environment [(String, String)]
+    deriving (Read,Show,Typeable,Data,Eq,NFData,Hashable,Binary)
 
 withEnvironment :: [(String,String)] -> ReaderT Environment m a -> m a
 withEnvironment env action = runReaderT action (Environment env)
