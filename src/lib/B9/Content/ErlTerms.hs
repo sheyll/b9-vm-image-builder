@@ -18,10 +18,13 @@ import           Data.Hashable
 import           GHC.Generics (Generic)
 import           Test.QuickCheck
 import           Text.Parsec
+       ((<|>), many, spaces, char, option, between, string, choice,
+        octDigit, hexDigit, many1, noneOf, try, digit, anyChar, alphaNum,
+        lower, parse)
 import           Text.Parsec.ByteString
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative hiding ((<|>))
-#endif
+-- #if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative hiding ((<|>), many, many1)
+-- #endif
 import           Text.Show.Pretty
 import           Control.Monad
 import           Text.Printf
