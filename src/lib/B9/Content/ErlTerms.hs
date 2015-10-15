@@ -23,7 +23,7 @@ import           Text.Parsec
         lower, parse)
 import           Text.Parsec.ByteString
 -- #if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative hiding ((<|>), many, many1)
+import           Control.Applicative hiding ((<|>), many)
 -- #endif
 import           Text.Show.Pretty
 import           Control.Monad
