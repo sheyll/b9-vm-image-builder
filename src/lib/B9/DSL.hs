@@ -1,25 +1,20 @@
--- | Experimental new, hopefully typesafe. domain specific language for
---   description of VM-builds.
 {-# LANGUAGE FlexibleInstances #-}
-module B9.DSL
-       (B9DSL, doc, doc', (#), Documentation(..), ($=), include, includeTemplate, writeContent,
-        exportCloudInit, imageSource, createImage, importImage, from,
-        fromResized, imageDestination, share, exportLiveInstallerImage,
-        exportImage, mount, lxc, lxc32, boot, exec, sh, rootImage,
-        dataImage, mountAndShareSharedImage, mountAndShareNewImage, runDSL,
-        printDSL, printBuildStep, dslExample)
-       where
+{-# LANGUAGE ConstraintKinds #-}
+module B9.DSL where
 
-import B9.ArtifactGenerator (ArtifactSource(..), CloudInitType(..))
+import B9.ArtifactGenerator
+       (CloudInitType(..), InstanceId(..))
 import B9.B9Config (ExecEnvType(..))
-import B9.Content.Generator(Content)
+import B9.Content (Content(..), FileSpec(..), fileSpec)
+import B9.Content.AST (AST(..))
 import B9.Content.StringTemplate
        (SourceFile(..), SourceFileConversion(..))
+import B9.Content.YamlObject (YamlObject(..))
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..))
-import B9.ExecEnv (CPUArch(..), SharedDirectory(..))
+        SizeUnit(..), Mounted, MountPoint(..))
+import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -29,120 +24,258 @@ import Control.Monad
 import Control.Monad.Free (Free(..), liftF, foldFree)
 import Data.Functor (void)
 import Text.Printf (printf)
+import GHC.Generics (Generic)
+import Data.Data
 
-data BuildStep next :: * where
-        Let :: String -> String -> next -> BuildStep next
-        Import ::
-          SArtifact a -> Source a -> (Imported a -> next) -> BuildStep next
-        Export :: SArtifact a -> Target a -> next -> BuildStep next
-        DefineExecEnv ::
-          String ->
-            ExecEnvType -> CPUArch -> (ExecEnv -> next) -> BuildStep next
-        Exec :: ExecEnv -> Script -> next -> BuildStep next
+-- ---------------------------------------------------------
+
+data BuildStep next where
+        Create ::
+            (Show (Handle a), Show (CreateSpec a)) =>
+            SArtifact a -> CreateSpec a -> (Handle a -> next) -> BuildStep next
+        Update ::
+            (Show (Handle a), Show (UpdateSpec a)) =>
+            Handle a -> UpdateSpec a -> next -> BuildStep next
+        Add ::
+            (CanAdd env a, Show (Handle env), Show (AddSpec a)) =>
+            Handle env -> SArtifact a -> AddSpec a -> next -> BuildStep next
+        Export ::
+            (Show (Handle a), Show (ExportSpec a)) =>
+            Handle a -> ExportSpec a -> next -> BuildStep next
 
 instance Functor BuildStep where
-    fmap f (Let k v next) = Let k v (f next)
-    fmap f (Import sa src k) = Import sa src (f . k)
-    fmap f (Export sa dst next) = Export sa dst (f next)
-    fmap f (DefineExecEnv n et a k) = DefineExecEnv n et a (f . k)
-    fmap f (Exec et s next) = Exec et s (f next)
+    fmap f (Create sa src k) = Create sa src (f . k)
+    fmap f (Update hnd upd next) = Update hnd upd (f next)
+    fmap f (Add hndEnv sa importSpec next) = Add hndEnv sa importSpec (f next)
+    fmap f (Export hnd out next) = Export hnd out (f next)
 
-type B9DSL a = Free BuildStep a
+type Program a = Free BuildStep a
 
-data Tagged a b =
-    Tagged b
+-- ---------------------------------------------------------
 
-instance Show b => Show (Tagged a b) where
-    show (Tagged s) = show s
+-- | A build step that creates something from a source that can be referenced to
+-- by a handle.
+create
+    :: (Show (Handle a), Show (CreateSpec a), Show (SArtifact a))
+    => SArtifact a -> CreateSpec a -> Program (Handle a)
+create sa src = liftF $ Create sa src id
 
-data Documentation
-    = Doc String
-    | DocIncluded Content
+-- | A build step the updates an object referenced by a handle from according to
+-- an update specification.
+update
+    :: (Show (Handle a), Show (UpdateSpec a), Show (SArtifact a))
+    => Handle a -> UpdateSpec a -> Program ()
+update hnd upd = liftF $ Update hnd upd ()
 
-data ExecEnv =
-    ExecEnv String
-            ExecEnvType
-            CPUArch
-    deriving (Show)
+-- | A build step that adds an artifact to an environment using an 'ImportSpec'.
+add
+    :: (CanAdd env b, Show (Handle env), Show (AddSpec b))
+    => Handle env
+    -> SArtifact b
+    -> AddSpec b
+    -> Program ()
+add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec ()
 
-type family Source (a :: Artifact) :: * where
-        Source 'StaticContent = ArtifactSource
-        Source 'VmImage = ImageSource
-        Source 'MountedImage = (ExecEnv, Tagged ImageSource String, FilePath)
-        Source 'MountedHostDirectory = (ExecEnv, FilePath, FilePath, MountOpts String)
-        Source 'SelfDocumentation = Documentation
+-- | A build step the exports an object referenced by a handle a to an output.
+export
+    :: (Show (Handle a), Show (ExportSpec a), Show (SArtifact a))
+    => Handle a -> ExportSpec a -> Program ()
+export hnd out = liftF $ Export hnd out ()
 
-type family Imported (a :: Artifact) :: * where
-        Imported 'VmImage = Tagged ImageSource String
-        Imported a = ()
+-- ---------------------------------------------------------
 
-type family Target (a :: Artifact) :: * where
-        Target 'VmImage = (Tagged ImageSource String, ImageDestination)
-        Target 'CloudInit = ([CloudInitType], FilePath)
+-- | A handle representing the environment holding all template variable
+-- bindings.
+variableBindings :: Handle 'VariableBindings
+variableBindings = singletonHandle SVariableBindings
+
+-- ---------------------------------------------------------
+
+-- | A handle representing the documentation gathered throughout a 'Program'
+documentation :: Handle 'Documentation
+documentation = singletonHandle SDocumentation
+
+-- ---------------------------------------------------------
+
+-- | Instruct an environment to mount a host directory
+data HostDirMnt
+    = AddMountHostDirRW FilePath
+    | AddMountHostDirRO FilePath
+    deriving (Read,Show,Eq,Generic,Data,Typeable)
+
+-- ---------------------------------------------------------
+
+data CloudInitTarget =
+    CloudInitTarget InstanceId
+                    [CloudInitType]
+                    FilePath
+    deriving (Read,Show,Typeable,Data,Eq,Generic)
+
+-- ---------------------------------------------------------
+
+data LinuxVmArgs =
+    LinuxVmArgs String
+                ExecEnvType
+                CPUArch
+    deriving (Read,Show,Generic,Eq,Data,Typeable)
+
+-- ---------------------------------------------------------
 
 data Artifact
-    = StaticContent
-    | VmImage
-    | MountedImage
+    = VmImage
     | CloudInit
-    | MountedHostDirectory
-    | SelfDocumentation
+    | CloudInitMetaData
+    | CloudInitUserData
+    | Documentation
+    | LinuxVm
+    | TemplateVariable
+    | MountedHostDir
+    | MountedVmImage
+    | ExecutableScript
+    | FileContent
+    | VariableBindings
+    deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
-data SArtifact (k :: Artifact) where
-        SStaticContent :: SArtifact 'StaticContent
+
+data SArtifact k where
         SVmImage :: SArtifact 'VmImage
-        SMountedImage :: SArtifact 'MountedImage
         SCloudInit :: SArtifact 'CloudInit
-        SMountedHostDirectory :: SArtifact 'MountedHostDirectory
-        SSelfDocumentation :: SArtifact 'SelfDocumentation
+        SCloudInitMetaData :: SArtifact 'CloudInitMetaData
+        SCloudInitUserData :: SArtifact 'CloudInitUserData
+        SDocumentation :: SArtifact 'Documentation
+        SLinuxVm :: SArtifact 'LinuxVm
+        STemplateVariable :: SArtifact 'TemplateVariable
+        SMountedHostDir :: SArtifact 'MountedHostDir
+        SMountedVmImage :: SArtifact 'MountedVmImage
+        SExecutableScript :: SArtifact 'ExecutableScript
+        SFileContent :: SArtifact 'FileContent
+        SVariableBindings :: SArtifact 'VariableBindings
+
+instance Show (SArtifact k) where
+   show SVmImage = "SVmImage"
+   show SCloudInit = "SCloudInit"
+   show SCloudInitUserData = "SCloudInitUserData"
+   show SCloudInitMetaData = "SCloudInitMetaData"
+   show SDocumentation = "SDocumentation"
+   show SLinuxVm = "SLinuxVm"
+   show STemplateVariable = "STemplateVariable"
+   show SMountedHostDir = "SMountedHostDir"
+   show SMountedVmImage = "SMountedVmImage"
+   show SExecutableScript = "SExecutableScript"
+   show SFileContent = "SFileContent"
+   show SVariableBindings = "SVariableBindings"
+
+-- ---------------------------------------------------------
+
+-- | This type identifies everything that can be created or added in a 'Program'
+data Handle (a :: Artifact) =
+    Handle (SArtifact a)
+           String
+    deriving (Show)
+
+-- | Create a 'Handle' that contains the string representation of the singleton
+-- type as tag value.
+singletonHandle :: SArtifact a -> Handle a
+singletonHandle sa = Handle sa (show sa)
+
+-- | Create a 'Handle' that contains a string.
+handle :: SArtifact a -> String -> Handle a
+handle = Handle
+
+
+type family CreateSpec (a :: Artifact) :: * where
+        CreateSpec 'VmImage = ImageSource
+        CreateSpec 'CloudInit = CloudInitTarget
+        CreateSpec 'LinuxVm = LinuxVmArgs
+        CreateSpec 'FileContent = Content
+
+type family UpdateSpec (a :: Artifact) :: * where
+        UpdateSpec 'VmImage = ImageResize
+
+type family AddSpec (a :: Artifact) :: * where
+        AddSpec 'Documentation = String
+        AddSpec 'FileContent = (FileSpec, Handle 'FileContent)
+        AddSpec 'ExecutableScript = Script
+        AddSpec 'MountedHostDir = Mounted HostDirMnt
+        AddSpec 'MountedVmImage = Mounted (Handle 'VmImage)
+        AddSpec 'TemplateVariable = (String, String)
+        AddSpec 'CloudInitMetaData = AST Content YamlObject
+        AddSpec 'CloudInitUserData = AST Content YamlObject
+
+type CanAdd env a = CanAddP env a ~ 'True
+
+type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
+     where
+        CanAddP 'LinuxVm 'FileContent = 'True
+        CanAddP 'LinuxVm 'MountedHostDir = 'True
+        CanAddP 'LinuxVm 'MountedVmImage = 'True
+        CanAddP 'LinuxVm 'ExecutableScript = 'True
+        CanAddP 'CloudInit 'FileContent = 'True
+        CanAddP 'CloudInit 'ExecutableScript = 'True
+        CanAddP 'CloudInit 'CloudInitMetaData = 'True
+        CanAddP 'CloudInit 'CloudInitUserData = 'True
+        CanAddP 'VariableBindings 'TemplateVariable = 'True
+        CanAddP 'Documentation 'Documentation = 'True
+        CanAddP env a = 'False
+
+type family ExportSpec (a :: Artifact) :: * where
+        ExportSpec 'VmImage = ImageDestination
+
+-- ---------------------------------------------------------
 
 -- * For documentation of the actual build/deployment itself either embed a
 --   string or a file, template parameters e.g. ${xxx} can be also used.
 
-doc :: String -> B9DSL ()
-doc str = liftF $ Import SSelfDocumentation (Doc str) id
+doc :: String -> Program ()
+doc str = add documentation SDocumentation str
 
-doc' :: Content -> B9DSL ()
-doc' c = liftF $ Import SSelfDocumentation (DocIncluded c) id
-
-(#) :: B9DSL a -> String -> B9DSL a
+(#) :: Program a -> String -> Program a
 m # str = do
   doc str
   m
 
+($=) :: String -> String -> Program ()
+var $= val = add variableBindings STemplateVariable (var, val)
+
 -- * Content generation and static file inclusion
 
-($=) :: String -> String -> B9DSL ()
-var $= val = liftF $ Let var val ()
+addFile ::(CanAdd e 'FileContent)
+    => Handle e -> FileSpec -> Content -> Program ()
+addFile hnd f c = createContent c >>= writeContent hnd f
 
--- TODO split file inclusion from file content generation. i.e. add newFile
--- ... and then add an 'appendFile' function. new file should be typed according
--- to its contents so that only compatible content can be appended
+createContent :: Content -> Program (Handle 'FileContent)
+createContent = create SFileContent
 
-include :: FilePath -> FilePath -> B9DSL ()
-include dest src = liftF $ Import SStaticContent (FromFile dest (Source NoConversion src)) id
+writeContent
+    :: (CanAdd e 'FileContent)
+    => Handle e -> FileSpec -> Handle 'FileContent -> Program ()
+writeContent hnd f c = add hnd SFileContent (f, c)
 
-includeTemplate :: FilePath -> FilePath -> B9DSL ()
-includeTemplate dest src = liftF $ Import SStaticContent (FromFile dest (Source ExpandVariables src)) id
+addMetaData
+    :: (CanAdd e 'CloudInitMetaData)
+    => Handle e -> AST Content YamlObject -> Program ()
+addMetaData hnd ast = add hnd SCloudInitMetaData ast
 
-writeContent :: FilePath -> Content -> B9DSL ()
-writeContent dst src = liftF $ Import SStaticContent (FromContent dst src) id
+addUserData
+    :: (CanAdd e 'CloudInitUserData)
+    => Handle e -> AST Content YamlObject -> Program ()
+addUserData hnd ast = add hnd SCloudInitUserData ast
 
 -- * cloud init
 
-exportCloudInit :: FilePath -> B9DSL ()
-exportCloudInit dst = liftF $ Export SCloudInit ([CI_ISO, CI_DIR], dst) ()
+cloudInitTarget :: InstanceId -> FilePath -> Program (Handle 'CloudInit)
+cloudInitTarget iid dst = create SCloudInit (CloudInitTarget iid [CI_ISO, CI_DIR] dst)
 
 -- * Image import
 
-imageSource :: ImageSource -> B9DSL (Imported 'VmImage)
-imageSource src = liftF $ Import SVmImage src id
+imageSource :: ImageSource -> Program (Handle 'VmImage)
+imageSource src = create SVmImage src
 
 createImage :: String
            -> FileSystem
            -> ImageType
            -> ImageSize
-           -> B9DSL (Imported 'VmImage)
+           -> Program (Handle 'VmImage)
 createImage s fs it is = imageSource $ EmptyImage s fs it is
 
 importImage :: FilePath
@@ -150,128 +283,116 @@ importImage :: FilePath
              -> FileSystem
              -> Partition
              -> ImageResize
-             -> B9DSL (Imported 'VmImage)
+             -> Program (Handle 'VmImage)
 importImage f it fs pt is = imageSource $ SourceImage (Image f it fs) pt is
 
-from :: String -> B9DSL (Imported 'VmImage)
+from :: String -> Program (Handle 'VmImage)
 from = fromResized KeepSize
 
-fromResized :: ImageResize -> String -> B9DSL (Imported 'VmImage)
+fromResized :: ImageResize -> String -> Program (Handle 'VmImage)
 fromResized r s = imageSource $ From s r
+
+resize :: Handle 'VmImage -> Int -> SizeUnit -> Program ()
+resize hnd s u = update hnd (Resize (ImageSize s u))
+
+resizeToMinimum :: Handle 'VmImage -> Program ()
+resizeToMinimum hnd = update hnd ShrinkToMinimum
 
 -- * Image export
 
-imageDestination :: Imported 'VmImage
+imageDestination :: Handle 'VmImage
                  -> ImageDestination
-                 -> B9DSL ()
-imageDestination img dst = liftF $ Export SVmImage (img, dst) ()
+                 -> Program ()
+imageDestination hnd dst = export hnd dst
 
-share :: Imported 'VmImage -> String -> B9DSL ()
-share img name = imageDestination img $ Share name QCow2 KeepSize
+share :: Handle 'VmImage -> String -> Program ()
+share hnd name = imageDestination hnd $ Share name QCow2 KeepSize
 
-exportLiveInstallerImage :: Imported 'VmImage
+exportLiveInstallerImage :: Handle 'VmImage
                          -> String
                          -> FilePath
                          -> ImageResize
-                         -> B9DSL ()
-exportLiveInstallerImage img imgName outDir resize =
-    imageDestination img $ LiveInstallerImage imgName outDir resize
+                         -> Program ()
+exportLiveInstallerImage hnd imgName outDir rs =
+    imageDestination hnd $ LiveInstallerImage imgName outDir rs
 
-exportImage :: Imported 'VmImage
+exportImage :: Handle 'VmImage
             -> FilePath
             -> ImageType
             -> FileSystem
             -> ImageResize
-            -> B9DSL ()
-exportImage img name it fs resize =
-    imageDestination img $ LocalFile (Image name it fs) resize
-
--- * Mounting
-
-class DSLCanMount a  where
-    type MountArtifact a :: Artifact
-    data MountOpts a
-    defaultMountOpts :: a -> MountOpts a
-    mountArtifactS :: a -> SArtifact (MountArtifact a)
-    mountArtifact :: MountOpts a
-                  -> ExecEnv
-                  -> a
-                  -> FilePath
-                  -> Source (MountArtifact a)
-
--- * Host directory
-instance DSLCanMount String where
-  type MountArtifact String = 'MountedHostDirectory
-  data MountOpts String = ReadOnly | ReadWrite deriving Show
-  defaultMountOpts _ = ReadOnly
-  mountArtifactS _ = SMountedHostDirectory
-  mountArtifact opts e src dest = (e, src, dest, opts)
-
-instance DSLCanMount (Tagged ImageSource String) where
-  type MountArtifact (Tagged ImageSource String) = 'MountedImage
-  data MountOpts (Tagged ImageSource String) = MountImgNoOptions deriving Show
-  defaultMountOpts _ = MountImgNoOptions
-  mountArtifactS _ = SMountedImage
-  mountArtifact opts e src dest = (e, src, dest)
-
-mount
-    :: DSLCanMount src
-    => ExecEnv -> src -> FilePath -> B9DSL (Imported (MountArtifact src))
-mount = mount' (defaultMountOpts undefined)
-
-mount'
-    :: DSLCanMount src
-    => MountOpts src
-    -> ExecEnv
-    -> src
-    -> FilePath
-    -> B9DSL (Imported (MountArtifact src))
-mount' mopts e src dest =
-    liftF $
-    Import
-        (mountArtifactS src)
-        (mountArtifact mopts e src dest)
-        id
+            -> Program ()
+exportImage hnd name it fs rs =
+    imageDestination hnd $ LocalFile (Image name it fs) rs
 
 -- * Execution environment
 
-lxc :: String -> B9DSL ExecEnv
+boot :: String -> ExecEnvType -> CPUArch -> Program (Handle 'LinuxVm)
+boot name et arch = create SLinuxVm (LinuxVmArgs name et arch)
+
+lxc :: String -> Program (Handle 'LinuxVm)
 lxc name = boot name LibVirtLXC X86_64
 
-lxc32 :: String -> B9DSL ExecEnv
+lxc32 :: String -> Program (Handle 'LinuxVm)
 lxc32 name = boot name LibVirtLXC I386
 
-boot :: String -> ExecEnvType -> CPUArch -> B9DSL ExecEnv
-boot name et arch = liftF $ DefineExecEnv name et arch id
+-- * Mounting
+
+mountDir :: Handle 'LinuxVm
+         -> FilePath
+         -> FilePath
+         -> Program ()
+mountDir e hostDir dest =
+    add e SMountedHostDir (AddMountHostDirRO hostDir, MountPoint dest)
+
+mountDirRW :: Handle 'LinuxVm
+           -> FilePath
+           -> FilePath
+           -> Program ()
+mountDirRW e hostDir dest =
+    add e SMountedHostDir (AddMountHostDirRW hostDir, MountPoint dest)
+
+mount :: Handle 'LinuxVm
+      -> Handle 'VmImage
+      -> FilePath
+      -> Program ()
+mount e imgHnd dest = add e SMountedVmImage (imgHnd, MountPoint dest)
 
 -- * Script Execution (inside a container)
 
-exec :: Script -> ExecEnv -> B9DSL ()
-exec script e = liftF $ Exec e script ()
+runCommand :: (CanAdd a 'ExecutableScript) => Handle a -> Script -> Program ()
+runCommand hnd s = add hnd SExecutableScript s
 
-sh :: String -> ExecEnv -> B9DSL ()
-sh s = exec (Run s [])
-
--- TODO generalize exec to work with 'includedFiles'
+sh :: (CanAdd a 'ExecutableScript) => Handle a -> String -> Program ()
+sh e s = runCommand e (Run s [])
 
 -- * Some utility vm builder lego
 
-rootImage :: String -> String -> ExecEnv -> B9DSL ()
+rootImage :: String -> String -> Handle 'LinuxVm -> Program ()
 rootImage nameFrom nameExport env =
     void $ mountAndShareSharedImage nameFrom nameExport "/" env
 
-dataImage :: String -> ExecEnv -> B9DSL ()
+dataImage :: String -> Handle 'LinuxVm -> Program ()
 dataImage nameExport env =
     void $ mountAndShareNewImage "data" 64 nameExport "/data" env
 
-mountAndShareSharedImage :: String -> String -> String -> ExecEnv -> B9DSL (Imported 'VmImage)
+mountAndShareSharedImage :: String
+                         -> String
+                         -> String
+                         -> Handle 'LinuxVm
+                         -> Program (Handle 'VmImage)
 mountAndShareSharedImage nameFrom nameExport mountPoint env = do
     img <- from nameFrom
     share img nameExport
     mount env img mountPoint
     return img
 
-mountAndShareNewImage :: String -> Int -> String -> FilePath -> ExecEnv -> B9DSL (Imported 'VmImage)
+mountAndShareNewImage :: String
+                      -> Int
+                      -> String
+                      -> FilePath
+                      -> Handle 'LinuxVm
+                      -> Program (Handle 'VmImage)
 mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
     img <- createImage fsLabel Ext4 QCow2 (ImageSize sizeGB GB)
     share img nameExport
@@ -280,69 +401,93 @@ mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
 
 -- * DSL Interpreter
 
+-- | Interpret a `Program` using an `Interpreter` monad.
+interpret
+    :: Interpreter m
+    => Program b -> m b
+interpret = foldFree runInterpreter
+  where
+    runInterpreter (Create sa src k) = do
+        hnd <- runCreate sa src
+        return (k hnd)
+    runInterpreter (Update hnd src next) = do
+        runUpdate hnd src
+        return next
+    runInterpreter (Add hnde sa addSpec next) = do
+        runAdd  hnde sa addSpec
+        return next
+    runInterpreter (Export hnd out next) = do
+        runExport hnd out
+        return next
+
+-- | Monads that interpret build steps
 #if MIN_VERSION_base(4,8,0)
-runDSL
-    :: Monad m
-    => (forall a. BuildStep a -> m a) -> B9DSL b -> m b
+class (Monad f) => Interpreter f where
 #else
-runDSL
-    :: (Monad m, Functor m)
-    => (forall a. BuildStep a -> m a) -> B9DSL b -> m b
+class (Monad f, Functor f) => Interpreter f where
 #endif
-runDSL = foldFree
+  runCreate
+      :: (Show (Handle a), Show (CreateSpec a))
+      => SArtifact a -> CreateSpec a -> f (Handle a)
+  runUpdate
+      :: (Show (Handle a), Show (UpdateSpec a))
+      => Handle a -> UpdateSpec a -> f ()
+  runAdd
+      :: (Show (Handle env), Show (AddSpec a))
+      => Handle env -> SArtifact a -> AddSpec a -> f ()
+  runExport
+      :: (Show (Handle a), Show (ExportSpec a))
+      => Handle a -> ExportSpec a -> f ()
 
--- | Print the DSL to IO
-printDSL :: B9DSL a -> IO ()
-printDSL = void . runDSL printBuildStep
-
-printBuildStep :: BuildStep a -> IO a
-printBuildStep (Let k v next) = do
-    printf "%s := %s\n" k v
-    return next
-printBuildStep (Import SStaticContent src k) = do
-    printf "import static %s\n" (show src)
-    return $ k ()
-printBuildStep (Import SVmImage src k) = do
-    printf "import image %s\n" (show src)
-    return (k (Tagged (show src)))
-printBuildStep (Import SMountedImage src k) = do
-    printf "mount image %s\n" (show src)
-    return (k ())
-printBuildStep (Import SMountedHostDirectory src k) = do
-    printf "mount host directory %s\n" (show src)
-    return (k ())
-printBuildStep (Import SSelfDocumentation (Doc str) k) = do
-    printf "-- %s\n" str
-    return (k ())
-printBuildStep (Import SSelfDocumentation (DocIncluded c) k) = do
-    printf "-- %s\n" (show c)
-    return (k ())
-printBuildStep (Export SVmImage dst next) = do
-    printf "export image %s\n" (show dst)
-    return next
-printBuildStep (Export SCloudInit dst next) = do
-    printf "export cloud-init %s\n" (show dst)
-    return next
-printBuildStep (DefineExecEnv n et a k) = do
-    printf "define env: %s %s %s\n" n (show et) (show a)
-    return (k (ExecEnv n et a))
-printBuildStep (Exec (ExecEnv n _ _) s next) = do
-    printf "exec in %s: %s\n" n (show s)
-    return next
-printBuildStep _other = do
-    printf "???\n"
-    return undefined
+instance Interpreter IO where
+    runCreate sa src = do
+        let hnd = singletonHandle sa
+        printf "create %s %s from %s\n" (show sa) (show hnd) (show src)
+        return hnd
+    runUpdate hnd src = do
+        printf "update %s using %s\n" (show hnd) (show src)
+    runAdd hnde sa src = do
+        let hnd = singletonHandle sa
+        printf
+            "add %s %s %s to %s\n"
+            (show sa)
+            (show hnd)
+            (show src)
+            (show hnde)
+        return ()
+    runExport hnd dest = do
+        printf "export %s to %s\n" (show hnd) (show dest)
 
 -- * Tests and experiments
 
-dslExample :: B9DSL ()
-dslExample = do
+dslExample1 :: Program ()
+dslExample1 = do
     "x" $= "3"
-    includeTemplate "httpd.conf" "httpd.conf.in" # "overwrite all of httpd!"
-    exportCloudInit "blah-ci"                    # "export the cloud-init stuff"
+    ci <- cloudInitTarget (IID "blah-ci-${x}") "/tmp/blah"
+    addMetaData ci (ASTString "test")
+    addUserData ci (ASTString "test")
     e <- lxc "container-id"
+    mountDirRW e "tmp" "/mnt/HOST_TMP"
+    addFile
+        e
+        (fileSpec "/etc/httpd.conf")
+        (FromTextFile (Source ExpandVariables "httpd.conf.in"))
+    sh e "ls -la"
+    addFile
+        ci
+        (fileSpec "/etc/httpd.conf")
+        (FromTextFile (Source ExpandVariables "httpd.conf.in"))
+    sh ci "ls -la"
     doc "From here there be dragons:"
-    mount e "/tmp" "/mnt/HOST_TMP"
     rootImage "fedora" "testv1-root" e
     dataImage "testv1-data" e
-    sh "ls -la" e
+    img <- from "schlupfi"
+    mountDir e "/tmp" "/mnt/HOST_TMP"
+    share img "wupfi"
+    resize img 64 GB
+    resizeToMinimum img
+
+dslExample2 :: Program ()
+dslExample2 = do
+  env <- lxc "c1"
+  sh env "ls -lR /"

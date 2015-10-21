@@ -28,10 +28,9 @@ import           Data.Text.Template (render,templateSafe,renderA)
 import           Test.QuickCheck
 import           Text.Printf
 import           Text.Show.Pretty (ppShow)
-
 import           B9.ConfigUtils
-
 import           B9.QCUtil
+
 -- | A wrapper around a file path and a flag indicating if template variable
 -- expansion should be performed when reading the file contents.
 data SourceFile =
@@ -56,71 +55,82 @@ newtype Environment =
     Environment [(String, String)]
     deriving (Read,Show,Typeable,Data,Eq,NFData,Hashable,Binary)
 
-withEnvironment :: [(String,String)] -> ReaderT Environment m a -> m a
+withEnvironment :: [(String, String)] -> ReaderT Environment m a -> m a
 withEnvironment env action = runReaderT action (Environment env)
 
-readTemplateFile :: (MonadIO m, MonadReader Environment m)
-                 => SourceFile -> m B.ByteString
+readTemplateFile
+    :: (MonadIO m, MonadReader Environment m)
+    => SourceFile -> m B.ByteString
 readTemplateFile (Source conv f') = do
-  Environment env <- ask
-  case substE env f' of
-    Left e ->
-      error (printf "Failed to substitute templates in source \
+    Environment env <- ask
+    case substE env f' of
+        Left e ->
+            error
+                (printf
+                     "Failed to substitute templates in source \
                     \file name '%s'/\nError: %s\n"
-                    f' e)
-    Right f -> do
-      c <- liftIO (B.readFile f)
-      convert f c
-
+                     f'
+                     e)
+        Right f -> do
+            c <- liftIO (B.readFile f)
+            convert f c
   where
-    convert f c = case conv of
-                    NoConversion -> return c
-                    ExpandVariables -> do
-                      Environment env <- ask
-                      case substEB env c of
-                        Left e ->
-                          error (printf "readTemplateFile '%s' failed: \n%s\n"
-                                         f
-                                         e)
-                        Right c' ->
-                          return c'
+    convert f c =
+        case conv of
+            NoConversion -> return c
+            ExpandVariables -> do
+                Environment env <- ask
+                case substEB env c of
+                    Left e ->
+                        error
+                            (printf "readTemplateFile '%s' failed: \n%s\n" f e)
+                    Right c' -> return c'
 
 
 -- String template substitution via dollar
-subst :: [(String,String)] -> String -> String
+subst :: [(String, String)] -> String -> String
 subst env templateStr =
-  case substE env templateStr of
-    Left e -> error e
-    Right r -> r
+    case substE env templateStr of
+        Left e -> error e
+        Right r -> r
 
 -- String template substitution via dollar
-substE :: [(String,String)] -> String -> Either String String
+substE :: [(String, String)] -> String -> Either String String
 substE env templateStr =
-  second (T.unpack . E.decodeUtf8)
-         (substEB env (E.encodeUtf8 (T.pack templateStr)))
+    second
+        (T.unpack . E.decodeUtf8)
+        (substEB env (E.encodeUtf8 (T.pack templateStr)))
 
 -- String template substitution via dollar
-substEB :: [(String,String)] -> B.ByteString -> Either String B.ByteString
+substEB :: [(String, String)] -> B.ByteString -> Either String B.ByteString
 substEB env templateStr = do
-  t <- template'
-  res <- renderA t env'
-  return (LB.toStrict (LE.encodeUtf8 res))
+    t <- template'
+    res <- renderA t env'
+    return (LB.toStrict (LE.encodeUtf8 res))
   where
-    env' t = case lookup (T.unpack t) env of
-               Just v -> Right (T.pack v)
-               Nothing -> Left ("Invalid template parameter: \""
-                                ++ T.unpack t ++ "\" in: \""
-                                ++ show templateStr
-                                ++ "\".\nValid variables:\n" ++ ppShow env)
+    env' t =
+        case lookup (T.unpack t) env of
+            Just v -> Right (T.pack v)
+            Nothing ->
+                Left
+                    ("Invalid template parameter: \"" ++
+                     T.unpack t ++
+                     "\" in: \"" ++
+                     show templateStr ++
+                     "\".\nValid variables:\n" ++ ppShow env)
+    template' =
+        case templateSafe (E.decodeUtf8 templateStr) of
+            Left (row,col) ->
+                Left
+                    ("Invalid template, error at row: " ++
+                     show row ++
+                     ", col: " ++ show col ++ " in: \"" ++ show templateStr)
+            Right t -> Right t
 
-    template' = case templateSafe (E.decodeUtf8 templateStr) of
-      Left (row,col) -> Left ("Invalid template, error at row: "
-                             ++ show row ++ ", col: " ++ show col
-                             ++ " in: \"" ++ show templateStr)
-      Right t -> Right t
 
-
-substFile :: MonadIO m => [(String, String)] -> FilePath -> FilePath -> m ()
+substFile
+    :: MonadIO m
+    => [(String, String)] -> FilePath -> FilePath -> m ()
 substFile assocs src dest = do
     templateBs <- liftIO (B.readFile src)
     let t = templateSafe (E.decodeUtf8 templateBs)
@@ -156,13 +166,14 @@ substFile assocs src dest = do
 
 substPath :: [(String, String)] -> SystemPath -> SystemPath
 substPath assocs src =
-          case src of
-            Path p -> Path (subst assocs p)
-            InHomeDir p -> InHomeDir (subst assocs p)
-            InB9UserDir p -> InB9UserDir (subst assocs p)
-            InTempDir p -> InTempDir (subst assocs p)
+    case src of
+        Path p -> Path (subst assocs p)
+        InHomeDir p -> InHomeDir (subst assocs p)
+        InB9UserDir p -> InB9UserDir (subst assocs p)
+        InTempDir p -> InTempDir (subst assocs p)
 
 
 instance Arbitrary SourceFile where
-  arbitrary = Source <$> elements [NoConversion, ExpandVariables]
-                     <*> smaller arbitraryFilePath
+    arbitrary =
+        Source <$> elements [NoConversion, ExpandVariables] <*>
+        smaller arbitraryFilePath

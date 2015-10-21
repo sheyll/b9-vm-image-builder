@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.14
+version:             0.6.0
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -75,11 +75,11 @@ library
                    , B9.ArtifactGeneratorImpl
                    , B9.Vm
                    , B9.VmBuilder
+                   , B9.Content
                    , B9.Content.ErlTerms
                    , B9.Content.ErlangPropList
                    , B9.Content.YamlObject
                    , B9.Content.AST
-                   , B9.Content.Generator
                    , B9.Content.StringTemplate
                    , B9.QCUtil
                    , B9.DSL
@@ -107,6 +107,7 @@ library
                    , random
                    , semigroups
                    , syb
+                   , tagged
                    , template
                    , text
                    , transformers

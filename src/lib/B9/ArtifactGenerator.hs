@@ -24,7 +24,7 @@ import System.FilePath ((<.>), (</>))
 import B9.DiskImages
 import B9.Vm
 import B9.Content.StringTemplate
-import B9.Content.Generator
+import B9.Content
 import B9.QCUtil
 
 import Test.QuickCheck
@@ -135,14 +135,12 @@ instance Monoid ArtifactGenerator where
 -- | Describe how input files for artifacts to build are obtained.  The general
 --   structure of each constructor is __FromXXX__ /destination/ /source/
 data ArtifactSource
-    = FromFile FilePath
-               SourceFile
+    = FromFile FilePath SourceFile
     |
       -- ^ Copy a 'B9.Content.StringTemplate.SourceFile'
       -- potentially replacing variabled defined in 'Let'-like
       -- parent elements.
-      FromContent FilePath
-                  Content
+      FromContent FilePath Content
     |
       -- ^ Create a file from some 'Content'
       SetPermissions Int

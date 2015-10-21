@@ -3,6 +3,8 @@
     scripts. -}
 module B9.ShellScript ( writeSh
                       , emptyScript
+                      , toBash
+                      , toCmds
                       , CmdVerbosity (..)
                       , Cwd (..)
                       , User (..)

@@ -11,7 +11,7 @@ import B9.Vm
 import B9.DiskImageBuilder
 import B9.ConfigUtils hiding (tell)
 import B9.Content.StringTemplate
-import B9.Content.Generator
+import B9.Content
 import B9.Content.AST
 
 import qualified Data.ByteString as B

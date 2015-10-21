@@ -16,26 +16,34 @@ module B9.B9Config ( B9Config(..)
                    , BuildVariables
                    ) where
 
-import Data.Maybe (fromMaybe)
-import Control.Monad
 import Control.Exception
-import Data.Function (on)
+import Control.Monad
 import Control.Monad.IO.Class
+import Data.Function (on)
+import Data.Maybe (fromMaybe)
 import System.Directory
 import Text.Printf
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
 import Data.Monoid
-
+import Data.Data
+import GHC.Generics (Generic)
 import B9.ConfigUtils
 
 type BuildVariables = [(String,String)]
 
-data ExecEnvType = LibVirtLXC deriving (Eq, Show, Ord, Read)
+data ExecEnvType =
+    LibVirtLXC
+    deriving (Eq,Show,Ord,Read,Generic,Data,Typeable)
 
-data LogLevel = LogTrace | LogDebug | LogInfo | LogError | LogNothing
-              deriving (Eq, Show, Ord, Read)
+data LogLevel
+    = LogTrace
+    | LogDebug
+    | LogInfo
+    | LogError
+    | LogNothing
+    deriving (Eq,Show,Ord,Read,Generic,Data,Typeable)
 
 data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , logFile :: Maybe FilePath
