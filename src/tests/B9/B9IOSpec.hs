@@ -15,6 +15,9 @@ spec =
        it "handles programs containing GetBuildDir" $
            let p = getBuildDir >>= logTrace
            in dumpToStrings p `shouldBe` ["getBuildDir", "logTrace /BUILD"]
+       it "handles programs containing GetBuildId" $
+           let p = getBuildId
+           in runPureDump p `shouldBe` ("build-id-1234", ["getBuildId"])
        it "handles programs containing MkTemp" $
            let p = mkTemp "test-prefix"
            in dumpToStrings p `shouldBe` ["mkTemp test-prefix"]

@@ -20,6 +20,7 @@ import           B9.Content.YamlObject as X
 import qualified Data.ByteString.Char8 as B
 import           B9.QCUtil
 import           Test.QuickCheck
+import           Control.Monad.IO.Class
 
 -- | This contains most of the information elements necessary to specify a file
 -- in some file system. This is used to specify where e.g. cloud-init or the
@@ -54,6 +55,7 @@ data Content
     | RenderYaml (AST Content YamlObject)
     | FromString String
     | FromTextFile SourceFile
+    | FromBinaryFile FilePath
     deriving (Read,Show,Typeable,Eq,Data,Generic)
 
 instance Hashable Content
@@ -63,8 +65,9 @@ instance NFData Content
 instance CanRender Content where
   render (RenderErlang ast) = encodeSyntax <$> fromAST ast
   render (RenderYaml ast) = encodeSyntax <$> fromAST ast
-  render (FromTextFile s) = readTemplateFile s
   render (FromString str) = return (B.pack str)
+  render (FromTextFile s) = readTemplateFile s
+  render (FromBinaryFile f) = liftIO (B.readFile f)
 
 -- * QuickCheck helper
 
@@ -81,4 +84,5 @@ instance Arbitrary Content where
             [ FromTextFile <$> smaller arbitrary
             , RenderErlang <$> smaller arbitrary
             , RenderYaml <$> smaller arbitrary
-            , FromString <$> smaller arbitrary]
+            , FromString <$> smaller arbitrary
+            , FromBinaryFile <$> smaller arbitraryFilePath]

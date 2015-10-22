@@ -26,6 +26,9 @@ spec = do
            it "creates a temporary directory containing the instance id" $
                let (Handle _ iid, cmds) = runPureDump (compile exportEmptyCloudInitIso)
                in cmds `shouldContain` ["mkTemp CloudInit/" ++ iid]
+           it "creates a meta-data file" $
+               let (Handle _ iid, cmds) = runPureDump (compile exportEmptyCloudInitIso)
+               in cmds `shouldContain` ["mkTemp CloudInit/" ++ iid]
 
 
 -- * cloud-init tests
