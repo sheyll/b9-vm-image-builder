@@ -4,13 +4,14 @@ module B9.LibVirtLXC ( runInEnvironment
                      , setDefaultConfig
                      ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Monad.IO.Class ( liftIO )
 import System.Directory
 import System.FilePath
 import Text.Printf ( printf )
 import Data.Char (toLower)
-
 import B9.ShellScript
 import B9.B9Monad
 import B9.DiskImages
@@ -286,6 +287,7 @@ fsImage (img,mnt) =
                 Raw -> ("type='loop'", "format='raw'")
                 QCow2 -> ("type='nbd'", "format='qcow2'")
                 Vmdk -> ("type='nbd'", "format='vmdk'")
+                other -> error (printf "Unsupported format: %s" (show other))
     fsImgSource (Image src _fmt _fs) = "<source file='" ++ src ++ "'/>"
 
 fsSharedDir :: SharedDirectory -> String

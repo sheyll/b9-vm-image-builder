@@ -3,35 +3,34 @@ Mostly effectful functions to assemble artifacts.
 -}
 module B9.ArtifactGeneratorImpl where
 
-import B9.ArtifactGenerator
-import B9.B9Monad
-import B9.B9Config
-import B9.VmBuilder
-import B9.Vm
-import B9.DiskImageBuilder
-import B9.ConfigUtils hiding (tell)
-import B9.Content.StringTemplate
-import B9.Content
-import B9.Content.AST
-
+import           B9.ArtifactGenerator
+import           B9.B9Config
+import           B9.B9Monad
+import           B9.ConfigUtils hiding (tell)
+import           B9.Content
+import           B9.DiskImageBuilder
+import           B9.Vm
+import           B9.VmBuilder
+import           Control.Arrow
 import qualified Data.ByteString as B
+import           Data.Data
+import           Data.Function
+import           Data.Generics.Aliases
+import           Data.Generics.Schemes
+import           Data.List
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
-import Data.Data
-import Data.Generics.Schemes
-import Data.Generics.Aliases
-import Data.List
-import Data.Function
-import Control.Arrow
-import Control.Applicative
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Control.Monad.Writer
-import Control.Monad.Error
-import System.FilePath
-import System.Directory
-import Text.Printf
-import Text.Show.Pretty (ppShow)
+#if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative
+#endif
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import           Control.Monad.Writer
+import           Control.Monad.Error
+import           System.FilePath
+import           System.Directory
+import           Text.Printf
+import           Text.Show.Pretty (ppShow)
 
 -- | Return a list of relative paths for the /local/ files to be generated
 -- by the ArtifactGenerator. This excludes 'Shared' and Transient image targets.

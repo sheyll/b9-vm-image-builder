@@ -58,8 +58,9 @@ source-repository head
 
 library
   exposed-modules:   B9
-                   , B9.B9Monad
                    , B9.B9Config
+                   , B9.B9Monad
+                   , B9.B9IO
                    , B9.Builder
                    , B9.ConfigUtils
                    , B9.ExecEnv
@@ -83,6 +84,7 @@ library
                    , B9.Content.StringTemplate
                    , B9.QCUtil
                    , B9.DSL
+                   , B9.DSL.Interpreter
   other-modules:   Paths_b9
   -- other-extensions:
   build-depends:     ConfigFile
@@ -90,19 +92,23 @@ library
                    , aeson
                    , async
                    , base >= 4.7 && < 5
+                   , bifunctors
                    , binary
+                   , boxes
                    , bytestring
                    , conduit
                    , conduit-extra
+                   , containers >= 0.5.6.2
                    , directory
                    , filepath
+                   , free
                    , hashable
+                   , lens
                    , mtl
-                   , time >= 1.5.0 && < 2
                    , parallel
                    , parsec
-                   , pretty-show
                    , pretty
+                   , pretty-show
                    , process
                    , random
                    , semigroups
@@ -110,13 +116,11 @@ library
                    , tagged
                    , template
                    , text
+                   , time >= 1.5.0 && < 2
                    , transformers
                    , unordered-containers
                    , vector
                    , yaml
-                   , bifunctors
-                   , free
-                   , boxes
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
                     , DeriveDataTypeable
@@ -177,18 +181,21 @@ test-suite spec
                    , B9.Content.YamlObjectSpec
                    , B9.ArtifactGeneratorImplSpec
                    , B9.DiskImagesSpec
-  build-depends:     base >= 4.7 && < 5
+                   , B9.DSL.InterpreterSpec
+                   , B9.B9IOSpec
+  build-depends:     QuickCheck
+                   , aeson
                    , b9
+                   , base >= 4.7 && < 5
+                   , bytestring
+                   , containers >= 0.5.6.2
                    , hspec
                    , hspec-expectations
-                   , QuickCheck
-                   , aeson
-                   , yaml
-                   , vector
-                   , unordered-containers
-                   , bytestring
-                   , text
                    , semigroups
+                   , text
+                   , unordered-containers
+                   , vector
+                   , yaml
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
                     , DeriveDataTypeable

@@ -11,7 +11,6 @@ import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
 import           Data.Hashable
-import           Data.Maybe
 import           Data.Semigroup
 import           System.FilePath
 import           Test.QuickCheck
@@ -49,6 +48,7 @@ data ImageDestination
     = Share String
             ImageType
             ImageResize
+            -- TODO add FileSystem
     |
       -- ^ Create the image and some meta data so that other
       -- builds can use them as 'ImageSource's via 'From'.
@@ -64,7 +64,7 @@ data ImageDestination
       -- ^ Write an image file to the path in the first
       -- argument., possible resizing it,
       Transient
-    -- ^ Do not export the image. Usefule if the main
+    -- ^ Do not export the image. Useful if the main
     -- objective of the b9 build is not an image file, but
     -- rather some artifact produced by executing by a
     -- containerize build.
@@ -132,6 +132,7 @@ data ImageType
     = Raw
     | QCow2
     | Vmdk
+    | Directory
     deriving (Eq,Read,Typeable,Data,Show,Generic)
 
 instance Hashable ImageType
@@ -142,8 +143,8 @@ instance NFData ImageType
 data FileSystem
     = NoFileSystem
     | Ext4
-    | ISO9660
-    | VFAT
+    | ISO9660 String
+    | VFAT String
     deriving (Eq,Show,Read,Typeable,Data,Generic)
 
 instance Hashable FileSystem
@@ -261,6 +262,14 @@ imageFileName (Image f _ _) = f
 imageImageType :: Image -> ImageType
 imageImageType (Image _ t _) = t
 
+-- | Return the 'FileSystem' of an 'Image'
+imageFileSystem :: Image -> FileSystem
+imageFileSystem (Image _ _ s) = s
+
+-- | Return the 'FileSystem' and 'ImageType' of an 'Image'
+imageFormat :: Image -> (ImageType, FileSystem)
+imageFormat i = (imageImageType i, imageFileSystem i)
+
 -- | Return the files generated for a 'LocalFile' or a 'LiveInstallerImage'; 'SharedImage' and 'Transient'
 -- are treated like they have no ouput files because the output files are manged
 -- by B9.
@@ -278,6 +287,15 @@ getImageDestinationOutputFiles (ImageTarget d _ _) =
 imageDestinationSharedImageName :: ImageDestination -> Maybe SharedImageName
 imageDestinationSharedImageName (Share n _ _) = Just (SharedImageName n)
 imageDestinationSharedImageName _ = Nothing
+
+-- | Guess the format of an image destination
+imageDestFormat :: ImageDestination -> Maybe (ImageType, FileSystem)
+imageDestFormat d =
+    case d of
+        Share _ t _ -> Just (t, Ext4)
+        LocalFile i _ -> Just $ imageFormat i
+        LiveInstallerImage _ _ _ -> Just (Raw, Ext4)
+        Transient -> Nothing
 
 -- | Return the name of a shared source image, if the 'ImageSource' is a 'From'
 --   source
@@ -312,10 +330,13 @@ getPartition NoPT = error "No partitions!"
 
 -- | Return the file name extension of an image file with a specific image
 -- format.
-imageFileExtension :: ImageType -> String
-imageFileExtension Raw = "raw"
-imageFileExtension QCow2 = "qcow2"
-imageFileExtension Vmdk = "vmdk"
+imageFileExtension :: ImageType -> FileSystem -> String
+imageFileExtension Raw (ISO9660 _) = "iso"
+imageFileExtension Raw (VFAT _) = "vfat"
+imageFileExtension Raw _ = "raw"
+imageFileExtension QCow2 _ = "qcow2"
+imageFileExtension Vmdk _ = "qcow2"
+imageFileExtension Directory _ = ""
 
 -- | Change the image file format and also rename the image file name to
 -- have the appropriate file name extension. See 'imageFileExtension' and
@@ -323,7 +344,15 @@ imageFileExtension Vmdk = "vmdk"
 changeImageFormat :: ImageType -> Image -> Image
 changeImageFormat fmt' (Image img _ fs) = Image img' fmt' fs
   where
-    img' = replaceExtension img (imageFileExtension fmt')
+    img' = replaceExtension img (imageFileExtension fmt' fs)
+
+-- | Change the file system type and rename the image file name to
+-- have the appropriate file name extension. See 'imageFileExtension' and
+-- 'replaceExtension'
+changeImageFileSystem :: FileSystem -> Image -> Image
+changeImageFileSystem fs' (Image img fmt _) = Image img' fmt fs'
+  where
+    img' = replaceExtension img (imageFileExtension fmt fs')
 
 changeImageDirectory :: FilePath -> Image -> Image
 changeImageDirectory dir (Image img fmt fs) = Image img' fmt fs
@@ -335,6 +364,12 @@ getImageSourceImageType (EmptyImage _ _ t _) = Just t
 getImageSourceImageType (CopyOnWrite i) = Just $ imageImageType i
 getImageSourceImageType (SourceImage i _ _) = Just $ imageImageType i
 getImageSourceImageType (From _ _) = Nothing
+
+getImageSourceFileSystem :: ImageSource -> Maybe FileSystem
+getImageSourceFileSystem (EmptyImage _ fs _ _) = Just fs
+getImageSourceFileSystem (CopyOnWrite i) = Just $ imageFileSystem i
+getImageSourceFileSystem (SourceImage i _ _) = Just $ imageFileSystem i
+getImageSourceFileSystem (From _ _) = Nothing
 
 -- * Constructors and accessors for 'SharedImage's
 
@@ -385,7 +420,9 @@ prettyPrintSharedImages imgs = Boxes.render table
 sharedImageImage :: SharedImage -> Image
 sharedImageImage (SharedImage (SharedImageName n) _ (SharedImageBuildId bid) sharedImageType sharedImageFileSystem) =
     Image
-        (n ++ "_" ++ bid <.> imageFileExtension sharedImageType)
+        (n ++
+         "_" ++
+         bid <.> imageFileExtension sharedImageType sharedImageFileSystem)
         sharedImageType
         sharedImageFileSystem
 
@@ -491,27 +528,6 @@ partition1ToLocalImage srcName destName mountPoint =
         (LocalFile (Image destName QCow2 Ext4) KeepSize)
         (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
         (MountPoint mountPoint)
-
--- * 'ImageTarget' Transformations
-
--- | Split any image target into two image targets, one for creating an intermediate shared image and one
--- from the intermediate shared image to the output image.
-splitToIntermediateSharedImage :: ImageTarget
-                               -> SharedImageName
-                               -> (ImageTarget, ImageTarget)
-splitToIntermediateSharedImage (ImageTarget dst src mnt) (SharedImageName intermediateName) =
-    (imgTargetShared, imgTargetExport)
-  where
-    imgTargetShared = ImageTarget intermediateTo src mnt
-    imgTargetExport = ImageTarget dst intermediateFrom mnt
-    intermediateTo =
-        Share
-            intermediateName
-            (fromMaybe
-                 sharedImageDefaultImageType
-                 (getImageSourceImageType src))
-            KeepSize
-    intermediateFrom = From intermediateName KeepSize
 
 -- * 'Arbitrary' instances for quickcheck
 

@@ -1,76 +1,61 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-| Effectful functions that create and convert disk image files. -}
-module B9.DiskImageBuilder (materializeImageSource
-                           ,substImageTarget
-                           ,preferredDestImageTypes
-                           ,preferredSourceImageTypes
-                           ,resolveImageSource
-                           ,createDestinationImage
-                           ,resizeImage
-                           ,importImage
-                           ,exportImage
-                           ,exportAndRemoveImage
-                           ,convertImage
-                           ,shareImage
-                           ,ensureAbsoluteImageDirExists
-                           ,pushSharedImageLatestVersion
-                           ,lookupSharedImages
-                           ,getSharedImages
-                           ,getSharedImagesCacheDir
-                           ,getSelectedRepos
-                           ,pullRemoteRepos
-                           ,pullLatestImage
-                           ,) where
+module B9.DiskImageBuilder
+       (materializeImageSource, substImageTarget, canConvertTo,
+        resolveImageSource, createDestinationImage, resizeImage,
+        importImage, exportImage, exportAndRemoveImage, convertImage,
+        shareImage, ensureAbsoluteImageDirExists,
+        pushSharedImageLatestVersion, lookupSharedImages, getSharedImages,
+        getSharedImagesCacheDir, getSelectedRepos, pullRemoteRepos,
+        pullLatestImage)
+       where
 
-import Control.Exception
-import Control.Monad
-import Control.Monad.IO.Class
-import System.Directory
-import System.FilePath
-import Text.Printf (printf)
-import Data.Maybe
-import Data.Monoid
-import Data.Function
-import Control.Applicative
-import Text.Show.Pretty (ppShow)
-import Data.List
-import Data.Data
-import Data.Generics.Schemes
-import Data.Generics.Aliases
-
-import B9.B9Monad
-import B9.Repository
-import B9.RepositoryIO
-import B9.DiskImages
+import           B9.B9Monad
+import           B9.ConfigUtils
+import           B9.Content.StringTemplate
+import           B9.DiskImages
 import qualified B9.PartitionTable as P
-import B9.ConfigUtils
-import B9.Content.StringTemplate
+import           B9.Repository
+import           B9.RepositoryIO
+#if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative
+import           Data.Monoid
+#endif
+import           Control.Exception
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Data.Data
+import           Data.Function
+import           Data.Generics.Aliases
+import           Data.Generics.Schemes
+import           Data.List
+import           Data.Maybe
+import           System.Directory
+import           System.FilePath
+import           Text.Printf (printf)
+import           Text.Show.Pretty (ppShow)
 
 
 -- | Replace $... variables inside an 'ImageTarget'
-substImageTarget :: [(String,String)] -> ImageTarget -> ImageTarget
+substImageTarget :: [(String, String)] -> ImageTarget -> ImageTarget
 substImageTarget env = everywhere gsubst
   where
-    gsubst :: Data a => a -> a
-    gsubst = mkT substMountPoint
-             `extT` substImage
-             `extT` substImageSource
-             `extT` substDiskTarget
-
+    gsubst
+        :: Data a
+        => a -> a
+    gsubst =
+        mkT substMountPoint `extT` substImage `extT` substImageSource `extT`
+        substDiskTarget
     substMountPoint NotMounted = NotMounted
     substMountPoint (MountPoint x) = MountPoint (sub x)
-
     substImage (Image fp t fs) = Image (sub fp) t fs
-
     substImageSource (From n s) = From (sub n) s
     substImageSource (EmptyImage l f t s) = EmptyImage (sub l) f t s
     substImageSource s = s
-
     substDiskTarget (Share n t s) = Share (sub n) t s
     substDiskTarget (LiveInstallerImage name outDir resize) =
-      LiveInstallerImage (sub name) (sub outDir) resize
+        LiveInstallerImage (sub name) (sub outDir) resize
     substDiskTarget s = s
-
     sub = subst env
 
 -- | Resolve an ImageSource to an 'Image'. Note however that this source will
@@ -89,45 +74,24 @@ resolveImageSource src =
       latestImage <- getLatestImageByName (SharedImageName name)
       liftIO (ensureAbsoluteImageDirExists latestImage)
 
--- | Return all valid image types sorted by preference.
-preferredDestImageTypes :: ImageSource -> B9 [ImageType]
-preferredDestImageTypes src =
-  case src of
-    (CopyOnWrite (Image _file fmt _fs)) -> return [fmt]
-    (EmptyImage _label NoFileSystem fmt _size) ->
-      return (nub [fmt, Raw, QCow2, Vmdk])
-    (EmptyImage _label _fs _fmt _size) -> return [Raw]
-    (SourceImage _img (Partition _) _resize) -> return [Raw]
-    (SourceImage (Image _file fmt _fs) _pt resize) ->
-      return
-        (nub [fmt, Raw, QCow2, Vmdk]
-         `intersect`
-         allowedImageTypesForResize resize)
-    (From name resize) -> do
-      sharedImg <- getLatestImageByName (SharedImageName name)
-      preferredDestImageTypes (SourceImage sharedImg NoPT resize)
+-- | Return True if the first image format can be converted to the other.
+canConvertTo :: (ImageType, FileSystem) -> (ImageType, FileSystem) -> Bool
+canConvertTo f t =
+    (canConvertImageTo `on` fst) f t && (canConvertFSTo `on` snd) f t
+  where
+    canConvertImageTo Directory Raw = True
+    canConvertImageTo a b
+      | a == b = True
+      | a `elem` [Raw, QCow2, Vmdk] && b `elem` [Raw, QCow2, Vmdk] = True
+      | otherwise = False
+    canConvertFSTo NoFileSystem (ISO9660 _) = True
+    canConvertFSTo NoFileSystem (VFAT _) = True
+    canConvertFSTo a b
+      | a == b = True
+      | otherwise = False
 
-preferredSourceImageTypes :: ImageDestination -> [ImageType]
-preferredSourceImageTypes dest =
-  case dest of
-    (Share _ fmt resize) ->
-      nub [fmt, Raw, QCow2, Vmdk]
-      `intersect` allowedImageTypesForResize resize
-    (LocalFile (Image _ fmt _) resize) ->
-      nub [fmt, Raw, QCow2, Vmdk]
-      `intersect` allowedImageTypesForResize resize
-    Transient ->
-      [Raw, QCow2, Vmdk]
-    (LiveInstallerImage _name _repo _imgResize) ->
-      [Raw]
-
-allowedImageTypesForResize :: ImageResize -> [ImageType]
-allowedImageTypesForResize r =
-  case r of
-    Resize _ -> [Raw]
-    ShrinkToMinimum -> [Raw]
-    _ -> [Raw, QCow2, Vmdk]
-
+-- | Convert the directory of an image file to an absolute path and create the
+-- directory if it doesn't exist.
 ensureAbsoluteImageDirExists :: Image -> IO Image
 ensureAbsoluteImageDirExists img@(Image path _ _) = do
   let dir = takeDirectory path
@@ -173,13 +137,13 @@ createImageFromImage src part size out = do
                  start
                  len)
         cmd (printf "mv '%s' '%s'" tmpFile outFile)
-    extractPartition (Partition partIndex) (Image outFile fmt _) =
+    extractPartition (Partition partIndex) (Image outFile fmt fs) =
         error
             (printf
                  "Extract partition %i from image '%s': Invalid format %s"
                  partIndex
                  outFile
-                 (imageFileExtension fmt))
+                 (imageFileExtension fmt fs))
 
 createDestinationImage :: Image -> ImageDestination -> B9 ()
 createDestinationImage buildImg dest =
@@ -245,7 +209,7 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
       cmd
           (printf
                "qemu-img create -f %s '%s' '%s'"
-               (imageFileExtension imgFmt)
+               (imageFileExtension imgFmt imgFs)
                imgFile
                (toQemuSizeOptVal imgSize))
       case (imgFmt, imgFs) of
@@ -262,12 +226,12 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
 
 
 createCOWImage :: Image -> Image -> B9 ()
-createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
+createCOWImage (Image backingFile _ _) (Image imgOut imgFmt imgFS) = do
   dbgL (printf "Creating COW image '%s' backed by '%s'" imgOut backingFile)
   cmd
     (printf
        "qemu-img create -f %s -o backing_file='%s' '%s'"
-       (imageFileExtension imgFmt)
+       (imageFileExtension imgFmt imgFS)
        backingFile
        imgOut)
 
@@ -313,7 +277,13 @@ convertImage = convert True
 
 -- | Convert/Copy/Move images
 convert :: Bool -> Image -> Image -> B9 ()
-convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
+convert doMove ii@(Image imgIn fmtIn fsIn) io@(Image imgOut fmtOut fsOut)
+  | fsIn /= fsOut = do
+      error
+          (printf
+               "FILE SYSTEM CONVERSION NOT SUPPORTED: '%s' -> '%s'"
+               (show ii)
+               (show io))
   | imgIn == imgOut = do
       ensureDir imgOut
       dbgL (printf "No need to convert: '%s'" imgIn)
@@ -324,22 +294,22 @@ convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
   | otherwise = do
       ensureDir imgOut
       dbgL
-        (printf
-           "Converting %s to %s: '%s' to '%s'"
-           (imageFileExtension fmtIn)
-           (imageFileExtension fmtOut)
-           imgIn
-           imgOut)
+          (printf
+               "Converting %s to %s: '%s' to '%s'"
+               (imageFileExtension fmtIn fsIn)
+               (imageFileExtension fmtOut fsOut)
+               imgIn
+               imgOut)
       cmd
-        (printf
-           "qemu-img convert -q -f %s -O %s '%s' '%s'"
-           (imageFileExtension fmtIn)
-           (imageFileExtension fmtOut)
-           imgIn
-           imgOut)
-      when doMove $ do
-        dbgL (printf "Removing '%s'" imgIn)
-        liftIO (removeFile imgIn)
+          (printf
+               "qemu-img convert -q -f %s -O %s '%s' '%s'"
+               (imageFileExtension fmtIn fsIn)
+               (imageFileExtension fmtOut fsOut)
+               imgIn
+               imgOut)
+      when doMove $
+          do dbgL (printf "Removing '%s'" imgIn)
+             liftIO (removeFile imgIn)
 
 toQemuSizeOptVal :: ImageSize -> String
 toQemuSizeOptVal (ImageSize amount u) = show amount ++ case u of

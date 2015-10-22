@@ -1,7 +1,8 @@
 {-| Types expressing some form of text content stored in files. The content can
 itself be structured, i.e. in Yaml, JSON or Erlang Term format, or unstructured
 raw strings or even binaries. -}
-module B9.Content where
+module B9.Content (module X, FileSpec(..), fileSpec, Content(..))
+       where
 
 import           Control.Parallel.Strategies
 import           Data.Binary
@@ -11,10 +12,11 @@ import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
 #endif
-import           B9.Content.AST
-import           B9.Content.ErlangPropList
-import           B9.Content.StringTemplate
-import           B9.Content.YamlObject
+import           B9.Content.AST as X
+import           B9.Content.ErlTerms as X
+import           B9.Content.ErlangPropList as X
+import           B9.Content.StringTemplate as X
+import           B9.Content.YamlObject as X
 import qualified Data.ByteString.Char8 as B
 import           B9.QCUtil
 import           Test.QuickCheck
@@ -37,7 +39,7 @@ instance Hashable FileSpec
 instance Binary FileSpec
 instance NFData FileSpec
 
-{-
+{- TODO
 data Content
     = ErlangContent (AST Content ErlangPropList)
     | YamlContent (AST Content YamlObject)

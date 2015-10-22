@@ -2,32 +2,38 @@
     an execution environment like e.g. libvirt-lxc. -}
 module B9.VmBuilder (buildWithVm) where
 
-import Data.List
-import Control.Monad
-import Control.Applicative
-import Control.Monad.IO.Class
-import System.Directory (createDirectoryIfMissing, canonicalizePath)
-import Text.Printf ( printf )
-import Text.Show.Pretty (ppShow)
-
-import B9.B9Monad
-import B9.DiskImages
-import B9.DiskImageBuilder
-import B9.ExecEnv
-import B9.B9Config
-import B9.Vm
-import B9.ArtifactGenerator
-import B9.ShellScript
+#if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative
+#endif
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           System.Directory (createDirectoryIfMissing, canonicalizePath)
+import           Text.Printf ( printf )
+import           Text.Show.Pretty (ppShow)
+import           B9.B9Monad
+import           B9.DiskImages
+import           B9.DiskImageBuilder
+import           B9.ExecEnv
+import           B9.B9Config
+import           B9.Vm
+import           B9.ArtifactGenerator
+import           B9.ShellScript
 import qualified B9.LibVirtLXC as LXC
-
+import           Data.Maybe
 
 buildWithVm :: InstanceId -> [ImageTarget] -> FilePath -> VmScript -> B9 Bool
 buildWithVm iid imageTargets instanceDir vmScript = do
-  vmBuildSupportedImageTypes <- getVmScriptSupportedImageTypes vmScript
-  buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
-  success <- runVmScript iid imageTargets buildImages instanceDir vmScript
-  when success (createDestinationImages buildImages imageTargets)
-  return success
+    vmBuildSupportedImageTypes <- getVmScriptSupportedImageTypes vmScript
+    mBuildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
+    case mBuildImages of
+        Nothing -> do
+            errorL "COULD NOT CREATE ALL BUILD IMAGES"
+            return False
+        Just buildImages -> do
+            success <-
+                runVmScript iid imageTargets buildImages instanceDir vmScript
+            when success (createDestinationImages buildImages imageTargets)
+            return success
 
 getVmScriptSupportedImageTypes :: VmScript -> B9 [ImageType]
 getVmScriptSupportedImageTypes NoVmScript =
@@ -39,29 +45,54 @@ getVmScriptSupportedImageTypes _ = do
 supportedImageTypes :: ExecEnvType -> [ImageType]
 supportedImageTypes LibVirtLXC = LXC.supportedImageTypes
 
-createBuildImages :: [ImageTarget] -> [ImageType] -> B9 [Image]
-createBuildImages imageTargets vmBuildSupportedImageTypes = do
-  dbgL "creating build images"
-  traceL (ppShow imageTargets)
-  buildImages <- mapM createBuildImage imageTargets
-  infoL "CREATED BUILD IMAGES"
-  traceL (ppShow buildImages)
-  return buildImages
+-- | Decide on a build image format.
+selectBuildImgFormat
+    :: (ImageType, FileSystem)
+    -> Maybe (ImageType, FileSystem)
+    -> [ImageType]
+    -> [FileSystem]
+    -> Maybe (ImageType, FileSystem)
+selectBuildImgFormat src mdst supportedT supportedFS =
+    listToMaybe $
+    maybe id filterValidSources mdst $
+    filterValidDestinations src $
+    [(t, f) | t <- supportedT
+            , f <- supportedFS]
   where
-    createBuildImage (ImageTarget dest imageSource _mnt) = do
-      buildDir <- getBuildDir
-      destTypes <- preferredDestImageTypes imageSource
-      let buildImgType = head (destTypes
-                               `intersect`
-                               preferredSourceImageTypes dest
-                               `intersect`
-                               vmBuildSupportedImageTypes)
-      srcImg <- resolveImageSource imageSource
-      let buildImg = changeImageFormat buildImgType
-                                       (changeImageDirectory buildDir srcImg)
-      buildImgAbsolutePath <- liftIO (ensureAbsoluteImageDirExists buildImg)
-      materializeImageSource imageSource buildImg
-      return buildImgAbsolutePath
+    filterValidDestinations (fmt,fs) = filter ((fmt, fs) `canConvertTo`)
+    filterValidSources (fmt,fs) = filter (`canConvertTo` (fmt, fs))
+
+createBuildImages :: [ImageTarget] -> [ImageType] -> B9 (Maybe [Image])
+createBuildImages imageTargets vmBuildSupportedImageTypes = do
+    dbgL "creating build images"
+    traceL (ppShow imageTargets)
+    buildImages <- sequenceA <$> mapM createBuildImage imageTargets
+    infoL "CREATED BUILD IMAGES"
+    traceL (ppShow buildImages)
+    return buildImages
+  where
+    createBuildImage it@(ImageTarget imageDest imageSource _mnt) = do
+        buildDir <- getBuildDir
+        srcImg <- resolveImageSource imageSource
+        case selectBuildImgFormat
+                 (imageFormat srcImg)
+                 (imageDestFormat imageDest)
+                 vmBuildSupportedImageTypes
+                 [Ext4] -- TODO make supported File systems configurable
+              of
+            Just (buildImgType, _buildImgFs) -> do -- TODO make use of
+                                                   -- buildImgFs
+                let buildImg =
+                        changeImageFormat
+                            buildImgType
+                            (changeImageDirectory buildDir srcImg)
+                buildImgAbsolutePath <-
+                    liftIO (ensureAbsoluteImageDirExists buildImg)
+                materializeImageSource imageSource buildImg
+                return (Just buildImgAbsolutePath)
+            Nothing -> do
+                errorL ("CANNOT CONVERT TO BUILD IMAGE: " ++ ppShow it)
+                return Nothing
 
 runVmScript :: InstanceId
             -> [ImageTarget]

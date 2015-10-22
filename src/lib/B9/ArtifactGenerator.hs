@@ -20,13 +20,11 @@ import Data.Monoid
 import Control.Applicative
 #endif
 import System.FilePath ((<.>), (</>))
-
 import B9.DiskImages
 import B9.Vm
 import B9.Content.StringTemplate
 import B9.Content
 import B9.QCUtil
-
 import Test.QuickCheck
 
 {-| Artifacts represent the things B9 can build. A generator specifies howto
@@ -171,12 +169,6 @@ instance Hashable ArtifactSource
 instance Binary ArtifactSource
 instance NFData ArtifactSource
 
--- | Identify an artifact. __Deprecated__ TODO: B9 does not check if all
--- instances IDs are unique.
-newtype InstanceId =
-    IID String
-    deriving (Read,Show,Typeable,Data,Eq,NFData,Binary,Hashable)
-
 -- | The variable containing the instance id. __Deprecated__
 instanceIdKey :: String
 instanceIdKey = "instance_id"
@@ -228,16 +220,7 @@ instance Hashable AssembledArtifact
 instance Binary AssembledArtifact
 instance NFData AssembledArtifact
 
-data ArtifactTarget
-    = CloudInitTarget CloudInitType
-                      FilePath
-    | VmImagesTarget
-    deriving (Read,Show,Typeable,Data,Eq,Generic)
-
-instance Hashable ArtifactTarget
-instance Binary ArtifactTarget
-instance NFData ArtifactTarget
-
+-- | The output type for cloud init images
 data CloudInitType
     = CI_ISO
     | CI_VFAT
@@ -247,6 +230,21 @@ data CloudInitType
 instance Hashable CloudInitType
 instance Binary CloudInitType
 instance NFData CloudInitType
+
+-- | Identify a cloud init instance.
+newtype InstanceId =
+    IID String
+    deriving (Read,Show,Typeable,Data,Eq,NFData,Binary,Hashable)
+
+data ArtifactTarget
+    = CloudInitTarget CloudInitType
+                      FilePath
+    | VmImagesTarget
+    deriving (Read,Show,Typeable,Data,Eq,Generic)
+
+instance Hashable ArtifactTarget
+instance Binary ArtifactTarget
+instance NFData ArtifactTarget
 
 -- | Return the files that the artifact assembly consist of.
 getAssemblyOutputFiles :: ArtifactAssembly -> [FilePath]
@@ -304,14 +302,15 @@ instance Arbitrary ArtifactSource where
             , FromDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
             , IntoDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary]
 
-instance Arbitrary InstanceId where
-    arbitrary = IID <$> arbitraryFilePath
-
 instance Arbitrary ArtifactAssembly where
     arbitrary =
         oneof
             [ CloudInit <$> arbitrary <*> arbitraryFilePath
             , VmImages <$> smaller arbitrary <*> pure NoVmScript]
 
+
 instance Arbitrary CloudInitType where
     arbitrary = elements [CI_ISO, CI_VFAT, CI_DIR]
+
+instance Arbitrary InstanceId where
+    arbitrary = IID <$> arbitraryFilePath

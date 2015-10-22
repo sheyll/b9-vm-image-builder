@@ -1,14 +1,9 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
 module B9.DSL where
 
-import B9.ArtifactGenerator
-       (CloudInitType(..), InstanceId(..))
 import B9.B9Config (ExecEnvType(..))
-import B9.Content (Content(..), FileSpec(..), fileSpec)
+import B9.Content (Content(..), FileSpec(..))
 import B9.Content.AST (AST(..))
-import B9.Content.StringTemplate
-       (SourceFile(..), SourceFileConversion(..))
 import B9.Content.YamlObject (YamlObject(..))
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
@@ -23,9 +18,14 @@ import Control.Monad
 #endif
 import Control.Monad.Free (Free(..), liftF, foldFree)
 import Data.Functor (void)
-import Text.Printf (printf)
-import GHC.Generics (Generic)
+import Control.Parallel.Strategies
+import Data.Binary
 import Data.Data
+import Data.Hashable
+import GHC.Generics (Generic)
+import Text.Printf (printf)
+import Test.QuickCheck
+import B9.QCUtil
 
 -- ---------------------------------------------------------
 
@@ -69,7 +69,7 @@ update hnd upd = liftF $ Update hnd upd ()
 
 -- | A build step that adds an artifact to an environment using an 'ImportSpec'.
 add
-    :: (CanAdd env b, Show (Handle env), Show (AddSpec b))
+    :: (CanAdd env b, Show (AddSpec b))
     => Handle env
     -> SArtifact b
     -> AddSpec b
@@ -102,14 +102,6 @@ data HostDirMnt
     = AddMountHostDirRW FilePath
     | AddMountHostDirRO FilePath
     deriving (Read,Show,Eq,Generic,Data,Typeable)
-
--- ---------------------------------------------------------
-
-data CloudInitTarget =
-    CloudInitTarget InstanceId
-                    [CloudInitType]
-                    FilePath
-    deriving (Read,Show,Typeable,Data,Eq,Generic)
 
 -- ---------------------------------------------------------
 
@@ -165,13 +157,16 @@ instance Show (SArtifact k) where
    show SFileContent = "SFileContent"
    show SVariableBindings = "SVariableBindings"
 
+instance Eq (SArtifact k) where
+   x == y = show x == show y
+
 -- ---------------------------------------------------------
 
 -- | This type identifies everything that can be created or added in a 'Program'
 data Handle (a :: Artifact) =
     Handle (SArtifact a)
            String
-    deriving (Show)
+    deriving (Show,Eq)
 
 -- | Create a 'Handle' that contains the string representation of the singleton
 -- type as tag value.
@@ -185,7 +180,7 @@ handle = Handle
 
 type family CreateSpec (a :: Artifact) :: * where
         CreateSpec 'VmImage = ImageSource
-        CreateSpec 'CloudInit = CloudInitTarget
+        CreateSpec 'CloudInit = String
         CreateSpec 'LinuxVm = LinuxVmArgs
         CreateSpec 'FileContent = Content
 
@@ -220,6 +215,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'VmImage = ImageDestination
+        ExportSpec 'CloudInit = ImageDestination
 
 -- ---------------------------------------------------------
 
@@ -237,9 +233,10 @@ m # str = do
 ($=) :: String -> String -> Program ()
 var $= val = add variableBindings STemplateVariable (var, val)
 
--- * Content generation and static file inclusion
+-- * Content generation and static file inclusion (for both cloud-init and
+-- vm-images)
 
-addFile ::(CanAdd e 'FileContent)
+addFile ::(CanAddP e 'FileContent ~ 'True)
     => Handle e -> FileSpec -> Content -> Program ()
 addFile hnd f c = createContent c >>= writeContent hnd f
 
@@ -251,6 +248,11 @@ writeContent
     => Handle e -> FileSpec -> Handle 'FileContent -> Program ()
 writeContent hnd f c = add hnd SFileContent (f, c)
 
+-- * cloud init
+
+newCloudInit :: String -> Program (Handle 'CloudInit)
+newCloudInit iid = create SCloudInit iid
+
 addMetaData
     :: (CanAdd e 'CloudInitMetaData)
     => Handle e -> AST Content YamlObject -> Program ()
@@ -261,10 +263,18 @@ addUserData
     => Handle e -> AST Content YamlObject -> Program ()
 addUserData hnd ast = add hnd SCloudInitUserData ast
 
--- * cloud init
+writeCloudInitIso :: (Handle 'CloudInit) -> FilePath -> Program ()
+writeCloudInitIso h dst =
+    export h (LocalFile (Image dst Raw (ISO9660 "cidata")) KeepSize)
 
-cloudInitTarget :: InstanceId -> FilePath -> Program (Handle 'CloudInit)
-cloudInitTarget iid dst = create SCloudInit (CloudInitTarget iid [CI_ISO, CI_DIR] dst)
+writeCloudInitVFat :: (Handle 'CloudInit) -> FilePath -> Program ()
+writeCloudInitVFat h dst =
+    export h (LocalFile (Image dst Raw (VFAT "cidata")) KeepSize)
+
+writeCloudInitDir :: (Handle 'CloudInit) -> FilePath -> Program ()
+writeCloudInitDir h dst =
+    export h (LocalFile (Image dst Directory NoFileSystem) KeepSize)
+
 
 -- * Image import
 
@@ -300,30 +310,30 @@ resizeToMinimum hnd = update hnd ShrinkToMinimum
 
 -- * Image export
 
-imageDestination :: Handle 'VmImage
-                 -> ImageDestination
-                 -> Program ()
-imageDestination hnd dst = export hnd dst
+exportImageDestination :: Handle 'VmImage
+                       -> ImageDestination
+                       -> Program ()
+exportImageDestination hnd dst = export hnd dst
 
 share :: Handle 'VmImage -> String -> Program ()
-share hnd name = imageDestination hnd $ Share name QCow2 KeepSize
+share hnd name = exportImageDestination hnd $ Share name QCow2 KeepSize
 
-exportLiveInstallerImage :: Handle 'VmImage
-                         -> String
-                         -> FilePath
-                         -> ImageResize
-                         -> Program ()
-exportLiveInstallerImage hnd imgName outDir rs =
-    imageDestination hnd $ LiveInstallerImage imgName outDir rs
+toLiveImg :: Handle 'VmImage
+             -> String
+             -> FilePath
+             -> ImageResize
+             -> Program ()
+toLiveImg hnd imgName outDir rs =
+    exportImageDestination hnd $ LiveInstallerImage imgName outDir rs
 
-exportImage :: Handle 'VmImage
+writeImg :: Handle 'VmImage
             -> FilePath
             -> ImageType
             -> FileSystem
             -> ImageResize
             -> Program ()
-exportImage hnd name it fs rs =
-    imageDestination hnd $ LocalFile (Image name it fs) rs
+writeImg hnd name it fs rs =
+    exportImageDestination hnd $ LocalFile (Image name it fs) rs
 
 -- * Execution environment
 
@@ -439,6 +449,7 @@ class (Monad f, Functor f) => Interpreter f where
       :: (Show (Handle a), Show (ExportSpec a))
       => Handle a -> ExportSpec a -> f ()
 
+-- | An interpreter that just prints out the Program
 instance Interpreter IO where
     runCreate sa src = do
         let hnd = singletonHandle sa
@@ -458,36 +469,5 @@ instance Interpreter IO where
     runExport hnd dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
 
--- * Tests and experiments
 
-dslExample1 :: Program ()
-dslExample1 = do
-    "x" $= "3"
-    ci <- cloudInitTarget (IID "blah-ci-${x}") "/tmp/blah"
-    addMetaData ci (ASTString "test")
-    addUserData ci (ASTString "test")
-    e <- lxc "container-id"
-    mountDirRW e "tmp" "/mnt/HOST_TMP"
-    addFile
-        e
-        (fileSpec "/etc/httpd.conf")
-        (FromTextFile (Source ExpandVariables "httpd.conf.in"))
-    sh e "ls -la"
-    addFile
-        ci
-        (fileSpec "/etc/httpd.conf")
-        (FromTextFile (Source ExpandVariables "httpd.conf.in"))
-    sh ci "ls -la"
-    doc "From here there be dragons:"
-    rootImage "fedora" "testv1-root" e
-    dataImage "testv1-data" e
-    img <- from "schlupfi"
-    mountDir e "/tmp" "/mnt/HOST_TMP"
-    share img "wupfi"
-    resize img 64 GB
-    resizeToMinimum img
-
-dslExample2 :: Program ()
-dslExample2 = do
-  env <- lxc "c1"
-  sh env "ls -lR /"
+-- * QuickCheck instances
