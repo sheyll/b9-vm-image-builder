@@ -5,7 +5,6 @@ import Options.Applicative.Help.Pretty hiding ((</>))
 
 import Control.Exception
 import Data.Function                   (on)
-import Data.List                       (groupBy)
 import Data.Maybe
 import Data.Version
 import Paths_b9
@@ -76,8 +75,8 @@ runFormatBuildFiles :: [FilePath] ->  BuildAction
 runFormatBuildFiles buildFiles _cfgFile _cp _conf = do
     generators <- mapM consult buildFiles
     let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
-    putStrLn `mapM` (generatorsFormatted)
-    (uncurry writeFile) `mapM` (buildFiles `zip` generatorsFormatted)
+    putStrLn `mapM_` (generatorsFormatted)
+    (uncurry writeFile) `mapM_` (buildFiles `zip` generatorsFormatted)
     return True
 
 runPush :: SharedImageName -> BuildAction

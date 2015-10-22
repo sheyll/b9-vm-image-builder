@@ -19,6 +19,7 @@ import B9.ShellScript as X
 import B9.Vm as X
 import B9.VmBuilder as X
 import Control.Monad.IO.Class
+import Control.Monad
 import Data.Monoid
 import System.Directory
 import Text.Printf ( printf )
@@ -33,7 +34,7 @@ buildArtifacts artifactGenerator cfgParser cliCfg =
             infoL "BUILDING ARTIFACTS"
             getConfig >>=
                 traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
-            assemble artifactGenerator
+            void $ assemble artifactGenerator
             return True
 
 withB9Config :: ConfigParser -> B9Config -> (B9Config -> IO Bool) -> IO Bool
