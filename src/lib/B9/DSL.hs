@@ -22,6 +22,7 @@ import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Hashable
+import Data.Function (on)
 import GHC.Generics (Generic)
 import Text.Printf (printf)
 import Test.QuickCheck
@@ -158,7 +159,10 @@ instance Show (SArtifact k) where
    show SVariableBindings = "SVariableBindings"
 
 instance Eq (SArtifact k) where
-   x == y = show x == show y
+    x == y = show x == show y
+
+instance Ord (SArtifact k) where
+    compare = compare `on` show
 
 -- ---------------------------------------------------------
 
@@ -166,7 +170,7 @@ instance Eq (SArtifact k) where
 data Handle (a :: Artifact) =
     Handle (SArtifact a)
            String
-    deriving (Show,Eq)
+    deriving (Show,Eq,Ord)
 
 -- | Create a 'Handle' that contains the string representation of the singleton
 -- type as tag value.

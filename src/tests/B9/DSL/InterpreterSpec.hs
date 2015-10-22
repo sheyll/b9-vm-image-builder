@@ -12,7 +12,7 @@ spec = do
         do it "traces documentation" $
                dumpToStrings (compile (doc "test")) `shouldBe`
                ["logTrace test"]
-    describe "compile (Cloud-Init)" $
+    describe "compile exportEmptyCloudInitIso" $
         do it "appends the build id to the instance id" $
                dumpToStrings (compile exportEmptyCloudInitIso) `shouldContain`
                ["getBuildId"]
@@ -24,19 +24,35 @@ spec = do
                        return (hnd1 == hnd2)) `shouldBe`
                False
            it "creates a temporary directory containing the instance id" $
-               let (Handle _ iid, cmds) = runPureDump (compile exportEmptyCloudInitIso)
+               let (Handle _ iid,cmds) =
+                       runPureDump (compile exportEmptyCloudInitIso)
                in cmds `shouldContain` ["mkTemp CloudInit/" ++ iid]
            it "creates a meta-data file" $
-               let (Handle _ iid, cmds) = runPureDump (compile exportEmptyCloudInitIso)
-               in cmds `shouldContain` ["mkTemp CloudInit/" ++ iid]
+               let (Handle _ iid,cmds) =
+                       runPureDump (compile exportEmptyCloudInitIso)
+               in cmds `shouldContain`
+                  [ "mkTemp CloudInit/" ++ iid
+                  , "mkDir " ++ "/BUILD/CloudInit" </> iid ++ "-XXXX"
+                  , "renderContentToFile " ++
+                    "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/meta-data " ++
+                    "Concat [FromString \"#cloud-config\\n\"," ++
+                    "RenderYaml (" ++
+                    "ASTObj [(\"instance-id\",ASTString \"test-instance-id-build-id-1234-0\")]" ++
+                    ")] " ++ "Environment []"]
+           it "creates a cloud-init ISO image" $
+               let (Handle _ iid,cmds) =
+                       runPureDump (compile exportEmptyCloudInitIso)
+                   tmpDir = "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX"
 
+               in cmds `shouldContain`
+                  [printf "createFileSystemFromDirectory %s TODO" tmpDir ]
 
 -- * cloud-init tests
 exportEmptyCloudInitIso :: Program (Handle 'CloudInit)
 exportEmptyCloudInitIso = do
-    ci <- newCloudInit "test-instance-id"
-    writeCloudInitIso ci "test.iso"
-    return ci
+    i <- newCloudInit "test-instance-id"
+    writeCloudInitIso i "test.iso"
+    return i
 
 -- * vmImage tests
 

@@ -6,9 +6,11 @@
 {-# LANGUAGE DeriveFunctor #-}
 module B9.B9IO where
 
+import B9.Content (Content(..), Environment(..))
 import Control.Monad.Free
 import Control.Monad.Trans.Writer.Lazy
 import System.FilePath
+import Text.Printf
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
@@ -27,7 +29,14 @@ data Action next
                next
     | GetBuildDir (FilePath -> next)
     | GetBuildId (String -> next)
-    | MkTemp FilePath (FilePath -> next)
+    | MkTemp FilePath
+             (FilePath -> next)
+    | MkDir FilePath
+            next
+    | RenderContentToFile FilePath
+                          Content
+                          Environment
+                          next
     deriving (Functor)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
@@ -48,6 +57,22 @@ getBuildId = liftF $ GetBuildId id
 -- prefix and ending with a unique random token.
 mkTemp :: FilePath -> IoProgram FilePath
 mkTemp prefix = liftF $ MkTemp prefix id
+
+-- | Just like @mkdir -p@
+mkDir :: FilePath -> IoProgram ()
+mkDir d = liftF $ MkDir d ()
+
+-- | Combination of 'mkTemp' and 'mkDir'
+mkTempDir :: FilePath -> IoProgram FilePath
+mkTempDir prefix = do
+    tmp <- mkTemp prefix
+    mkDir tmp
+    return tmp
+
+-- | Render a given content to a file. Implementations should overwrite the file
+-- if it exists.
+renderContentToFile :: FilePath -> Content -> Environment -> IoProgram ()
+renderContentToFile f c e = liftF $ RenderContentToFile f c e ()
 
 -- | Testing support
 dumpToStrings :: IoProgram a -> [String]
@@ -71,4 +96,10 @@ runPureDump p = runWriter (run dump p)
         return (n "build-id-1234")
     dump (MkTemp prefix n) = do
         tell ["mkTemp " ++ prefix]
-        return (n ("/BUILD" </> prefix <.> "-XXXX"))
+        return (n ("/BUILD" </> prefix ++ "-XXXX"))
+    dump (MkDir d n) = do
+        tell ["mkDir " ++ d]
+        return n
+    dump (RenderContentToFile f c e n) = do
+        tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
+        return n

@@ -52,7 +52,7 @@ instance Binary SourceFileConversion
 instance NFData SourceFileConversion
 
 newtype Environment =
-    Environment [(String, String)]
+    Environment [(String, String)] -- TODO convert to Map
     deriving (Read,Show,Typeable,Data,Eq,NFData,Hashable,Binary)
 
 withEnvironment :: [(String, String)] -> ReaderT Environment m a -> m a

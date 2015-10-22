@@ -11,6 +11,8 @@ import           Data.Hashable
 import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+import           Control.Monad
+import           Data.Foldable
 #endif
 import           B9.Content.AST as X
 import           B9.Content.ErlTerms as X
@@ -56,6 +58,8 @@ data Content
     | FromString String
     | FromTextFile SourceFile
     | FromBinaryFile FilePath
+    | FromBinary B.ByteString
+    | Concat [Content]
     deriving (Read,Show,Typeable,Eq,Data,Generic)
 
 instance Hashable Content
@@ -68,6 +72,8 @@ instance CanRender Content where
   render (FromString str) = return (B.pack str)
   render (FromTextFile s) = readTemplateFile s
   render (FromBinaryFile f) = liftIO (B.readFile f)
+  render (FromBinary b) = return b
+  render (Concat cs) = fmap mconcat $ mapM render cs
 
 -- * QuickCheck helper
 
@@ -85,4 +91,7 @@ instance Arbitrary Content where
             , RenderErlang <$> smaller arbitrary
             , RenderYaml <$> smaller arbitrary
             , FromString <$> smaller arbitrary
-            , FromBinaryFile <$> smaller arbitraryFilePath]
+            , FromBinaryFile <$> smaller arbitraryFilePath
+            , FromBinary <$> B.pack <$> smaller arbitrary
+            , Concat <$> smaller arbitrary
+            ]

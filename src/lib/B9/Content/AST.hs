@@ -62,22 +62,23 @@ instance ConcatableSyntax B.ByteString where
 -- e.g. B9.Content.Generator.Content'. The second parameter defines a specifix
 -- syntax, e.g 'B9.Content.ErlangPropList' that the 'AST' value generates.
 data AST c a
-    = ASTObj [(String, AST c a)] -- ^ Create an object similar to a
-                                 -- Json object.
-    | ASTArr [AST c a] -- ^ An array.
-    | ASTMerge [AST c a] -- ^ Merge the nested elements, this is a very
-                         -- powerful tool that allows to combine
-    |
-      -- several inputs in a smart and safe way,
-      -- e.g. by merging the values of the same
-      -- fields in yaml objects.
-      ASTEmbed c -- Embed some pure content.
-    | ASTString String -- A string literal.
-    | ASTParse SourceFile -- An 'AST' obtained from parsing a source
-                          -- file that contains a string corresponding
-    |
-                -- to the type parameter @a@, e.g. 'YamlObject's
-      AST a -- Embed a literal @a@.
+    = ASTObj [(String, AST c a)]
+      -- ^ Create an object similar to a Json object.
+    | ASTArr [AST c a]
+      -- ^ An array.
+    | ASTMerge [AST c a]
+      -- ^ Merge the nested elements, this is a very powerful tool that allows
+      -- to combine several inputs in a smart and safe way, e.g. by merging the
+      -- values of the same fields in yaml objects.
+    | ASTEmbed c
+      -- ^ Embed some pure content.
+    | ASTString String
+      -- ^ A string literal.
+    | ASTParse SourceFile
+      -- ^ An 'AST' obtained from parsing a source file that contains a string
+      -- corresponding to the type parameter @a@, e.g. 'YamlObject's
+    | AST a
+      -- ^ Embed a literal @a@.
     deriving (Read,Show,Typeable,Data,Eq,Generic)
 
 instance (Hashable c, Hashable a) => Hashable (AST c a)
