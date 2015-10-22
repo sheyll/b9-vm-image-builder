@@ -45,29 +45,29 @@ instance NFData MountPoint
 
 -- | The destination of an image.
 data ImageDestination
-    = Share String
+    =
+      -- | Create the image and some meta data so that other builds can use them
+      -- as 'ImageSource's via 'From'.
+      Share String
             ImageType
             ImageResize
-            -- TODO add FileSystem
     |
-      -- ^ Create the image and some meta data so that other
-      -- builds can use them as 'ImageSource's via 'From'.
+      -- | Export a raw image that can directly
+      -- be booted.
       LiveInstallerImage String
                          FilePath
                          ImageResize
     |
-      -- ^ __DEPRECATED__ Export a raw image that can directly
-      -- be booted.
+      -- | Write an image file to the path in the first
+      -- argument., possible resizing it,
       LocalFile Image
                 ImageResize
     |
-      -- ^ Write an image file to the path in the first
-      -- argument., possible resizing it,
+      -- | Do not export the image. Useful if the main
+      -- objective of the b9 build is not an image file, but
+      -- rather some artifact produced by executing by a
+      -- containerize build.
       Transient
-    -- ^ Do not export the image. Useful if the main
-    -- objective of the b9 build is not an image file, but
-    -- rather some artifact produced by executing by a
-    -- containerize build.
     deriving (Read,Show,Typeable,Data,Eq,Generic)
 
 instance Hashable ImageDestination
@@ -76,29 +76,38 @@ instance NFData ImageDestination
 
 -- | Specification of how the image to build is obtained.
 data ImageSource
-    = EmptyImage String
+    =
+      -- | Create an empty image file having a file system label (first
+      -- parameter), a file system type (e.g. 'Ext4') and an 'ImageSize'
+      EmptyImage FSLabel
                  FileSystem
                  ImageType
                  ImageSize
     |
-      -- ^ Create an empty image file having a file system label
-      -- (first parameter), a file system type (e.g. 'Ext4') and an
-      -- 'ImageSize'
+      -- | Create an image containig the files of a directory.
+      ImageFromDir FilePath
+                   FSLabel
+                   FileSystem
+                   ImageType
+                   ImageSize
+    |
+      -- | __DEPRECATED__
       CopyOnWrite Image
     |
-      -- ^ __DEPRECATED__
+      -- | Clone an existing image file; if the image file contains
+      -- partitions, select the partition to use, b9 will extract
+      -- that partition by reading the offset of the partition from
+      -- the partition table and extract it using @dd@.
       SourceImage Image
                   Partition
                   ImageResize
     |
-      -- ^ Clone an existing image file; if the image file contains
-      -- partitions, select the partition to use, b9 will extract
-      -- that partition by reading the offset of the partition from
-      -- the partition table and extract it using @dd@.
+      -- | Use an image previously shared by via 'Share'.
       From String
            ImageResize
-    -- ^ Use an image previously shared by via 'Share'.
     deriving (Show,Read,Typeable,Data,Eq,Generic)
+
+type FSLabel = String
 
 instance Hashable ImageSource
 instance Binary ImageSource
@@ -132,7 +141,6 @@ data ImageType
     = Raw
     | QCow2
     | Vmdk
-    | Directory
     deriving (Eq,Read,Typeable,Data,Show,Generic)
 
 instance Hashable ImageType
@@ -143,8 +151,8 @@ instance NFData ImageType
 data FileSystem
     = NoFileSystem
     | Ext4
-    | ISO9660 String
-    | VFAT String
+    | ISO9660
+    | VFAT
     deriving (Eq,Show,Read,Typeable,Data,Generic)
 
 instance Hashable FileSystem
@@ -331,12 +339,11 @@ getPartition NoPT = error "No partitions!"
 -- | Return the file name extension of an image file with a specific image
 -- format.
 imageFileExtension :: ImageType -> FileSystem -> String
-imageFileExtension Raw (ISO9660 _) = "iso"
-imageFileExtension Raw (VFAT _) = "vfat"
+imageFileExtension Raw ISO9660 = "iso"
+imageFileExtension Raw VFAT = "vfat"
 imageFileExtension Raw _ = "raw"
 imageFileExtension QCow2 _ = "qcow2"
 imageFileExtension Vmdk _ = "qcow2"
-imageFileExtension Directory _ = ""
 
 -- | Change the image file format and also rename the image file name to
 -- have the appropriate file name extension. See 'imageFileExtension' and
@@ -361,12 +368,14 @@ changeImageDirectory dir (Image img fmt fs) = Image img' fmt fs
 -- * Constructors and accessors for 'ImageSource's
 getImageSourceImageType :: ImageSource -> Maybe ImageType
 getImageSourceImageType (EmptyImage _ _ t _) = Just t
+getImageSourceImageType (ImageFromDir _ _ _ t _) = Just t
 getImageSourceImageType (CopyOnWrite i) = Just $ imageImageType i
 getImageSourceImageType (SourceImage i _ _) = Just $ imageImageType i
 getImageSourceImageType (From _ _) = Nothing
 
 getImageSourceFileSystem :: ImageSource -> Maybe FileSystem
 getImageSourceFileSystem (EmptyImage _ fs _ _) = Just fs
+getImageSourceFileSystem (ImageFromDir _ _ fs _ _) = Just fs
 getImageSourceFileSystem (CopyOnWrite i) = Just $ imageFileSystem i
 getImageSourceFileSystem (SourceImage i _ _) = Just $ imageFileSystem i
 getImageSourceFileSystem (From _ _) = Nothing

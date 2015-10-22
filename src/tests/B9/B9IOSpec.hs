@@ -3,6 +3,7 @@ module B9.B9IOSpec (spec) where
 import B9.Content
 import B9.B9IO
 import Test.Hspec
+import Test.QuickCheck
 import Text.Printf
 
 spec :: Spec
@@ -39,3 +40,8 @@ spec =
                     testFile
                     (show testContent)
                     (show testEnv)]
+       it "handles programs containing convertImageTo" $
+           property $
+           \removeSource img dest ->
+                let p = convertImageTo removeSource img dest
+                in and $ zipWith (==) (head $ dumpToStrings p) "convertImageTo"

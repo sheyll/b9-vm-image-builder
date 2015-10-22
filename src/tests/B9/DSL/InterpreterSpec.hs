@@ -40,12 +40,21 @@ spec = do
                     "ASTObj [(\"instance-id\",ASTString \"test-instance-id-build-id-1234-0\")]" ++
                     ")] " ++ "Environment []"]
            it "creates a cloud-init ISO image" $
-               let (Handle _ iid,cmds) =
-                       runPureDump (compile exportEmptyCloudInitIso)
-                   tmpDir = "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX"
-
-               in cmds `shouldContain`
-                  [printf "createFileSystemFromDirectory %s TODO" tmpDir ]
+               let cmds = dumpToStrings (compile exportEmptyCloudInitIso)
+                   tmpDir =
+                       "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX"
+                   src =
+                       show
+                           (ImageFromDir
+                                tmpDir
+                                "cidata"
+                                ISO9660
+                                Raw
+                                (ImageSize 10 MB))
+                   dst =
+                       show (LocalFile (Image "test.iso" Raw ISO9660) KeepSize)
+                   canMove = True
+               in cmds `shouldContain` [printf "convertImageTo %s %s %s" (show canMove) src dst]
 
 -- * cloud-init tests
 exportEmptyCloudInitIso :: Program (Handle 'CloudInit)

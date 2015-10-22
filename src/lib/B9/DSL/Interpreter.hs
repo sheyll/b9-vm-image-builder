@@ -43,7 +43,7 @@ instance Default Ctx where
 data CiCtx = CiCtx
     { _metaData :: (AST Content YamlObject)
     , _userData :: (AST Content YamlObject)
-    , _ciExports :: [ImageDestination]
+    , _ciExports :: [Either FilePath ImageDestination]
     } deriving (Show)
 
 instance Default CiCtx where
@@ -88,13 +88,28 @@ generateAllCI = do
 
 -- | Generate the exports of a single cloud init instance.
 generateCI :: Environment -> Handle 'CloudInit -> CiCtx -> IoProgram ()
-generateCI env h ci = do
+generateCI env h c = do
     let (Handle _ iid) = h
-    tmpDir <- mkTempDir $ "CloudInit" </> iid
-    let mf = tmpDir </> "meta-data"
-        mc = Concat [FromString "#cloud-config\n", RenderYaml (ci ^. metaData)]
-    renderContentToFile mf mc env
-    return ()
+        numberOfExports = c ^. ciExports . to length
+    when (numberOfExports > 0) $
+        do tmpDir <- mkTempDir $ "CloudInit" </> iid
+           let mf = tmpDir </> "meta-data"
+               mc =
+                   Concat
+                       [ FromString "#cloud-config\n"
+                       , RenderYaml (c ^. metaData)]
+           renderContentToFile mf mc env
+           mapM_
+               (generateCIExport (numberOfExports == 1) tmpDir)
+               (c ^. ciExports)
+           return ()
+  where
+    generateCIExport _resuseTmpDir _tmpDir (Left _outDir) = undefined
+    generateCIExport resuseTmpDir tmpDir (Right dest) =
+        convertImageTo resuseTmpDir src dest
+      where
+        src = ImageFromDir tmpDir "cidata" ISO9660 Raw (ImageSize 10 MB)
+
 
 -- * Utilities
 

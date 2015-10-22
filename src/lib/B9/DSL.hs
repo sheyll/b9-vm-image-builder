@@ -219,7 +219,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'VmImage = ImageDestination
-        ExportSpec 'CloudInit = ImageDestination
+        ExportSpec 'CloudInit = Either FilePath ImageDestination
 
 -- ---------------------------------------------------------
 
@@ -269,15 +269,14 @@ addUserData hnd ast = add hnd SCloudInitUserData ast
 
 writeCloudInitIso :: (Handle 'CloudInit) -> FilePath -> Program ()
 writeCloudInitIso h dst =
-    export h (LocalFile (Image dst Raw (ISO9660 "cidata")) KeepSize)
+    export h $ Right (LocalFile (Image dst Raw ISO9660) KeepSize)
 
 writeCloudInitVFat :: (Handle 'CloudInit) -> FilePath -> Program ()
 writeCloudInitVFat h dst =
-    export h (LocalFile (Image dst Raw (VFAT "cidata")) KeepSize)
+    export h $ Right (LocalFile (Image dst Raw VFAT) KeepSize)
 
 writeCloudInitDir :: (Handle 'CloudInit) -> FilePath -> Program ()
-writeCloudInitDir h dst =
-    export h (LocalFile (Image dst Directory NoFileSystem) KeepSize)
+writeCloudInitDir h dst = export h $ Left dst
 
 
 -- * Image import

@@ -7,6 +7,7 @@
 module B9.B9IO where
 
 import B9.Content (Content(..), Environment(..))
+import B9.DiskImages
 import Control.Monad.Free
 import Control.Monad.Trans.Writer.Lazy
 import System.FilePath
@@ -37,6 +38,10 @@ data Action next
                           Content
                           Environment
                           next
+    | ConvertImageTo Bool
+                     ImageSource
+                     ImageDestination
+                     next
     deriving (Functor)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
@@ -68,6 +73,14 @@ mkTempDir prefix = do
     tmp <- mkTemp prefix
     mkDir tmp
     return tmp
+
+-- | Move/Copy/Upload/Convert/Create a disk-image from an 'ImageSource' to an
+--   'ImageDestination' If the first parameter is 'True' the source is regarded
+--   as destructable and might be destroyed during the operation, e.g. when an
+--   image is exported as 'LocalFile' and neither size, nor image type nor
+--   filesystem differ, the source image might as well simple be renamed.
+convertImageTo :: Bool -> ImageSource -> ImageDestination -> IoProgram ()
+convertImageTo removeSource src dst = liftF $ ConvertImageTo removeSource src dst ()
 
 -- | Render a given content to a file. Implementations should overwrite the file
 -- if it exists.
@@ -102,4 +115,7 @@ runPureDump p = runWriter (run dump p)
         return n
     dump (RenderContentToFile f c e n) = do
         tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
+        return n
+    dump (ConvertImageTo r i d n) = do
+        tell [printf "convertImageTo %s %s %s" (show r) (show i) (show d)]
         return n

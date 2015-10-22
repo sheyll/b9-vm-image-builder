@@ -79,13 +79,12 @@ canConvertTo :: (ImageType, FileSystem) -> (ImageType, FileSystem) -> Bool
 canConvertTo f t =
     (canConvertImageTo `on` fst) f t && (canConvertFSTo `on` snd) f t
   where
-    canConvertImageTo Directory Raw = True
     canConvertImageTo a b
       | a == b = True
       | a `elem` [Raw, QCow2, Vmdk] && b `elem` [Raw, QCow2, Vmdk] = True
       | otherwise = False
-    canConvertFSTo NoFileSystem (ISO9660 _) = True
-    canConvertFSTo NoFileSystem (VFAT _) = True
+    canConvertFSTo NoFileSystem ISO9660 = True
+    canConvertFSTo NoFileSystem VFAT = True
     canConvertFSTo a b
       | a == b = True
       | otherwise = False
