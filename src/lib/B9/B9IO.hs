@@ -34,6 +34,9 @@ data Action next
              (FilePath -> next)
     | MkDir FilePath
             next
+    | CopyDirectory FilePath
+                    FilePath
+                    next
     | RenderContentToFile FilePath
                           Content
                           Environment
@@ -74,6 +77,10 @@ mkTempDir prefix = do
     mkDir tmp
     return tmp
 
+-- | Make a recursive copy of an existing directory.
+copyDirectory :: FilePath -> FilePath -> IoProgram ()
+copyDirectory src dst = liftF $ CopyDirectory src dst ()
+
 -- | Move/Copy/Upload/Convert/Create a disk-image from an 'ImageSource' to an
 --   'ImageDestination' If the first parameter is 'True' the source is regarded
 --   as destructable and might be destroyed during the operation, e.g. when an
@@ -112,6 +119,9 @@ runPureDump p = runWriter (run dump p)
         return (n ("/BUILD" </> prefix ++ "-XXXX"))
     dump (MkDir d n) = do
         tell ["mkDir " ++ d]
+        return n
+    dump (CopyDirectory s d n) = do
+        tell [printf "copyDirectory %s %s" s d]
         return n
     dump (RenderContentToFile f c e n) = do
         tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]

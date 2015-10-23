@@ -27,7 +27,7 @@ spec =
        it "handles programs containing MkDir" $
            let p = mkDir "test-dir"
            in dumpToStrings p `shouldBe` ["mkDir test-dir"]
-       it "handles programs containing renderContentToFile" $
+       it "handles programs containing RenderContentToFile" $
            let p = renderContentToFile testFile testContent testEnv
                testFile = "test-file"
                testContent =
@@ -40,8 +40,11 @@ spec =
                     testFile
                     (show testContent)
                     (show testEnv)]
-       it "handles programs containing convertImageTo" $
+       it "handles programs containing ConvertImageTo" $
            property $
            \removeSource img dest ->
                 let p = convertImageTo removeSource img dest
                 in and $ zipWith (==) (head $ dumpToStrings p) "convertImageTo"
+       it "handles programs containing CopyDirectory" $
+           let p = copyDirectory "from" "to"
+           in dumpToStrings p `shouldBe` ["copyDirectory from to"]
