@@ -4,6 +4,7 @@
 module B9.ShellScript ( writeSh
                       , emptyScript
                       , toBash
+                      , toBashOneLiner
                       , toCmds
                       , CmdVerbosity (..)
                       , Cwd (..)
@@ -15,6 +16,7 @@ import Data.Data
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 import Data.Monoid
+import Data.Foldable
 #endif
 import Control.Parallel.Strategies
 import Data.Binary
@@ -118,6 +120,9 @@ writeSh file script = do
 emptyScript :: Script -> Bool
 emptyScript = null . toCmds
 
+toBashOneLiner :: Script -> String
+toBashOneLiner = intercalate " ; " . concatMap cmdToBash . toCmds
+
 toCmds :: Script -> [Cmd]
 toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
   where
@@ -160,14 +165,13 @@ toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
         return [Cmd cmd args u c i v]
 
 toBash :: [Cmd] -> String
-toBash cmds = intercalate "\n\n" $ bashHeader ++ (cmdToBash <$> cmds)
+toBash cmds = intercalate "\n\n" $ bashHeader ++ (concatMap cmdToBash cmds)
 
 bashHeader :: [String]
 bashHeader = ["#!/bin/bash", "set -e"]
 
-cmdToBash :: Cmd -> String
+cmdToBash :: Cmd -> [String]
 cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
-    intercalate "\n" $
     disableErrorChecking ++
     pushd cwdQ ++ execCmd ++ popd cwdQ ++ reenableErrorChecking
   where
@@ -181,8 +185,8 @@ cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
     pushd NoCwd = []
     pushd (Cwd cwdPath) = [unwords (["pushd", cwdPath] ++ redirectOutput)]
     popd NoCwd = []
-    popd (Cwd cwdPath) =
-        [unwords (["popd"] ++ redirectOutput ++ ["#", cwdPath])]
+    popd (Cwd _) =
+        [unwords (["popd"] ++ redirectOutput)]
     disableErrorChecking = ["set +e" | ignoreErrors]
     reenableErrorChecking = ["set -e" | ignoreErrors]
     cwdQ =
