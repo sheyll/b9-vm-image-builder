@@ -29,14 +29,14 @@ import           Control.Monad.IO.Class
 -- 'LibVirtLXC' builder should create a file.
 data FileSpec = FileSpec
     { fileSpecPath :: FilePath
-    , fileSpecPermissions :: (Word8, Word8, Word8)
+    , fileSpecPermissions :: (Word8,Word8, Word8, Word8)
     , fileSpecOwner :: String
     , fileSpecGroup :: String
     } deriving (Read,Show,Eq,Data,Typeable,Generic)
 
 -- | A file spec for a file belonging to root:root with permissions 0644.
 fileSpec :: FilePath -> FileSpec
-fileSpec f = FileSpec f (6,4,4) "root" "root"
+fileSpec f = FileSpec f (0,6,4,4) "root" "root"
 
 instance Hashable FileSpec
 instance Binary FileSpec
@@ -80,7 +80,9 @@ instance CanRender Content where
 instance Arbitrary FileSpec where
     arbitrary =
         FileSpec <$> smaller arbitraryFilePath <*>
-        ((,,) <$> elements [0 .. 7] <*> elements [0 .. 7] <*> elements [0 .. 7]) <*>
+        ((,,,) <$> elements [0 .. 7] <*> elements [0 .. 7] <*>
+         elements [0 .. 7] <*>
+         elements [0 .. 7]) <*>
         elements ["root", "alice", "bob"] <*>
         elements ["root", "users", "wheel"]
 
