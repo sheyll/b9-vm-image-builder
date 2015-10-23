@@ -32,11 +32,23 @@ data Action next
     | GetBuildId (String -> next)
     | MkTemp FilePath
              (FilePath -> next)
+    | Copy FilePath
+           FilePath
+           next
+    | CopyDir FilePath
+              FilePath
+              next
+    | Move FilePath
+           FilePath
+           next
     | MkDir FilePath
             next
-    | CopyDirectory FilePath
-                    FilePath
-                    next
+    | GetRealPath FilePath
+                  (FilePath -> next)
+    | GetParentDir FilePath
+                   (FilePath -> next)
+    | GetFileName FilePath
+                  (FilePath -> next)
     | RenderContentToFile FilePath
                           Content
                           Environment
@@ -66,9 +78,33 @@ getBuildId = liftF $ GetBuildId id
 mkTemp :: FilePath -> IoProgram FilePath
 mkTemp prefix = liftF $ MkTemp prefix id
 
+-- | Copy a file
+copy :: FilePath -> FilePath -> IoProgram ()
+copy from to = liftF $ Copy from to ()
+
+-- | Make a recursive copy of an existing directory.
+copyDir :: FilePath -> FilePath -> IoProgram ()
+copyDir src dst = liftF $ CopyDir src dst ()
+
+-- | Move a file or a directory
+move :: FilePath -> FilePath -> IoProgram ()
+move from to = liftF $ Move from to ()
+
 -- | Just like @mkdir -p@
 mkDir :: FilePath -> IoProgram ()
 mkDir d = liftF $ MkDir d ()
+
+-- | Return the canonical path of a relative path. NOTE: The file should exist!
+getRealPath :: FilePath -> IoProgram FilePath
+getRealPath d = liftF $ GetRealPath d id
+
+-- | Return the parent directory of a file (or directory)
+getParentDir :: FilePath -> IoProgram FilePath
+getParentDir d = liftF $ GetParentDir d id
+
+-- | Return the filename (last part) of a path.
+getFileName :: FilePath -> IoProgram FilePath
+getFileName f = liftF $ GetFileName f id
 
 -- | Combination of 'mkTemp' and 'mkDir'
 mkTempDir :: FilePath -> IoProgram FilePath
@@ -76,10 +112,6 @@ mkTempDir prefix = do
     tmp <- mkTemp prefix
     mkDir tmp
     return tmp
-
--- | Make a recursive copy of an existing directory.
-copyDirectory :: FilePath -> FilePath -> IoProgram ()
-copyDirectory src dst = liftF $ CopyDirectory src dst ()
 
 -- | Move/Copy/Upload/Convert/Create a disk-image from an 'ImageSource' to an
 --   'ImageDestination' If the first parameter is 'True' the source is regarded
@@ -120,9 +152,24 @@ runPureDump p = runWriter (run dump p)
     dump (MkDir d n) = do
         tell ["mkDir " ++ d]
         return n
-    dump (CopyDirectory s d n) = do
-        tell [printf "copyDirectory %s %s" s d]
+    dump (CopyDir s d n) = do
+        tell [printf "copyDir %s %s" s d]
         return n
+    dump (Copy s d n) = do
+        tell [printf "copy %s %s" s d]
+        return n
+    dump (Move s d n) = do
+        tell [printf "move %s %s" s d]
+        return n
+    dump (GetParentDir f k) = do
+        tell [printf "getParentDir %s" f]
+        return (k (takeDirectory f))
+    dump (GetRealPath f k) = do
+        tell [printf "getRealPath %s" f]
+        return (k ("/abs/path/" ++ f))
+    dump (GetFileName f k) = do
+        tell [printf "getFileName %s" f]
+        return (k (takeFileName f))
     dump (RenderContentToFile f c e n) = do
         tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
         return n

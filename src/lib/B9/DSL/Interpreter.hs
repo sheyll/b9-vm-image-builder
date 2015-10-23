@@ -147,7 +147,7 @@ generateCI env h c = do
            return ()
   where
     generateCIExport False tmpDir (Left outDir) =
-        copyDirectory tmpDir outDir
+        copyDir tmpDir outDir
     generateCIExport True tmpDir (Left outDir) =
         fail "NYI: renameDirectory tmpDir outDir"
     generateCIExport resuseTmpDir tmpDir (Right dest) =

@@ -133,6 +133,7 @@ cloudInitWithContentExamples =
     udPath = "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/user-data"
 
     templateVars :: Environment
+
     templateVars = Environment [("x","3")]
 
     mdContent :: Content
