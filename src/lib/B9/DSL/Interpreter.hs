@@ -64,7 +64,7 @@ compile p = evalStateT compileSt def
       return result
 
 instance Interpreter IoCompiler where
-    -- Cloud-init
+    -- Create
     runCreate SCloudInit iidPrefix = do
         buildId <- lift $ getBuildId
         hnd@(Handle _ iid) <-
@@ -72,25 +72,27 @@ instance Interpreter IoCompiler where
         let ciCtx = set metaData (ASTObj [("instance-id", ASTString iid)]) def
         ci . at hnd ?= ciCtx
         return hnd
-    -- Fall-through
     runCreate SFileContent c = do
         hnd <- uniqueHandle SFileContent ""
         fileContent . at hnd ?= c
         return hnd
     runCreate sa _src = return $ singletonHandle sa
+    -- Update
     runUpdate _hnd _src = return ()
+    -- Add
     runAdd _ SDocumentation str = lift $ logTrace str
     runAdd _ STemplateVariable (k,v) = vars . at k ?= v
     runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast =
-        ci . at hnd . traverse . metaData %= (flip astMerge ast)
+        ci . at hnd . traverse . metaData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SCloudInitUserData ast =
-        ci . at hnd . traverse . userData %= (flip astMerge ast)
+        ci . at hnd . traverse . userData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SFileContent (fspec,contentHnd) = do
         Just content <- use (fileContent . at contentHnd)
         runAdd hnd SCloudInitUserData (toUserDataWriteFilesAST fspec content)
     runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
         runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
     runAdd _hnde _sa _src = return ()
+    -- Export
     runExport hnd@(Handle SCloudInit _) d =
         ci . at hnd . traverse . ciExports <>= [d]
     runExport _hnd _dest = return ()

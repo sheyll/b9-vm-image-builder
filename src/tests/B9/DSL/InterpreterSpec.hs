@@ -110,14 +110,21 @@ exportCloudInitExamples =
 cloudInitWithContentExamples :: Spec
 cloudInitWithContentExamples =
     describe "compile cloudInitWithContent" $
-    do it "correctly merges meta-data" $
-           let cmds = dumpToStrings (compile cloudInitWithContent)
-           in cmds `shouldContain`
-              [printf "renderContentToFile %s %s %s" mdPath (show mdContent) (show templateVars)]
-       it "correctly merges user-data" $
-           let cmds = dumpToStrings (compile cloudInitWithContent)
-           in cmds `shouldContain`
-              [printf "renderContentToFile %s %s %s" udPath (show udContent) (show templateVars)]
+    do let cmds = dumpToStrings (compile cloudInitWithContent)
+       do it "correctly merges meta-data" $
+              cmds `shouldContain`
+              [ printf
+                    "renderContentToFile %s %s %s"
+                    mdPath
+                    (show mdContent)
+                    (show templateVars)]
+          it "correctly merges user-data" $
+              cmds `shouldContain`
+              [ printf
+                    "renderContentToFile %s %s %s"
+                    udPath
+                    (show udContent)
+                    (show templateVars)]
   where
     mdPath :: FilePath
     mdPath = "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/meta-data"
@@ -151,8 +158,8 @@ cloudInitWithContentExamples =
                        , ASTObj [("write_files",
                                   ASTArr
                                   [ASTObj [("path", ASTString "file1.txt")
-                                          ,("owner", ASTString "user:group")
-                                          ,("permissions", ASTString "0123")
+                                          ,("owner", ASTString "user1:group1")
+                                          ,("permissions", ASTString "0642")
                                           ,("content", ASTEmbed (FromString "file1"))]])]
                        , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
     cloudInitWithContent :: Program (Handle 'CloudInit)
@@ -162,7 +169,7 @@ cloudInitWithContentExamples =
         writeCloudInitIso i "test.iso"
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifdown eth0"])])
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifup eth0"])])
-        addFile i (FileSpec "file1.txt" (0,1,2,3) "user" "group") (FromString "file1")
+        addFile i (FileSpec "file1.txt" (0,6,4,2) "user1" "group1") (FromString "file1")
         sh i "ls -la /tmp"
         return i
 

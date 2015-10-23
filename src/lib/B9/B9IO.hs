@@ -1,4 +1,4 @@
--- | A /pure/ abstraction off the IO related actions done in B9. This is useful
+-- | A /pure/ abstraction off the IO related actions available in B9. This is useful
 -- to enable unit testing, OS-independence and debugging.
 
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -23,7 +23,7 @@ type IoProgram = Free Action
 run :: Monad m => (forall a. Action a -> m a) -> IoProgram b -> m b
 run = foldFree
 
--- | Pure commands for disk image creation and conversion, lxc interaction, file
+-- | Pure commands for disk image creation and conversion, file
 -- IO and libvirt lxc interaction.
 data Action next
     = LogTrace String
@@ -108,9 +108,9 @@ runPureDump p = runWriter (run dump p)
     dump (LogTrace s n) = do
         tell ["logTrace " ++ s]
         return n
-    dump (GetBuildDir n) = do
+    dump (GetBuildDir k) = do
         tell ["getBuildDir"]
-        return (n "/BUILD")
+        return (k "/BUILD")
     dump (GetBuildId n) = do
         tell ["getBuildId"]
         return (n "build-id-1234")

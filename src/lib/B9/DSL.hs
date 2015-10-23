@@ -32,16 +32,16 @@ import B9.QCUtil
 
 data BuildStep next where
         Create ::
-            (Show (Handle a), Show (CreateSpec a)) =>
+            (Show (CreateSpec a)) =>
             SArtifact a -> CreateSpec a -> (Handle a -> next) -> BuildStep next
         Update ::
-            (Show (Handle a), Show (UpdateSpec a)) =>
+            (Show (UpdateSpec a)) =>
             Handle a -> UpdateSpec a -> next -> BuildStep next
         Add ::
-            (CanAdd env a, Show (Handle env), Show (AddSpec a)) =>
+            (CanAdd env a, Show (AddSpec a)) =>
             Handle env -> SArtifact a -> AddSpec a -> next -> BuildStep next
         Export ::
-            (Show (Handle a), Show (ExportSpec a)) =>
+            (Show (ExportSpec a)) =>
             Handle a -> ExportSpec a -> next -> BuildStep next
 
 instance Functor BuildStep where
@@ -57,14 +57,14 @@ type Program a = Free BuildStep a
 -- | A build step that creates something from a source that can be referenced to
 -- by a handle.
 create
-    :: (Show (Handle a), Show (CreateSpec a), Show (SArtifact a))
+    :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
 create sa src = liftF $ Create sa src id
 
 -- | A build step the updates an object referenced by a handle from according to
 -- an update specification.
 update
-    :: (Show (Handle a), Show (UpdateSpec a), Show (SArtifact a))
+    :: (Show (UpdateSpec a))
     => Handle a -> UpdateSpec a -> Program ()
 update hnd upd = liftF $ Update hnd upd ()
 
@@ -79,7 +79,7 @@ add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec ()
 
 -- | A build step the exports an object referenced by a handle a to an output.
 export
-    :: (Show (Handle a), Show (ExportSpec a), Show (SArtifact a))
+    :: (Show (ExportSpec a))
     => Handle a -> ExportSpec a -> Program ()
 export hnd out = liftF $ Export hnd out ()
 
@@ -240,7 +240,7 @@ var $= val = add variableBindings STemplateVariable (var, val)
 -- * Content generation and static file inclusion (for both cloud-init and
 -- vm-images)
 
-addFile ::(CanAddP e 'FileContent ~ 'True)
+addFile ::(CanAdd e 'FileContent)
     => Handle e -> FileSpec -> Content -> Program ()
 addFile hnd f c = createContent c >>= writeContent hnd f
 
@@ -440,16 +440,16 @@ class (Monad f) => Interpreter f where
 class (Monad f, Functor f) => Interpreter f where
 #endif
   runCreate
-      :: (Show (Handle a), Show (CreateSpec a))
+      :: (Show (CreateSpec a))
       => SArtifact a -> CreateSpec a -> f (Handle a)
   runUpdate
-      :: (Show (Handle a), Show (UpdateSpec a))
+      :: (Show (UpdateSpec a))
       => Handle a -> UpdateSpec a -> f ()
   runAdd
-      :: (Show (Handle env), Show (AddSpec a))
+      :: (Show (AddSpec a))
       => Handle env -> SArtifact a -> AddSpec a -> f ()
   runExport
-      :: (Show (Handle a), Show (ExportSpec a))
+      :: (Show (ExportSpec a))
       => Handle a -> ExportSpec a -> f ()
 
 -- | An interpreter that just prints out the Program
