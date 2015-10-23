@@ -5,21 +5,22 @@
 
 module B9.DSL.Interpreter where -- TODO rename to Compiler
 
-import B9.DSL
 import B9.B9IO
 import B9.Content
        (Content(..), Environment(..), AST(..),
-        YamlObject(..))
+        YamlObject(..),astMerge,FileSpec(..))
+import B9.DSL
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..))
+import B9.ShellScript (Script(..), toBashOneLiner)
 import Text.Printf (printf)
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
-import Data.Monoid
 import Control.Monad
 #endif
+import Data.Monoid
 import System.FilePath
 import Data.Map as Map
 import Control.Monad.State
@@ -34,10 +35,11 @@ data Ctx = Ctx
     { _idCounter :: Int
     , _vars :: Map.Map String String
     , _ci :: Map.Map (Handle 'CloudInit) CiCtx
+    , _fileContent :: Map.Map (Handle 'FileContent) Content
     } deriving (Show)
 
 instance Default Ctx where
-    def = Ctx 0 def def
+    def = Ctx 0 def def def
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -71,13 +73,50 @@ instance Interpreter IoCompiler where
         ci . at hnd ?= ciCtx
         return hnd
     -- Fall-through
+    runCreate SFileContent c = do
+        hnd <- uniqueHandle SFileContent ""
+        fileContent . at hnd ?= c
+        return hnd
     runCreate sa _src = return $ singletonHandle sa
     runUpdate _hnd _src = return ()
     runAdd _ SDocumentation str = lift $ logTrace str
+    runAdd _ STemplateVariable (k,v) = vars . at k ?= v
+    runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast =
+        ci . at hnd . traverse . metaData %= (flip astMerge ast)
+    runAdd hnd@(Handle SCloudInit _) SCloudInitUserData ast =
+        ci . at hnd . traverse . userData %= (flip astMerge ast)
+    runAdd hnd@(Handle SCloudInit _) SFileContent (fspec,contentHnd) = do
+        Just content <- use (fileContent . at contentHnd)
+        runAdd hnd SCloudInitUserData (toUserDataWriteFilesAST fspec content)
+    runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
+        runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
     runAdd _hnde _sa _src = return ()
     runExport hnd@(Handle SCloudInit _) d =
         ci . at hnd . traverse . ciExports <>= [d]
     runExport _hnd _dest = return ()
+
+-- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.
+toUserDataWriteFilesAST :: FileSpec -> Content -> AST Content YamlObject
+toUserDataWriteFilesAST (FileSpec fileName (s,u,g,o) userName groupName) content =
+    ASTObj
+        [ ( "write_files"
+          , ASTArr
+                [ ASTObj
+                      [ ("path", ASTString fileName)
+                      , ("owner", ASTString (userName ++ ":" ++ groupName))
+                      , ("permissions", ASTString (printf "%i%i%i%i" s u g o))
+                      , ("content", ASTEmbed content)]])]
+
+-- | Create a @cloud-config@ compatibe @runcmd@ 'AST' object.
+toUserDataRunCmdAST :: Script -> AST Content YamlObject
+toUserDataRunCmdAST scr = ASTObj [("runcmd", ASTArr [ASTString cmd])]
+  where
+    cmd = toBashOneLiner scr
+
+-- | Wrap either the meta-data or user-data 'AST' into a 'Content' that contains
+--   the obligatory first line with the string @#cloud-config@.
+wrapCloudConfigAST :: AST Content YamlObject -> Content
+wrapCloudConfigAST a = Concat [FromString "#cloud-config\n", RenderYaml a]
 
 -- | Generate all the cloud init exports
 generateAllCI :: IoCompiler ()
@@ -94,17 +133,21 @@ generateCI env h c = do
     when (numberOfExports > 0) $
         do tmpDir <- mkTempDir $ "CloudInit" </> iid
            let mf = tmpDir </> "meta-data"
-               mc =
-                   Concat
-                       [ FromString "#cloud-config\n"
-                       , RenderYaml (c ^. metaData)]
+               mc = wrapCloudConfigAST (c ^. metaData)
+               uf = tmpDir </> "user-data"
+               uc = wrapCloudConfigAST (c ^. userData)
            renderContentToFile mf mc env
+           unless ((c ^. userData) == ASTObj []) $
+               renderContentToFile uf uc env
            mapM_
                (generateCIExport (numberOfExports == 1) tmpDir)
                (c ^. ciExports)
            return ()
   where
-    generateCIExport _resuseTmpDir _tmpDir (Left _outDir) = undefined
+    generateCIExport False tmpDir (Left outDir) =
+        copyDirectory tmpDir outDir
+    generateCIExport True tmpDir (Left outDir) =
+        fail "NYI: renameDirectory tmpDir outDir"
     generateCIExport resuseTmpDir tmpDir (Right dest) =
         convertImageTo resuseTmpDir src dest
       where
@@ -117,4 +160,8 @@ uniqueHandle :: SArtifact a -> String -> IoCompiler (Handle a)
 uniqueHandle sa str = do
     nextId <- use idCounter
     idCounter += 1
-    return $ handle sa (str ++ "-" ++ show nextId)
+    return $
+        handle sa $
+        if str == ""
+            then (show nextId)
+            else (str ++ "-" ++ show nextId)

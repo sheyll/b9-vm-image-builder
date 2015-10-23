@@ -20,6 +20,7 @@ module B9.Content.AST ( ConcatableSyntax (..)
                       , ASTish(..)
                       , AST(..)
                       , CanRender(..)
+                      , astMerge
                       ) where
 
 import           Control.Parallel.Strategies
@@ -85,6 +86,12 @@ instance (Hashable c, Hashable a) => Hashable (AST c a)
 instance (Binary c, Binary a) => Binary (AST c a)
 instance (NFData c, NFData a) => NFData (AST c a)
 
+-- | Merge two 'AST's.
+astMerge :: AST c a -> AST c a -> AST c a
+astMerge (ASTMerge l) (ASTMerge r) = ASTMerge (l ++ r)
+astMerge (ASTMerge l) r = ASTMerge (l ++ [r])
+astMerge l (ASTMerge r) = ASTMerge (l:r)
+astMerge l r = ASTMerge [l,r]
 
 -- | Types of values that describe content, that can be created from an 'AST'.
 class (ConcatableSyntax a) => ASTish a  where
