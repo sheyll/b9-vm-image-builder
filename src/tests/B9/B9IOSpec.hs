@@ -2,13 +2,14 @@ module B9.B9IOSpec (spec) where
 
 import B9.B9IO
 import B9.Content
+import Data.List
 import System.FilePath
 import Test.Hspec
 import Test.QuickCheck
 import Text.Printf
 
 spec :: Spec
-spec = actionSpec >> getParentDirSpec >> getFileNameSpec >> convertImageSpec
+spec = actionSpec >> getParentDirSpec >> getFileNameSpec >> ensusreParentDirSpec
 
 actionSpec :: Spec
 actionSpec =
@@ -37,9 +38,12 @@ actionSpec =
        it "handles GetRealPath" $
            let p = getRealPath "from"
            in runPureDump p `shouldBe` ("/abs/path/from", ["getRealPath from"])
+       it "handles GetRealPath" $
+           let p = getRealPath "."
+           in runPureDump p `shouldBe` ("/cwd", ["getRealPath ."])
        it "handles GetParentDir" $
            let p = getParentDir "from"
-           in dumpToStrings p `shouldBe` ["getParentDir from"]
+           in runPureDump p `shouldBe` (".", ["getParentDir from"])
        it "handles GetBuildDir" $
            let p = getBuildDir
            in runPureDump p `shouldBe` ("/BUILD", ["getBuildDir"])
@@ -89,11 +93,21 @@ getFileNameSpec =
                expected = takeFileName filepath
            return $ actual == expected
 
-convertImageSpec :: Spec
-convertImageSpec =
-    describe "convertImageTo" $
-    do it "handles ConvertImageTo" $
+ensusreParentDirSpec :: Spec
+ensusreParentDirSpec =
+    describe "ensusreParentDir" $
+    do it "creates the parent directory" $
            property $
-           \removeSource img dest ->
-                let p = convertImageTo removeSource img dest
-                in not $ null $ dumpToStrings p
+           do filepath <- listOf $ elements $ ['a' .. 'k'] ++ ['/', '.', '-']
+              let actual = dumpToStrings $ ensureParentDir filepath
+                  expected = dumpToStrings $ getParentDir filepath >>= mkDir
+              return $ expected `isInfixOf` actual
+       it "returns the filepath with the parent directory canonicalized" $
+           property $
+           do filepath <- listOf $ elements $ ['a' .. 'k'] ++ ['/', '.', '-']
+              let actual = dumpToResult $ ensureParentDir filepath
+                  expected =
+                      dumpToResult $
+                      (</>) <$> (getParentDir filepath >>= getRealPath) <*>
+                      getFileName filepath
+              return $ expected == actual

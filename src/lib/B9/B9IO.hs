@@ -6,12 +6,13 @@
 {-# LANGUAGE DeriveFunctor #-}
 module B9.B9IO where
 
-import B9.Content (Content(..), Environment(..))
-import B9.DiskImages
-import Control.Monad.Free
-import Control.Monad.Trans.Writer.Lazy
-import System.FilePath
-import Text.Printf
+import           B9.Content (Content(..), Environment(..))
+import           B9.DiskImages
+import           Control.Monad.Free
+import           Control.Monad.Trans.Writer.Lazy
+import qualified Data.ByteString as B
+import           System.FilePath
+import           Text.Printf
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
@@ -30,8 +31,6 @@ data Action next
                next
     | GetBuildDir (FilePath -> next)
     | GetBuildId (String -> next)
-    | MkTemp FilePath
-             (FilePath -> next)
     | Copy FilePath
            FilePath
            next
@@ -43,6 +42,8 @@ data Action next
            next
     | MkDir FilePath
             next
+    | MkTemp FilePath
+             (FilePath -> next)
     | GetRealPath FilePath
                   (FilePath -> next)
     | GetParentDir FilePath
@@ -53,10 +54,6 @@ data Action next
                           Content
                           Environment
                           next
-    | ConvertImageTo Bool
-                     ImageSource
-                     ImageDestination
-                     next
     deriving (Functor)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
@@ -72,11 +69,6 @@ getBuildDir = liftF $ GetBuildDir id
 -- unique id.
 getBuildId :: IoProgram String
 getBuildId = liftF $ GetBuildId id
-
--- | Create a unique file path inside the build directory starting with a given
--- prefix and ending with a unique random token.
-mkTemp :: FilePath -> IoProgram FilePath
-mkTemp prefix = liftF $ MkTemp prefix id
 
 -- | Copy a file
 copy :: FilePath -> FilePath -> IoProgram ()
@@ -94,6 +86,18 @@ move from to = liftF $ Move from to ()
 mkDir :: FilePath -> IoProgram ()
 mkDir d = liftF $ MkDir d ()
 
+-- | Create a unique file path inside the build directory starting with a given
+-- prefix and ending with a unique random token.
+mkTemp :: FilePath -> IoProgram FilePath
+mkTemp prefix = liftF $ MkTemp prefix id
+
+-- | Combination of 'mkTemp' and 'mkDir'
+mkTempDir :: FilePath -> IoProgram FilePath
+mkTempDir prefix = do
+    tmp <- mkTemp prefix
+    mkDir tmp
+    return tmp
+
 -- | Return the canonical path of a relative path. NOTE: The file should exist!
 getRealPath :: FilePath -> IoProgram FilePath
 getRealPath d = liftF $ GetRealPath d id
@@ -106,20 +110,15 @@ getParentDir d = liftF $ GetParentDir d id
 getFileName :: FilePath -> IoProgram FilePath
 getFileName f = liftF $ GetFileName f id
 
--- | Combination of 'mkTemp' and 'mkDir'
-mkTempDir :: FilePath -> IoProgram FilePath
-mkTempDir prefix = do
-    tmp <- mkTemp prefix
-    mkDir tmp
-    return tmp
-
--- | Move/Copy/Upload/Convert/Create a disk-image from an 'ImageSource' to an
---   'ImageDestination' If the first parameter is 'True' the source is regarded
---   as destructable and might be destroyed during the operation, e.g. when an
---   image is exported as 'LocalFile' and neither size, nor image type nor
---   filesystem differ, the source image might as well simple be renamed.
-convertImageTo :: Bool -> ImageSource -> ImageDestination -> IoProgram ()
-convertImageTo removeSource src dst = liftF $ ConvertImageTo removeSource src dst ()
+-- | Extract the parent directory from a path, create it if it does not exist
+-- and return the canonical path
+ensureParentDir :: FilePath -> IoProgram FilePath
+ensureParentDir path = do
+    parentDir <- getParentDir path
+    mkDir parentDir
+    parentDirAbs <- getRealPath parentDir
+    file <- getFileName path
+    return (parentDirAbs </> file)
 
 -- | Render a given content to a file. Implementations should overwrite the file
 -- if it exists.
@@ -134,7 +133,7 @@ dumpToResult :: IoProgram a -> a
 dumpToResult = fst . runPureDump
 
 runPureDump :: IoProgram a -> (a, [String])
-runPureDump p = runWriter (run dump p)
+runPureDump p = runWriter $ run dump p
   where
     dump :: Action a -> Writer [String] a
     dump (LogTrace s n) = do
@@ -164,6 +163,9 @@ runPureDump p = runWriter (run dump p)
     dump (GetParentDir f k) = do
         tell [printf "getParentDir %s" f]
         return (k (takeDirectory f))
+    dump (GetRealPath "." k) = do
+        tell [printf "getRealPath ."]
+        return (k ("/cwd"))
     dump (GetRealPath f k) = do
         tell [printf "getRealPath %s" f]
         return (k ("/abs/path/" ++ f))
@@ -172,7 +174,4 @@ runPureDump p = runWriter (run dump p)
         return (k (takeFileName f))
     dump (RenderContentToFile f c e n) = do
         tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
-        return n
-    dump (ConvertImageTo r i d n) = do
-        tell [printf "convertImageTo %s %s %s" (show r) (show i) (show d)]
         return n
