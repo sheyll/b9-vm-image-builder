@@ -55,10 +55,7 @@ data Action next
                           Environment
                           next
     | CreateFileSystem FilePath
-                       FileSystem
-                       FSLabel
-                       Int
-                       SizeUnit
+                       FileSystemCreation
                        [(FilePath, FileSpec)]
                        next
     deriving (Functor)

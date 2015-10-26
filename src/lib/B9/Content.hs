@@ -32,7 +32,7 @@ data FileSpec = FileSpec
     , fileSpecPermissions :: (Word8,Word8, Word8, Word8)
     , fileSpecOwner :: String
     , fileSpecGroup :: String
-    } deriving (Read,Show,Eq,Data,Typeable,Generic)
+    } deriving (Ord,Read,Show,Eq,Data,Typeable,Generic)
 
 -- | A file spec for a file belonging to root:root with permissions 0644.
 fileSpec :: FilePath -> FileSpec
