@@ -129,7 +129,15 @@ ensureParentDir path = do
 renderContentToFile :: FilePath -> Content -> Environment -> IoProgram ()
 renderContentToFile f c e = liftF $ RenderContentToFile f c e ()
 
--- |
+-- | Create a 'FileSystem' inside a file, such that the criteria in a
+-- 'FileSystemCreation' record are matched and all files listed in the third
+-- parameter are copied into the file system.
+createFileSystem :: FilePath
+                 -> FileSystemCreation
+                 -> [(FilePath, FileSpec)]
+                 -> IoProgram ()
+createFileSystem destFile fs content =
+    liftF $ CreateFileSystem destFile fs content ()
 
 -- | Testing support
 dumpToStrings :: IoProgram a -> [String]
@@ -180,4 +188,7 @@ runPureDump p = runWriter $ run dump p
         return (k (takeFileName f))
     dump (RenderContentToFile f c e n) = do
         tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
+        return n
+    dump (CreateFileSystem f c fs n) = do
+        tell [printf "CreateFileSystem %s %s %s" f (show c) (show fs)]
         return n

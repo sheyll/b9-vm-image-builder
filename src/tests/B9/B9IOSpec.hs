@@ -65,8 +65,12 @@ actionSpec =
                     (show testContent)
                     (show testEnv)]
        it "handles CreateFileSystem" $
-           runPureDump (createFileSystem "test" Ext4 "label" 10 MB) `shouldBe`
-           ((), ["createFileSystem test Ext4 label 10 MB"])
+           runPureDump
+               (createFileSystem
+                    "test"
+                    (FileSystemCreation Ext4 "label" 10 MB)
+                    [("test", fileSpec "test")]) `shouldBe`
+           ((), ["createFileSystem test (FileSystemCreation \"label\" Ext4 10 MB)"])
        it "handles CopyFileToImage" $
            runPureDump
                (copyFileToImage

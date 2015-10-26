@@ -150,6 +150,19 @@ instance Hashable ImageType
 instance Binary ImageType
 instance NFData ImageType
 
+
+-- | Descibe how a 'FileSystem' should be created.
+data FileSystemCreation =
+    FileSystemCreation FileSystem
+                       FSLabel
+                       Int
+                       SizeUnit
+    deriving (Read,Show,Generic,Eq,Data,Typeable)
+
+instance Hashable FileSystemCreation
+instance Binary FileSystemCreation
+instance NFData FileSystemCreation
+
 -- | The file systems that b9 can use and convert.
 data FileSystem
     = NoFileSystem

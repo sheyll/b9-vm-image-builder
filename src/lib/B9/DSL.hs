@@ -6,7 +6,7 @@ import B9.Content (Content(..), FileSpec(..),AST(..),YamlObject(..),FileSpec,fil
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), FSLabel(..))
+        SizeUnit(..), Mounted, MountPoint(..), FSLabel(..), FileSystemCreation(..))
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 #if !MIN_VERSION_base(4,8,0)
@@ -229,14 +229,6 @@ data LinuxVmArgs =
                 CPUArch
     deriving (Read,Show,Generic,Eq,Data,Typeable)
 
--- | Descibe how a 'FileSystem' should be created.
-data FileSystemCreation =
-    FileSystemCreation FileSystem
-                       FSLabel
-                       Int
-                       SizeUnit
-    deriving (Read,Show,Generic,Eq,Data,Typeable)
-
 -- * Inline documentation/comment support
 
 -- | A handle representing the documentation gathered throughout a 'Program'
@@ -295,16 +287,18 @@ addUserData hnd ast = add hnd SCloudInitUserData ast
 
 writeCloudInitDir :: (Handle 'CloudInit) -> FilePath -> Program ()
 writeCloudInitDir h dst = do
-    (userDataH,metaDataH) <- export h ()
+    (metaDataH,userDataH) <- export h ()
     dirH <- create SLocalDirectory ()
     addContent dirH (fileSpec "meta-data") metaDataH
     addContent dirH (fileSpec "user-data") userDataH
     void $ export dirH (Just dst)
 
+writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program ()
+writeCloudInit h fs dst = void $ writeCloudInit' h fs dst
 
-writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program Image
-writeCloudInit h fs dst = do
-    (userDataH, metaDataH) <- export h ()
+writeCloudInit' :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program Image
+writeCloudInit' h fs dst = do
+    (metaDataH,userDataH) <- export h ()
     fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
     addContent fsH (fileSpec "meta-data") metaDataH
     addContent fsH (fileSpec "user-data") userDataH

@@ -13,7 +13,7 @@ import B9.DSL
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..))
+        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Text.Printf (printf)
 #if !MIN_VERSION_base(4,8,0)
@@ -50,6 +50,7 @@ data DirCtx = DirCtx
     , _dirFiles :: Map.Map FileSpec (Handle 'FileContent)
     , _dirExports :: [Maybe FilePath]
     } deriving (Show)
+
 instance Default DirCtx where
     def = DirCtx "/tmp" def def
 
@@ -59,6 +60,7 @@ data FsCtx = FsCtx
     , _fsFiles :: Map.Map FileSpec (Handle 'FileContent)
     , _fsExports :: [FilePath]
     } deriving (Show)
+
 instance Default FsCtx where
     def = FsCtx (FileSystemCreation Ext4 "/" 10 MB) def def
 
@@ -71,7 +73,12 @@ data CiCtx = CiCtx
     } deriving (Show)
 
 instance Default CiCtx where
-    def = CiCtx (ASTObj []) (ASTObj []) (singletonHandle SFileContent) (singletonHandle SFileContent)
+    def =
+        CiCtx
+            (ASTObj [])
+            (ASTObj [])
+            (singletonHandle SFileContent)
+            (singletonHandle SFileContent)
 
 makeLenses ''Ctx
 makeLenses ''CiCtx
@@ -83,11 +90,11 @@ compile :: Program a -> IoProgram a
 compile p = evalStateT compileSt def
   where
     compileSt = do
-      result <- interpret p
-      generateAllCloudInitContent
-      generateAllDirectories
-      generateAllFileSystems
-      return result
+        result <- interpret p
+        generateAllCloudInitContent
+        generateAllDirectories
+        generateAllFileSystems
+        return result
 
 instance Interpreter IoCompiler where
     -- Create
@@ -97,10 +104,14 @@ instance Interpreter IoCompiler where
         uh <- interpret $ createContent (FromString "#cloud-config\n")
         hnd@(Handle _ iid) <-
             uniqueHandle SCloudInit (iidPrefix ++ "-" ++ buildId)
-        let ciCtx = def & metaData .~ (ASTObj [("instance-id", ASTString iid)])
-                        & userData .~ (ASTObj [])
-                        & metaDataH .~ mh
-                        & userDataH .~ uh
+        let ciCtx =
+                def & metaData .~ (ASTObj [("instance-id", ASTString iid)]) &
+                userData .~
+                (ASTObj []) &
+                metaDataH .~
+                mh &
+                userDataH .~
+                uh
         ci . at hnd ?= ciCtx
         return hnd
     runCreate SFileContent c = do
@@ -119,15 +130,17 @@ instance Interpreter IoCompiler where
     runCreate sa _src = return $ singletonHandle sa
     -- Update
     runUpdate hnd@(Handle SFileContent _) c = do
-      fileContent . at hnd . traverse %= \cOld -> Concat [cOld, c]
-      return ()
+        fileContent . at hnd . traverse %=
+            \cOld ->
+                 Concat [cOld, c]
+        return ()
     runUpdate _hnd _src = return ()
     -- Add
     runAdd _ SDocumentation str = lift $ logTrace str
     runAdd _ STemplateVariable (k,v) = vars . at k ?= v
-    runAdd hnd@(Handle SLocalDirectory _) SFileContent (fSpec, cHnd) =
+    runAdd hnd@(Handle SLocalDirectory _) SFileContent (fSpec,cHnd) =
         localDirs . at hnd . traverse . dirFiles . at fSpec ?= cHnd
-    runAdd hnd@(Handle SFileSystemImage _) SFileContent (fSpec, cHnd) =
+    runAdd hnd@(Handle SFileSystemImage _) SFileContent (fSpec,cHnd) =
         fileSystems . at hnd . traverse . fsFiles . at fSpec ?= cHnd
     runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast =
         ci . at hnd . traverse . metaData %= (`astMerge` ast)
@@ -146,15 +159,16 @@ instance Interpreter IoCompiler where
         return (mh, uh)
     runExport hnd@(Handle SLocalDirectory _) mDestDir = do
         localDirs . at hnd . traverse . dirExports <>= [mDestDir]
-        maybe (use (localDirs . at hnd . traverse . dirTempDir))
-          return
-          mDestDir
+        maybe
+            (use (localDirs . at hnd . traverse . dirTempDir))
+            return
+            mDestDir
     runExport hnd@(Handle SFileSystemImage _) destFile = do
         fileSystems . at hnd . traverse . fsExports <>= [destFile]
-        (FileSystemCreation fsType _ _ _) <- use fileSystems . at hnd . to fromJust . fsCreation
+        (FileSystemCreation fsType _ _ _) <-
+            use (fileSystems . at hnd . to fromJust . fsCreation)
         return (Image destFile Raw fsType)
-    runExport _hnd _dest =
-        fail "Not Yet Implemented"
+    runExport _hnd _dest = fail "Not Yet Implemented"
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.
 toUserDataWriteFilesAST :: FileSpec -> Content -> AST Content YamlObject
@@ -183,18 +197,18 @@ wrapCloudConfigAST a = Concat [FromString "#cloud-config\n", RenderYaml a]
 -- artifacts into the corresponding file contents.
 generateAllCloudInitContent :: IoCompiler ()
 generateAllCloudInitContent = do
-  ciContexts <- use (ci . to Map.toList)
-  mapM_ updateContentWithCI ciContexts
+    ciContexts <- use (ci . to Map.toList)
+    mapM_ updateContentWithCI ciContexts
   where
-    updateContentWithCI (_ciHnd, ciCtx) = do
-       let
-          uH = ciCtx ^. userDataH
-          uC = ciCtx ^. userData
-          mH = ciCtx ^. metaDataH
-          mC = ciCtx ^. metaData
-       interpret $ do
-         appendContent mH (RenderYaml mC)
-         appendContent uH (RenderYaml uC)
+    updateContentWithCI (_ciHnd,ciCtx) = do
+        let uH = ciCtx ^. userDataH
+            uC = ciCtx ^. userData
+            mH = ciCtx ^. metaDataH
+            mC = ciCtx ^. metaData
+        interpret $
+            do appendContent mH (RenderYaml mC)
+               appendContent uH (RenderYaml uC)
+        use fileContent
 
 -- | Generate 'SLocalDirectory' exports
 generateAllDirectories :: IoCompiler ()
@@ -202,7 +216,7 @@ generateAllDirectories = do
     dirs <- uses localDirs Map.toList
     mapM_ generateDir dirs
   where
-    generateDir (_h, c) =
+    generateDir (_h,c) =
         let fcs = Map.toList (c ^. dirFiles)
             tmpDir = c ^. dirTempDir
         in generateFileContentsToDir tmpDir fcs
@@ -211,9 +225,9 @@ generateAllDirectories = do
 generateAllFileSystems :: IoCompiler ()
 generateAllFileSystems = do
     fss <- uses fileSystems Map.toList
-    mapM generateFS fss
+    mapM_ generateFS fss
   where
-    generateFS (_h, c) = do
+    generateFS (_h,c) = do
         let fcs = Map.toList (c ^. fsFiles)
             fsc = c ^. fsCreation
             exports = c ^. fsExports
@@ -221,7 +235,10 @@ generateAllFileSystems = do
         files <- generateFileContentsToDir tmpDir fcs
         tmpFsImage <- lift $ mkTemp "file-system-image"
         lift $ createFileSystem tmpFsImage fsc files
-        forM_ exports (lift . move tmpFsImage)
+        forM_ exports (lift . copyToDest tmpFsImage)
+    copyToDest src dest = do
+        dest' <- ensureParentDir dest
+        copy src dest'
 
 -- | Generate a list iof file contents to a temp directory and return a list of
 -- absolute file paths of all files added/created. These paths are in temporary
@@ -229,14 +246,14 @@ generateAllFileSystems = do
 -- program terminates.
 generateFileContentsToDir :: FilePath -> [(FileSpec, Handle 'FileContent)] -> IoCompiler [(FilePath, FileSpec)]
 generateFileContentsToDir tmpDir fcs = do
-  env <- uses vars (Environment . Map.toList)
-  mapM (gen env) fcs
+    env <- uses vars (Environment . Map.toList)
+    mapM (gen env) fcs
   where
-     gen env (fspec@(FileSpec fp _ _ _), cHnd) = do
-       fp' <- lift $ ensureParentDir (tmpDir </> fp)
-       c <- use (fileContent . at cHnd . to fromJust)
-       lift $ renderContentToFile fp' c env
-       return (fp', fspec)
+    gen env (fspec@(FileSpec fp _ _ _),cHnd) = do
+        fp' <- lift $ ensureParentDir (tmpDir </> fp)
+        c <- use (fileContent . at cHnd . to fromJust)
+        lift $ renderContentToFile fp' c env
+        return (fp', fspec)
 
 -- * Utilities
 
