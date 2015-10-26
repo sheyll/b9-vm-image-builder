@@ -98,7 +98,7 @@ library
                    , bytestring
                    , conduit
                    , conduit-extra
-                   , containers >= 0.5.6.2
+                   , containers
                    , data-default
                    , directory
                    , filepath
@@ -117,7 +117,7 @@ library
                    , tagged
                    , template
                    , text
-                   , time >= 1.5.0 && < 2
+                   , time
                    , transformers
                    , unordered-containers
                    , vector
@@ -189,7 +189,7 @@ test-suite spec
                    , b9
                    , base >= 4.7 && < 5
                    , bytestring
-                   , containers >= 0.5.6.2
+                   , containers
                    , data-default
                    , hspec
                    , hspec-expectations
