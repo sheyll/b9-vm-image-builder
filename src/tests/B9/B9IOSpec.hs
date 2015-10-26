@@ -10,7 +10,11 @@ import Test.QuickCheck
 import Text.Printf
 
 spec :: Spec
-spec = actionSpec >> getParentDirSpec >> getFileNameSpec >> ensusreParentDirSpec
+spec = do
+    actionSpec
+    getParentDirSpec
+    getFileNameSpec
+    ensusreParentDirSpec
 
 actionSpec :: Spec
 actionSpec =
@@ -70,14 +74,9 @@ actionSpec =
                     "test"
                     (FileSystemCreation Ext4 "label" 10 MB)
                     [("test", fileSpec "test")]) `shouldBe`
-           ((), ["createFileSystem test (FileSystemCreation \"label\" Ext4 10 MB)"])
-       it "handles CopyFileToImage" $
-           runPureDump
-               (copyFileToImage
-                    "file-local"
-                    (fileSpec "file-fs")
-                    (Image "img" Vmdk Ext4)) `shouldBe`
-           ((), ["copyFileToImage file-local file-fs (Image \"img\" Vmdk Ext4)"])
+           ( ()
+           , [ "createFileSystem test FileSystemCreation Ext4 \"label\" 10 MB " ++
+               show [("test", fileSpec "test")]])
 
 getParentDirSpec :: Spec
 getParentDirSpec =

@@ -190,5 +190,5 @@ runPureDump p = runWriter $ run dump p
         tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
         return n
     dump (CreateFileSystem f c fs n) = do
-        tell [printf "CreateFileSystem %s %s %s" f (show c) (show fs)]
+        tell [printf "createFileSystem %s %s %s" f (show c) (show fs)]
         return n
