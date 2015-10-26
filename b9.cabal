@@ -191,6 +191,7 @@ test-suite spec
                    , bytestring
                    , containers
                    , data-default
+                   , filepath
                    , hspec
                    , hspec-expectations
                    , semigroups
