@@ -23,6 +23,7 @@ import           Text.Printf
 -- | Build target for disk images; the destination, format and size of the image
 -- to generate, as well as how to create or obtain the image before a
 -- 'B9.Vm.VmScript' is executed with the image mounted at a 'MountPoint'.
+-- TODO refactor this into the DSL
 data ImageTarget =
     ImageTarget ImageDestination
                 ImageSource
@@ -44,6 +45,7 @@ instance Binary MountPoint
 instance NFData MountPoint
 
 -- | The destination of an image.
+-- TODO refactor this into the DSL
 data ImageDestination
     =
       -- | Create the image and some meta data so that other builds can use them
@@ -75,6 +77,7 @@ instance Binary ImageDestination
 instance NFData ImageDestination
 
 -- | Specification of how the image to build is obtained.
+-- TODO refactor this into the DSL
 data ImageSource
     =
       -- | Create an empty image file having a file system label (first

@@ -14,8 +14,8 @@ spec = do
                dumpToStrings (compile (doc "test")) `shouldBe`
                ["logTrace test"]
     emptyCloudInitIsoExamples
-    cloudInitWithContentExamples
     exportCloudInitExamples
+    cloudInitWithContentExamples
 
 -- * Cloud init examples
 
@@ -36,7 +36,7 @@ emptyCloudInitIsoExamples =
            let (Handle _ iid,cmds) =
                    runPureDump (compile emptyCloudInitIso)
            in cmds `shouldContain` ["mkTemp CloudInit/" ++ iid]
-       it "creates a meta-data file" $
+       it "creates a meta-data file with the instance id and #cloud-config as first line" $
            let (Handle _ iid,cmds) =
                    runPureDump (compile emptyCloudInitIso)
            in cmds `shouldContain`
@@ -45,22 +45,16 @@ emptyCloudInitIsoExamples =
               , "renderContentToFile " ++
                 "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/meta-data " ++
                 show mdContent ++ " Environment []"]
-       it "creates a cloud-init ISO image" $
-           let cmds = dumpToStrings (compile emptyCloudInitIso)
-               tmpDir =
-                   "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX"
-               src =
-                   show
-                       (ImageFromDir
-                            tmpDir
-                            "cidata"
-                            ISO9660
-                            Raw
-                            (ImageSize 10 MB))
-               dst = show (LocalFile (Image "test.iso" Raw ISO9660) KeepSize)
-               canMove = True
+       it "creates a user-data file containing #cloud-config as first line" $
+           let (Handle _ iid,cmds) =
+                   runPureDump (compile emptyCloudInitIso)
            in cmds `shouldContain`
-              [printf "convertImageTo %s %s %s" (show canMove) src dst]
+              [ "mkTemp CloudInit/" ++ iid
+              , "mkDir " ++ "/BUILD/CloudInit" </> iid ++ "-XXXX"
+              , "renderContentToFile " ++
+                "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/user-data " ++
+                show (FromString "#cloud-config\n") ++ " Environment []"]
+
   where
     mdContent :: Content
     mdContent =
@@ -72,40 +66,62 @@ emptyCloudInitIsoExamples =
                          , ASTString "test-instance-id-build-id-1234-0")])]
 
 
-emptyCloudInitIso :: Program (Handle 'CloudInit)
-emptyCloudInitIso = do
-    i <- newCloudInit "test-instance-id"
-    writeCloudInitIso i "test.iso"
-    return i
-
+    emptyCloudInitIso :: Program (Handle 'CloudInit)
+    emptyCloudInitIso = do
+        i <- newCloudInit "test-instance-id"
+        writeCloudInitIso i "test.iso"
+        return i
 
 exportCloudInitExamples :: Spec
 exportCloudInitExamples =
     describe "compile exportCloudInitToAllFormats" $
     do let cmds = dumpToStrings (compile exportCloudInitToAllFormats)
            tmpDir = "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX"
-       it "creates a cloud-init ISO image" $
-           let src =
-                   show
-                       (ImageFromDir
-                            tmpDir
-                            "cidata"
-                            ISO9660
-                            Raw
-                            (ImageSize 10 MB))
-               dst = show (LocalFile (Image "test.iso" Raw ISO9660) KeepSize)
-           in cmds `shouldContain`
-              [printf "convertImageTo False %s %s" src dst]
-       it "creates cloud-init directories" $
+       it "exports a cloud-init ISO image" $
            cmds `shouldContain`
-           [printf "copyDirectory %s %s" tmpDir "test.d"]
+           (dumptToStrings
+                (do t' <- mkTemp "test.iso"
+                    t <- ensureParentDir t'
+                    createFileSystem
+                        t
+                        ISO9660
+                        "cidata"
+                        10
+                        MB
+                        [ ( "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/meta-data"
+                          , fileSpec "meta-data")
+                        , ( "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/user-data"
+                          , fileSpec "user-data")]
+                    out <- ensureParentDir "test.iso"
+                    move t out))
+       it "exports cloud-init directories" $
+           cmds `shouldContain`
+           (dumptToStrings
+                (do p <- ensureParentDir "/export/test.d"
+                    copyDir tmpDir "cidata" p))
+       it "creates cloud-init vfat images" $
+           cmds `shouldContain`
+           (dumptToStrings
+                (do t' <- mkTemp "test.vfat"
+                    t <- ensureParentDir t'
+                    createFileSystem
+                        t
+                        VFAT
+                        "cidata"
+                        2
+                        MB
+                        [ ( "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/meta-data"
+                          , fileSpec "meta-data")
+                        , ( "/BUILD/CloudInit/test-instance-id-build-id-1234-0-XXXX/user-data"
+                          , fileSpec "user-data")]
+                    out <- ensureParentDir "rel-export/test.vfat"
+                    move t out))
   where
     exportCloudInitToAllFormats = do
         i <- newCloudInit "test-instance-id"
-        writeCloudInitDir i "test.d"
-        writeCloudInitVFat i "test.vfat"
+        writeCloudInitDir i "/export/test.d"
+        writeCloudInitVFat i "rel-export/test.vfat"
         writeCloudInitIso i "test.iso"
-        writeCloudInitIso i "test-1s.iso"
 
 cloudInitWithContentExamples :: Spec
 cloudInitWithContentExamples =

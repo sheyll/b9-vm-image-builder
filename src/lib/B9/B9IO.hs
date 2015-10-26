@@ -6,7 +6,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module B9.B9IO where
 
-import           B9.Content (Content(..), Environment(..))
+import           B9.Content
 import           B9.DiskImages
 import           Control.Monad.Free
 import           Control.Monad.Trans.Writer.Lazy
@@ -54,6 +54,13 @@ data Action next
                           Content
                           Environment
                           next
+    | CreateFileSystem FilePath
+                       FileSystem
+                       FSLabel
+                       Int
+                       SizeUnit
+                       [(FilePath, FileSpec)]
+                       next
     deriving (Functor)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
@@ -124,6 +131,8 @@ ensureParentDir path = do
 -- if it exists.
 renderContentToFile :: FilePath -> Content -> Environment -> IoProgram ()
 renderContentToFile f c e = liftF $ RenderContentToFile f c e ()
+
+-- |
 
 -- | Testing support
 dumpToStrings :: IoProgram a -> [String]

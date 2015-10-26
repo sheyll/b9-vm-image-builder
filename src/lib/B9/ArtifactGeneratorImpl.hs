@@ -340,52 +340,55 @@ createTarget iid instanceDir (VmImages imageTargets vmScript) = do
 createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
   where
     create_ CI_DIR = do
-      let ciDir = outPath
-      ensureDir (ciDir ++ "/")
-      dbgL (printf "creating directory '%s'" ciDir)
-      files <- getDirectoryFiles instanceDir
-      traceL (printf "copying files: %s" (show files))
-      liftIO
-        (mapM_
-           (\(f, t) -> do
-              ensureDir t
-              copyFile f t)
-           (((instanceDir </>) &&& (ciDir </>)) <$> files))
-      infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir))
-      return (CloudInitTarget CI_DIR ciDir)
-
+        let ciDir = outPath
+        ensureDir (ciDir ++ "/")
+        dbgL (printf "creating directory '%s'" ciDir)
+        files <- getDirectoryFiles instanceDir
+        traceL (printf "copying files: %s" (show files))
+        liftIO
+            (mapM_
+                 (\(f,t) ->
+                       do ensureDir t
+                          copyFile f t)
+                 (((instanceDir </>) &&& (ciDir </>)) <$> files))
+        infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir))
+        return (CloudInitTarget CI_DIR ciDir)
     create_ CI_ISO = do
-      buildDir <- getBuildDir
-      let isoFile = outPath <.> "iso"
-          tmpFile = buildDir </> takeFileName isoFile
-      ensureDir tmpFile
-      dbgL (printf "creating cloud init iso temp image '%s', destination file: '%s" tmpFile isoFile)
-      cmd
-        (printf
-           "genisoimage -output '%s' -volid cidata -rock -d '%s' 2>&1"
-           tmpFile
-           instanceDir)
-      dbgL (printf "moving iso image '%s' to '%s'" tmpFile isoFile)
-      ensureDir isoFile
-      liftIO (copyFile tmpFile isoFile)
-      infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile))
-      return (CloudInitTarget CI_ISO isoFile)
-
+        buildDir <- getBuildDir
+        let isoFile = outPath <.> "iso"
+            tmpFile = buildDir </> takeFileName isoFile
+        ensureDir tmpFile
+        dbgL
+            (printf
+                 "creating cloud init iso temp image '%s', destination file: '%s"
+                 tmpFile
+                 isoFile)
+        cmd
+            (printf
+                 "genisoimage -output '%s' -volid cidata -rock -d '%s' 2>&1"
+                 tmpFile
+                 instanceDir)
+        dbgL (printf "moving iso image '%s' to '%s'" tmpFile isoFile)
+        ensureDir isoFile
+        liftIO (copyFile tmpFile isoFile)
+        infoL (printf "CREATED CI_ISO IMAGE: '%s'" (takeFileName isoFile))
+        return (CloudInitTarget CI_ISO isoFile)
     create_ CI_VFAT = do
-      buildDir <- getBuildDir
-      let vfatFile = outPath <.> "vfat"
-          tmpFile = buildDir </> takeFileName vfatFile
-      ensureDir tmpFile
-      files <- map (instanceDir </>) <$> getDirectoryFiles instanceDir
-      dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
-      traceL (printf "adding '%s'" (show files))
-      cmd (printf "truncate --size 2M '%s'" tmpFile)
-      cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
-      cmd
-        (unwords (printf "mcopy -oi '%s' " tmpFile : (printf "'%s'" <$> files))
-         ++ " ::")
-      dbgL (printf "moving vfat image '%s' to '%s'" tmpFile vfatFile)
-      ensureDir vfatFile
-      liftIO (copyFile tmpFile vfatFile)
-      infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile))
-      return (CloudInitTarget CI_ISO vfatFile)
+        buildDir <- getBuildDir
+        let vfatFile = outPath <.> "vfat"
+            tmpFile = buildDir </> takeFileName vfatFile
+        ensureDir tmpFile
+        files <- map (instanceDir </>) <$> getDirectoryFiles instanceDir
+        dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
+        traceL (printf "adding '%s'" (show files))
+        cmd (printf "truncate --size 2M '%s'" tmpFile)
+        cmd (printf "mkfs.vfat -n cidata '%s' 2>&1" tmpFile)
+        cmd
+            (unwords
+                 (printf "mcopy -oi '%s' " tmpFile : (printf "'%s'" <$> files)) ++
+             " ::")
+        dbgL (printf "moving vfat image '%s' to '%s'" tmpFile vfatFile)
+        ensureDir vfatFile
+        liftIO (copyFile tmpFile vfatFile)
+        infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile))
+        return (CloudInitTarget CI_ISO vfatFile)

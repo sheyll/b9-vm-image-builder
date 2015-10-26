@@ -36,16 +36,31 @@ data Ctx = Ctx
     , _vars :: Map.Map String String
     , _ci :: Map.Map (Handle 'CloudInit) CiCtx
     , _fileContent :: Map.Map (Handle 'FileContent) Content
+    , _dirs :: Map.Map (Handle 'LocalDirectory) DirCtx
+    , _fs :: Map.Map (Handle 'FileSystemImage) FsCtx
     } deriving (Show)
 
 instance Default Ctx where
-    def = Ctx 0 def def def
+    def = Ctx 0 def def def def def
+
+-- | Context of a 'SLocalDirectory'
+data DirCtx = DirCtx
+    { _dirExports :: [FilePath]
+    , _dirPath :: FilePath
+    } deriving (Show)
+
+-- | Context of a 'SFileSystemImage'
+data FsCtx = FsCtx
+    { _fsExports :: [FilePath]
+    , _fsCreation :: FileSystemCreation
+    } deriving (Show)
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
     { _metaData :: (AST Content YamlObject)
     , _userData :: (AST Content YamlObject)
-    , _ciExports :: [Either FilePath ImageDestination]
+    , _metaDataH :: Handle 'FileContent
+    , _userDataH :: Handle 'FileContent
     } deriving (Show)
 
 instance Default CiCtx where
@@ -53,6 +68,8 @@ instance Default CiCtx where
 
 makeLenses ''Ctx
 makeLenses ''CiCtx
+makeLenses ''DirCtx
+makeLenses ''FsCtx
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
@@ -67,9 +84,14 @@ instance Interpreter IoCompiler where
     -- Create
     runCreate SCloudInit iidPrefix = do
         buildId <- lift $ getBuildId
+        mh <- interpret $ createContent (FromString "#cloud-config\n")
+        uh <- interpret $ createContent (FromString "#cloud-config\n")
         hnd@(Handle _ iid) <-
             uniqueHandle SCloudInit (iidPrefix ++ "-" ++ buildId)
-        let ciCtx = set metaData (ASTObj [("instance-id", ASTString iid)]) def
+        let ciCtx = def & metaData .~ (ASTObj [("instance-id", ASTString iid)])
+                        & userData .~ (ASTObj [])
+                        & metaDataH .~ mh
+                        & userDataH .~ uh
         ci . at hnd ?= ciCtx
         return hnd
     runCreate SFileContent c = do
@@ -78,6 +100,9 @@ instance Interpreter IoCompiler where
         return hnd
     runCreate sa _src = return $ singletonHandle sa
     -- Update
+    runUpdate hnd@(Handle SFileContent _) c =
+      fileContent . at hnd . traverse %= \cOld -> Concat [cOld, c]
+      return ()
     runUpdate _hnd _src = return ()
     -- Add
     runAdd _ SDocumentation str = lift $ logTrace str
@@ -139,17 +164,14 @@ generateCI env h c = do
                uf = tmpDir </> "user-data"
                uc = wrapCloudConfigAST (c ^. userData)
            renderContentToFile mf mc env
-           unless ((c ^. userData) == ASTObj []) $
-               renderContentToFile uf uc env
+           renderContentToFile uf uc env
            mapM_
                (generateCIExport (numberOfExports == 1) tmpDir)
                (c ^. ciExports)
            return ()
   where
-    generateCIExport False tmpDir (Left outDir) =
+    generateCIExport _resuseTmpDir tmpDir (Left outDir) = do
         copyDir tmpDir outDir
-    generateCIExport True tmpDir (Left outDir) =
-        fail "NYI: renameDirectory tmpDir outDir"
     generateCIExport resuseTmpDir tmpDir (Right dest) =
         convertImageTo resuseTmpDir src dest
       where

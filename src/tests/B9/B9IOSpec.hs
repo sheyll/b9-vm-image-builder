@@ -1,5 +1,6 @@
 module B9.B9IOSpec (spec) where
 
+import B9.DiskImages
 import B9.B9IO
 import B9.Content
 import Data.List
@@ -63,6 +64,16 @@ actionSpec =
                     testFile
                     (show testContent)
                     (show testEnv)]
+       it "handles CreateFileSystem" $
+           runPureDump (createFileSystem "test" Ext4 "label" 10 MB) `shouldBe`
+           ((), ["createFileSystem test Ext4 label 10 MB"])
+       it "handles CopyFileToImage" $
+           runPureDump
+               (copyFileToImage
+                    "file-local"
+                    (fileSpec "file-fs")
+                    (Image "img" Vmdk Ext4)) `shouldBe`
+           ((), ["copyFileToImage file-local file-fs (Image \"img\" Vmdk Ext4)"])
 
 getParentDirSpec :: Spec
 getParentDirSpec =

@@ -35,9 +35,7 @@ import           Control.Applicative
 #endif
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-
 import           B9.Content.StringTemplate
-
 import           Test.QuickCheck
 import           B9.QCUtil
 

@@ -2,13 +2,11 @@
 module B9.DSL where
 
 import B9.B9Config (ExecEnvType(..))
-import B9.Content (Content(..), FileSpec(..))
-import B9.Content.AST (AST(..))
-import B9.Content.YamlObject (YamlObject(..))
+import B9.Content (Content(..), FileSpec(..),AST(..),YamlObject(..),FileSpec,fileSpec)
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..))
+        SizeUnit(..), Mounted, MountPoint(..), FSLabel(..))
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 #if !MIN_VERSION_base(4,8,0)
@@ -27,6 +25,7 @@ import GHC.Generics (Generic)
 import Text.Printf (printf)
 import Test.QuickCheck
 import B9.QCUtil
+import System.FilePath
 
 -- ---------------------------------------------------------
 
@@ -41,14 +40,14 @@ data BuildStep next where
             (CanAdd env a, Show (AddSpec a)) =>
             Handle env -> SArtifact a -> AddSpec a -> next -> BuildStep next
         Export ::
-            (Show (ExportSpec a)) =>
-            Handle a -> ExportSpec a -> next -> BuildStep next
+            (Show (ExportSpec a), Show (ExportResult a)) =>
+            Handle a -> ExportSpec a -> (ExportResult a -> next) -> BuildStep next
 
 instance Functor BuildStep where
     fmap f (Create sa src k) = Create sa src (f . k)
     fmap f (Update hnd upd next) = Update hnd upd (f next)
     fmap f (Add hndEnv sa importSpec next) = Add hndEnv sa importSpec (f next)
-    fmap f (Export hnd out next) = Export hnd out (f next)
+    fmap f (Export hnd out k) = Export hnd out (f . k)
 
 type Program a = Free BuildStep a
 
@@ -79,38 +78,9 @@ add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec ()
 
 -- | A build step the exports an object referenced by a handle a to an output.
 export
-    :: (Show (ExportSpec a))
-    => Handle a -> ExportSpec a -> Program ()
-export hnd out = liftF $ Export hnd out ()
-
--- ---------------------------------------------------------
-
--- | A handle representing the environment holding all template variable
--- bindings.
-variableBindings :: Handle 'VariableBindings
-variableBindings = singletonHandle SVariableBindings
-
--- ---------------------------------------------------------
-
--- | A handle representing the documentation gathered throughout a 'Program'
-documentation :: Handle 'Documentation
-documentation = singletonHandle SDocumentation
-
--- ---------------------------------------------------------
-
--- | Instruct an environment to mount a host directory
-data HostDirMnt
-    = AddMountHostDirRW FilePath
-    | AddMountHostDirRO FilePath
-    deriving (Read,Show,Eq,Generic,Data,Typeable)
-
--- ---------------------------------------------------------
-
-data LinuxVmArgs =
-    LinuxVmArgs String
-                ExecEnvType
-                CPUArch
-    deriving (Read,Show,Generic,Eq,Data,Typeable)
+    :: (Show (ExportSpec a), Show (ExportResult a))
+    => Handle a -> ExportSpec a -> Program (ExportResult a)
+export hnd out = liftF $ Export hnd out id
 
 -- ---------------------------------------------------------
 
@@ -127,6 +97,12 @@ data Artifact
     | ExecutableScript
     | FileContent
     | VariableBindings
+    | LocalDirectory
+    | FileSystemImage
+    --    TODO refactor more and more code from e.g. 'DiskImageBuilder' into the
+    --    DSL or B9IO. E.g. when exporting cloud-init compile to an /intermediate/
+    --    'Program' where file content is added to an ISOImage Artifact, and later
+    --    exported.
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
 
@@ -143,20 +119,24 @@ data SArtifact k where
         SExecutableScript :: SArtifact 'ExecutableScript
         SFileContent :: SArtifact 'FileContent
         SVariableBindings :: SArtifact 'VariableBindings
+        SLocalDirectory :: SArtifact 'LocalDirectory
+        SFileSystemImage :: SArtifact 'FileSystemImage
 
 instance Show (SArtifact k) where
-   show SVmImage = "SVmImage"
-   show SCloudInit = "SCloudInit"
-   show SCloudInitUserData = "SCloudInitUserData"
-   show SCloudInitMetaData = "SCloudInitMetaData"
-   show SDocumentation = "SDocumentation"
-   show SLinuxVm = "SLinuxVm"
-   show STemplateVariable = "STemplateVariable"
-   show SMountedHostDir = "SMountedHostDir"
-   show SMountedVmImage = "SMountedVmImage"
-   show SExecutableScript = "SExecutableScript"
-   show SFileContent = "SFileContent"
-   show SVariableBindings = "SVariableBindings"
+    show SVmImage = "SVmImage"
+    show SCloudInit = "SCloudInit"
+    show SCloudInitUserData = "SCloudInitUserData"
+    show SCloudInitMetaData = "SCloudInitMetaData"
+    show SDocumentation = "SDocumentation"
+    show SLinuxVm = "SLinuxVm"
+    show STemplateVariable = "STemplateVariable"
+    show SMountedHostDir = "SMountedHostDir"
+    show SMountedVmImage = "SMountedVmImage"
+    show SExecutableScript = "SExecutableScript"
+    show SFileContent = "SFileContent"
+    show SVariableBindings = "SVariableBindings"
+    show SLocalDirectory = "SLocalDirectory"
+    show SFileSystemImage = "SFileSystemImage"
 
 instance Eq (SArtifact k) where
     x == y = show x == show y
@@ -187,9 +167,12 @@ type family CreateSpec (a :: Artifact) :: * where
         CreateSpec 'CloudInit = String
         CreateSpec 'LinuxVm = LinuxVmArgs
         CreateSpec 'FileContent = Content
+        CreateSpec 'LocalDirectory = ()
+        CreateSpec 'FileSystemImage = FileSystemCreation
 
 type family UpdateSpec (a :: Artifact) :: * where
         UpdateSpec 'VmImage = ImageResize
+        UpdateSpec 'FileContent = Content
 
 type family AddSpec (a :: Artifact) :: * where
         AddSpec 'Documentation = String
@@ -209,22 +192,56 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
         CanAddP 'LinuxVm 'MountedHostDir = 'True
         CanAddP 'LinuxVm 'MountedVmImage = 'True
         CanAddP 'LinuxVm 'ExecutableScript = 'True
+        CanAddP 'FileContent 'FileContent = 'True
         CanAddP 'CloudInit 'FileContent = 'True
         CanAddP 'CloudInit 'ExecutableScript = 'True
         CanAddP 'CloudInit 'CloudInitMetaData = 'True
         CanAddP 'CloudInit 'CloudInitUserData = 'True
+        CanAddP 'LocalDirectory 'FileContent = 'True
+        CanAddP 'FileSystemImage 'FileContent = 'True
         CanAddP 'VariableBindings 'TemplateVariable = 'True
         CanAddP 'Documentation 'Documentation = 'True
         CanAddP env a = 'False
 
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'VmImage = ImageDestination
-        ExportSpec 'CloudInit = Either FilePath ImageDestination
+        ExportSpec 'CloudInit = ()
+        ExportSpec 'LocalDirectory = Maybe FilePath
+        ExportSpec 'FileSystemImage = FilePath
 
--- ---------------------------------------------------------
+type family ExportResult (a :: Artifact) :: * where
+        ExportResult 'CloudInit =
+                                (Handle 'FileContent, Handle 'FileContent)
+        ExportResult 'LocalDirectory = FilePath
+        ExportResult 'FileSystemImage = Image
+        ExportResult a = ()
 
--- * For documentation of the actual build/deployment itself either embed a
---   string or a file, template parameters e.g. ${xxx} can be also used.
+-- | Instruct an environment to mount a host directory
+data HostDirMnt
+    = AddMountHostDirRW FilePath
+    | AddMountHostDirRO FilePath
+    deriving (Read,Show,Eq,Generic,Data,Typeable)
+
+-- | Decribe how a linux container is supposed to be started.
+data LinuxVmArgs =
+    LinuxVmArgs String
+                ExecEnvType
+                CPUArch
+    deriving (Read,Show,Generic,Eq,Data,Typeable)
+
+-- | Descibe how a 'FileSystem' should be created.
+data FileSystemCreation =
+    FileSystemCreation FileSystem
+                       FSLabel
+                       Int
+                       SizeUnit
+    deriving (Read,Show,Generic,Eq,Data,Typeable)
+
+-- * Inline documentation/comment support
+
+-- | A handle representing the documentation gathered throughout a 'Program'
+documentation :: Handle 'Documentation
+documentation = singletonHandle SDocumentation
 
 doc :: String -> Program ()
 doc str = add documentation SDocumentation str
@@ -234,6 +251,11 @@ m # str = do
   doc str
   m
 
+-- | A handle representing the environment holding all template variable
+-- bindings.
+variableBindings :: Handle 'VariableBindings
+variableBindings = singletonHandle SVariableBindings
+
 ($=) :: String -> String -> Program ()
 var $= val = add variableBindings STemplateVariable (var, val)
 
@@ -242,15 +264,19 @@ var $= val = add variableBindings STemplateVariable (var, val)
 
 addFile ::(CanAdd e 'FileContent)
     => Handle e -> FileSpec -> Content -> Program ()
-addFile hnd f c = createContent c >>= writeContent hnd f
+addFile hnd f c = createContent c >>= addContent hnd f
 
 createContent :: Content -> Program (Handle 'FileContent)
 createContent = create SFileContent
 
-writeContent
+appendContent
+    :: Handle 'FileContent -> Content -> Program ()
+appendContent hnd c = update hnd c
+
+addContent
     :: (CanAdd e 'FileContent)
     => Handle e -> FileSpec -> Handle 'FileContent -> Program ()
-writeContent hnd f c = add hnd SFileContent (f, c)
+addContent hnd f c = add hnd SFileContent (f, c)
 
 -- * cloud init
 
@@ -267,16 +293,22 @@ addUserData
     => Handle e -> AST Content YamlObject -> Program ()
 addUserData hnd ast = add hnd SCloudInitUserData ast
 
-writeCloudInitIso :: (Handle 'CloudInit) -> FilePath -> Program ()
-writeCloudInitIso h dst =
-    export h $ Right (LocalFile (Image dst Raw ISO9660) KeepSize)
-
-writeCloudInitVFat :: (Handle 'CloudInit) -> FilePath -> Program ()
-writeCloudInitVFat h dst =
-    export h $ Right (LocalFile (Image dst Raw VFAT) KeepSize)
-
 writeCloudInitDir :: (Handle 'CloudInit) -> FilePath -> Program ()
-writeCloudInitDir h dst = export h $ Left dst
+writeCloudInitDir h dst = do
+    (userDataH,metaDataH) <- export h ()
+    dirH <- create SLocalDirectory ()
+    addContent dirH (fileSpec "meta-data") metaDataH
+    addContent dirH (fileSpec "user-data") userDataH
+    void $ export dirH (Just dst)
+
+
+writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program Image
+writeCloudInit h fs dst = do
+    (userDataH, metaDataH) <- export h ()
+    fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
+    addContent fsH (fileSpec "meta-data") metaDataH
+    addContent fsH (fileSpec "user-data") userDataH
+    export fsH dst
 
 
 -- * Image import
@@ -429,9 +461,9 @@ interpret = foldFree runInterpreter
     runInterpreter (Add hnde sa addSpec next) = do
         runAdd  hnde sa addSpec
         return next
-    runInterpreter (Export hnd out next) = do
-        runExport hnd out
-        return next
+    runInterpreter (Export hnd out k) = do
+        res <- runExport hnd out
+        return (k res)
 
 -- | Monads that interpret build steps
 #if MIN_VERSION_base(4,8,0)
@@ -449,8 +481,8 @@ class (Monad f, Functor f) => Interpreter f where
       :: (Show (AddSpec a))
       => Handle env -> SArtifact a -> AddSpec a -> f ()
   runExport
-      :: (Show (ExportSpec a))
-      => Handle a -> ExportSpec a -> f ()
+      :: (Show (ExportSpec a), Show (ExportResult a))
+      => Handle a -> ExportSpec a -> f (ExportResult a)
 
 -- | An interpreter that just prints out the Program
 instance Interpreter IO where
@@ -469,8 +501,21 @@ instance Interpreter IO where
             (show src)
             (show hnde)
         return ()
+    runExport hnd@(Handle SCloudInit _) dest = do
+        printf "export %s to %s\n" (show hnd) (show dest)
+        interpret $ do
+          m <- createContent $ FromString "meta-data"
+          u <- createContent $ FromString "user-data"
+          return (m,u)
+    runExport hnd@(Handle SLocalDirectory _) dest = do
+        printf "export %s to %s\n" (show hnd) (show dest)
+        return "local-directory-path"
+    runExport hnd@(Handle SFileSystemImage _) dest = do
+        printf "export %s to %s\n" (show hnd) (show dest)
+        return (Image "local-fs-img" QCow2 Ext4)
     runExport hnd dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
+        return undefined
 
 
 -- * QuickCheck instances
