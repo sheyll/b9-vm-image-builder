@@ -40,9 +40,11 @@ cloudInitIsoImageExamples =
                (compile $
                 do hnd1 <- cloudInitIsoImage
                    hnd2 <- cloudInitIsoImage
-                   return (hnd1 == hnd2)) `shouldBe` False
+                   return (hnd1 == hnd2)) `shouldBe`
+           False
        it "generates meta-data into the file system image temp dir" $
-           let (Handle _ iid,actualCmds) = runPureDump (compile cloudInitIsoImage)
+           let (Handle _ iid,actualCmds) =
+                   runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
                    tmpDir <- mkTempDir "file-system-content"
@@ -50,7 +52,10 @@ cloudInitIsoImageExamples =
                        expectedContent = minimalMetaData iid
                        expectedEnv = Environment []
                    absMetaDataFile <- ensureParentDir metaDataFile
-                   renderContentToFile absMetaDataFile expectedContent expectedEnv
+                   renderContentToFile
+                       absMetaDataFile
+                       expectedContent
+                       expectedEnv
            in actualCmds `shouldContain` expectedCmds
        it "generates user-data into the file system image temp dir" $
            let actualCmds = dumpToStrings (compile cloudInitIsoImage)
@@ -58,15 +63,20 @@ cloudInitIsoImageExamples =
                expectedProg = do
                    let expectedContent = minimalUserData
                        expectedEnv = Environment []
-                       absUserDataFile = "/abs/path//BUILD/file-system-content-XXXX/user-data"
-                   renderContentToFile absUserDataFile expectedContent expectedEnv
+                       absUserDataFile =
+                           "/abs/path//BUILD/file-system-content-XXXX/user-data"
+                   renderContentToFile
+                       absUserDataFile
+                       expectedContent
+                       expectedEnv
            in actualCmds `shouldContain` expectedCmds
        it "generates an ISO image" $
            let actualCmds = dumpToStrings (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   let files = [(tmpDir </> "meta-data", fileSpec "meta-data")
-                               ,(tmpDir </> "user-data", fileSpec "user-data")]
+                   let files =
+                           [ (tmpDir </> "meta-data", fileSpec "meta-data")
+                           , (tmpDir </> "user-data", fileSpec "user-data")]
                        fsc = FileSystemCreation ISO9660 "cidata" 2 MB
                        tmpDir = "/abs/path//BUILD/file-system-content-XXXX"
                        tmpImg = "/BUILD/file-system-image-XXXX"
@@ -75,7 +85,6 @@ cloudInitIsoImageExamples =
                    dstImg' <- ensureParentDir dstImg
                    copy tmpImg dstImg'
            in actualCmds `shouldContain` expectedCmds
-
   where
     cloudInitIsoImage :: Program (Handle 'CloudInit)
     cloudInitIsoImage = do
@@ -96,8 +105,9 @@ cloudInitMultiVfatImageExamples =
            in actualCmds `shouldContain` expectedCmds
   where
     expectedProg dstImg = do
-        let files = [(tmpDir </> "meta-data", fileSpec "meta-data")
-                    ,(tmpDir </> "user-data", fileSpec "user-data")]
+        let files =
+                [ (tmpDir </> "meta-data", fileSpec "meta-data")
+                , (tmpDir </> "user-data", fileSpec "user-data")]
             fsc = FileSystemCreation VFAT "cidata" 2 MB
             tmpDir = "/abs/path//BUILD/file-system-content-XXXX"
             tmpImg = "/BUILD/file-system-image-XXXX"
@@ -114,22 +124,28 @@ cloudInitMultiVfatImageExamples =
 cloudInitDirExamples :: Spec
 cloudInitDirExamples =
     describe "compile cloudInitDir" $
-    do let (Handle _ iid, actualCmds) = runPureDump $ compile cloudInitDir
-       it "generates a temporary directory" $ do
-         let createTempDirCmds = dumpToStrings $ do
-               mkTempDir "local-dir"
-         actualCmds `shouldContain` createTempDirCmds
-       it "renders user-data and meta-data into the temporary directory" $ do
-         let renderMetaData = dumpToStrings $ do
-               void $ B9.B9IO.getBuildId
-               t <- mkTempDir "local-dir"
-               let m = t </> "meta-data"
-               m' <- ensureParentDir m
-               renderContentToFile m' (minimalMetaData iid) (Environment [])
-               let u = t </> "user-data"
-               u' <- ensureParentDir u
-               renderContentToFile u' minimalUserData (Environment [])
-         actualCmds `shouldContain` renderMetaData
+    do let (Handle _ iid,actualCmds) = runPureDump $ compile cloudInitDir
+       it "generates a temporary directory" $
+           do let createTempDirCmds = dumpToStrings $ do mkTempDir "local-dir"
+              actualCmds `shouldContain` createTempDirCmds
+       it "renders user-data and meta-data into the temporary directory" $
+           do let renderMetaData =
+                      dumpToStrings $
+                      do void $ B9.B9IO.getBuildId
+                         t <- mkTempDir "local-dir"
+                         let m = t </> "meta-data"
+                         m' <- ensureParentDir m
+                         renderContentToFile
+                             m'
+                             (minimalMetaData iid)
+                             (Environment [])
+                         let u = t </> "user-data"
+                         u' <- ensureParentDir u
+                         renderContentToFile
+                             u'
+                             minimalUserData
+                             (Environment [])
+              actualCmds `shouldContain` renderMetaData
   where
     cloudInitDir :: Program (Handle 'CloudInit)
     cloudInitDir = do

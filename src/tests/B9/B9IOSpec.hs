@@ -101,11 +101,11 @@ getFileNameSpec :: Spec
 getFileNameSpec =
     describe "getFileName" $
     do it "has the same semantics as System.FilePath.takeFileName" $
-         property $ do
-           filepath <- listOf $ elements $ ['a' .. 'k'] ++ ['/', '.', '-']
-           let actual = dumpToResult $ getFileName filepath
-               expected = takeFileName filepath
-           return $ actual == expected
+           property $
+           do filepath <- listOf $ elements $ ['a' .. 'k'] ++ ['/', '.', '-']
+              let actual = dumpToResult $ getFileName filepath
+                  expected = takeFileName filepath
+              return $ actual == expected
 
 ensusreParentDirSpec :: Spec
 ensusreParentDirSpec =
