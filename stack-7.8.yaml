@@ -1,5 +1,8 @@
 flags: {}
 packages:
 - '.'
-extra-deps: []
+extra-deps:
+- ConfigFile-1.1.4
+- boxes-0.1.4
+- template-0.2.0.10
 resolver: lts-2.22
