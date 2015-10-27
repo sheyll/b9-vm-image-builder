@@ -185,11 +185,6 @@ toUserDataRunCmdAST scr = ASTObj [("runcmd", ASTArr [ASTString cmd])]
   where
     cmd = toBashOneLiner scr
 
--- | Wrap either the meta-data or user-data 'AST' into a 'Content' that contains
---   the obligatory first line with the string @#cloud-config@.
-wrapCloudConfigAST :: AST Content YamlObject -> Content
-wrapCloudConfigAST a = Concat [FromString "#cloud-config\n", RenderYaml a]
-
 -- | Merge all the content accumulated in the user-data and meta-data of CI
 -- artifacts into the corresponding file contents.
 generateAllCloudInitContent :: IoCompiler ()

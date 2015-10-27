@@ -44,6 +44,8 @@ executeIoProg p = run go p
         liftIO $ copyFile s d
         return n
     go (CopyDir s d n) = do
+        exists <- liftIO $ doesDirectoryExist d
+        when exists (liftIO $ removeDirectoryRecursive d)
         B9Monad.cmdRaw "cp" ["-r", s, d]
         return n
     go (MoveFile s d n) = do
