@@ -10,7 +10,7 @@ spec :: Spec
 spec =
     describe "defaultMain" $
     do it "logs 'LogTrace'" $
-           do res <- defaultMain generateCloudInitDir
+           do res <- runProgramWithConfigAndCliArgs generateCloudInitDir
               res `shouldBe` True
 
 

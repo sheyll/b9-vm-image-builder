@@ -2,7 +2,10 @@
 {-|
 Highest-level build functions and and B9-re-exports.
 -}
-module B9.Builder (buildArtifacts, runProgram, runIoProgram, defaultMain, configure, module X) where
+module B9.Builder
+       (buildArtifacts, runProgram, runProgramWithConfigAndCliArgs,
+        runIoProgram, defaultMain, configure, module X)
+       where
 import B9.ArtifactGenerator as X
 import B9.ArtifactGeneratorImpl as X
 import B9.B9Config as X
@@ -34,8 +37,8 @@ import qualified B9.LibVirtLXC as LibVirtLXC
 defaultMain :: Neu.Program () -> IO ()
 defaultMain = void . runProgramWithConfigAndCliArgs
 
--- | Execute a 'Program' in the 'B9' monad; parse all b9 command line options
--- and read the b9 configuration file.
+-- | Execute a 'Program' using all b9 command line options
+-- and settings from the b9 configuration file.
 runProgramWithConfigAndCliArgs :: Neu.Program () -> IO Bool
 runProgramWithConfigAndCliArgs p = do
     (opts,vars) <- getGlobalOptsFromCLI
@@ -44,23 +47,33 @@ runProgramWithConfigAndCliArgs p = do
     cp <- configure cfgFile cfgCli
     runProgram (p >> return True) vars cp cfgCli
 
--- | Merge 'existingConfig' with the configuration from the main b9 config
+-- | Merge 'existingConfig' with the configuration from the b9 config
 -- file. If the file does not exists, a new config file with the given
 -- configuration will be written. The return value is a parser for the config
 -- file. Returning the raw config file parser allows modules unkown to
 -- 'B9.B9Config' to add their own values to the shared config file.
-configure :: MonadIO m => Maybe SystemPath -> B9Config -> m ConfigParser
+configure
+    :: MonadIO m
+    => Maybe SystemPath -> B9Config -> m ConfigParser
 configure b9ConfigPath existingConfig = do
-  writeInitialB9Config b9ConfigPath existingConfig LibVirtLXC.setDefaultConfig
-  readB9Config b9ConfigPath
+    writeInitialB9Config
+        b9ConfigPath
+        existingConfig
+        LibVirtLXC.setDefaultConfig
+    readB9Config b9ConfigPath
 
+-- | Execute a 'Program'.
 runProgram :: Neu.Program Bool
            -> Environment
            -> ConfigParser
            -> B9Config
            -> IO Bool
-runProgram dsl e cfgParser cliCfg =
-    runIoProgram (Neu.traceEveryAction (Neu.compile dsl)) cfgParser cliCfg
+runProgram dsl (Environment vars) cfgParser cliCfg =
+    runIoProgram (Neu.traceEveryAction (Neu.compile dsl')) cfgParser cliCfg
+  where
+    dsl' = do
+        mapM_ (uncurry (Neu.$=)) vars
+        dsl
 
 buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
