@@ -206,7 +206,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'VmImage = ImageDestination
         ExportSpec 'CloudInit = ()
-        ExportSpec 'LocalDirectory = Maybe FilePath
+        ExportSpec 'LocalDirectory = FilePath
         ExportSpec 'FileSystemImage = FilePath
 
 type family ExportResult (a :: Artifact) :: * where
@@ -270,6 +270,16 @@ addContent
     => Handle e -> FileSpec -> Handle 'FileContent -> Program ()
 addContent hnd f c = add hnd SFileContent (f, c)
 
+-- * directories
+
+-- | Create a temp directory
+newDirectory :: Program (Handle 'LocalDirectory)
+newDirectory = create SLocalDirectory ()
+
+-- | Render the directory to the actual destination (which must not exist)
+exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program FilePath
+exportDir dirH dest = export dirH dest
+
 -- * cloud init
 
 newCloudInit :: String -> Program (Handle 'CloudInit)
@@ -288,10 +298,10 @@ addUserData hnd ast = add hnd SCloudInitUserData ast
 writeCloudInitDir :: (Handle 'CloudInit) -> FilePath -> Program ()
 writeCloudInitDir h dst = do
     (metaDataH,userDataH) <- export h ()
-    dirH <- create SLocalDirectory ()
+    dirH <- newDirectory
     addContent dirH (fileSpec "meta-data") metaDataH
     addContent dirH (fileSpec "user-data") userDataH
-    void $ export dirH (Just dst)
+    void $ exportDir dirH dst
 
 writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program ()
 writeCloudInit h fs dst = void $ writeCloudInit' h fs dst

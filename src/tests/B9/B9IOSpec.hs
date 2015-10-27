@@ -32,6 +32,9 @@ actionSpec =
        it "handles Copy" $
            let p = copy "from" "to"
            in dumpToStrings p `shouldBe` ["copy from to"]
+       it "handles CopyDir" $
+           let p = copyDir "from" "to"
+           in dumpToStrings p `shouldBe` ["copyDir from to"]
        it "handles MoveFile" $
            let p = moveFile "from" "to"
            in dumpToStrings p `shouldBe` ["moveFile from to"]

@@ -13,10 +13,30 @@ spec = do
         do it "traces documentation" $
                dumpToStrings (compile (doc "test")) `shouldBe`
                ["logTrace test"]
+    localDirExamples
     cloudInitIsoImageExamples
     cloudInitMultiVfatImageExamples
     cloudInitDirExamples
     cloudInitWithContentExamples
+
+-- * 'SLocalDirectory' examples
+
+localDirExamples :: Spec
+localDirExamples =
+    describe "compile exportDir" $
+    do it "create temporary intermediate directory" $
+         let expectedCmds = dumpToStrings $ mkTempDir "local-dir"
+         in actualCmds `shouldContain` expectedCmds
+       it "copies the temporary intermediate directory to all exports" $
+         let exportsCmds = dumpToStrings $ do
+               src' <- getRealPath "/BUILD/local-dir-XXXX"
+               dest' <- ensureParentDir "/tmp/test.d"
+               copyDir src' dest'
+         in actualCmds `shouldContain` exportsCmds
+  where
+    actualCmds = dumpToStrings $ compile $ do
+        d <- newDirectory
+        exportDir d "/tmp/test.d"
 
 -- * Cloud init examples
 
@@ -146,6 +166,12 @@ cloudInitDirExamples =
                              minimalUserData
                              (Environment [])
               actualCmds `shouldContain` renderMetaData
+       it "copies the temporary directory to the destination directories" $
+           do let copyToOutputDir =
+                      dumpToStrings $
+                      do destDir <- ensureParentDir "test.d"
+                         copyDir "/abs/path//BUILD/local-dir-XXXX" destDir
+              actualCmds `shouldContain` copyToOutputDir
   where
     cloudInitDir :: Program (Handle 'CloudInit)
     cloudInitDir = do

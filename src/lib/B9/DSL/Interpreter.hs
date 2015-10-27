@@ -48,7 +48,7 @@ instance Default Ctx where
 data DirCtx = DirCtx
     { _dirTempDir :: FilePath
     , _dirFiles :: Map.Map FileSpec (Handle 'FileContent)
-    , _dirExports :: [Maybe FilePath]
+    , _dirExports :: [FilePath]
     } deriving (Show)
 
 instance Default DirCtx where
@@ -157,12 +157,9 @@ instance Interpreter IoCompiler where
         mh <- use (ci . at hnd . to fromJust . metaDataH)
         uh <- use (ci . at hnd . to fromJust . userDataH)
         return (mh, uh)
-    runExport hnd@(Handle SLocalDirectory _) mDestDir = do
-        localDirs . at hnd . traverse . dirExports <>= [mDestDir]
-        maybe
-            (use (localDirs . at hnd . traverse . dirTempDir))
-            return
-            mDestDir
+    runExport hnd@(Handle SLocalDirectory _) destDir = do
+        localDirs . at hnd . traverse . dirExports <>= [destDir]
+        return destDir
     runExport hnd@(Handle SFileSystemImage _) destFile = do
         fileSystems . at hnd . traverse . fsExports <>= [destFile]
         (FileSystemCreation fsType _ _ _) <-
@@ -216,10 +213,16 @@ generateAllDirectories = do
     dirs <- uses localDirs Map.toList
     mapM_ generateDir dirs
   where
-    generateDir (_h,c) =
+    generateDir (_h,c) = do
         let fcs = Map.toList (c ^. dirFiles)
             tmpDir = c ^. dirTempDir
-        in generateFileContentsToDir tmpDir fcs
+            exports = c ^. dirExports
+        void $ generateFileContentsToDir tmpDir fcs
+        forM_ exports (lift . copyToDest tmpDir)
+    copyToDest src dest = do
+        src' <- getRealPath src
+        dest' <- ensureParentDir dest
+        copyDir src' dest'
 
 -- | Generate 'SFileSystemImage' exports
 generateAllFileSystems :: IoCompiler ()
@@ -244,7 +247,10 @@ generateAllFileSystems = do
 -- absolute file paths of all files added/created. These paths are in temporary
 -- directories and are designed to be removed as soon as possible, e.g. when the
 -- program terminates.
-generateFileContentsToDir :: FilePath -> [(FileSpec, Handle 'FileContent)] -> IoCompiler [(FilePath, FileSpec)]
+generateFileContentsToDir
+    :: FilePath
+    -> [(FileSpec, Handle 'FileContent)]
+    -> IoCompiler [(FilePath, FileSpec)]
 generateFileContentsToDir tmpDir fcs = do
     env <- uses vars (Environment . Map.toList)
     mapM (gen env) fcs
