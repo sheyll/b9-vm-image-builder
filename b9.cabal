@@ -61,6 +61,7 @@ library
                    , B9.B9Config
                    , B9.B9Monad
                    , B9.B9IO
+                   , B9.B9IOImpl
                    , B9.Builder
                    , B9.ConfigUtils
                    , B9.ExecEnv
@@ -184,6 +185,7 @@ test-suite spec
                    , B9.DiskImagesSpec
                    , B9.DSL.InterpreterSpec
                    , B9.B9IOSpec
+                   , B9.B9IOImplSpec
   build-depends:     QuickCheck
                    , aeson
                    , b9
