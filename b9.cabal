@@ -151,8 +151,8 @@ executable b9c
   -- other-extensions:
   build-depends:     b9
                    , base >= 4.7 && < 5
-                   , directory
                    , bytestring
+                   , directory
                    , optparse-applicative
   hs-source-dirs:    src/cli
   default-language:  Haskell2010
@@ -195,9 +195,11 @@ test-suite spec
                    , bytestring
                    , containers
                    , data-default
+                   , directory
                    , filepath
                    , hspec
                    , hspec-expectations
+                   , lens
                    , semigroups
                    , text
                    , unordered-containers

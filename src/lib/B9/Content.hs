@@ -1,7 +1,9 @@
 {-| Types expressing some form of text content stored in files. The content can
 itself be structured, i.e. in Yaml, JSON or Erlang Term format, or unstructured
 raw strings or even binaries. -}
-module B9.Content (module X, FileSpec(..), fileSpec, Content(..))
+module B9.Content
+       (module X, FileSpec(..), fileSpec, Content(..), fileSpecPath,
+        fileSpecPermissions, fileSpecOwner, fileSpecGroup)
        where
 
 import           Control.Parallel.Strategies
@@ -23,20 +25,23 @@ import qualified Data.ByteString.Char8 as B
 import           B9.QCUtil
 import           Test.QuickCheck
 import           Control.Monad.IO.Class
+import           Control.Lens.TH
 
 -- | This contains most of the information elements necessary to specify a file
 -- in some file system. This is used to specify where e.g. cloud-init or the
 -- 'LibVirtLXC' builder should create a file.
 data FileSpec = FileSpec
-    { fileSpecPath :: FilePath
-    , fileSpecPermissions :: (Word8,Word8, Word8, Word8)
-    , fileSpecOwner :: String
-    , fileSpecGroup :: String
+    { _fileSpecPath :: FilePath
+    , _fileSpecPermissions :: (Word8,Word8, Word8, Word8)
+    , _fileSpecOwner :: String
+    , _fileSpecGroup :: String
     } deriving (Ord,Read,Show,Eq,Data,Typeable,Generic)
 
 -- | A file spec for a file belonging to root:root with permissions 0644.
 fileSpec :: FilePath -> FileSpec
 fileSpec f = FileSpec f (0,6,4,4) "root" "root"
+
+makeLenses ''FileSpec
 
 instance Hashable FileSpec
 instance Binary FileSpec

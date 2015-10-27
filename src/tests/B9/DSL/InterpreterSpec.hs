@@ -1,11 +1,13 @@
 module B9.DSL.InterpreterSpec (spec) where
-import Test.Hspec
-
 import B9 hiding (CloudInit)
 import B9.B9IO
 import B9.DSL
 import B9.DSL.Interpreter
 import B9.ShellScript
+import Control.Lens hiding (from)
+import Data.Function
+import Test.Hspec
+import Test.QuickCheck (property)
 
 spec :: Spec
 spec = do
@@ -13,11 +15,109 @@ spec = do
         do it "traces documentation" $
                dumpToStrings (compile (doc "test")) `shouldBe`
                ["logTrace test"]
+    candySpecs
     localDirExamples
     cloudInitIsoImageExamples
     cloudInitMultiVfatImageExamples
     cloudInitDirExamples
     cloudInitWithContentExamples
+
+-- * Specs for /candy/ functions.
+candySpecs :: Spec
+candySpecs = do
+    describe "addFile" $
+        it "strips the directory and  does not replace templates" $
+        do let actual = do
+                   d <- newDirectory
+                   addFile d "/some/path/test.txt"
+               expected = do
+                   d <- newDirectory
+                   addFileContent
+                       d
+                       (fileSpec "test.txt")
+                       (FromTextFile
+                            (Source NoConversion "/some/path/test.txt"))
+           actual `hasSameEffectAs` expected
+    describe "addExe" $
+        it "is equal to addFile, but changes permissions to 0755" $
+        do let actual = do
+                   d <- newDirectory
+                   addExe d "/some/path/test.txt"
+               expected = do
+                   d <- newDirectory
+                   addFileContent
+                       d
+                       (fileSpec "test.txt" & fileSpecPermissions .~
+                        (0, 7, 5, 5))
+                       (FromTextFile
+                            (Source NoConversion "/some/path/test.txt"))
+           actual `hasSameEffectAs` expected
+    describe "addFileP" $
+        it "is equal to addFile, but changes permissions to the given value" $
+        property $
+        \perm ->
+             do let actual = do
+                        d <- newDirectory
+                        addFileP d "/some/path/test.txt" perm
+                    expected = do
+                        d <- newDirectory
+                        addFileContent
+                            d
+                            (fileSpec "test.txt" & fileSpecPermissions .~
+                             perm)
+                            (FromTextFile
+                                 (Source NoConversion "/some/path/test.txt"))
+                actual `hasSameEffect` expected
+    describe "addTemplate" $
+        it "strips the directory and replaces template variables" $
+        do let actual = do
+                   d <- newDirectory
+                   addTemplate d "/some/path/test.txt"
+               expected = do
+                   d <- newDirectory
+                   addFileContent
+                       d
+                       (fileSpec "test.txt")
+                       (FromTextFile
+                            (Source ExpandVariables "/some/path/test.txt"))
+           actual `hasSameEffectAs` expected
+    describe "addTemplateExe" $
+        it "is equal to addTemplate, but changes permissions to 0755" $
+        do let actual = do
+                   d <- newDirectory
+                   addTemplateExe d "/some/path/test.txt"
+               expected = do
+                   d <- newDirectory
+                   addFileContent
+                       d
+                       (fileSpec "test.txt" & fileSpecPermissions .~
+                        (0, 7, 5, 5))
+                       (FromTextFile
+                            (Source ExpandVariables "/some/path/test.txt"))
+           actual `hasSameEffectAs` expected
+    describe "addTemplateP" $
+        it "is equal to addTemplate, but changes permissions to the given value" $
+        property $
+        \perm ->
+             do let actual = do
+                        d <- newDirectory
+                        addTemplateP d "/some/path/test.txt" perm
+                    expected = do
+                        d <- newDirectory
+                        addFileContent
+                            d
+                            (fileSpec "test.txt" & fileSpecPermissions .~
+                             perm)
+                            (FromTextFile
+                                 (Source ExpandVariables "/some/path/test.txt"))
+                actual `hasSameEffect` expected
+  where
+    hasSameEffectAs :: Program a -> Program a -> IO ()
+    hasSameEffectAs = shouldContain `on` (dumpToStrings . compile)
+    hasSameEffect
+        :: Eq a
+        => Program a -> Program a -> Bool
+    hasSameEffect = isInfixOf `on` (dumpToStrings . compile)
 
 -- * 'SLocalDirectory' examples
 
@@ -222,7 +322,7 @@ cloudInitWithContentExamples =
         writeCloudInit i ISO9660 "test.iso"
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifdown eth0"])])
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifup eth0"])])
-        addFile i (FileSpec "file1.txt" (0,6,4,2) "user1" "group1") (FromString "file1")
+        addFileContent i (FileSpec "file1.txt" (0,6,4,2) "user1" "group1") (FromString "file1")
         sh i "ls -la /tmp"
         return i
 
@@ -273,12 +373,12 @@ dslExample1 = do
     addUserData c (ASTString "test")
     e <- lxc "container-id"
     mountDirRW e "tmp" "/mnt/HOST_TMP"
-    addFile
+    addFileContent
         e
         (fileSpec "/etc/httpd.conf")
         (FromTextFile (Source ExpandVariables "httpd.conf.in"))
     sh e "ls -la"
-    addFile
+    addFileContent
         c
         (fileSpec "/etc/httpd.conf")
         (FromTextFile (Source ExpandVariables "httpd.conf.in"))

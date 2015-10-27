@@ -2,7 +2,10 @@
 module B9.DSL where
 
 import B9.B9Config (ExecEnvType(..))
-import B9.Content (Content(..), FileSpec(..),AST(..),YamlObject(..),FileSpec,fileSpec)
+import B9.Content
+       (SourceFile(..), Content(..), FileSpec(..), AST(..),
+        YamlObject(..), FileSpec, fileSpec, fileSpecPermissions,
+        SourceFileConversion(..))
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
@@ -26,6 +29,7 @@ import Text.Printf (printf)
 import Test.QuickCheck
 import B9.QCUtil
 import System.FilePath
+import Control.Lens hiding (from)
 
 -- ---------------------------------------------------------
 
@@ -251,18 +255,76 @@ variableBindings = singletonHandle SVariableBindings
 ($=) :: String -> String -> Program ()
 var $= val = add variableBindings STemplateVariable (var, val)
 
--- * Content generation and static file inclusion (for both cloud-init and
--- vm-images)
+-- * Content generation and static file inclusion (e.g. for directories, file system images, cloud-init and
+-- lxc environments)
 
-addFile ::(CanAdd e 'FileContent)
+-- | Add an existing file to an artifact.
+-- Strip the directories from the path, e.g. @/etc/blub.conf@ will be
+-- @blob.conf@ in the artifact. The file will be world readable and not
+-- executable. The source file must not be a directory.
+addFile
+    :: (CanAddP e1 'FileContent ~ 'True)
+    => Handle e1 -> FilePath -> Program ()
+addFile d f = addFileP d f (0, 6, 4, 4)
+
+-- | Same as 'addFile' but set the destination file permissions to @0755@
+-- (executable for all).
+addExe
+    :: (CanAddP e1 'FileContent ~ 'True)
+    => Handle e1 -> FilePath -> Program ()
+addExe d f = addFileP d f (0, 7, 5, 5)
+
+-- | Same as 'addFile' but with an extra output file permission parameter.
+addFileP
+    :: (CanAddP e1 'FileContent ~ 'True)
+    => Handle e1 -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
+addFileP d f p = do
+    let f' = takeFileName f
+    addFileContent
+        d
+        (fileSpec f' & fileSpecPermissions .~ p)
+        (FromTextFile (Source NoConversion f))
+
+-- | Generate a file to an artifact from a local file template.
+-- All occurences of @${var}@ will be replaced by the contents of @var@, which
+-- is the last values assigned to @var@ using @"var" $= "123"@. The directory
+-- part is stripped from the output file name, e.g. @template/blah/foo.cfg@ will
+-- be @foo.cfg@ in the artifact. The file will be world readable and not
+-- executable. The source file must not be a directory.
+addTemplate
+    :: (CanAddP e1 'FileContent ~ 'True)
+    => Handle e1 -> FilePath -> Program ()
+addTemplate d f = do
+  addTemplateP d f (0,6,4,4)
+
+-- | Same as 'addTemplate' but set the destination file permissions to @0755@
+-- (executable for all).
+addTemplateExe
+    :: (CanAddP e1 'FileContent ~ 'True)
+    => Handle e1 -> FilePath -> Program ()
+addTemplateExe d f = do
+    addTemplateP d f (0, 6, 4, 4)
+
+-- | Same as 'addTemplate' but with an extra output file permission parameter.
+addTemplateP
+    :: (CanAddP e1 'FileContent ~ 'True)
+    => Handle e1 -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
+addTemplateP d f p = do
+    let f' = takeFileName f
+    addFileContent
+        d
+        (fileSpec f' & fileSpecPermissions .~ p)
+        (FromTextFile (Source ExpandVariables f))
+
+addFileContent
+    :: (CanAdd e 'FileContent)
     => Handle e -> FileSpec -> Content -> Program ()
-addFile hnd f c = createContent c >>= addContent hnd f
+addFileContent hnd f c = createContent c >>= addContent hnd f
 
 createContent :: Content -> Program (Handle 'FileContent)
 createContent = create SFileContent
 
-appendContent
-    :: Handle 'FileContent -> Content -> Program ()
+appendContent :: Handle 'FileContent -> Content -> Program ()
 appendContent hnd c = update hnd c
 
 addContent
@@ -306,7 +368,10 @@ writeCloudInitDir h dst = do
 writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program ()
 writeCloudInit h fs dst = void $ writeCloudInit' h fs dst
 
-writeCloudInit' :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program Image
+writeCloudInit' :: (Handle 'CloudInit)
+                -> FileSystem
+                -> FilePath
+                -> Program Image
 writeCloudInit' h fs dst = do
     (metaDataH,userDataH) <- export h ()
     fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
@@ -321,18 +386,19 @@ imageSource :: ImageSource -> Program (Handle 'VmImage)
 imageSource src = create SVmImage src
 
 createImage :: String
-           -> FileSystem
-           -> ImageType
-           -> ImageSize
-           -> Program (Handle 'VmImage)
+            -> FileSystem
+            -> ImageType
+            -> ImageSize
+            -> Program (Handle 'VmImage)
 createImage s fs it is = imageSource $ EmptyImage s fs it is
 
-importImage :: FilePath
-             -> ImageType
-             -> FileSystem
-             -> Partition
-             -> ImageResize
-             -> Program (Handle 'VmImage)
+importImage
+    :: FilePath
+    -> ImageType
+    -> FileSystem
+    -> Partition
+    -> ImageResize
+    -> Program (Handle 'VmImage)
 importImage f it fs pt is = imageSource $ SourceImage (Image f it fs) pt is
 
 from :: String -> Program (Handle 'VmImage)
@@ -349,28 +415,23 @@ resizeToMinimum hnd = update hnd ShrinkToMinimum
 
 -- * Image export
 
-exportImageDestination :: Handle 'VmImage
-                       -> ImageDestination
-                       -> Program ()
+exportImageDestination :: Handle 'VmImage -> ImageDestination -> Program ()
 exportImageDestination hnd dst = export hnd dst
 
 share :: Handle 'VmImage -> String -> Program ()
 share hnd name = exportImageDestination hnd $ Share name QCow2 KeepSize
 
-toLiveImg :: Handle 'VmImage
-             -> String
-             -> FilePath
-             -> ImageResize
-             -> Program ()
+toLiveImg :: Handle 'VmImage -> String -> FilePath -> ImageResize -> Program ()
 toLiveImg hnd imgName outDir rs =
     exportImageDestination hnd $ LiveInstallerImage imgName outDir rs
 
-writeImg :: Handle 'VmImage
-            -> FilePath
-            -> ImageType
-            -> FileSystem
-            -> ImageResize
-            -> Program ()
+writeImg
+    :: Handle 'VmImage
+    -> FilePath
+    -> ImageType
+    -> FileSystem
+    -> ImageResize
+    -> Program ()
 writeImg hnd name it fs rs =
     exportImageDestination hnd $ LocalFile (Image name it fs) rs
 
@@ -387,32 +448,27 @@ lxc32 name = boot name LibVirtLXC I386
 
 -- * Mounting
 
-mountDir :: Handle 'LinuxVm
-         -> FilePath
-         -> FilePath
-         -> Program ()
+mountDir :: Handle 'LinuxVm -> FilePath -> FilePath -> Program ()
 mountDir e hostDir dest =
     add e SMountedHostDir (AddMountHostDirRO hostDir, MountPoint dest)
 
-mountDirRW :: Handle 'LinuxVm
-           -> FilePath
-           -> FilePath
-           -> Program ()
+mountDirRW :: Handle 'LinuxVm -> FilePath -> FilePath -> Program ()
 mountDirRW e hostDir dest =
     add e SMountedHostDir (AddMountHostDirRW hostDir, MountPoint dest)
 
-mount :: Handle 'LinuxVm
-      -> Handle 'VmImage
-      -> FilePath
-      -> Program ()
+mount :: Handle 'LinuxVm -> Handle 'VmImage -> FilePath -> Program ()
 mount e imgHnd dest = add e SMountedVmImage (imgHnd, MountPoint dest)
 
 -- * Script Execution (inside a container)
 
-runCommand :: (CanAdd a 'ExecutableScript) => Handle a -> Script -> Program ()
+runCommand
+    :: (CanAdd a 'ExecutableScript)
+    => Handle a -> Script -> Program ()
 runCommand hnd s = add hnd SExecutableScript s
 
-sh :: (CanAdd a 'ExecutableScript) => Handle a -> String -> Program ()
+sh
+    :: (CanAdd a 'ExecutableScript)
+    => Handle a -> String -> Program ()
 sh e s = runCommand e (Run s [])
 
 -- * Some utility vm builder lego
@@ -436,12 +492,13 @@ mountAndShareSharedImage nameFrom nameExport mountPoint env = do
     mount env img mountPoint
     return img
 
-mountAndShareNewImage :: String
-                      -> Int
-                      -> String
-                      -> FilePath
-                      -> Handle 'LinuxVm
-                      -> Program (Handle 'VmImage)
+mountAndShareNewImage
+    :: String
+    -> Int
+    -> String
+    -> FilePath
+    -> Handle 'LinuxVm
+    -> Program (Handle 'VmImage)
 mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
     img <- createImage fsLabel Ext4 QCow2 (ImageSize sizeGB GB)
     share img nameExport
@@ -463,7 +520,7 @@ interpret = foldFree runInterpreter
         runUpdate hnd src
         return next
     runInterpreter (Add hnde sa addSpec next) = do
-        runAdd  hnde sa addSpec
+        runAdd hnde sa addSpec
         return next
     runInterpreter (Export hnd out k) = do
         res <- runExport hnd out
@@ -507,10 +564,10 @@ instance Interpreter IO where
         return ()
     runExport hnd@(Handle SCloudInit _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
-        interpret $ do
-          m <- createContent $ FromString "meta-data"
-          u <- createContent $ FromString "user-data"
-          return (m,u)
+        interpret $
+            do m <- createContent $ FromString "meta-data"
+               u <- createContent $ FromString "user-data"
+               return (m, u)
     runExport hnd@(Handle SLocalDirectory _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
         return "local-directory-path"
