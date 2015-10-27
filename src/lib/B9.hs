@@ -11,7 +11,7 @@
 
 -}
 
-module B9 (configure, b9_version, module X) where
+module B9 (configure, b9_version, module X, defaultMain) where
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative as X
 #endif
@@ -29,6 +29,7 @@ import           Data.Version as X
 import           B9.Builder as X
 import           Paths_b9 (version)
 import qualified B9.LibVirtLXC as LibVirtLXC
+import qualified B9.DSL as Neu
 
 -- | Merge 'existingConfig' with the configuration from the main b9 config
 -- file. If the file does not exists, a new config file with the given
@@ -43,3 +44,11 @@ configure b9ConfigPath existingConfig = do
 -- | Return the cabal package version of the B9 library.
 b9_version :: Version
 b9_version = version
+
+defaultMain :: Neu.Program () -> IO Bool
+defaultMain p = do
+    (opts,vars) <- getGlobalOptsFromCLI
+    let cfgCli = cliB9Config opts
+        cfgFile = configFile opts
+    cp <- configure cfgFile cfgCli
+    runProgram (p >> return True) vars cp cfgCli

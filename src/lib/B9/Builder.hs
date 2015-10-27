@@ -29,6 +29,14 @@ import qualified B9.DSL.Interpreter as Neu
 import qualified B9.B9IO as Neu
 import qualified B9.B9IOImpl as Neu
 
+runProgram :: Neu.Program Bool
+           -> Environment
+           -> ConfigParser
+           -> B9Config
+           -> IO Bool
+runProgram dsl e cfgParser cliCfg =
+    runIoProgram (Neu.traceEveryAction (Neu.compile dsl)) cfgParser cliCfg
+
 buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
     withB9Config cfgParser cliCfg $
@@ -41,10 +49,7 @@ buildArtifacts artifactGenerator cfgParser cliCfg =
             void $ assemble artifactGenerator
             return True
 
-runProgram :: Neu.Program () -> Environment -> ConfigParser -> B9Config -> IO Bool
-runProgram dsl e cfgParser cliCfg = runIoProgram (Neu.compile dsl) cfgParser cliCfg
-
-runIoProgram :: Neu.IoProgram () -> ConfigParser -> B9Config -> IO Bool
+runIoProgram :: Neu.IoProgram Bool -> ConfigParser -> B9Config -> IO Bool
 runIoProgram prog cfgParser cliCfg =
     withB9Config cfgParser cliCfg $
     \cfg ->
@@ -53,8 +58,7 @@ runIoProgram prog cfgParser cliCfg =
             infoL "BUILDING ARTIFACTS"
             getConfig >>=
                 traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
-            void $ Neu.executeIoProg prog
-            return True
+            Neu.executeIoProg prog
 
 withB9Config :: ConfigParser -> B9Config -> (B9Config -> IO Bool) -> IO Bool
 withB9Config cfgParser cliCfg f = do
@@ -66,11 +70,3 @@ withB9Config cfgParser cliCfg f = do
         Right parsedCfg ->
             let cfg = defaultB9Config <> parsedCfg <> cliCfg
             in f cfg
-
-defaultMain :: Neu.Program () -> IO ()
-defaultMain p = do
-  (opts,vars) <- getGlobalOptsFromCLI
-  let cfgCli = cliB9Config globalOpts
-      cfgFile = configFile globalOpts
-  cp <- configure cfgFile cfgCli
-  runProgram

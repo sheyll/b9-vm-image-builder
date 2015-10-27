@@ -7,7 +7,7 @@ This module is used by the _effectful_ functions in this library.
 -}
 module B9.B9Monad ( B9 , run , traceL , dbgL , infoL , errorL , getConfigParser
 , getConfig , getBuildId , getBuildDate , getBuildDir , getExecEnvType ,
-getSelectedRemoteRepo , getRemoteRepos , getRepoCache , cmd ) where
+getSelectedRemoteRepo , getRemoteRepos , getRepoCache , cmd, cmdRaw ) where
 
 import           B9.B9Config
 import           B9.ConfigUtils
@@ -169,27 +169,36 @@ getRepoCache = gets bsRepoCache
 
 cmd :: String -> B9 ()
 cmd str = do
+  traceL $ "COMMAND: " ++ str
+  execCmd $ shell str
+
+cmdRaw :: FilePath -> [String] -> B9 ()
+cmdRaw p args = do
+  traceL $ printf "RAW COMMAND: %s %s" p (show args)
+  execCmd $ proc p args
+
+execCmd :: CreateProcess -> B9 ()
+execCmd c = do
   inheritStdIn <- gets bsInheritStdIn
   if inheritStdIn
-     then interactiveCmd str
-     else nonInteractiveCmd str
+     then interactiveCmd c
+     else nonInteractiveCmd c
 
-interactiveCmd :: String -> B9 ()
-interactiveCmd str = void (cmdWithStdIn True str :: B9 Inherited)
+interactiveCmd :: CreateProcess -> B9 ()
+interactiveCmd p = void (cmdWithStdIn True p :: B9 Inherited)
 
-nonInteractiveCmd :: String -> B9 ()
+nonInteractiveCmd :: CreateProcess -> B9 ()
 -- TODO if we use 'ClosedStream' we get an error from 'virsh console'
 -- complaining about a missing controlling tty. Original source line:
 -- nonInteractiveCmd str = void (cmdWithStdIn False str :: B9 ClosedStream)
-nonInteractiveCmd str = void (cmdWithStdIn False str :: B9 Inherited)
+nonInteractiveCmd p = void (cmdWithStdIn False p :: B9 Inherited)
 
-cmdWithStdIn :: (InputSource stdin) => Bool -> String -> B9 stdin
-cmdWithStdIn toStdOut cmdStr = do
-  traceL $ "COMMAND: " ++ cmdStr
+cmdWithStdIn :: (InputSource stdin) => Bool -> CreateProcess -> B9 stdin
+cmdWithStdIn toStdOut p = do
   cmdLogger <- getCmdLogger
   let outPipe = if toStdOut then CL.mapM_ B.putStr
                 else cmdLogger LogTrace
-  (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
+  (cpIn, cpOut, cpErr, cph) <- streamingProcess p
   e <- liftIO $ runConcurrently $
          Concurrently (cpOut $$ outPipe) *>
          Concurrently (cpErr $$ cmdLogger LogInfo) *>
@@ -207,7 +216,7 @@ cmdWithStdIn toStdOut cmdStr = do
     checkExitCode ExitSuccess =
       traceL "COMMAND SUCCESS"
     checkExitCode ec@(ExitFailure e) = do
-      errorL $ printf "COMMAND '%s' FAILED: %i!" cmdStr e
+      errorL $ printf "COMMAND FAILED: %i!" e
       liftIO $ exitWith ec
 
 traceL :: String -> B9 ()

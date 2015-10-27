@@ -43,6 +43,9 @@ executeIoProg p = run go p
     go (Copy s d n) = do
         liftIO $ copyFile s d
         return n
+    go (CopyDir s d n) = do
+        B9Monad.cmdRaw "cp" ["-r", s, d]
+        return n
     go (MoveFile s d n) = do
         liftIO $ renameFile s d
         return n

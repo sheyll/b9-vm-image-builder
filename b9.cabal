@@ -107,6 +107,7 @@ library
                    , hashable
                    , lens
                    , mtl
+                   , optparse-applicative
                    , parallel
                    , parsec
                    , pretty
@@ -185,6 +186,7 @@ test-suite spec
                    , B9.DiskImagesSpec
                    , B9.DSL.InterpreterSpec
                    , B9.B9IOSpec
+                   , B9.BuilderSpec
                    , B9.B9IOImplSpec
   build-depends:     QuickCheck
                    , aeson

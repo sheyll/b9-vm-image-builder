@@ -36,6 +36,9 @@ data Action next
     | Copy FilePath
            FilePath
            next
+    | CopyDir FilePath
+              FilePath
+              next
     | MoveFile FilePath
                FilePath
                next
@@ -67,6 +70,7 @@ instance Show (Action a) where
     show (GetBuildId _) = "getBuildId"
     show (GetBuildDir _) = "getBuildDir"
     show (Copy s d _) = printf "copy %s %s" s d
+    show (CopyDir s d _) = printf "copyDir %s %s" s d
     show (MoveFile s d _) = printf "moveFile %s %s" s d
     show (MoveDir s d _) = printf "moveDir %s %s" s d
     show (MkDir d _) = printf "mkDir %s" d
@@ -96,6 +100,10 @@ getBuildId = liftF $ GetBuildId id
 -- | Copy a file
 copy :: FilePath -> FilePath -> IoProgram ()
 copy from to = liftF $ Copy from to ()
+
+-- | Copy a directory recursively
+copyDir :: FilePath -> FilePath -> IoProgram ()
+copyDir from to = liftF $ CopyDir from to ()
 
 -- | Move a file
 moveFile :: FilePath -> FilePath -> IoProgram ()
@@ -189,6 +197,10 @@ traceEveryAction = run traceAction
         logTrace $ show a
         copy s d
         return n
+    traceAction a@(CopyDir s d n) = do
+        logTrace $ show a
+        copyDir s d
+        return n
     traceAction a@(MoveFile s d n) = do
         logTrace $ show a
         moveFile s d
@@ -261,6 +273,9 @@ runPureDump p = runWriter $ run dump p
     dump a@(Copy _s _d n) = do
         tell [show a]
         return n
+    dump a@(CopyDir _s _d n) = do
+        tell [show a]
+        return n
     dump a@(MoveFile _s _d n) = do
         tell [show a]
         return n
@@ -296,6 +311,8 @@ instance Arbitrary a => Arbitrary (Action a) where
             , GetBuildId <$> arbitrary
             , GetBuildDir <$> arbitrary
             , Copy <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , CopyDir <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
               smaller arbitrary
             , MoveFile <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
               smaller arbitrary
