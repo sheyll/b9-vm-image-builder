@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-|
 Some QuickCheck utility functions.
 -}
@@ -8,6 +9,7 @@ import Control.Applicative
 #endif
 import Control.Monad
 import Test.QuickCheck
+import Control.Monad.Free
 
 arbitraryEnv
     :: Arbitrary a
@@ -53,3 +55,16 @@ arbitraryLetterLower = elements ['a' .. 'z']
 
 arbitraryDigit :: Gen Char
 arbitraryDigit = elements ['0' .. '9']
+
+arbitraryNiceString :: Gen String
+arbitraryNiceString =
+    listOf $ oneof [arbitraryDigit, arbitraryLetter, pure ' ']
+
+arbitraryFree
+    :: (Functor f, Arbitrary a, Arbitrary (f a), Arbitrary (f ()))
+    => Gen (Free f a)
+arbitraryFree = oneof [Pure <$> smaller arbitrary,
+                       do
+                         (x :: f ()) <- smaller arbitrary
+                         rest <- smaller arbitraryFree
+                         return (Free (fmap (const rest) x))]

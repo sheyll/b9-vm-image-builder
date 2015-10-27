@@ -172,8 +172,12 @@ substPath assocs src =
         InB9UserDir p -> InB9UserDir (subst assocs p)
         InTempDir p -> InTempDir (subst assocs p)
 
+-- * Test support
 
 instance Arbitrary SourceFile where
     arbitrary =
         Source <$> elements [NoConversion, ExpandVariables] <*>
         smaller arbitraryFilePath
+
+instance Arbitrary Environment where
+    arbitrary = Environment <$> arbitrary

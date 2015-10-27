@@ -8,10 +8,12 @@ module B9.B9IO where
 
 import           B9.Content
 import           B9.DiskImages
+import           B9.QCUtil
 import           Control.Monad.Free
 import           Control.Monad.Trans.Writer.Lazy
 import qualified Data.ByteString as B
 import           System.FilePath
+import           Test.QuickCheck
 import           Text.Printf
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
@@ -34,12 +36,12 @@ data Action next
     | Copy FilePath
            FilePath
            next
-    | CopyDir FilePath
+    | MoveFile FilePath
+               FilePath
+               next
+    | MoveDir FilePath
               FilePath
               next
-    | Move FilePath
-           FilePath
-           next
     | MkDir FilePath
             next
     | MkTemp FilePath
@@ -60,6 +62,23 @@ data Action next
                        next
     deriving (Functor)
 
+instance Show (Action a) where
+    show (LogTrace m _) = "logTrace " ++ m
+    show (GetBuildId _) = "getBuildId"
+    show (GetBuildDir _) = "getBuildDir"
+    show (Copy s d _) = printf "copy %s %s" s d
+    show (MoveFile s d _) = printf "moveFile %s %s" s d
+    show (MoveDir s d _) = printf "moveDir %s %s" s d
+    show (MkDir d _) = printf "mkDir %s" d
+    show (MkTemp p _) = printf "mkTemp %s" p
+    show (GetRealPath p _) = printf "getRealPath %s" p
+    show (GetParentDir p _) = printf "getParentDir %s" p
+    show (GetFileName p _) = printf "getFileName %s" p
+    show (RenderContentToFile f c e _) =
+        printf "renderContentToFile %s %s %s" f (show c) (show e)
+    show (CreateFileSystem f c fs _) =
+        printf "createFileSystem %s %s %s" f (show c) (show fs)
+
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
 logTrace :: String -> IoProgram ()
@@ -78,13 +97,13 @@ getBuildId = liftF $ GetBuildId id
 copy :: FilePath -> FilePath -> IoProgram ()
 copy from to = liftF $ Copy from to ()
 
--- | Make a recursive copy of an existing directory.
-copyDir :: FilePath -> FilePath -> IoProgram ()
-copyDir src dst = liftF $ CopyDir src dst ()
+-- | Move a file
+moveFile :: FilePath -> FilePath -> IoProgram ()
+moveFile from to = liftF $ MoveFile from to ()
 
--- | Move a file or a directory
-move :: FilePath -> FilePath -> IoProgram ()
-move from to = liftF $ Move from to ()
+-- | Move a directory
+moveDir :: FilePath -> FilePath -> IoProgram ()
+moveDir from to = liftF $ MoveDir from to ()
 
 -- | Just like @mkdir -p@
 mkDir :: FilePath -> IoProgram ()
@@ -139,56 +158,159 @@ createFileSystem :: FilePath
 createFileSystem destFile fs content =
     liftF $ CreateFileSystem destFile fs content ()
 
--- | Testing support
+-- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
+-- 'LogTrace' are logged via 'LogTrace'.
+traceEveryAction :: IoProgram a -> IoProgram a
+traceEveryAction = run traceAction
+  where
+    traceAction (LogTrace s n) = do
+        logTrace s
+        return n
+    traceAction a@(GetBuildDir k) = do
+        logTrace $ show a
+        b <- getBuildDir
+        logTrace $ " -> " ++ b
+        return $ k b
+    traceAction a@(GetBuildId k) = do
+        logTrace $ show a
+        b <- getBuildId
+        logTrace $ " -> " ++ b
+        return $ k b
+    traceAction a@(MkTemp prefix k) = do
+        logTrace $ show a
+        t <- mkTemp prefix
+        logTrace $ printf " -> %s" t
+        return $ k t
+    traceAction a@(MkDir d n) = do
+        logTrace $ show a
+        mkDir d
+        return n
+    traceAction a@(Copy s d n) = do
+        logTrace $ show a
+        copy s d
+        return n
+    traceAction a@(MoveFile s d n) = do
+        logTrace $ show a
+        moveFile s d
+        return n
+    traceAction a@(MoveDir s d n) = do
+        logTrace $ show a
+        moveDir s d
+        return n
+    traceAction a@(GetParentDir f k) = do
+        logTrace $ show a
+        p <- getParentDir f
+        logTrace $ printf " -> %s" p
+        return $ k p
+    traceAction a@(GetRealPath f k) = do
+        logTrace $ show a
+        p <- getRealPath f
+        logTrace $ printf " -> %s" p
+        return $ k p
+    traceAction a@(GetFileName f k) = do
+        logTrace $ show a
+        p <- getFileName f
+        logTrace $ printf " -> %s" p
+        return $ k p
+    traceAction a@(RenderContentToFile f c e n) = do
+        logTrace $ show a
+        renderContentToFile f c e
+        return n
+    traceAction a@(CreateFileSystem f c fs n) = do
+        logTrace $ show a
+        createFileSystem f c fs
+        return n
+
+-- * Testing support
+
+-- | Run a program without any I/O
+--   and return a list of strings, each list element is a textual representation
+--   of the command and its parameters. This is useful for testing and
+--   inspection.
 dumpToStrings :: IoProgram a -> [String]
 dumpToStrings = snd . runPureDump
 
+-- | Run a program without any I/O
+--   and return a the return value of the program. This is useful for testing
+--   and inspection.
 dumpToResult :: IoProgram a -> a
 dumpToResult = fst . runPureDump
 
+-- | Run a program without any I/O using a simple writer
+--   monad where the output is a list of strings each representing an action of
+--   the program and its paraters.  This is useful for testing and inspection.
 runPureDump :: IoProgram a -> (a, [String])
 runPureDump p = runWriter $ run dump p
   where
     dump :: Action a -> Writer [String] a
-    dump (LogTrace s n) = do
-        tell ["logTrace " ++ s]
+    dump a@(LogTrace _s n) = do
+        tell [show a]
         return n
-    dump (GetBuildDir k) = do
-        tell ["getBuildDir"]
+    dump a@(GetBuildDir k) = do
+        tell [show a]
         return (k "/BUILD")
-    dump (GetBuildId n) = do
-        tell ["getBuildId"]
+    dump a@(GetBuildId n) = do
+        tell [show a]
         return (n "build-id-1234")
-    dump (MkTemp prefix n) = do
-        tell ["mkTemp " ++ prefix]
+    dump a@(MkTemp prefix n) = do
+        tell [show a]
         return (n ("/BUILD" </> prefix ++ "-XXXX"))
-    dump (MkDir d n) = do
-        tell ["mkDir " ++ d]
+    dump a@(MkDir _d n) = do
+        tell [show a]
         return n
-    dump (CopyDir s d n) = do
-        tell [printf "copyDir %s %s" s d]
+    dump a@(Copy _s _d n) = do
+        tell [show a]
         return n
-    dump (Copy s d n) = do
-        tell [printf "copy %s %s" s d]
+    dump a@(MoveFile _s _d n) = do
+        tell [show a]
         return n
-    dump (Move s d n) = do
-        tell [printf "move %s %s" s d]
+    dump a@(MoveDir _s _d n) = do
+        tell [show a]
         return n
-    dump (GetParentDir f k) = do
-        tell [printf "getParentDir %s" f]
+    dump a@(GetParentDir f k) = do
+        tell [show a]
         return (k (takeDirectory f))
-    dump (GetRealPath "." k) = do
-        tell [printf "getRealPath ."]
+    dump a@(GetRealPath "." k) = do
+        tell [show a]
         return (k ("/cwd"))
-    dump (GetRealPath f k) = do
-        tell [printf "getRealPath %s" f]
+    dump a@(GetRealPath f k) = do
+        tell [show a]
         return (k ("/abs/path/" ++ f))
-    dump (GetFileName f k) = do
-        tell [printf "getFileName %s" f]
+    dump a@(GetFileName f k) = do
+        tell [show a]
         return (k (takeFileName f))
-    dump (RenderContentToFile f c e n) = do
-        tell [printf "renderContentToFile %s %s %s" f (show c) (show e)]
+    dump a@(RenderContentToFile _f _c _e n) = do
+        tell [show a]
         return n
-    dump (CreateFileSystem f c fs n) = do
-        tell [printf "createFileSystem %s %s %s" f (show c) (show fs)]
+    dump a@(CreateFileSystem _f _c _fs n) = do
+        tell [show a]
         return n
+
+arbitraryIoProgram :: Gen (IoProgram ())
+arbitraryIoProgram = arbitraryFree
+
+instance Arbitrary a => Arbitrary (Action a) where
+    arbitrary =
+        oneof
+            [ LogTrace <$> smaller arbitraryNiceString <*> smaller arbitrary
+            , GetBuildId <$> arbitrary
+            , GetBuildDir <$> arbitrary
+            , Copy <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , MoveFile <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , MoveDir <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , MkDir <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , MkTemp <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , GetRealPath <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , GetParentDir <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , GetFileName <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , RenderContentToFile <$> smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller arbitrary <*>
+              smaller arbitrary
+            , CreateFileSystem <$> smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller (listOf ((,) <$> arbitraryFilePath <*> arbitrary)) <*>
+              smaller arbitrary]

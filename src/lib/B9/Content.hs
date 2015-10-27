@@ -92,8 +92,8 @@ instance Arbitrary Content where
             [ FromTextFile <$> smaller arbitrary
             , RenderErlang <$> smaller arbitrary
             , RenderYaml <$> smaller arbitrary
-            , FromString <$> smaller arbitrary
+            , FromString <$> smaller arbitraryNiceString
             , FromBinaryFile <$> smaller arbitraryFilePath
-            , FromBinary <$> B.pack <$> smaller arbitrary
+            , FromBinary <$> B.pack <$> smaller arbitraryNiceString
             , Concat <$> smaller arbitrary
             ]

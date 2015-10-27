@@ -15,6 +15,7 @@ spec = do
     getParentDirSpec
     getFileNameSpec
     ensusreParentDirSpec
+    traceEveryActionWrapsAllActionsSpec
 
 actionSpec :: Spec
 actionSpec =
@@ -31,12 +32,12 @@ actionSpec =
        it "handles Copy" $
            let p = copy "from" "to"
            in dumpToStrings p `shouldBe` ["copy from to"]
-       it "handles CopyDir" $
-           let p = copyDir "from" "to"
-           in dumpToStrings p `shouldBe` ["copyDir from to"]
-       it "handles Move" $
-           let p = move "from" "to"
-           in dumpToStrings p `shouldBe` ["move from to"]
+       it "handles MoveFile" $
+           let p = moveFile "from" "to"
+           in dumpToStrings p `shouldBe` ["moveFile from to"]
+       it "handles MoveDir" $
+           let p = moveDir "from" "to"
+           in dumpToStrings p `shouldBe` ["moveDir from to"]
        it "handles MkDir" $
            let p = mkDir "test-dir"
            in dumpToStrings p `shouldBe` ["mkDir test-dir"]
@@ -77,6 +78,10 @@ actionSpec =
            ( ()
            , [ "createFileSystem test FileSystemCreation Ext4 \"label\" 10 MB " ++
                show [("test", fileSpec "test")]])
+       it "handles any program, really" $
+           property $
+           do prog <- arbitraryIoProgram
+              return $ dumpToResult (prog >> return True)
 
 getParentDirSpec :: Spec
 getParentDirSpec =
@@ -125,3 +130,14 @@ ensusreParentDirSpec =
                       (</>) <$> (getParentDir filepath >>= getRealPath) <*>
                       getFileName filepath
               return $ expected == actual
+
+traceEveryActionWrapsAllActionsSpec :: Spec
+traceEveryActionWrapsAllActionsSpec =
+    describe "traceEveryAction" $
+    do it "ignores 'logTrace'" $
+           (runPureDump (logTrace "test")) `shouldBe`
+           (runPureDump (traceEveryAction (logTrace "test")))
+       it "handles any program" $
+           property $
+           do prog <- arbitraryIoProgram
+              return $ dumpToResult (traceEveryAction prog >> return True)

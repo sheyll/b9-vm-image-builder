@@ -614,6 +614,12 @@ instance Arbitrary SizeUnit where
 instance Arbitrary SharedImageName where
     arbitrary = SharedImageName <$> arbitrarySharedImageName
 
+instance Arbitrary FileSystemCreation where
+    arbitrary =
+        FileSystemCreation <$> smaller arbitrary <*> smaller arbitrary <*>
+        smaller arbitrary <*>
+        smaller arbitrary
+
 arbitrarySharedImageName :: Gen String
 arbitrarySharedImageName =
     elements [printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3]]
