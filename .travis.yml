@@ -26,13 +26,13 @@ before_install:
  - chmod a+x ~/.local/bin/stack
 
 install:
-  - ./travis_long stack --no-terminal --skip-ghc-check setup
-  - ./travis_long stack --no-terminal --skip-ghc-check test --only-snapshot
+  - stack --no-terminal --skip-ghc-check setup
+  - stack --no-terminal --skip-ghc-check test --only-snapshot
 
 script:
-  - ./travis_long stack --no-terminal --skip-ghc-check test
-  - ./travis_long stack --no-terminal --skip-ghc-check haddock
-  - ./travis_long stack --no-terminal --skip-ghc-check sdist
+  - stack --no-terminal --skip-ghc-check test
+  - stack --no-terminal --skip-ghc-check haddock
+  - stack --no-terminal --skip-ghc-check sdist
 
 cache:
   directories:
