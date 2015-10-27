@@ -3,10 +3,20 @@ module B9.B9IOImpl where
 
 import           B9.B9IO
 import qualified B9.B9Monad as B9Monad
+import           B9.Content
 import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as E
 import           System.Directory
 import           System.FilePath
 import           System.Random
+import           Text.Printf
+#if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative
+#endif
+import qualified Data.ByteString as B
+
 
 -- | Execute a 'B9IO' Program in the 'B9' monad.
 executeIoProg :: IoProgram a -> B9Monad.B9 a
@@ -34,18 +44,22 @@ executeIoProg p = run go p
         liftIO $ copyFile s d
         return n
     go (MoveFile s d n) = do
+        liftIO $ renameFile s d
         return n
     go (MoveDir s d n) = do
+        liftIO $ renameDirectory s d
         return n
     go (GetParentDir f k) = do
-        return (k (takeDirectory f))
-    go (GetRealPath "." k) = do
-        return (k ("/cwd"))
+        return $ k (takeDirectory f)
     go (GetRealPath f k) = do
-        return (k ("/abs/path/" ++ f))
+        f' <- liftIO $ makeAbsolute f
+        return $ k f'
     go (GetFileName f k) = do
-        return (k (takeFileName f))
-    go (RenderContentToFile _f _c _e n) = do
+        return $ k (takeFileName f)
+    go (RenderContentToFile f c e n) = do
+        result <- runReaderT (render c) e
+        B9Monad.traceL $ printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result))
+        liftIO $ B.writeFile f result
         return n
-    go (CreateFileSystem _f _c _fs n) = do
+    go (CreateFileSystem f c fs n) = do
         return n

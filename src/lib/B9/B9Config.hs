@@ -14,6 +14,10 @@ module B9.B9Config ( B9Config(..)
                    , LogLevel(..)
                    , ExecEnvType (..)
                    , BuildVariables
+                   , GlobalOpts(..)
+                   , parseGlobalOpts
+                   , parseBuildVars
+                   , getGlobalOptsFromCLI
                    ) where
 
 import Control.Exception
@@ -30,8 +34,114 @@ import Data.Monoid
 import Data.Data
 import GHC.Generics (Generic)
 import B9.ConfigUtils
+import B9.Content
+import Options.Applicative hiding (action)
+import Options.Applicative.Help.Pretty hiding ((</>))
+import Paths_b9 (version)
 
 type BuildVariables = [(String,String)]
+
+data GlobalOpts = GlobalOpts
+    { configFile :: Maybe SystemPath
+    , cliB9Config :: B9Config
+    }
+
+parseBuildVars :: Parser BuildVariables
+parseBuildVars =
+    zip (("arg_" ++) . show <$> ([1 ..] :: [Int])) <$> many (strArgument idm)
+
+getGlobalOptsFromCLI :: IO (GlobalOpts, Environment)
+getGlobalOptsFromCLI =
+    execParser
+        (info
+             (helper <*>
+              ((,) <$> parseGlobalOpts <*> (Environment <$> parseBuildVars)))
+             (fullDesc <> headerDoc (Just helpHeader)))
+  where
+    helpHeader = linebreak <> text ("A B9 build script ")
+
+parseGlobalOpts :: Parser GlobalOpts
+parseGlobalOpts =
+    toGlobalOpts <$>
+    optional
+        (strOption
+             (help "Path to user's b9-configuration (default: ~/.b9/b9.conf)" <>
+              short 'c' <>
+              long "configuration-file" <>
+              metavar "FILENAME")) <*>
+    switch
+        (help "Log everything that happens to stdout" <> short 'v' <>
+         long "verbose") <*>
+    switch (help "Suppress non-error output" <> short 'q' <> long "quiet") <*>
+    optional
+        (strOption
+             (help "Path to a logfile" <> short 'l' <> long "log-file" <>
+              metavar "FILENAME")) <*>
+    optional
+        (strOption
+             (help "Output file for a command/timing profile" <>
+              long "profile-file" <>
+              metavar "FILENAME")) <*>
+    optional
+        (strOption
+             (help "Root directory for build directories" <> short 'b' <>
+              long "build-root-dir" <>
+              metavar "DIRECTORY")) <*>
+    switch
+        (help "Keep build directories after exit" <> short 'k' <>
+         long "keep-build-dir") <*>
+    switch
+        (help "Predictable build directory names" <> short 'u' <>
+         long "predictable-build-dir") <*>
+    optional
+        (strOption
+             (help
+                  "Cache directory for shared images, default: '~/.b9/repo-cache'" <>
+              long "repo-cache" <>
+              metavar "DIRECTORY")) <*>
+    optional
+        (strOption
+             (help "Remote repository to share image to" <> short 'r' <>
+              long "repo" <>
+              metavar "REPOSITORY_ID"))
+  where
+    toGlobalOpts
+        :: Maybe FilePath
+        -> Bool
+        -> Bool
+        -> Maybe FilePath
+        -> Maybe FilePath
+        -> Maybe FilePath
+        -> Bool
+        -> Bool
+        -> Maybe FilePath
+        -> Maybe String
+        -> GlobalOpts
+    toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique mRepoCache repo =
+        let minLogLevel =
+                if verbose
+                    then Just LogTrace
+                    else if quiet
+                             then Just LogError
+                             else Nothing
+            b9cfg' =
+                let b9cfg =
+                        mempty
+                        { verbosity = minLogLevel
+                        , logFile = logF
+                        , profileFile = profF
+                        , buildDirRoot = buildRoot
+                        , keepTempDirs = keep
+                        , uniqueBuildDirs = not notUnique
+                        , repository = repo
+                        }
+                in b9cfg
+                   { repositoryCache = Path <$> mRepoCache
+                   }
+        in GlobalOpts
+           { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
+           , cliB9Config = b9cfg'
+           }
 
 data ExecEnvType =
     LibVirtLXC

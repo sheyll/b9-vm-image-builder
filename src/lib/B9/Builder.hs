@@ -2,7 +2,7 @@
 {-|
 Highest-level build functions and and B9-re-exports.
 -}
-module B9.Builder (buildArtifacts, module X) where
+module B9.Builder (buildArtifacts, runProgram, runIoProgram, module X) where
 import B9.ArtifactGenerator as X
 import B9.ArtifactGeneratorImpl as X
 import B9.B9Config as X
@@ -24,6 +24,10 @@ import Data.Monoid
 import System.Directory
 import Text.Printf ( printf )
 import Text.Show.Pretty (ppShow)
+import qualified B9.DSL as Neu
+import qualified B9.DSL.Interpreter as Neu
+import qualified B9.B9IO as Neu
+import qualified B9.B9IOImpl as Neu
 
 buildArtifacts :: ArtifactGenerator -> ConfigParser -> B9Config -> IO Bool
 buildArtifacts artifactGenerator cfgParser cliCfg =
@@ -37,6 +41,21 @@ buildArtifacts artifactGenerator cfgParser cliCfg =
             void $ assemble artifactGenerator
             return True
 
+runProgram :: Neu.Program () -> Environment -> ConfigParser -> B9Config -> IO Bool
+runProgram dsl e cfgParser cliCfg = runIoProgram (Neu.compile dsl) cfgParser cliCfg
+
+runIoProgram :: Neu.IoProgram () -> ConfigParser -> B9Config -> IO Bool
+runIoProgram prog cfgParser cliCfg =
+    withB9Config cfgParser cliCfg $
+    \cfg ->
+         run cfgParser cfg $
+         do traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
+            infoL "BUILDING ARTIFACTS"
+            getConfig >>=
+                traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
+            void $ Neu.executeIoProg prog
+            return True
+
 withB9Config :: ConfigParser -> B9Config -> (B9Config -> IO Bool) -> IO Bool
 withB9Config cfgParser cliCfg f = do
     let parsedCfg' = parseB9Config cfgParser
@@ -47,3 +66,11 @@ withB9Config cfgParser cliCfg f = do
         Right parsedCfg ->
             let cfg = defaultB9Config <> parsedCfg <> cliCfg
             in f cfg
+
+defaultMain :: Neu.Program () -> IO ()
+defaultMain p = do
+  (opts,vars) <- getGlobalOptsFromCLI
+  let cfgCli = cliB9Config globalOpts
+      cfgFile = configFile globalOpts
+  cp <- configure cfgFile cfgCli
+  runProgram

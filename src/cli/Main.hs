@@ -1,18 +1,17 @@
 module Main where
 
-import Options.Applicative             hiding (action)
-import Options.Applicative.Help.Pretty hiding ((</>))
-
 import Control.Exception
-import Data.Function                   (on)
+import Data.Function (on)
 import Data.Maybe
 import Data.Version
+import Options.Applicative hiding (action)
+import Options.Applicative.Help.Pretty hiding ((</>))
 import Paths_b9
 import System.Directory
-import System.IO.Error                 hiding (isDoesNotExistErrorType)
+import System.IO.Error hiding (isDoesNotExistErrorType)
 #if !MIN_VERSION_base(4,8,0)
-import System.IO.Error                 hiding (catch)
-import Prelude                         hiding (catch)
+import System.IO.Error hiding (catch)
+import Prelude hiding (catch)
 #endif
 import B9
 
@@ -28,7 +27,7 @@ parseCommandLine :: IO B9Options
 parseCommandLine =
     execParser
         (info
-             (helper <*> (B9Options <$> globals <*> cmds <*> buildVars))
+             (helper <*> (B9Options <$> parseGlobalOpts <*> cmds <*> parseBuildVars))
              (fullDesc <>
               progDesc
                   "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'" <>
@@ -42,11 +41,6 @@ data B9Options =
     B9Options GlobalOpts
               BuildAction
               BuildVariables
-
-data GlobalOpts = GlobalOpts
-    { configFile :: Maybe SystemPath
-    , cliB9Config :: B9Config
-    }
 
 type BuildAction = Maybe SystemPath -> ConfigParser -> B9Config -> IO Bool
 
@@ -237,89 +231,6 @@ runAddRepo repo cfgFile cp _conf = do
         Right cpWithRepo -> writeB9Config cfgFile cpWithRepo
     return True
 
-globals :: Parser GlobalOpts
-globals =
-    toGlobalOpts <$>
-    optional
-        (strOption
-             (help "Path to user's b9-configuration (default: ~/.b9/b9.conf)" <>
-              short 'c' <>
-              long "configuration-file" <>
-              metavar "FILENAME")) <*>
-    switch
-        (help "Log everything that happens to stdout" <> short 'v' <>
-         long "verbose") <*>
-    switch (help "Suppress non-error output" <> short 'q' <> long "quiet") <*>
-    optional
-        (strOption
-             (help "Path to a logfile" <> short 'l' <> long "log-file" <>
-              metavar "FILENAME")) <*>
-    optional
-        (strOption
-             (help "Output file for a command/timing profile" <>
-              long "profile-file" <>
-              metavar "FILENAME")) <*>
-    optional
-        (strOption
-             (help "Root directory for build directories" <> short 'b' <>
-              long "build-root-dir" <>
-              metavar "DIRECTORY")) <*>
-    switch
-        (help "Keep build directories after exit" <> short 'k' <>
-         long "keep-build-dir") <*>
-    switch
-        (help "Predictable build directory names" <> short 'u' <>
-         long "predictable-build-dir") <*>
-    optional
-        (strOption
-             (help
-                  "Cache directory for shared images, default: '~/.b9/repo-cache'" <>
-              long "repo-cache" <>
-              metavar "DIRECTORY")) <*>
-    optional
-        (strOption
-             (help "Remote repository to share image to" <> short 'r' <>
-              long "repo" <>
-              metavar "REPOSITORY_ID"))
-  where
-    toGlobalOpts
-        :: Maybe FilePath
-        -> Bool
-        -> Bool
-        -> Maybe FilePath
-        -> Maybe FilePath
-        -> Maybe FilePath
-        -> Bool
-        -> Bool
-        -> Maybe FilePath
-        -> Maybe String
-        -> GlobalOpts
-    toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique mRepoCache repo =
-        let minLogLevel =
-                if verbose
-                    then Just LogTrace
-                    else if quiet
-                             then Just LogError
-                             else Nothing
-            b9cfg' =
-                let b9cfg =
-                        mempty
-                        { verbosity = minLogLevel
-                        , logFile = logF
-                        , profileFile = profF
-                        , buildDirRoot = buildRoot
-                        , keepTempDirs = keep
-                        , uniqueBuildDirs = not notUnique
-                        , repository = repo
-                        }
-                in b9cfg
-                   { repositoryCache = Path <$> mRepoCache
-                   }
-        in GlobalOpts
-           { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
-           , cliB9Config = b9cfg'
-           }
-
 cmds :: Parser BuildAction
 cmds =
     subparser
@@ -388,10 +299,6 @@ buildFileParser =
               long "project-file" <>
               metavar "FILENAME" <>
               noArgError (ErrorMsg "No build file specified!")))
-
-buildVars :: Parser BuildVariables
-buildVars =
-    zip (("arg_" ++) . show <$> ([1 ..] :: [Int])) <$> many (strArgument idm)
 
 remoteRepoParser :: Parser RemoteRepo
 remoteRepoParser =
