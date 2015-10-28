@@ -2,9 +2,9 @@
 {-| Effectful functions that create and convert disk image files. -}
 module B9.DiskImageBuilder
        (materializeImageSource, substImageTarget, canConvertTo,
-        resolveImageSource, createDestinationImage, resizeImage,
-        importImage, exportImage, exportAndRemoveImage, convertImage,
-        shareImage, ensureAbsoluteImageDirExists,
+        resolveImageSource, createDestinationImage, createFSWithFiles,
+        resizeImage, importImage, exportImage, exportAndRemoveImage,
+        convertImage, shareImage, ensureAbsoluteImageDirExists,
         pushSharedImageLatestVersion, lookupSharedImages, getSharedImages,
         getSharedImagesCacheDir, getSelectedRepos, pullRemoteRepos,
         pullLatestImage)
@@ -12,7 +12,7 @@ module B9.DiskImageBuilder
 
 import           B9.B9Monad
 import           B9.ConfigUtils
-import           B9.Content.StringTemplate
+import           B9.Content
 import           B9.DiskImages
 import qualified B9.PartitionTable as P
 import           B9.Repository
@@ -178,6 +178,14 @@ createDestinationImage buildImg dest =
             buildId <- getBuildId
             liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
         Transient -> return ()
+
+createFSWithFiles :: FilePath
+                  -> FileSystemCreation
+                  -> FilePath
+                  -> [FileSpec]
+                  -> B9 ()
+createFSWithFiles dst (FileSystemCreation ISO9660 l _s _su) srcDir _fs = do
+    cmdRaw "genisoimage" ["-output", dst, "-volid", l, "-rock", "-d", srcDir]
 
 createEmptyImage :: String
                  -> FileSystem

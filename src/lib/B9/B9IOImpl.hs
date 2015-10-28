@@ -2,6 +2,7 @@
 module B9.B9IOImpl where
 
 import           B9.B9IO
+import           B9.DiskImageBuilder
 import qualified B9.B9Monad as B9Monad
 import           B9.Content
 import           Control.Monad.IO.Class
@@ -66,5 +67,6 @@ executeIoProg p = run go p
         B9Monad.traceL $ printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result))
         liftIO $ B.writeFile f result
         return n
-    go (CreateFileSystem f c fs n) = do
+    go (CreateFileSystem dst fs srcDir files n) = do
+        createFSWithFiles dst fs srcDir files
         return n

@@ -63,8 +63,7 @@ candySpecs = do
                         d <- newDirectory
                         addFileContent
                             d
-                            (fileSpec "test.txt" & fileSpecPermissions .~
-                             perm)
+                            (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                             (FromTextFile
                                  (Source NoConversion "/some/path/test.txt"))
                 actual `hasSameEffect` expected
@@ -96,7 +95,8 @@ candySpecs = do
                             (Source ExpandVariables "/some/path/test.txt"))
            actual `hasSameEffectAs` expected
     describe "addTemplateP" $
-        it "is equal to addTemplate, but changes permissions to the given value" $
+        it
+            "is equal to addTemplate, but changes permissions to the given value" $
         property $
         \perm ->
              do let actual = do
@@ -106,8 +106,7 @@ candySpecs = do
                         d <- newDirectory
                         addFileContent
                             d
-                            (fileSpec "test.txt" & fileSpecPermissions .~
-                             perm)
+                            (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                             (FromTextFile
                                  (Source ExpandVariables "/some/path/test.txt"))
                 actual `hasSameEffect` expected
@@ -194,14 +193,12 @@ cloudInitIsoImageExamples =
            let actualCmds = dumpToStrings (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   let files =
-                           [ (tmpDir </> "meta-data", fileSpec "meta-data")
-                           , (tmpDir </> "user-data", fileSpec "user-data")]
+                   let files = [fileSpec "meta-data", fileSpec "user-data"]
                        fsc = FileSystemCreation ISO9660 "cidata" 2 MB
-                       tmpDir = "/abs/path//BUILD/file-system-content-XXXX"
+                       tmpDir = "/BUILD/file-system-content-XXXX"
                        tmpImg = "/BUILD/file-system-image-XXXX"
                        dstImg = "test.iso"
-                   createFileSystem tmpImg fsc files
+                   createFileSystem tmpImg fsc tmpDir files
                    dstImg' <- ensureParentDir dstImg
                    copy tmpImg dstImg'
            in actualCmds `shouldContain` expectedCmds
@@ -225,13 +222,11 @@ cloudInitMultiVfatImageExamples =
            in actualCmds `shouldContain` expectedCmds
   where
     expectedProg dstImg = do
-        let files =
-                [ (tmpDir </> "meta-data", fileSpec "meta-data")
-                , (tmpDir </> "user-data", fileSpec "user-data")]
+        let files = [fileSpec "meta-data", fileSpec "user-data"]
             fsc = FileSystemCreation VFAT "cidata" 2 MB
-            tmpDir = "/abs/path//BUILD/file-system-content-XXXX"
+            tmpDir = "/BUILD/file-system-content-XXXX"
             tmpImg = "/BUILD/file-system-image-XXXX"
-        createFileSystem tmpImg fsc files
+        createFileSystem tmpImg fsc tmpDir files
         dstImg' <- ensureParentDir dstImg
         copy tmpImg dstImg'
     cloudInitVfatImage :: Program (Handle 'CloudInit)

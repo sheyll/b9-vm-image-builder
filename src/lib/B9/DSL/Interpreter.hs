@@ -232,7 +232,7 @@ generateAllFileSystems = do
         tmpDir <- lift $ mkTempDir "file-system-content"
         files <- generateFileContentsToDir tmpDir fcs
         tmpFsImage <- lift $ mkTemp "file-system-image"
-        lift $ createFileSystem tmpFsImage fsc files
+        lift $ createFileSystem tmpFsImage fsc tmpDir (snd <$> files)
         forM_ exports (lift . copyToDest tmpFsImage)
     copyToDest src dest = do
         dest' <- ensureParentDir dest

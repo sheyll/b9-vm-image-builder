@@ -61,7 +61,8 @@ data Action next
                           next
     | CreateFileSystem FilePath
                        FileSystemCreation
-                       [(FilePath, FileSpec)]
+                       FilePath
+                       [FileSpec]
                        next
     deriving (Functor)
 
@@ -80,8 +81,8 @@ instance Show (Action a) where
     show (GetFileName p _) = printf "getFileName %s" p
     show (RenderContentToFile f c e _) =
         printf "renderContentToFile %s %s %s" f (show c) (show e)
-    show (CreateFileSystem f c fs _) =
-        printf "createFileSystem %s %s %s" f (show c) (show fs)
+    show (CreateFileSystem dst fs srcDir files _) =
+        printf "createFileSystem %s %s %s %s" dst (show fs) srcDir (show files)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
@@ -161,10 +162,11 @@ renderContentToFile f c e = liftF $ RenderContentToFile f c e ()
 -- parameter are copied into the file system.
 createFileSystem :: FilePath
                  -> FileSystemCreation
-                 -> [(FilePath, FileSpec)]
+                 -> FilePath
+                 -> [FileSpec]
                  -> IoProgram ()
-createFileSystem destFile fs content =
-    liftF $ CreateFileSystem destFile fs content ()
+createFileSystem dst fs srcDir files =
+    liftF $ CreateFileSystem dst fs srcDir files ()
 
 -- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogTrace' are logged via 'LogTrace'.
@@ -228,9 +230,9 @@ traceEveryAction = run traceAction
         logTrace $ show a
         renderContentToFile f c e
         return n
-    traceAction a@(CreateFileSystem f c fs n) = do
+    traceAction a@(CreateFileSystem dst fs srcDir files n) = do
         logTrace $ show a
-        createFileSystem f c fs
+        createFileSystem dst fs srcDir files
         return n
 
 -- * Testing support
@@ -297,7 +299,7 @@ runPureDump p = runWriter $ run dump p
     dump a@(RenderContentToFile _f _c _e n) = do
         tell [show a]
         return n
-    dump a@(CreateFileSystem _f _c _fs n) = do
+    dump a@(CreateFileSystem _f _c _d _fs n) = do
         tell [show a]
         return n
 
@@ -329,5 +331,6 @@ instance Arbitrary a => Arbitrary (Action a) where
               smaller arbitrary
             , CreateFileSystem <$> smaller arbitraryFilePath <*>
               smaller arbitrary <*>
-              smaller (listOf ((,) <$> arbitraryFilePath <*> arbitrary)) <*>
+              smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
               smaller arbitrary]
