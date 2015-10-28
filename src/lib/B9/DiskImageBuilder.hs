@@ -176,6 +176,17 @@ createDestinationImage buildImg dest =
             liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
         Transient -> return ()
 
+createEmptyFile :: FilePath -> Int -> SizeUnit -> B9 ()
+createEmptyFile f s su = do
+    cmdRaw "truncate" ["--size", show s ++ formattedSizeUnit, f]
+  where
+    formattedSizeUnit =
+        case su of
+            GB -> "G"
+            MB -> "M"
+            KB -> "K"
+            B -> ""
+
 createFSWithFiles :: FilePath
                   -> FileSystemCreation
                   -> FilePath
@@ -184,16 +195,15 @@ createFSWithFiles :: FilePath
 createFSWithFiles dst (FileSystemCreation ISO9660 l _s _su) srcDir _fs = do
     cmdRaw "genisoimage" ["-output", dst, "-volid", l, "-rock", "-d", srcDir]
 createFSWithFiles dst (FileSystemCreation VFAT l s su) srcDir fs = do
-    cmdRaw "truncate" ["--size", show s ++ formattedSizeUnit, dst]
+    createEmptyFile dst s su
     cmdRaw "mkfs.vfat" ["-n", l, dst]
     cmdRaw "mcopy" (("-oi" : dst : (((srcDir </>) . view fileSpecPath) <$> fs)) ++ ["::"])
-  where
-    formattedSizeUnit =
-        case su of
-            GB -> "G"
-            MB -> "M"
-            KB -> "K"
-            B -> ""
+createFSWithFiles dst (FileSystemCreation Ext4 l s su) _ fs = do
+  when (not (null fs)) $
+    fail "Creating non-empty Ext4 file systems is not yet implemented"
+  createEmptyFile dst s su
+  cmdRaw "mkfs.ext4" ["-L", l, "-q", dst]
+
 
 createEmptyImage :: String
                  -> FileSystem

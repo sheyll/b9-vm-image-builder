@@ -9,21 +9,17 @@ import B9.Content
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), FSLabel(..), FileSystemCreation(..))
+        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..))
 import B9.ExecEnv (CPUArch(..))
-import B9.QCUtil
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
 import Control.Monad.Free (Free(..), liftF, foldFree)
-import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Function (on)
 import Data.Functor (void)
-import Data.Hashable
 import GHC.Generics (Generic)
 import System.FilePath
-import Test.QuickCheck
 import Text.Printf (printf)
 
 -- ---------------------------------------------------------
