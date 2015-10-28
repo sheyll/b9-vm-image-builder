@@ -54,7 +54,7 @@ cabal-version:       >=1.10
 Flag IntegrationTests
      Description: Enable tests that will create and convert real file system
                   images and launch containers
-     Default: False
+     Default: True
      Manual: True
 
 source-repository head
