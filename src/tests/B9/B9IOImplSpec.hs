@@ -14,13 +14,13 @@ spec =
     describe "executeIoProg" $
 #ifdef INTEGRATION_TESTS
     do it "can create iso images" $
-           createFS (FileSystemCreation ISO9660 "cidata" 10 MB) "/tmp" [] `shoudlReturn`
+           createFS (FileSystemCreation ISO9660 "cidata" 10 MB) "/tmp" [] `shouldReturn`
            ()
        it "can create vfat images" $
-           createFS (FileSystemCreation VFAT "cidata" 10 MB) "/tmp" [] `shoudlReturn`
+           createFS (FileSystemCreation VFAT "cidata" 10 MB) "/tmp" [] `shouldReturn`
            ()
        it "can create ext4 images" $
-           createFS (FileSystemCreation Ext4 "test" 100 MB) "/tmp" [] `shoudlReturn`
+           createFS (FileSystemCreation Ext4 "test" 100 MB) "/tmp" [] `shouldReturn`
            ()
        it "cannot create ext4 images with files" $
            createFS
