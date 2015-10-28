@@ -1,7 +1,7 @@
 # B9 - A Benign VM-Build Tool
 
 [![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=master)](https://travis-ci.org/sheyll/b9-vm-image-builder)
-
+[![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
 [![b9 on Stackage LTS 2](http://stackage.org/package/b9/badge/lts-2)](http://stackage.org/lts-2/package/b9)
 [![b9 on Stackage LTS 3](http://stackage.org/package/b9/badge/lts-3)](http://stackage.org/lts-3/package/b9)
 [![b9 on Stackage Nightly](http://stackage.org/package/b9/badge/nightly)](http://stackage.org/nightly/package/b9)
