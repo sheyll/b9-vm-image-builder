@@ -14,6 +14,7 @@ import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monoid
 import           Data.Foldable
 #endif
 import           B9.Content.AST as X
