@@ -89,6 +89,7 @@ library
                    , B9.Content.AST
                    , B9.Content.StringTemplate
                    , B9.QCUtil
+                   , B9.QemuImg
                    , B9.DSL
                    , B9.DSL.Interpreter
   other-modules:   Paths_b9

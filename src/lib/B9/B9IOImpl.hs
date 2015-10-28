@@ -2,7 +2,7 @@
 module B9.B9IOImpl where
 
 import           B9.B9IO
-import           B9.DiskImageBuilder
+import           B9.QemuImg
 import qualified B9.B9Monad as B9Monad
 import           B9.Content
 import           Control.Monad.IO.Class

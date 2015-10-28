@@ -1,23 +1,210 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-| Effectful functions executing shared image respository operations.
     See "B9.Repository" -}
-module B9.RepositoryIO (repoSearch
-                       ,pushToRepo
-                       ,pullFromRepo
-                       ,pullGlob
-                       ,Repository(..)
-                       ,toRemoteRepository
-                       ,FilePathGlob(..)) where
+module B9.RepositoryIO
+       (repoSearch, pushToRepo, pullFromRepo, shareImage,
+        pushSharedImageLatestVersion, lookupSharedImages, getSharedImages,
+        getSharedImagesCacheDir, getSelectedRepos, pullRemoteRepos,
+        getLatestImageByName, pullLatestImage, pullGlob, Repository(..),
+        toRemoteRepository, FilePathGlob(..))
+       where
 
-import B9.Repository
 import B9.B9Monad
+import B9.QemuImg
 import B9.ConfigUtils
-
+import B9.DiskImages
+import B9.Repository
 import Control.Applicative
-import Data.List
+import Control.Monad
+import Control.Exception
 import Control.Monad.IO.Class
+import Data.Function
+import Data.List
+import Data.Maybe
 import System.Directory
 import System.FilePath
 import Text.Printf (printf)
+import Text.Show.Pretty (ppShow)
+
+
+-- | Publish an sharedImage made from an image and image meta data to the
+-- configured repository
+shareImage :: Image -> SharedImageName -> B9 SharedImage
+shareImage buildImg sname@(SharedImageName name) = do
+    sharedImage <- createSharedImageInCache buildImg sname
+    infoL (printf "SHARED '%s'" name)
+    pushToSelectedRepo sharedImage
+    return sharedImage
+
+-- | Return a 'SharedImage' with the current build data and build id from the
+-- name and disk image.
+getSharedImageFromImageInfo :: SharedImageName -> Image -> B9 SharedImage
+getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
+    buildId <- getBuildId
+    date <- getBuildDate
+    return
+        (SharedImage
+             name
+             (SharedImageDate date)
+             (SharedImageBuildId buildId)
+             imgType
+             imgFS)
+
+-- | Convert the disk image and serialize the base image data structure.
+createSharedImageInCache :: Image -> SharedImageName -> B9 SharedImage
+createSharedImageInCache img sname@(SharedImageName name) = do
+    dbgL (printf "CREATING SHARED IMAGE: '%s' '%s'" (ppShow img) name)
+    sharedImg <- getSharedImageFromImageInfo sname img
+    dir <- getSharedImagesCacheDir
+    convertImage img (changeImageDirectory dir (sharedImageImage sharedImg))
+    tell (dir </> sharedImageFileName sharedImg) sharedImg
+    dbgL (printf "CREATED SHARED IMAGE IN CAHCE '%s'" (ppShow sharedImg))
+    return sharedImg
+
+
+-- | Publish the latest version of a shared image identified by name to the
+-- selected repository from the cache.
+pushSharedImageLatestVersion :: SharedImageName -> B9 ()
+pushSharedImageLatestVersion name@(SharedImageName imgName) = do
+    sharedImage <- getLatestSharedImageByNameFromCache name
+    dbgL (printf "PUSHING '%s'" (ppShow sharedImage))
+    pushToSelectedRepo sharedImage
+    infoL (printf "PUSHED '%s'" imgName)
+
+-- | Upload a shared image from the cache to a selected remote repository
+pushToSelectedRepo :: SharedImage -> B9 ()
+pushToSelectedRepo i = do
+    c <- getSharedImagesCacheDir
+    r <- getSelectedRemoteRepo
+    when (isJust r) $
+        do let (Image imgFile' _imgType _imgFS) = sharedImageImage i
+               cachedImgFile = c </> imgFile'
+               cachedInfoFile = c </> sharedImageFileName i
+               repoImgFile = sharedImagesRootDirectory </> imgFile'
+               repoInfoFile =
+                   sharedImagesRootDirectory </> sharedImageFileName i
+           pushToRepo (fromJust r) cachedImgFile repoImgFile
+           pushToRepo (fromJust r) cachedInfoFile repoInfoFile
+
+-- | Pull metadata files from all remote repositories.
+pullRemoteRepos :: B9 ()
+pullRemoteRepos = do
+    repos <- getSelectedRepos
+    mapM_ dl repos
+  where
+    dl =
+        pullGlob
+            sharedImagesRootDirectory
+            (FileExtension sharedImageFileExtension)
+
+-- | Pull the latest version of an image, either from the selected remote
+-- repo or from the repo that has the latest version.
+pullLatestImage :: SharedImageName -> B9 Bool
+pullLatestImage name@(SharedImageName dbgName) = do
+    repos <- getSelectedRepos
+    let repoPredicate Cache = False
+        repoPredicate (Remote repoId) = repoId `elem` repoIds
+        repoIds = map remoteRepoRepoId repos
+        hasName sharedImage = name == siName sharedImage
+    candidates <- lookupSharedImages repoPredicate hasName
+    let (Remote repoId,image) = last candidates
+    if null candidates
+        then do
+            errorL
+                (printf
+                     "No shared image named '%s' on these remote repositories: '%s'"
+                     dbgName
+                     (ppShow repoIds))
+            return False
+        else do
+            dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
+            cacheDir <- getSharedImagesCacheDir
+            let (Image imgFile' _imgType _fs) = sharedImageImage image
+                cachedImgFile = cacheDir </> imgFile'
+                cachedInfoFile = cacheDir </> sharedImageFileName image
+                repoImgFile = sharedImagesRootDirectory </> imgFile'
+                repoInfoFile =
+                    sharedImagesRootDirectory </> sharedImageFileName image
+                repo = fromJust (lookupRemoteRepo repos repoId)
+            pullFromRepo repo repoImgFile cachedImgFile
+            pullFromRepo repo repoInfoFile cachedInfoFile
+            infoL (printf "PULLED '%s' FROM '%s'" dbgName repoId)
+            return True
+
+
+-- | Return the 'Image' of the latest version of a shared image named 'name'
+-- from the local cache.
+getLatestImageByName :: SharedImageName -> B9 Image
+getLatestImageByName name = do
+    sharedImage <- getLatestSharedImageByNameFromCache name
+    cacheDir <- getSharedImagesCacheDir
+    let image = changeImageDirectory cacheDir (sharedImageImage sharedImage)
+    dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show image))
+    return image
+
+-- | Return the latest version of a shared image named 'name' from the local cache.
+getLatestSharedImageByNameFromCache :: SharedImageName -> B9 SharedImage
+getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
+    imgs <- lookupSharedImages (== Cache) ((== name) . siName)
+    case reverse imgs of
+        (Cache,sharedImage):_rest -> return sharedImage
+        _ -> error (printf "No image(s) named '%s' found." dbgName)
+
+-- | Return a list of all existing sharedImages from cached repositories.
+getSharedImages :: B9 [(Repository, [SharedImage])]
+getSharedImages = do
+    reposAndFiles <-
+        repoSearch
+            sharedImagesRootDirectory
+            (FileExtension sharedImageFileExtension)
+    mapM
+        (\(repo,files) ->
+              ((repo, ) . catMaybes) <$> mapM consult' files)
+        reposAndFiles
+  where
+    consult' f = do
+        r <- liftIO (try (consult f))
+        case r of
+            Left (e :: SomeException) -> do
+                dbgL
+                    (printf
+                         "Failed to load shared image meta-data from '%s': '%s'"
+                         (takeFileName f)
+                         (show e))
+                dbgL (printf "Removing bad meta-data file '%s'" f)
+                liftIO (removeFile f)
+                return Nothing
+            Right c -> return (Just c)
+
+-- | Find shared images and the associated repos from two predicates. The result
+-- is the concatenated result of the sorted shared images satisfying 'imgPred'.
+lookupSharedImages :: (Repository -> Bool)
+                   -> (SharedImage -> Bool)
+                   -> B9 [(Repository, SharedImage)]
+lookupSharedImages repoPred imgPred = do
+    xs <- getSharedImages
+    let rs =
+            [(r, s) | (r,ss) <- xs
+                    , s <- ss]
+        matchingRepo = filter (repoPred . fst) rs
+        matchingImg = filter (imgPred . snd) matchingRepo
+        sorted = sortBy (compare `on` snd) matchingImg
+    return (mconcat (pure <$> sorted))
+
+-- | Return either all remote repos or just the single selected repo.
+getSelectedRepos :: B9 [RemoteRepo]
+getSelectedRepos = do
+    allRepos <- getRemoteRepos
+    selectedRepo <- getSelectedRemoteRepo
+    let repos = maybe allRepos return selectedRepo -- 'Maybe' a repo
+    return repos
+
+-- | Return the path to the sub directory in the cache that contains files of
+-- shared images.
+getSharedImagesCacheDir :: B9 FilePath
+getSharedImagesCacheDir = do
+    cacheDir <- localRepoDir <$> getRepoCache
+    return (cacheDir </> sharedImagesRootDirectory)
 
 data Repository = Cache | Remote String
   deriving (Eq, Ord, Read, Show)

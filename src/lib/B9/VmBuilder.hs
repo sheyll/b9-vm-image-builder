@@ -3,6 +3,7 @@
 module B9.VmBuilder (buildWithVm) where
 
 import           B9.ArtifactGenerator
+import           B9.QemuImg
 import           B9.B9Config
 import           B9.B9Monad
 import           B9.DiskImageBuilder
