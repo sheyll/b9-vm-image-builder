@@ -26,7 +26,7 @@ spec =
            createFS
                (FileSystemCreation Ext4 "test" 100 MB)
                "/tmp"
-               [fileSpec "test"] `shoudlReturn`
+               [fileSpec "test"] `shouldReturn`
            ()
 #else
     return ()
