@@ -5,9 +5,6 @@ module B9.MBR ( getPartition
               , MBR(..)
               , CHS(..)) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import Data.Binary.Get
 import Data.Word
 import Text.Printf

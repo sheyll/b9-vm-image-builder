@@ -22,9 +22,6 @@ import           Text.Parsec
         octDigit, hexDigit, many1, noneOf, try, digit, anyChar, alphaNum,
         lower, parse)
 import           Text.Parsec.ByteString
--- #if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative hiding ((<|>), many)
--- #endif
 import           Text.Show.Pretty
 import           Control.Monad
 import           Text.Printf

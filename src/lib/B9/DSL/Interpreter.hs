@@ -15,18 +15,13 @@ import B9.DiskImages
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
-import Text.Printf (printf)
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Control.Monad
-import Data.Monoid
-#endif
-import System.FilePath
-import Data.Map as Map
-import Control.Monad.State
 import Control.Lens hiding (from, (<.>))
+import Control.Monad.State
 import Data.Default
+import Data.Map as Map
 import Data.Maybe
+import System.FilePath
+import Text.Printf (printf)
 
 -- | The monad used to compile a 'Program' into an 'IoProgram'
 type IoCompiler = StateT Ctx IoProgram

@@ -6,10 +6,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 module B9.B9IO where
 
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-import           Data.Monoid
-#endif
 import           B9.Content
 import           B9.DiskImages
 import           B9.QCUtil
@@ -28,11 +24,7 @@ type IoProgram = Free Action
 
 -- | Execute an 'IoProgram' using a monadic interpretation function.
 run
-#if !MIN_VERSION_base(4,8,0)
-    :: (Functor m, Monad m)
-#else
     :: Monad m
-#endif
     => (forall a. Action a -> m a) -> IoProgram b -> m b
 run = foldFree
 

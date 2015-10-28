@@ -13,9 +13,6 @@ import           Data.Semigroup
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import           GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-#endif
 import           Text.Printf
 
 import           B9.Content.ErlTerms

@@ -10,21 +10,17 @@ module B9.ArtifactGenerator
         getAssemblyOutputFiles)
        where
 
+import B9.Content
+import B9.Content.StringTemplate
+import B9.DiskImages
+import B9.QCUtil
+import B9.Vm
 import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Hashable
 import GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
-import Control.Applicative
-#endif
 import System.FilePath ((<.>), (</>))
-import B9.DiskImages
-import B9.Vm
-import B9.Content.StringTemplate
-import B9.Content
-import B9.QCUtil
 import Test.QuickCheck
 
 {-| Artifacts represent the things B9 can build. A generator specifies howto

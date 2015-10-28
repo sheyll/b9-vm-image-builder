@@ -13,9 +13,6 @@ import           System.Directory
 import           System.FilePath
 import           System.Random
 import           Text.Printf
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-#endif
 import qualified Data.ByteString as B
 
 

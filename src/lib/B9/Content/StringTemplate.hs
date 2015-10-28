@@ -7,9 +7,6 @@ module B9.Content.StringTemplate
         withEnvironment)
        where
 
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-#endif
 import           Control.Arrow hiding (second)
 import           Control.Monad.Reader
 import           Data.Bifunctor

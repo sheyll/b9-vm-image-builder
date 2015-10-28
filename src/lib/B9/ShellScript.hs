@@ -1,28 +1,18 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-| Definition of 'Script' and functions to convert 'Script's to bash
     scripts. -}
-module B9.ShellScript ( writeSh
-                      , emptyScript
-                      , toBash
-                      , toBashOneLiner
-                      , toCmds
-                      , CmdVerbosity (..)
-                      , Cwd (..)
-                      , User (..)
-                      , Script (..)
-                      ) where
+module B9.ShellScript
+       (writeSh, emptyScript, toBash, toBashOneLiner, toCmds,
+        CmdVerbosity(..), Cwd(..), User(..), Script(..))
+       where
 
-import Data.Data
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Monoid
-#endif
+import Control.Monad.Reader
 import Control.Parallel.Strategies
 import Data.Binary
+import Data.Data
 import Data.Hashable
-import GHC.Generics (Generic)
-import Control.Monad.Reader
 import Data.List ( intercalate )
+import GHC.Generics (Generic)
 import System.Directory ( getPermissions
                         , setPermissions
                         , setOwnerExecutable )

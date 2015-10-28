@@ -12,9 +12,6 @@
 -}
 
 module B9 (b9_version, module X) where
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative as X
-#endif
 import           Control.Monad as X
 import           Control.Monad.IO.Class as X
 import           Data.Monoid as X

@@ -11,25 +11,20 @@ import B9.DiskImages
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..), FSLabel(..), FileSystemCreation(..))
 import B9.ExecEnv (CPUArch(..))
+import B9.QCUtil
 import B9.ShellScript (Script(..))
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Monoid
-import Control.Monad
-#endif
+import Control.Lens hiding (from)
 import Control.Monad.Free (Free(..), liftF, foldFree)
-import Data.Functor (void)
 import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
-import Data.Hashable
 import Data.Function (on)
+import Data.Functor (void)
+import Data.Hashable
 import GHC.Generics (Generic)
-import Text.Printf (printf)
-import Test.QuickCheck
-import B9.QCUtil
 import System.FilePath
-import Control.Lens hiding (from)
+import Test.QuickCheck
+import Text.Printf (printf)
 
 -- ---------------------------------------------------------
 
@@ -527,23 +522,19 @@ interpret = foldFree runInterpreter
         return (k res)
 
 -- | Monads that interpret build steps
-#if MIN_VERSION_base(4,8,0)
-class (Monad f) => Interpreter f where
-#else
-class (Monad f, Functor f) => Interpreter f where
-#endif
-  runCreate
-      :: (Show (CreateSpec a))
-      => SArtifact a -> CreateSpec a -> f (Handle a)
-  runUpdate
-      :: (Show (UpdateSpec a))
-      => Handle a -> UpdateSpec a -> f ()
-  runAdd
-      :: (Show (AddSpec a))
-      => Handle env -> SArtifact a -> AddSpec a -> f ()
-  runExport
-      :: (Show (ExportSpec a), Show (ExportResult a))
-      => Handle a -> ExportSpec a -> f (ExportResult a)
+class (Monad f) => Interpreter f  where
+    runCreate
+        :: (Show (CreateSpec a))
+        => SArtifact a -> CreateSpec a -> f (Handle a)
+    runUpdate
+        :: (Show (UpdateSpec a))
+        => Handle a -> UpdateSpec a -> f ()
+    runAdd
+        :: (Show (AddSpec a))
+        => Handle env -> SArtifact a -> AddSpec a -> f ()
+    runExport
+        :: (Show (ExportSpec a), Show (ExportResult a))
+        => Handle a -> ExportSpec a -> f (ExportResult a)
 
 -- | An interpreter that just prints out the Program
 instance Interpreter IO where

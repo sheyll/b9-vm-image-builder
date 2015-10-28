@@ -3,15 +3,12 @@ images.-}
 module B9.DiskImages where
 
 import           B9.QCUtil
-import           GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-#endif
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
 import           Data.Hashable
 import           Data.Semigroup
+import           GHC.Generics (Generic)
 import           System.FilePath
 import           Test.QuickCheck
 import qualified Text.PrettyPrint.Boxes as Boxes

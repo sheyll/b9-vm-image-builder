@@ -30,9 +30,6 @@ import           Data.Data
 import           Data.Hashable
 import           Data.Semigroup
 import           GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-#endif
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           B9.Content.StringTemplate

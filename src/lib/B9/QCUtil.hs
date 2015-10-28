@@ -4,12 +4,9 @@ Some QuickCheck utility functions.
 -}
 module B9.QCUtil where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
 import Control.Monad
-import Test.QuickCheck
 import Control.Monad.Free
+import Test.QuickCheck
 
 arbitraryEnv
     :: Arbitrary a
