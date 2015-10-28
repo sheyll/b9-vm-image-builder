@@ -6,6 +6,10 @@
 {-# LANGUAGE DeriveFunctor #-}
 module B9.B9IO where
 
+#if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative
+import           Data.Monoid
+#endif
 import           B9.Content
 import           B9.DiskImages
 import           B9.QCUtil

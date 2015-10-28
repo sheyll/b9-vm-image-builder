@@ -19,8 +19,8 @@ import Text.Printf (printf)
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 import Control.Monad
-#endif
 import Data.Monoid
+#endif
 import System.FilePath
 import Data.Map as Map
 import Control.Monad.State
