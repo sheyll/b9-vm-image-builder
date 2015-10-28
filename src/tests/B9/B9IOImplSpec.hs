@@ -11,10 +11,14 @@ import Text.Printf
 
 spec :: Spec
 spec =
+#ifdef INTEGRATION_TESTS
     describe "executeIoProg" $
-    do it "can create iso images" $
-           createFS (FileSystemCreation ISO9660 "cidata" 10 MB)
-
+    do it "can create iso images" $ do
+          createFS (FileSystemCreation ISO9660 "cidata" 10 MB)
+          True `shouldBe` True
+#else
+    describe "executeIoProg *DISABLED*" $ return ()
+#endif
 
 createFS :: FileSystemCreation -> IO ()
 createFS c@(FileSystemCreation t _ _ _) = do

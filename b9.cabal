@@ -48,9 +48,14 @@ bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
 copyright:           2015 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
-extra-source-files:  README.md, build_and_test.sh, build_haddock.sh,
-                     LICENSE, TODO.org, Setup.hs, b9.cabal, .gitignore, prepare_release.sh, .travis.yml, CONTRIBUTORS
+extra-source-files:  README.md, LICENSE, TODO.org, Setup.hs, stack.yaml, b9.cabal, .gitignore, .travis.yml, CONTRIBUTORS
 cabal-version:       >=1.10
+
+Flag IntegrationTests
+     Description: Enable tests that will create and convert real file system
+                  images and launch containers
+     Default: True
+     Manual: True
 
 source-repository head
   type:                 git
@@ -182,8 +187,11 @@ test-suite spec
                    , B9.DiskImagesSpec
                    , B9.DSL.InterpreterSpec
                    , B9.B9IOSpec
-                   , B9.BuilderSpec
-                   , B9.B9IOImplSpec
+  if flag(IntegrationTests)
+    other-modules: B9.BuilderSpec, B9.B9IOImplSpec
+    CC-Options: "-DINTEGRATION_TESTS"
+    CPP-Options: -DINTEGRATION_TESTS
+
   build-depends:     QuickCheck
                    , aeson
                    , b9

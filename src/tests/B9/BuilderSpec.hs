@@ -9,6 +9,7 @@ import Text.Printf
 
 spec :: Spec
 spec =
+#ifdef INTEGRATION_TESTS
     describe "runProgramWithConfigAndCliArgs" $
     do it "creates a cloud-init directory with user-data and meta-data" $
            do runProgramWithConfigAndCliArgs ciDir `shouldReturn` True
@@ -24,6 +25,9 @@ spec =
            do runProgramWithConfigAndCliArgs ciVfat `shouldReturn` True
               doesFileExist "/tmp/instance-123.vfat" `shouldReturn` True
               removeFile "/tmp/instance-123.vfat"
+#else
+    describe "runProgramWithConfigAndCliArgs *DISABLED*" $ return ()
+#endif
 
 ciDir :: Program ()
 ciDir = do
