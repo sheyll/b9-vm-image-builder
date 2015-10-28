@@ -20,10 +20,10 @@ install:
   - stack --no-terminal --skip-ghc-check setup
 
 script:
-  - stack --no-terminal --skip-ghc-check build --flag b9:IntegrationTests
-  - stack --no-terminal --skip-ghc-check test --flag b9:IntegrationTests
-  - stack --no-terminal --skip-ghc-check haddock --flag b9:IntegrationTests
-  - stack --no-terminal --skip-ghc-check sdist --flag b9:IntegrationTests
+  - stack --no-terminal --skip-ghc-check build --flag b9:-IntegrationTests
+  - stack --no-terminal --skip-ghc-check test --flag b9:-IntegrationTests
+  - stack --no-terminal --skip-ghc-check haddock --flag b9:-IntegrationTests
+  - stack --no-terminal --skip-ghc-check sdist --flag b9:-IntegrationTests
 
 cache:
   directories:

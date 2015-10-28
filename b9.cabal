@@ -54,7 +54,7 @@ cabal-version:       >=1.10
 Flag IntegrationTests
      Description: Enable tests that will create and convert real file system
                   images and launch containers
-     Default: True
+     Default: False
      Manual: True
 
 source-repository head
@@ -187,8 +187,9 @@ test-suite spec
                    , B9.DiskImagesSpec
                    , B9.DSL.InterpreterSpec
                    , B9.B9IOSpec
+                   , B9.BuilderSpec
+                   , B9.B9IOImplSpec
   if flag(IntegrationTests)
-    other-modules: B9.BuilderSpec, B9.B9IOImplSpec
     CC-Options: "-DINTEGRATION_TESTS"
     CPP-Options: -DINTEGRATION_TESTS
 
