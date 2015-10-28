@@ -27,7 +27,13 @@ import           Text.Printf
 type IoProgram = Free Action
 
 -- | Execute an 'IoProgram' using a monadic interpretation function.
-run :: Monad m => (forall a. Action a -> m a) -> IoProgram b -> m b
+run
+#if !MIN_VERSION_base(4,8,0)
+    :: (Functor m, Monad m)
+#else
+    :: Monad m
+#endif
+    => (forall a. Action a -> m a) -> IoProgram b -> m b
 run = foldFree
 
 -- | Pure commands for disk image creation and conversion, file
