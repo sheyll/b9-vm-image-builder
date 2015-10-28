@@ -14,29 +14,27 @@ spec =
     describe "executeIoProg" $
 #ifdef INTEGRATION_TESTS
     do it "can create iso images" $
-           createFS (FileSystemCreation ISO9660 "cidata" 10 MB) "/tmp" [] `shouldReturn`
+           createFS (FileSystemCreation ISO9660 "cidata" 10 MB) [] `shouldReturn`
            ()
        it "can create vfat images" $
-           createFS (FileSystemCreation VFAT "cidata" 10 MB) "/tmp" [] `shouldReturn`
+           createFS (FileSystemCreation VFAT "cidata" 10 MB) [] `shouldReturn`
            ()
        it "can create ext4 images" $
-           createFS (FileSystemCreation Ext4 "test" 100 MB) "/tmp" [] `shouldReturn`
+           createFS (FileSystemCreation Ext4 "test" 100 MB) [] `shouldReturn`
            ()
        it "cannot create ext4 images with files" $
            createFS
                (FileSystemCreation Ext4 "test" 100 MB)
-               "/tmp"
-               [fileSpec "test"] `shouldReturn`
-           ()
+               [fileSpec "test"] `shouldThrow` anyException
 #else
     return ()
 #endif
 
-createFS :: FileSystemCreation -> IO ()
-createFS c@(FileSystemCreation t _ _ _) = do
+createFS :: FileSystemCreation -> [FileSpec] -> IO ()
+createFS c@(FileSystemCreation t _ _ _) fs = do
     let p = do
             srcDir <- mkTempDir "test"
-            createFileSystem dest c srcDir []
+            createFileSystem dest c srcDir fs
         dest = "/tmp/test-fs-image" <.> show t
     (execInB9 p) `shouldReturn` ()
     (doesFileExist dest) `shouldReturn` True
