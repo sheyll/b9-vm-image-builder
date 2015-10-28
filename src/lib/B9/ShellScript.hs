@@ -16,7 +16,6 @@ import Data.Data
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 import Data.Monoid
-import Data.Foldable
 #endif
 import Control.Parallel.Strategies
 import Data.Binary
