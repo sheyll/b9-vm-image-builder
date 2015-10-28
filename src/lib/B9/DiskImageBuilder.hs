@@ -18,6 +18,7 @@ import qualified B9.PartitionTable as P
 import           B9.Repository
 import           B9.RepositoryIO
 import           Control.Exception
+import           Control.Lens (view)
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Data
@@ -182,6 +183,17 @@ createFSWithFiles :: FilePath
                   -> B9 ()
 createFSWithFiles dst (FileSystemCreation ISO9660 l _s _su) srcDir _fs = do
     cmdRaw "genisoimage" ["-output", dst, "-volid", l, "-rock", "-d", srcDir]
+createFSWithFiles dst (FileSystemCreation VFAT l s su) srcDir fs = do
+    cmdRaw "truncate" ["--size", show s ++ formattedSizeUnit, dst]
+    cmdRaw "mkfs.vfat" ["-n", l, dst]
+    cmdRaw "mcopy" (("-oi" : dst : (((srcDir </>) . view fileSpecPath) <$> fs)) ++ ["::"])
+  where
+    formattedSizeUnit =
+        case su of
+            GB -> "G"
+            MB -> "M"
+            KB -> "K"
+            B -> ""
 
 createEmptyImage :: String
                  -> FileSystem
