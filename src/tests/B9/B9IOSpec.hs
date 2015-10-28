@@ -77,10 +77,10 @@ actionSpec =
                (createFileSystem
                     "test"
                     (FileSystemCreation Ext4 "label" 10 MB)
-                    [("test", fileSpec "test")]) `shouldBe`
+                    "test.d" [fileSpec "test"]) `shouldBe`
            ( ()
            , [ "createFileSystem test FileSystemCreation Ext4 \"label\" 10 MB " ++
-               show [("test", fileSpec "test")]])
+              "test.d " ++ show [(fileSpec "test")]])
        it "handles any program, really" $
            property $
            do prog <- arbitraryIoProgram

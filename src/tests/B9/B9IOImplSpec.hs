@@ -18,7 +18,9 @@ spec =
 
 createFS :: FileSystemCreation -> IO ()
 createFS c@(FileSystemCreation t _ _ _) = do
-    let p = createFileSystem dest c []
+    let p = do
+            srcDir <- mkTempDir "test"
+            createFileSystem dest c srcDir []
         dest = "/tmp/test-fs-image" <.> show t
     (execInB9 p) `shouldReturn` ()
     (doesFileExist dest) `shouldReturn` True
