@@ -154,12 +154,9 @@ instance Interpreter IoCompiler where
         return (mh, uh)
     runExport hnd@(Handle SLocalDirectory _) destDir = do
         localDirs . at hnd . traverse . dirExports <>= [destDir]
-        return destDir
+        return ()
     runExport hnd@(Handle SFileSystemImage _) destFile = do
         fileSystems . at hnd . traverse . fsExports <>= [destFile]
-        (FileSystemCreation fsType _ _ _) <-
-            use (fileSystems . at hnd . to fromJust . fsCreation)
-        return (Image destFile Raw fsType)
     runExport _hnd _dest = fail "Not Yet Implemented"
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.

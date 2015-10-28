@@ -207,8 +207,6 @@ type family ExportSpec (a :: Artifact) :: * where
 type family ExportResult (a :: Artifact) :: * where
         ExportResult 'CloudInit =
                                 (Handle 'FileContent, Handle 'FileContent)
-        ExportResult 'LocalDirectory = FilePath
-        ExportResult 'FileSystemImage = Image
         ExportResult a = ()
 
 -- | Instruct an environment to mount a host directory
@@ -330,7 +328,7 @@ newDirectory :: Program (Handle 'LocalDirectory)
 newDirectory = create SLocalDirectory ()
 
 -- | Render the directory to the actual destination (which must not exist)
-exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program FilePath
+exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program ()
 exportDir dirH dest = export dirH dest
 
 -- * cloud init
@@ -357,19 +355,12 @@ writeCloudInitDir h dst = do
     void $ exportDir dirH dst
 
 writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program ()
-writeCloudInit h fs dst = void $ writeCloudInit' h fs dst
-
-writeCloudInit' :: (Handle 'CloudInit)
-                -> FileSystem
-                -> FilePath
-                -> Program Image
-writeCloudInit' h fs dst = do
+writeCloudInit h fs dst = do
     (metaDataH,userDataH) <- export h ()
     fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
     addContent fsH (fileSpec "meta-data") metaDataH
     addContent fsH (fileSpec "user-data") userDataH
     export fsH dst
-
 
 -- * Image import
 
@@ -557,10 +548,10 @@ instance Interpreter IO where
                return (m, u)
     runExport hnd@(Handle SLocalDirectory _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
-        return "local-directory-path"
+        return ()
     runExport hnd@(Handle SFileSystemImage _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
-        return (Image "local-fs-img" QCow2 Ext4)
+        return ()
     runExport hnd dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
         return undefined
