@@ -8,6 +8,7 @@ addons:
     - hvr-ghc
     packages:
     - ghc-7.10.2
+    - genisoimage
 
 before_install:
  - mkdir -p ~/.local/bin
