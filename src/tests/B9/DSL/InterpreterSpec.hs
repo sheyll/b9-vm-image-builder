@@ -13,14 +13,79 @@ spec :: Spec
 spec = do
     describe "compile (General)" $
         do it "traces documentation" $
-               dumpToStrings (compile (doc "test")) `shouldBe`
+               toList (doc "test") `shouldBe`
                ["logTrace test"]
+    readOnlyFileExamples
+    buildOrderSpecs
     candySpecs
     localDirExamples
     cloudInitIsoImageExamples
     cloudInitMultiVfatImageExamples
     cloudInitDirExamples
     cloudInitWithContentExamples
+
+toList :: Program a -> [String]
+toList = dumpToStrings . compile
+
+-- * Examples for 'ReadOnlyFile' artifacts
+
+readOnlyFileExamples :: Spec
+readOnlyFileExamples = do
+    describe "ReadOnlyFile" $
+        do it "can be created from an existing local file" $
+               do let actual = do
+                          fH <- create SReadOnlyFile "/tmp/test.file"
+                          export fH "/tmp/test.file.copy"
+                  return ()
+           it "is copied to a file when exporting" $
+               do let actual = do
+                          fH <- create SReadOnlyFile "/tmp/test.file"
+                          export fH "/tmp/test.file.copy"
+                  return ()
+           it "can be added to LocalDirectory" $
+               do let actual = do
+                          fH <- create SReadOnlyFile "/tmp/test.file"
+                          dirH <- newDirectory
+                          add c SReadOnlyFile (fileSpec "test.file", fH)
+                  return ()
+           it "can be added to FileSystemImage" $
+               do let actual = do
+                          fH <- create SReadOnlyFile "/tmp/test.file"
+                          fsH <-
+                              create
+                                  SFileSystemImage
+                                  (FileSystemCreation ISO9660 "cidata" 1 MB)
+                          add fsH SReadOnlyFile (fileSpec "test.file", fH)
+                  return ()
+           it "can be added to CloudInit" $
+               do let actual = do
+                          fH <- create SReadOnlyFile "/tmp/test.file"
+                          c <- newCloudInit
+                          add c SReadOnlyFile (fileSpec "test.file", fH)
+                  return ()
+           it "can be exported from a FileSystemImage" $
+               do let actual = do
+                          fsH <-
+                              create
+                                  SFileSystemImage
+                                  (FileSystemCreation ISO9660 "cidata" 1 MB)
+                          export fsH "/tmp/test.iso"
+                  return ()
+           it "can be exported from GeneratedContent" $
+               do let actual = do
+                          fcH <- createContent (FromString "test-content")
+                          export fcH "/tmp/rendered-content.file"
+                  return ()
+           it "is exported to a (new) ReadOnlyFile" $
+               do let actual = do
+                          fH <- create SReadOnlyFile "/tmp/test.file"
+                          export fH "/tmp/test.file.copy"
+                  return ()
+
+-- * Specs for the build order
+buildOrderSpecs :: Spec
+buildOrderSpecs = do
+    describe "" $ return ()
 
 -- * Specs for /candy/ functions.
 candySpecs :: Spec
@@ -32,7 +97,7 @@ candySpecs = do
                    addFile d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addFileContent
+                   addGeneratedContent
                        d
                        (fileSpec "test.txt")
                        (FromTextFile
@@ -45,7 +110,7 @@ candySpecs = do
                    addExe d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addFileContent
+                   addGeneratedContent
                        d
                        (fileSpec "test.txt" & fileSpecPermissions .~
                         (0, 7, 5, 5))
@@ -61,7 +126,7 @@ candySpecs = do
                         addFileP d "/some/path/test.txt" perm
                     expected = do
                         d <- newDirectory
-                        addFileContent
+                        addGeneratedContent
                             d
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                             (FromTextFile
@@ -74,7 +139,7 @@ candySpecs = do
                    addTemplate d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addFileContent
+                   addGeneratedContent
                        d
                        (fileSpec "test.txt")
                        (FromTextFile
@@ -87,7 +152,7 @@ candySpecs = do
                    addTemplateExe d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addFileContent
+                   addGeneratedContent
                        d
                        (fileSpec "test.txt" & fileSpecPermissions .~
                         (0, 7, 5, 5))
@@ -104,7 +169,7 @@ candySpecs = do
                         addTemplateP d "/some/path/test.txt" perm
                     expected = do
                         d <- newDirectory
-                        addFileContent
+                        addGeneratedContent
                             d
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                             (FromTextFile
@@ -123,19 +188,22 @@ candySpecs = do
 localDirExamples :: Spec
 localDirExamples =
     describe "compile exportDir" $
-    do it "create temporary intermediate directory" $
-         let expectedCmds = dumpToStrings $ mkTempDir "local-dir"
-         in actualCmds `shouldContain` expectedCmds
+    do it "creates a temporary intermediate directory" $
+           let expectedCmds = dumpToStrings $ mkTempDir "local-dir"
+           in actualCmds `shouldContain` expectedCmds
        it "copies the temporary intermediate directory to all exports" $
-         let exportsCmds = dumpToStrings $ do
-               src' <- getRealPath "/BUILD/local-dir-XXXX"
-               dest' <- ensureParentDir "/tmp/test.d"
-               copyDir src' dest'
-         in actualCmds `shouldContain` exportsCmds
+           let exportsCmds =
+                   dumpToStrings $
+                   do src' <- getRealPath "/BUILD/local-dir-XXXX"
+                      dest' <- ensureParentDir "/tmp/test.d"
+                      copyDir src' dest'
+           in actualCmds `shouldContain` exportsCmds
   where
-    actualCmds = dumpToStrings $ compile $ do
-        d <- newDirectory
-        exportDir d "/tmp/test.d"
+    actualCmds =
+        dumpToStrings $
+        compile $
+        do d <- newDirectory
+           exportDir d "/tmp/test.d"
 
 -- * Cloud init examples
 
@@ -277,10 +345,10 @@ cloudInitDirExamples =
 cloudInitWithContentExamples :: Spec
 cloudInitWithContentExamples =
     describe "compile cloudInitWithContent" $
-    do it "correctly merges meta-data" $
+    do it "merges meta-data" $
            cmds `shouldContain`
            (dumpToStrings (renderContentToFile mdPath mdContent templateVars))
-       it "correctly merges user-data" $
+       it "merges user-data" $
            cmds `shouldContain`
            (dumpToStrings (renderContentToFile udPath udContent templateVars))
   where
@@ -317,7 +385,7 @@ cloudInitWithContentExamples =
         writeCloudInit i ISO9660 "test.iso"
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifdown eth0"])])
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifup eth0"])])
-        addFileContent i (FileSpec "file1.txt" (0,6,4,2) "user1" "group1") (FromString "file1")
+        addGeneratedContent i (FileSpec "file1.txt" (0,6,4,2) "user1" "group1") (FromString "file1")
         sh i "ls -la /tmp"
         return i
 
@@ -368,12 +436,12 @@ dslExample1 = do
     addUserData c (ASTString "test")
     e <- lxc "container-id"
     mountDirRW e "tmp" "/mnt/HOST_TMP"
-    addFileContent
+    addGeneratedContent
         e
         (fileSpec "/etc/httpd.conf")
         (FromTextFile (Source ExpandVariables "httpd.conf.in"))
     sh e "ls -la"
-    addFileContent
+    addGeneratedContent
         c
         (fileSpec "/etc/httpd.conf")
         (FromTextFile (Source ExpandVariables "httpd.conf.in"))

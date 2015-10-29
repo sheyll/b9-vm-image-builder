@@ -90,14 +90,11 @@ data Artifact
     | MountedHostDir
     | MountedVmImage
     | ExecutableScript
-    | FileContent
+    | GeneratedContent
     | VariableBindings
     | LocalDirectory
+    | ReadOnlyFile
     | FileSystemImage
-    --    TODO refactor more and more code from e.g. 'DiskImageBuilder' into the
-    --    DSL or B9IO. E.g. when exporting cloud-init compile to an /intermediate/
-    --    'Program' where file content is added to an ISOImage Artifact, and later
-    --    exported.
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
 
@@ -112,9 +109,10 @@ data SArtifact k where
         SMountedHostDir :: SArtifact 'MountedHostDir
         SMountedVmImage :: SArtifact 'MountedVmImage
         SExecutableScript :: SArtifact 'ExecutableScript
-        SFileContent :: SArtifact 'FileContent
+        SGeneratedContent :: SArtifact 'GeneratedContent
         SVariableBindings :: SArtifact 'VariableBindings
         SLocalDirectory :: SArtifact 'LocalDirectory
+        SReadOnlyFile :: SArtifact 'ReadOnlyFile
         SFileSystemImage :: SArtifact 'FileSystemImage
 
 instance Show (SArtifact k) where
@@ -128,9 +126,10 @@ instance Show (SArtifact k) where
     show SMountedHostDir = "SMountedHostDir"
     show SMountedVmImage = "SMountedVmImage"
     show SExecutableScript = "SExecutableScript"
-    show SFileContent = "SFileContent"
+    show SGeneratedContent = "SGeneratedContent"
     show SVariableBindings = "SVariableBindings"
     show SLocalDirectory = "SLocalDirectory"
+    show SReadOnlyFile = "SReadOnlyFile"
     show SFileSystemImage = "SFileSystemImage"
 
 instance Eq (SArtifact k) where
@@ -161,17 +160,19 @@ type family CreateSpec (a :: Artifact) :: * where
         CreateSpec 'VmImage = ImageSource
         CreateSpec 'CloudInit = String
         CreateSpec 'LinuxVm = LinuxVmArgs
-        CreateSpec 'FileContent = Content
+        CreateSpec 'GeneratedContent = Content
         CreateSpec 'LocalDirectory = ()
+        CreateSpec 'ReadOnlyFile = ()
         CreateSpec 'FileSystemImage = FileSystemCreation
 
 type family UpdateSpec (a :: Artifact) :: * where
         UpdateSpec 'VmImage = ImageResize
-        UpdateSpec 'FileContent = Content
+        UpdateSpec 'GeneratedContent = Content
 
 type family AddSpec (a :: Artifact) :: * where
         AddSpec 'Documentation = String
-        AddSpec 'FileContent = (FileSpec, Handle 'FileContent)
+        AddSpec 'GeneratedContent = (FileSpec, Handle 'GeneratedContent)
+        AddSpec 'ReadOnlyFile = (FileSpec, Handle 'ReadOnlyFile)
         AddSpec 'ExecutableScript = Script
         AddSpec 'MountedHostDir = Mounted HostDirMnt
         AddSpec 'MountedVmImage = Mounted (Handle 'VmImage)
@@ -183,30 +184,36 @@ type CanAdd env a = CanAddP env a ~ 'True
 
 type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
      where
-        CanAddP 'LinuxVm 'FileContent = 'True
         CanAddP 'LinuxVm 'MountedHostDir = 'True
         CanAddP 'LinuxVm 'MountedVmImage = 'True
         CanAddP 'LinuxVm 'ExecutableScript = 'True
-        CanAddP 'FileContent 'FileContent = 'True
-        CanAddP 'CloudInit 'FileContent = 'True
+        CanAddP 'LinuxVm 'ReadOnlyFile = 'True
+        CanAddP 'GeneratedContent 'GeneratedContent = 'True
+        CanAddP 'CloudInit 'ReadOnlyFile = 'True
         CanAddP 'CloudInit 'ExecutableScript = 'True
         CanAddP 'CloudInit 'CloudInitMetaData = 'True
         CanAddP 'CloudInit 'CloudInitUserData = 'True
-        CanAddP 'LocalDirectory 'FileContent = 'True
-        CanAddP 'FileSystemImage 'FileContent = 'True
+        CanAddP 'LocalDirectory 'ReadOnlyFile = 'True
+        CanAddP 'FileSystemImage 'ReadOnlyFile = 'True
         CanAddP 'VariableBindings 'TemplateVariable = 'True
         CanAddP 'Documentation 'Documentation = 'True
         CanAddP env a = 'False
 
 type family ExportSpec (a :: Artifact) :: * where
-        ExportSpec 'VmImage = ImageDestination
         ExportSpec 'CloudInit = ()
+        ExportSpec 'VmImage = ImageDestination
         ExportSpec 'LocalDirectory = FilePath
         ExportSpec 'FileSystemImage = FilePath
+        ExportSpec 'ReadOnlyFile = FilePath
+        ExportSpec 'GeneratedContent = FilePath
 
 type family ExportResult (a :: Artifact) :: * where
         ExportResult 'CloudInit =
-                                (Handle 'FileContent, Handle 'FileContent)
+                                (Handle 'GeneratedContent, Handle 'GeneratedContent)
+        ExportResult 'VmImage = Handle 'ReadOnlyFile
+        ExportResult 'FileSystemImage = Handle 'ReadOnlyFile
+        ExportResult 'ReadOnlyFile = Handle 'ReadOnlyFile
+        ExportResult 'GeneratedContent = Handle 'ReadOnlyFile
         ExportResult a = ()
 
 -- | Instruct an environment to mount a host directory
@@ -252,24 +259,24 @@ var $= val = add variableBindings STemplateVariable (var, val)
 -- @blob.conf@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addFile
-    :: (CanAddP e1 'FileContent ~ 'True)
+    :: (CanAddP e1 'GeneratedContent ~ 'True)
     => Handle e1 -> FilePath -> Program ()
 addFile d f = addFileP d f (0, 6, 4, 4)
 
 -- | Same as 'addFile' but set the destination file permissions to @0755@
 -- (executable for all).
 addExe
-    :: (CanAddP e1 'FileContent ~ 'True)
+    :: (CanAddP e1 'GeneratedContent ~ 'True)
     => Handle e1 -> FilePath -> Program ()
 addExe d f = addFileP d f (0, 7, 5, 5)
 
 -- | Same as 'addFile' but with an extra output file permission parameter.
 addFileP
-    :: (CanAddP e1 'FileContent ~ 'True)
+    :: (CanAddP e1 'GeneratedContent ~ 'True)
     => Handle e1 -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
 addFileP d f p = do
     let f' = takeFileName f
-    addFileContent
+    addContent
         d
         (fileSpec f' & fileSpecPermissions .~ p)
         (FromTextFile (Source NoConversion f))
@@ -281,7 +288,7 @@ addFileP d f p = do
 -- be @foo.cfg@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addTemplate
-    :: (CanAddP e1 'FileContent ~ 'True)
+    :: (CanAddP e1 'GeneratedContent ~ 'True)
     => Handle e1 -> FilePath -> Program ()
 addTemplate d f = do
   addTemplateP d f (0,6,4,4)
@@ -289,37 +296,37 @@ addTemplate d f = do
 -- | Same as 'addTemplate' but set the destination file permissions to @0755@
 -- (executable for all).
 addTemplateExe
-    :: (CanAddP e1 'FileContent ~ 'True)
+    :: (CanAddP e1 'GeneratedContent ~ 'True)
     => Handle e1 -> FilePath -> Program ()
 addTemplateExe d f = do
     addTemplateP d f (0, 6, 4, 4)
 
 -- | Same as 'addTemplate' but with an extra output file permission parameter.
 addTemplateP
-    :: (CanAddP e1 'FileContent ~ 'True)
+    :: (CanAddP e1 'GeneratedContent ~ 'True)
     => Handle e1 -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
 addTemplateP d f p = do
     let f' = takeFileName f
-    addFileContent
+    addContent
         d
         (fileSpec f' & fileSpecPermissions .~ p)
         (FromTextFile (Source ExpandVariables f))
 
-addFileContent
-    :: (CanAdd e 'FileContent)
-    => Handle e -> FileSpec -> Content -> Program ()
-addFileContent hnd f c = createContent c >>= addContent hnd f
+createContent :: Content -> Program (Handle 'GeneratedContent)
+createContent = create SGeneratedContent
 
-createContent :: Content -> Program (Handle 'FileContent)
-createContent = create SFileContent
-
-appendContent :: Handle 'FileContent -> Content -> Program ()
+appendContent :: Handle 'GeneratedContent -> Content -> Program ()
 appendContent hnd c = update hnd c
 
 addContent
-    :: (CanAdd e 'FileContent)
-    => Handle e -> FileSpec -> Handle 'FileContent -> Program ()
-addContent hnd f c = add hnd SFileContent (f, c)
+    :: (CanAdd e 'GeneratedContent)
+    => Handle e -> FileSpec -> Content -> Program ()
+addContent hnd f c = createContent c >>= addGeneratedContent hnd f
+
+addGeneratedContent
+    :: (CanAdd e 'GeneratedContent)
+    => Handle e -> FileSpec -> Handle 'GeneratedContent -> Program ()
+addGeneratedContent hnd f c = add hnd SGeneratedContent (f, c)
 
 -- * directories
 
@@ -346,21 +353,32 @@ addUserData
     => Handle e -> AST Content YamlObject -> Program ()
 addUserData hnd ast = add hnd SCloudInitUserData ast
 
-writeCloudInitDir :: (Handle 'CloudInit) -> FilePath -> Program ()
+writeCloudInitDir :: Handle 'CloudInit -> FilePath -> Program ()
 writeCloudInitDir h dst = do
-    (metaDataH,userDataH) <- export h ()
     dirH <- newDirectory
-    addContent dirH (fileSpec "meta-data") metaDataH
-    addContent dirH (fileSpec "user-data") userDataH
-    void $ exportDir dirH dst
+    exportCloudInit h dirH dst
 
-writeCloudInit :: (Handle 'CloudInit) -> FileSystem -> FilePath -> Program ()
-writeCloudInit h fs dst = do
-    (metaDataH,userDataH) <- export h ()
+writeCloudInit :: Handle 'CloudInit -> FileSystem -> FilePath -> Program ()
+writeCloudInit h fs dst = void $ writeCloudInit' h fs dst
+
+writeCloudInit' :: Handle 'CloudInit
+                -> FileSystem
+                -> FilePath
+                -> Program (Handle 'ReadOnlyFile)
+writeCloudInit' h fs dst = do
     fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
-    addContent fsH (fileSpec "meta-data") metaDataH
-    addContent fsH (fileSpec "user-data") userDataH
-    export fsH dst
+    exportCloudInit h fsH dst
+
+exportCloudInit
+    :: (CanAdd a 'ReadOnlyFile, Show (ExportSpec a), Show (ExportResult a))
+    => Handle 'CloudInit -> Handle a -> ExportSpec a -> Program (ExportResult a)
+exportCloudInit chH destH dest = do
+    (metaDataH,userDataH) <- export chH ()
+    metaDataFileH <- export metaDataH "meta-data"
+    userDataFileH <- export userDataH "user-data"
+    add destH SReadOnlyFile (fileSpec "meta-data", metaDataFileH)
+    add destH SReadOnlyFile (fileSpec "user-data", userDataFileH)
+    export destH dest
 
 -- * Image import
 
@@ -397,15 +415,17 @@ resizeToMinimum hnd = update hnd ShrinkToMinimum
 
 -- * Image export
 
-exportImageDestination :: Handle 'VmImage -> ImageDestination -> Program ()
+exportImageDestination :: Handle 'VmImage
+                       -> ImageDestination
+                       -> Program (Handle 'ReadOnlyFile)
 exportImageDestination hnd dst = export hnd dst
 
 share :: Handle 'VmImage -> String -> Program ()
-share hnd name = exportImageDestination hnd $ Share name QCow2 KeepSize
+share hnd name = void $ exportImageDestination hnd $ Share name QCow2 KeepSize
 
 toLiveImg :: Handle 'VmImage -> String -> FilePath -> ImageResize -> Program ()
 toLiveImg hnd imgName outDir rs =
-    exportImageDestination hnd $ LiveInstallerImage imgName outDir rs
+    void $ exportImageDestination hnd $ LiveInstallerImage imgName outDir rs
 
 writeImg
     :: Handle 'VmImage
@@ -413,7 +433,7 @@ writeImg
     -> ImageType
     -> FileSystem
     -> ImageResize
-    -> Program ()
+    -> Program (Handle 'ReadOnlyFile)
 writeImg hnd name it fs rs =
     exportImageDestination hnd $ LocalFile (Image name it fs) rs
 
@@ -551,7 +571,7 @@ instance Interpreter IO where
         return ()
     runExport hnd@(Handle SFileSystemImage _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
-        return ()
+        return (handle SReadOnlyFile dest)
     runExport hnd dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
         return undefined
