@@ -47,22 +47,23 @@ data Ctx = Ctx
     { _idCounter :: Graph.Vertex
     , _vars :: Map.Map String String
     , _ci :: Map.Map (Handle 'CloudInit) CiCtx
-    , _fileContent :: Map.Map (Handle 'GeneratedContent) Content
+    , _generatedContent :: Map.Map (Handle 'GeneratedContent) Content
     , _localDirs :: Map.Map (Handle 'LocalDirectory) DirCtx
     , _fileSystems :: Map.Map (Handle 'FileSystemImage) FsCtx
+    , _roFiles :: Map.Map (Handle 'ReadOnlyFile) RofCtx
+    , _actions :: Map.Map Graph.Vertex [IoCompiler ()]
     , _vToH :: Map.Map Graph.Vertex SomeHandle
     , _hToV :: Map.Map SomeHandle Graph.Vertex
     , _dependencies :: [Graph.Edge]
-    } deriving (Show)
+    }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def []
+    def = Ctx 0 def def def def def def def def def []
 
 -- | Context of a 'SLocalDirectory'
 data DirCtx = DirCtx
     { _dirTempDir :: FilePath
-    , _dirFiles :: Map.Map FileSpec (Handle 'GeneratedContent)
-    , _dirExports :: [FilePath]
+    , _dirFiles :: Map.Map FileSpec (Handle 'ReadOnlyFile)
     } deriving (Show)
 
 instance Default DirCtx where
@@ -71,12 +72,17 @@ instance Default DirCtx where
 -- | Context of a 'SFileSystemImage'
 data FsCtx = FsCtx
     { _fsCreation :: FileSystemCreation
-    , _fsFiles :: Map.Map FileSpec (Handle 'GeneratedContent)
+    , _fsFiles :: Map.Map FileSpec (Handle 'ReadOnlyFile)
     , _fsExports :: [FilePath]
     } deriving (Show)
 
 instance Default FsCtx where
     def = FsCtx (FileSystemCreation Ext4 "/" 10 MB) def def
+
+-- | Context of a 'SReadOnlyFile'
+data RofCtx = RofCtx
+    { _rofFileName :: FilePath
+    } deriving (Show)
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -98,6 +104,7 @@ makeLenses ''Ctx
 makeLenses ''CiCtx
 makeLenses ''DirCtx
 makeLenses ''FsCtx
+makeLenses ''RofCtx
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
@@ -116,7 +123,7 @@ instance Interpreter IoCompiler where
         buildId <- lift $ getBuildId
         mh <- interpret $ createContent (FromString "#cloud-config\n")
         uh <- interpret $ createContent (FromString "#cloud-config\n")
-        (hnd@(Handle _ iid), _) <-
+        (hnd@(Handle _ iid),_) <-
             allocHandle SCloudInit (iidPrefix ++ "-" ++ buildId)
         let ciCtx =
                 def & metaData .~ (ASTObj [("instance-id", ASTString iid)]) &
@@ -127,10 +134,12 @@ instance Interpreter IoCompiler where
                 userDataH .~
                 uh
         ci . at hnd ?= ciCtx
+        hnd --> mh
+        hnd --> uh
         return hnd
     runCreate SGeneratedContent c = do
         (hnd,_) <- allocHandle SGeneratedContent ""
-        fileContent . at hnd ?= c
+        generatedContent . at hnd ?= c
         return hnd
     runCreate SLocalDirectory () = do
         tmp <- lift $ mkTempDir "local-dir"
@@ -141,10 +150,14 @@ instance Interpreter IoCompiler where
         (hnd,_) <- allocHandle SFileSystemImage fsLabel
         fileSystems . at hnd ?= (def & fsCreation .~ fsCreate)
         return hnd
+    runCreate SReadOnlyFile fn = do
+        (hnd,_) <- allocHandle SReadOnlyFile fn
+        roFiles . at hnd ?= RofCtx fn
+        return hnd
     runCreate sa _src = return $ singletonHandle sa
     -- Update
     runUpdate hnd@(Handle SGeneratedContent _) c = do
-        fileContent . at hnd . traverse %=
+        generatedContent . at hnd . traverse %=
             \cOld ->
                  Concat [cOld, c]
         return ()
@@ -152,28 +165,53 @@ instance Interpreter IoCompiler where
     -- Add
     runAdd _ SDocumentation str = lift $ logTrace str
     runAdd _ STemplateVariable (k,v) = vars . at k ?= v
-    runAdd hnd@(Handle SLocalDirectory _) SReadOnlyFile (fSpec,cHnd) =
+    runAdd hnd@(Handle SLocalDirectory _) SReadOnlyFile (fSpec,cHnd) = do
+        cHnd --> hnd
         localDirs . at hnd . traverse . dirFiles . at fSpec ?= cHnd
-    runAdd hnd@(Handle SFileSystemImage _) SReadOnlyFile (fSpec,cHnd) =
+    runAdd hnd@(Handle SFileSystemImage _) SReadOnlyFile (fSpec,cHnd) = do
+        cHnd --> hnd
         fileSystems . at hnd . traverse . fsFiles . at fSpec ?= cHnd
     runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast =
         ci . at hnd . traverse . metaData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SCloudInitUserData ast =
         ci . at hnd . traverse . userData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SReadOnlyFile (fspec,cHnd) = do
-        Just content <- use (fileContent . at cHnd)
-        runAdd hnd SCloudInitUserData (toUserDataWriteFilesAST fspec content)
+        cHnd --> hnd
+        fName <- use $ roFiles . at cHnd . to fromJust . rofFileName
+        runAdd
+            hnd
+            SCloudInitUserData
+            (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
     runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
         runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
     runAdd _hnde _sa _src = return ()
     -- Export
     runExport hnd@(Handle SCloudInit _) () = do
-        mh <- use (ci . at hnd . to fromJust . metaDataH)
-        uh <- use (ci . at hnd . to fromJust . userDataH)
-        return (mh, uh)
-    runExport hnd@(Handle SLocalDirectory _) destDir = do
-        localDirs . at hnd . traverse . dirExports <>= [destDir]
-        return ()
+        mH <- use (ci . at hnd . to fromJust . metaDataH)
+        uH <- use (ci . at hnd . to fromJust . userDataH)
+        addAction hnd $
+            do Just ciCtx <- use (ci . at hnd . to fromJust)
+               let uC = ciCtx ^. userData
+                   mC = ciCtx ^. metaData
+               interpret $
+                   do appendContent mH (RenderYaml mC)
+                      appendContent uH (RenderYaml uC)
+        return (mH, uH)
+    runExport hnd@(Handle SLocalDirectory _) destDir =
+        addAction hnd $
+        do fs <-
+               use $ localDirs . at hnd . to fromJust . dirFiles .
+               to Map.toList
+           tmpDir <- lift $ mkTempDir "local-directory"
+           forM_ fs $
+               \(fSpec,fH) ->
+                    do fName <-
+                           use $ roFiles . at fH . to fromJust . rofFileName
+                       let fp = fSpec ^. fileSpecPath
+                       fp' <- lift $ ensureParentDir (tmpDir </> fp)
+                       lift $ copy fName fp'
+           destDir' <- lift $ ensureParentDir destDir
+           lift $ moveDir tmpDir destDir'
     runExport hnd@(Handle SFileSystemImage _) destFile = do
         fileSystems . at hnd . traverse . fsExports <>= [destFile]
         return (singletonHandle SReadOnlyFile) -- TODO REPLACE!!!
@@ -197,35 +235,15 @@ toUserDataRunCmdAST scr = ASTObj [("runcmd", ASTArr [ASTString cmd])]
   where
     cmd = toBashOneLiner scr
 
--- | Merge all the content accumulated in the user-data and meta-data of CI
--- artifacts into the corresponding file contents.
-generateAllCloudInitContent :: IoCompiler ()
-generateAllCloudInitContent = do
-    ciContexts <- use (ci . to Map.toList)
-    mapM_ updateContentWithCI ciContexts
+-- | Generate the local directory by copying all generated files into it.
+generateLocalDir :: DirCtx -> IoCompiler ()
+generateLocalDir c = do
+    let fcs = Map.toList (c ^. dirFiles)
+        tmpDir = c ^. dirTempDir
+        exports = c ^. dirExports
+    void $ generateContentsToDir tmpDir fcs
+    forM_ exports (lift . copyToDest tmpDir)
   where
-    updateContentWithCI (_ciHnd,ciCtx) = do
-        let uH = ciCtx ^. userDataH
-            uC = ciCtx ^. userData
-            mH = ciCtx ^. metaDataH
-            mC = ciCtx ^. metaData
-        interpret $
-            do appendContent mH (RenderYaml mC)
-               appendContent uH (RenderYaml uC)
-        use fileContent
-
--- | Generate 'SLocalDirectory' exports
-generateAllDirectories :: IoCompiler ()
-generateAllDirectories = do
-    dirs <- uses localDirs Map.toList
-    mapM_ generateDir dirs
-  where
-    generateDir (_h,c) = do
-        let fcs = Map.toList (c ^. dirFiles)
-            tmpDir = c ^. dirTempDir
-            exports = c ^. dirExports
-        void $ generateContentsToDir tmpDir fcs
-        forM_ exports (lift . copyToDest tmpDir)
     copyToDest src dest = do
         src' <- getRealPath src
         dest' <- ensureParentDir dest
@@ -264,7 +282,7 @@ generateContentsToDir tmpDir fcs = do
   where
     gen env (fspec@(FileSpec fp _ _ _),cHnd) = do
         fp' <- lift $ ensureParentDir (tmpDir </> fp)
-        c <- use (fileContent . at cHnd . to fromJust)
+        c <- use (generatedContent . at cHnd . to fromJust)
         lift $ renderContentToFile fp' c env
         return (fp', fspec)
 
@@ -284,6 +302,19 @@ allocHandle sa str = do
     vToH . at nextId ?= sh
     hToV . at sh ?= nextId
     return (h, sh)
+
+-- | Add a dependency of one resource to another
+(-->) :: Handle a -> Handle b -> IoCompiler ()
+h --> h' = do
+  Just v <- lookupVertex h
+  Just v' <- lookupVertex h'
+  dependencies <>= [(v,v')]
+
+-- | Add a build action to a handle
+addAction :: Handle a -> IoCompiler () -> IoCompiler ()
+addAction h a = do
+  Just v <- lookupVertex $ SomeHandle h
+  actions . at v . traverse <>= [a]
 
 -- | Return the vertex of a handle.
 lookupVertex :: Handle a -> IoCompiler (Maybe Graph.Vertex)
