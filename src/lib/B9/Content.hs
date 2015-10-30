@@ -6,21 +6,23 @@ module B9.Content
         fileSpecPermissions, fileSpecOwner, fileSpecGroup)
        where
 
-import           Control.Parallel.Strategies
-import           Data.Binary
-import           Data.Data
-import           Data.Hashable
-import           GHC.Generics (Generic)
 import           B9.Content.AST as X
 import           B9.Content.ErlTerms as X
 import           B9.Content.ErlangPropList as X
 import           B9.Content.StringTemplate as X
 import           B9.Content.YamlObject as X
-import qualified Data.ByteString.Char8 as B
 import           B9.QCUtil
-import           Test.QuickCheck
-import           Control.Monad.IO.Class
 import           Control.Lens.TH
+import           Control.Monad.IO.Class
+import           Control.Parallel.Strategies
+import           Data.Binary
+import           Data.Bits
+import qualified Data.ByteString.Char8 as B
+import           Data.Data
+import           Data.Hashable
+import           GHC.Generics (Generic)
+import           Test.QuickCheck
+import           Text.Printf
 
 -- | This contains most of the information elements necessary to specify a file
 -- in some file system. This is used to specify where e.g. cloud-init or the
@@ -30,7 +32,40 @@ data FileSpec = FileSpec
     , _fileSpecPermissions :: (Word8,Word8, Word8, Word8)
     , _fileSpecOwner :: String
     , _fileSpecGroup :: String
-    } deriving (Ord,Read,Show,Eq,Data,Typeable,Generic)
+    } deriving (Ord,Read,Eq,Data,Typeable,Generic)
+
+instance Show FileSpec where
+    show (FileSpec path (s,u,g,o) owner group) =
+        printf
+               "%s%s%s%s %s %s %s"
+               (str' s)
+               (str u)
+               (str g)
+               (str o)
+               owner
+               group
+               path
+      where
+        str' x =
+            (if (testBit x 2)
+                 then 'u'
+                 else '-') :
+            (if (testBit x 1)
+                 then 'g'
+                 else '-') :
+            if (testBit x 0)
+                then "s"
+                else "-"
+        str x =
+            (if (testBit x 2)
+                 then 'r'
+                 else '-') :
+            (if (testBit x 1)
+                 then 'w'
+                 else '-') :
+            (if (testBit x 0)
+                 then "w"
+                 else "-")
 
 -- | A file spec for a file belonging to root:root with permissions 0644.
 fileSpec :: FilePath -> FileSpec

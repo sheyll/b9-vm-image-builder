@@ -1,6 +1,7 @@
 module B9.DSL.InterpreterSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
+import B9.Content
 import B9.DSL
 import B9.DSL.Interpreter
 import B9.ShellScript
@@ -25,62 +26,155 @@ spec = do
     cloudInitWithContentExamples
 
 toList :: Program a -> [String]
-toList = dumpToStrings . compile
+toList = toListIo . compile
+
+toListIo :: IoProgram a -> [String]
+toListIo = dumpToStrings . void
+
+shouldMean :: Program a -> Program b -> Expectation
+shouldMean actual expected = (toList actual) `shouldContain` (toList expected)
+
+shouldMeanIo :: Program a -> IoProgram b -> Expectation
+shouldMeanIo actual expected = (toList actual) `shouldContain` (toListIo expected)
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
 readOnlyFileExamples :: Spec
-readOnlyFileExamples = do
+readOnlyFileExamples =
     describe "ReadOnlyFile" $
-        do it "can be created from an existing local file" $
-               do let actual = do
-                          fH <- create SReadOnlyFile "/tmp/test.file"
-                          export fH "/tmp/test.file.copy"
-                  return ()
-           it "is copied to a file when exporting" $
-               do let actual = do
-                          fH <- create SReadOnlyFile "/tmp/test.file"
-                          export fH "/tmp/test.file.copy"
-                  return ()
-           it "can be added to LocalDirectory" $
-               do let actual = do
-                          fH <- create SReadOnlyFile "/tmp/test.file"
-                          dirH <- newDirectory
-                          add c SReadOnlyFile (fileSpec "test.file", fH)
-                  return ()
-           it "can be added to FileSystemImage" $
-               do let actual = do
-                          fH <- create SReadOnlyFile "/tmp/test.file"
-                          fsH <-
-                              create
-                                  SFileSystemImage
-                                  (FileSystemCreation ISO9660 "cidata" 1 MB)
-                          add fsH SReadOnlyFile (fileSpec "test.file", fH)
-                  return ()
-           it "can be added to CloudInit" $
-               do let actual = do
-                          fH <- create SReadOnlyFile "/tmp/test.file"
-                          c <- newCloudInit
-                          add c SReadOnlyFile (fileSpec "test.file", fH)
-                  return ()
-           it "can be exported from a FileSystemImage" $
-               do let actual = do
-                          fsH <-
-                              create
-                                  SFileSystemImage
-                                  (FileSystemCreation ISO9660 "cidata" 1 MB)
-                          export fsH "/tmp/test.iso"
-                  return ()
-           it "can be exported from GeneratedContent" $
-               do let actual = do
-                          fcH <- createContent (FromString "test-content")
-                          export fcH "/tmp/rendered-content.file"
-                  return ()
-           it "is exported to a (new) ReadOnlyFile" $
-               do let actual = do
-                          fH <- create SReadOnlyFile "/tmp/test.file"
-                          export fH "/tmp/test.file.copy"
-                  return ()
+    do it "has no effects if unused" $
+           do let actual = do
+                      create SReadOnlyFile "/tmp/test.file"
+                  expected = return ()
+              actual `shouldMeanIo` expected
+       it "is copied to a file when exporting" $
+           do let actual = do
+                      fH <- create SReadOnlyFile "/tmp/test.file"
+                      export fH $ Just "/tmp/test.file.copy"
+                  expected = do
+                      src' <- getRealPath "/tmp/test.file"
+                      dst' <- ensureParentDir "/tmp/test.file.copy"
+                      copy src' dst'
+              actual `shouldMeanIo` expected
+       it "can be added to LocalDirectory" $
+           do let actual = do
+                      fH <- create SReadOnlyFile "/tmp/test.file"
+                      dirH <- newDirectory
+                      add dirH SReadOnlyFile (fileSpec "test.file", fH)
+                  expected = do
+                      tmpDir <- mkTempDir "local-dir"
+                      src' <- getRealPath "/tmp/test.file"
+                      dst' <- ensureParentDir (tmpDir </> "test.file")
+                      copy src' dst'
+              actual `shouldMeanIo` expected
+       it "can be added to FileSystemImage" $
+           do let actual = do
+                      fH <- create SReadOnlyFile "/tmp/test.file"
+                      fsH <-
+                          create
+                              SFileSystemImage
+                              (FileSystemCreation ISO9660 "cidata" 1 MB)
+                      add fsH SReadOnlyFile (fileSpec "test.file", fH)
+                  expected = do
+                      img <- mkTemp "file-system-image-cidata"
+                      tmpDir <- mkTempDir "file-system-content"
+                      src' <- getRealPath "/tmp/test.file"
+                      dst' <- ensureParentDir (tmpDir </> "test.file")
+                      copy src' dst'
+                      createFileSystem
+                          img
+                          (FileSystemCreation ISO9660 "cidata" 1 MB)
+                          tmpDir
+                          [fileSpec "test.file"]
+              actual `shouldMeanIo` expected
+       it
+           "can be added to FileSystemImage, which can be exported and added to another FileSystemImage" $
+           do let actual = do
+                      fH <- create SReadOnlyFile "/tmp/test.file"
+                      fsH <-
+                          create
+                              SFileSystemImage
+                              (FileSystemCreation ISO9660 "cidata" 1 MB)
+                      add fsH SReadOnlyFile (fileSpec "test.file", fH)
+                      fileSysFileH <- export fsH Nothing
+                      fsH2 <-
+                          create
+                              SFileSystemImage
+                              (FileSystemCreation VFAT "blub" 1 MB)
+                      add
+                          fsH2
+                          SReadOnlyFile
+                          (fileSpec "test1.iso", fileSysFileH)
+                  expected = do
+                      -- Allocate all /automatic/ file names:
+                      img1 <- mkTemp "file-system-image-cidata"
+                      tmpDir1 <- mkTempDir "file-system-content"
+                      img1Exp <- mkTemp "tmp-file"
+                      img2 <- mkTemp "file-system-image-blub"
+                      tmpDir2 <- mkTempDir "file-system-content"
+                      -- Copy the input file to the directory from which the ISO
+                      -- is created:
+                      src1' <- getRealPath "/tmp/test.file"
+                      dst1' <- ensureParentDir (tmpDir1 </> "test.file")
+                      copy
+                          src1'
+                          dst1'
+                      -- Generate the first image:
+                      createFileSystem
+                          img1
+                          (FileSystemCreation ISO9660 "cidata" 1 MB)
+                          tmpDir1
+                          [fileSpec "test.file"]
+                      -- Copy the image file to a temporary file:
+                      img1ExpSrc <- getRealPath img1
+                      img1Exp' <- ensureParentDir (tmpDir2 </> img1Exp)
+                      copy img1ExpSrc img1Exp'
+                      -- Copy the temp image file to the directory from which
+                      -- the VFAT is created using the new name (test1.iso):
+                      img2Img1Src <- getRealPath img1Exp
+                      img2Img1Dst <- ensureParentDir (tmpDir2 </> "test1.iso")
+                      copy img2Img1Src img2Img1Dst
+                      -- Generate the second image:
+                      createFileSystem
+                          img2
+                          (FileSystemCreation VFAT "blub" 1 MB)
+                          tmpDir2
+                          [fileSpec "test1.iso"]
+                      return ()
+              actual `shouldMeanIo` expected
+       it "can be added to CloudInit" $
+           do let actual = do
+                      fH <- create SReadOnlyFile "/tmp/test.file"
+                      c <- newCloudInit "iid-1"
+                      add c SReadOnlyFile (fileSpec "test.file", fH)
+                      writeCloudInitDir c "/tmp/ci.d"
+                  expected = do
+                      src' <- getRealPath "/tmp/test.file"
+                      dst' <- ensureParentDir "/tmp/test.file.copy"
+                      copy src' dst'
+              actual `shouldMeanIo` expected
+       it "can be exported from a FileSystemImage" $
+           do let actual = do
+                      fsH <-
+                          create
+                              SFileSystemImage
+                              (FileSystemCreation ISO9660 "cidata" 1 MB)
+                      export fsH (Just "/tmp/test.iso")
+              return ()
+              True `shouldBe` True
+       it "can be exported from GeneratedContent" $
+           do let actual = do
+                      fcH <- createContent (FromString "test-content")
+                      fH <- writeContentTmp fcH
+                      export fH (Just "/tmp/rendered-content.file")
+              return ()
+              True `shouldBe` True
+       it "is exported to a (new) ReadOnlyFile" $
+           do let actual = do
+                      fH <- create SReadOnlyFile "/tmp/test.file"
+                      export fH (Just "/tmp/test.file.copy")
+              return ()
+              True `shouldBe` True
 
 -- * Specs for the build order
 buildOrderSpecs :: Spec
@@ -97,11 +191,10 @@ candySpecs = do
                    addFile d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addGeneratedContent
+                   addFileFull
                        d
+                       (Source NoConversion "/some/path/test.txt")
                        (fileSpec "test.txt")
-                       (FromTextFile
-                            (Source NoConversion "/some/path/test.txt"))
            actual `hasSameEffectAs` expected
     describe "addExe" $
         it "is equal to addFile, but changes permissions to 0755" $
@@ -110,12 +203,11 @@ candySpecs = do
                    addExe d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addGeneratedContent
+                   addFileFull
                        d
+                       (Source NoConversion "/some/path/test.txt")
                        (fileSpec "test.txt" & fileSpecPermissions .~
                         (0, 7, 5, 5))
-                       (FromTextFile
-                            (Source NoConversion "/some/path/test.txt"))
            actual `hasSameEffectAs` expected
     describe "addFileP" $
         it "is equal to addFile, but changes permissions to the given value" $
@@ -126,11 +218,10 @@ candySpecs = do
                         addFileP d "/some/path/test.txt" perm
                     expected = do
                         d <- newDirectory
-                        addGeneratedContent
+                        addFileFull
                             d
+                            (Source NoConversion "/some/path/test.txt")
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
-                            (FromTextFile
-                                 (Source NoConversion "/some/path/test.txt"))
                 actual `hasSameEffect` expected
     describe "addTemplate" $
         it "strips the directory and replaces template variables" $
@@ -139,11 +230,10 @@ candySpecs = do
                    addTemplate d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addGeneratedContent
+                   addFileFull
                        d
+                       (Source ExpandVariables "/some/path/test.txt")
                        (fileSpec "test.txt")
-                       (FromTextFile
-                            (Source ExpandVariables "/some/path/test.txt"))
            actual `hasSameEffectAs` expected
     describe "addTemplateExe" $
         it "is equal to addTemplate, but changes permissions to 0755" $
@@ -152,12 +242,11 @@ candySpecs = do
                    addTemplateExe d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addGeneratedContent
+                   addFileFull
                        d
+                       (Source ExpandVariables "/some/path/test.txt")
                        (fileSpec "test.txt" & fileSpecPermissions .~
                         (0, 7, 5, 5))
-                       (FromTextFile
-                            (Source ExpandVariables "/some/path/test.txt"))
            actual `hasSameEffectAs` expected
     describe "addTemplateP" $
         it
@@ -169,11 +258,10 @@ candySpecs = do
                         addTemplateP d "/some/path/test.txt" perm
                     expected = do
                         d <- newDirectory
-                        addGeneratedContent
+                        addFileFull
                             d
+                            (Source ExpandVariables "/some/path/test.txt")
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
-                            (FromTextFile
-                                 (Source ExpandVariables "/some/path/test.txt"))
                 actual `hasSameEffect` expected
   where
     hasSameEffectAs :: Program a -> Program a -> IO ()
@@ -385,7 +473,7 @@ cloudInitWithContentExamples =
         writeCloudInit i ISO9660 "test.iso"
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifdown eth0"])])
         addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifup eth0"])])
-        addGeneratedContent i (FileSpec "file1.txt" (0,6,4,2) "user1" "group1") (FromString "file1")
+        addFileFromContent i (FromString "file1") (FileSpec "file1.txt" (0,6,4,2) "user1" "group1")
         sh i "ls -la /tmp"
         return i
 
@@ -394,13 +482,13 @@ cloudInitWithContentExamples =
 vmImageExport :: Program ()
 vmImageExport = do
     i1 <- from "test"
-    writeImg i1 "test.qcow" QCow2 Ext4 ShrinkToMinimum
+    void $ writeImg i1 "test.qcow" QCow2 Ext4 ShrinkToMinimum
 
 vmImageMultiExport :: Program ()
 vmImageMultiExport = do
     i1 <- from "test"
-    writeImg i1 "test-1" QCow2 Ext4 ShrinkToMinimum
-    writeImg i1 "test-2" Vmdk Ext4 KeepSize
+    void $ writeImg i1 "test-1" QCow2 Ext4 ShrinkToMinimum
+    void $ writeImg i1 "test-2" Vmdk Ext4 KeepSize
 
 vmImageMount :: Program ()
 vmImageMount = do
@@ -414,8 +502,8 @@ vmImageMultiMountAndExport = do
     e <- lxc "test"
     mount e i1 "/mnt/test-1"
     mount e i1 "/mnt/test-2"
-    writeImg i1 "test-1" QCow2 Ext4 ShrinkToMinimum
-    writeImg i1 "test-2" Vmdk Ext4 KeepSize
+    void $ writeImg i1 "test-1" QCow2 Ext4 ShrinkToMinimum
+    void $ writeImg i1 "test-2" Vmdk Ext4 KeepSize
 
 vmImageMultiEnvMultiMount :: Program ()
 vmImageMultiEnvMultiMount = do
@@ -436,15 +524,12 @@ dslExample1 = do
     addUserData c (ASTString "test")
     e <- lxc "container-id"
     mountDirRW e "tmp" "/mnt/HOST_TMP"
-    addGeneratedContent
+    addFileFull
         e
+        (Source ExpandVariables "httpd.conf.in")
         (fileSpec "/etc/httpd.conf")
-        (FromTextFile (Source ExpandVariables "httpd.conf.in"))
     sh e "ls -la"
-    addGeneratedContent
-        c
-        (fileSpec "/etc/httpd.conf")
-        (FromTextFile (Source ExpandVariables "httpd.conf.in"))
+    addTemplate c "httpd.conf"
     sh c "ls -la"
     doc "From here there be dragons:"
     rootImage "fedora" "testv1-root" e

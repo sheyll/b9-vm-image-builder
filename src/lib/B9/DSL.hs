@@ -18,6 +18,7 @@ import Data.Binary
 import Data.Data
 import Data.Function (on)
 import Data.Functor (void)
+import Data.Maybe
 import GHC.Generics (Generic)
 import System.FilePath
 import Text.Printf (printf)
@@ -162,7 +163,7 @@ type family CreateSpec (a :: Artifact) :: * where
         CreateSpec 'LinuxVm = LinuxVmArgs
         CreateSpec 'GeneratedContent = Content
         CreateSpec 'LocalDirectory = ()
-        CreateSpec 'ReadOnlyFile = ()
+        CreateSpec 'ReadOnlyFile = FilePath
         CreateSpec 'FileSystemImage = FileSystemCreation
 
 type family UpdateSpec (a :: Artifact) :: * where
@@ -171,7 +172,7 @@ type family UpdateSpec (a :: Artifact) :: * where
 
 type family AddSpec (a :: Artifact) :: * where
         AddSpec 'Documentation = String
-        AddSpec 'GeneratedContent = (FileSpec, Handle 'GeneratedContent)
+        AddSpec 'GeneratedContent = Handle 'GeneratedContent
         AddSpec 'ReadOnlyFile = (FileSpec, Handle 'ReadOnlyFile)
         AddSpec 'ExecutableScript = Script
         AddSpec 'MountedHostDir = Mounted HostDirMnt
@@ -202,15 +203,16 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'CloudInit = ()
         ExportSpec 'VmImage = ImageDestination
-        ExportSpec 'LocalDirectory = FilePath
-        ExportSpec 'FileSystemImage = FilePath
-        ExportSpec 'ReadOnlyFile = FilePath
-        ExportSpec 'GeneratedContent = FilePath
+        ExportSpec 'LocalDirectory = Maybe FilePath
+        ExportSpec 'FileSystemImage = Maybe FilePath
+        ExportSpec 'ReadOnlyFile = Maybe FilePath
+        ExportSpec 'GeneratedContent = Maybe FilePath
 
 type family ExportResult (a :: Artifact) :: * where
         ExportResult 'CloudInit =
                                 (Handle 'GeneratedContent, Handle 'GeneratedContent)
         ExportResult 'VmImage = Handle 'ReadOnlyFile
+        ExportResult 'LocalDirectory = Handle 'LocalDirectory
         ExportResult 'FileSystemImage = Handle 'ReadOnlyFile
         ExportResult 'ReadOnlyFile = Handle 'ReadOnlyFile
         ExportResult 'GeneratedContent = Handle 'ReadOnlyFile
@@ -251,35 +253,32 @@ variableBindings = singletonHandle SVariableBindings
 ($=) :: String -> String -> Program ()
 var $= val = add variableBindings STemplateVariable (var, val)
 
--- * Content generation and static file inclusion (e.g. for directories, file system images, cloud-init and
--- lxc environments)
+-- * File Inclusion, File-Templating and Script Rendering
 
 -- | Add an existing file to an artifact.
 -- Strip the directories from the path, e.g. @/etc/blub.conf@ will be
 -- @blob.conf@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addFile
-    :: (CanAddP e1 'GeneratedContent ~ 'True)
-    => Handle e1 -> FilePath -> Program ()
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> FilePath -> Program ()
 addFile d f = addFileP d f (0, 6, 4, 4)
 
 -- | Same as 'addFile' but set the destination file permissions to @0755@
 -- (executable for all).
 addExe
-    :: (CanAddP e1 'GeneratedContent ~ 'True)
-    => Handle e1 -> FilePath -> Program ()
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> FilePath -> Program ()
 addExe d f = addFileP d f (0, 7, 5, 5)
 
 -- | Same as 'addFile' but with an extra output file permission parameter.
 addFileP
-    :: (CanAddP e1 'GeneratedContent ~ 'True)
-    => Handle e1 -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
 addFileP d f p = do
-    let f' = takeFileName f
-    addContent
-        d
-        (fileSpec f' & fileSpecPermissions .~ p)
-        (FromTextFile (Source NoConversion f))
+    let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
+        srcFile = Source NoConversion f
+    addFileFull d srcFile dstSpec
 
 -- | Generate a file to an artifact from a local file template.
 -- All occurences of @${var}@ will be replaced by the contents of @var@, which
@@ -288,45 +287,70 @@ addFileP d f p = do
 -- be @foo.cfg@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addTemplate
-    :: (CanAddP e1 'GeneratedContent ~ 'True)
-    => Handle e1 -> FilePath -> Program ()
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> FilePath -> Program ()
 addTemplate d f = do
   addTemplateP d f (0,6,4,4)
 
 -- | Same as 'addTemplate' but set the destination file permissions to @0755@
 -- (executable for all).
 addTemplateExe
-    :: (CanAddP e1 'GeneratedContent ~ 'True)
-    => Handle e1 -> FilePath -> Program ()
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> FilePath -> Program ()
 addTemplateExe d f = do
     addTemplateP d f (0, 6, 4, 4)
 
 -- | Same as 'addTemplate' but with an extra output file permission parameter.
 addTemplateP
-    :: (CanAddP e1 'GeneratedContent ~ 'True)
-    => Handle e1 -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
 addTemplateP d f p = do
-    let f' = takeFileName f
-    addContent
-        d
-        (fileSpec f' & fileSpecPermissions .~ p)
-        (FromTextFile (Source ExpandVariables f))
+    let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
+        srcFile = Source ExpandVariables f
+    addFileFull d srcFile dstSpec
 
+-- | Add an existing file from the file system, optionally with template
+-- variable expansion to an artifact at a 'FileSpec'.
+addFileFull
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> SourceFile -> FileSpec -> Program ()
+addFileFull dstH srcFile dstSpec =
+    addFileFromContent dstH (FromTextFile srcFile) dstSpec
+
+-- | Generate a file with a content and add that file to an artifact at a
+-- 'FileSpec'.
+addFileFromContent
+    :: (CanAdd e 'ReadOnlyFile)
+    => Handle e -> Content -> FileSpec -> Program ()
+addFileFromContent dstH content dstSpec = do
+    cH <- createContent content
+    tmpFileH <- writeContentTmp cH
+    add dstH SReadOnlyFile (dstSpec, tmpFileH)
+
+-- * /Low-level/ 'Content' generation functions
+
+-- | Create a handle for accumulating 'Content' with an initial 'Content'.
 createContent :: Content -> Program (Handle 'GeneratedContent)
 createContent = create SGeneratedContent
 
+-- | Accumulate/Append more 'Content' to the 'GeneratedContent'
+--   handle obtained by e.g. 'createContent'
 appendContent :: Handle 'GeneratedContent -> Content -> Program ()
 appendContent hnd c = update hnd c
 
+-- | Add 'GeneratedContent' to a given artifact.
 addContent
     :: (CanAdd e 'GeneratedContent)
-    => Handle e -> FileSpec -> Content -> Program ()
-addContent hnd f c = createContent c >>= addGeneratedContent hnd f
+    => Handle e -> Handle 'GeneratedContent -> Program ()
+addContent hnd c = add hnd SGeneratedContent c
 
-addGeneratedContent
-    :: (CanAdd e 'GeneratedContent)
-    => Handle e -> FileSpec -> Handle 'GeneratedContent -> Program ()
-addGeneratedContent hnd f c = add hnd SGeneratedContent (f, c)
+-- | Write 'GeneratedContent' to a temporary file and return the file handle.
+writeContentTmp :: Handle 'GeneratedContent -> Program (Handle 'ReadOnlyFile)
+writeContentTmp hnd = export hnd Nothing
+
+-- | Write 'GeneratedContent' to a given file and return the file handle.
+writeContent :: Handle 'GeneratedContent -> FilePath -> Program (Handle 'ReadOnlyFile)
+writeContent hnd = export hnd . Just
 
 -- * directories
 
@@ -335,8 +359,8 @@ newDirectory :: Program (Handle 'LocalDirectory)
 newDirectory = create SLocalDirectory ()
 
 -- | Render the directory to the actual destination (which must not exist)
-exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program ()
-exportDir dirH dest = export dirH dest
+exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program (Handle 'LocalDirectory)
+exportDir dirH dest = export dirH (Just dest)
 
 -- * cloud init
 
@@ -354,9 +378,12 @@ addUserData
 addUserData hnd ast = add hnd SCloudInitUserData ast
 
 writeCloudInitDir :: Handle 'CloudInit -> FilePath -> Program ()
-writeCloudInitDir h dst = do
+writeCloudInitDir h dst = void $ writeCloudInitDir' h dst
+
+writeCloudInitDir' :: Handle 'CloudInit -> FilePath -> Program (Handle 'LocalDirectory)
+writeCloudInitDir' h dst = do
     dirH <- newDirectory
-    exportCloudInit h dirH dst
+    exportCloudInit h dirH (Just dst)
 
 writeCloudInit :: Handle 'CloudInit -> FileSystem -> FilePath -> Program ()
 writeCloudInit h fs dst = void $ writeCloudInit' h fs dst
@@ -367,15 +394,15 @@ writeCloudInit' :: Handle 'CloudInit
                 -> Program (Handle 'ReadOnlyFile)
 writeCloudInit' h fs dst = do
     fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
-    exportCloudInit h fsH dst
+    exportCloudInit h fsH (Just dst)
 
 exportCloudInit
     :: (CanAdd a 'ReadOnlyFile, Show (ExportSpec a), Show (ExportResult a))
     => Handle 'CloudInit -> Handle a -> ExportSpec a -> Program (ExportResult a)
 exportCloudInit chH destH dest = do
     (metaDataH,userDataH) <- export chH ()
-    metaDataFileH <- export metaDataH "meta-data"
-    userDataFileH <- export userDataH "user-data"
+    metaDataFileH <- writeContentTmp metaDataH
+    userDataFileH <- writeContentTmp userDataH
     add destH SReadOnlyFile (fileSpec "meta-data", metaDataFileH)
     add destH SReadOnlyFile (fileSpec "user-data", userDataFileH)
     export destH dest
@@ -568,10 +595,10 @@ instance Interpreter IO where
                return (m, u)
     runExport hnd@(Handle SLocalDirectory _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
-        return ()
+        return $ handle SLocalDirectory (fromMaybe "xxx" dest)
     runExport hnd@(Handle SFileSystemImage _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
-        return (handle SReadOnlyFile dest)
+        return (handle SReadOnlyFile (fromMaybe "xxx" dest))
     runExport hnd dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
         return undefined
