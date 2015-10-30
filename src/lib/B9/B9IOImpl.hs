@@ -50,7 +50,9 @@ executeIoProg p = run go p
         liftIO $ renameFile s d
         return n
     go (MoveDir s d n) = do
-        liftIO $ renameDirectory s d
+        exists <- liftIO $ doesDirectoryExist d
+        when exists (liftIO $ removeDirectoryRecursive d)
+        B9Monad.cmdRaw "mv" [s, d]
         return n
     go (GetParentDir f k) = do
         return $ k (takeDirectory f)
