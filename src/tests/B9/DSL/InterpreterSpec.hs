@@ -1,11 +1,9 @@
 module B9.DSL.InterpreterSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
-import B9.Content
 import B9.DSL
 import B9.DSL.Interpreter
-import B9.ShellScript
-import B9.SpecExtra hiding (spec)
+import B9.SpecExtra
 import Control.Lens hiding (from)
 import Data.Function
 import Test.Hspec
