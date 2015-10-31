@@ -6,8 +6,6 @@ import B9.Builder
 import System.Directory
 import System.FilePath
 import Test.Hspec
-import Test.QuickCheck
-import Text.Printf
 
 spec :: Spec
 spec =
