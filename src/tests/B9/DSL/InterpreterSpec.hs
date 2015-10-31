@@ -5,6 +5,7 @@ import B9.Content
 import B9.DSL
 import B9.DSL.Interpreter
 import B9.ShellScript
+import B9.SpecExtra hiding (spec)
 import Control.Lens hiding (from)
 import Data.Function
 import Test.Hspec
@@ -14,8 +15,7 @@ spec :: Spec
 spec = do
     describe "compile (General)" $
         do it "traces documentation" $
-               toList (doc "test") `shouldBe`
-               ["logTrace test"]
+               (doc "test") `shouldMeanIo` (logTrace "test")
     readOnlyFileExamples
     buildOrderSpecs
     candySpecs
@@ -31,11 +31,8 @@ toList = toListIo . compile
 toListIo :: IoProgram a -> [String]
 toListIo = dumpToStrings . void
 
-shouldMean :: Program a -> Program b -> Expectation
-shouldMean actual expected = (toList actual) `shouldContain` (toList expected)
-
 shouldMeanIo :: Program a -> IoProgram b -> Expectation
-shouldMeanIo actual expected = (toList actual) `shouldContain` (toListIo expected)
+shouldMeanIo actual expected = (toList actual) `should've` (toListIo expected)
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
@@ -149,32 +146,29 @@ readOnlyFileExamples =
                       add c SReadOnlyFile (fileSpec "test.file", fH)
                       writeCloudInitDir c "/tmp/ci.d"
                   expected = do
-                      src' <- getRealPath "/tmp/test.file"
-                      dst' <- ensureParentDir "/tmp/test.file.copy"
-                      copy src' dst'
+                      src <- mkTempDir "local-dir"
+                      dst <- ensureParentDir "/tmp/ci.d"
+                      moveDir src dst
               actual `shouldMeanIo` expected
-       it "can be exported from a FileSystemImage" $
-           do let actual = do
-                      fsH <-
-                          create
-                              SFileSystemImage
-                              (FileSystemCreation ISO9660 "cidata" 1 MB)
-                      export fsH (Just "/tmp/test.iso")
-              return ()
-              True `shouldBe` True
        it "can be exported from GeneratedContent" $
            do let actual = do
                       fcH <- createContent (FromString "test-content")
                       fH <- writeContentTmp fcH
                       export fH (Just "/tmp/rendered-content.file")
-              return ()
-              True `shouldBe` True
+                  expected = do
+                      src <- mkTemp "generated-content-0"
+                      src' <- ensureParentDir src
+                      renderContentToFile src' (FromString "test-content") (Environment [])
+              actual `shouldMeanIo` expected
        it "is exported to a (new) ReadOnlyFile" $
            do let actual = do
                       fH <- create SReadOnlyFile "/tmp/test.file"
                       export fH (Just "/tmp/test.file.copy")
-              return ()
-              True `shouldBe` True
+                  expected = do
+                      src <- getRealPath "/tmp/test.file"
+                      dst <- ensureParentDir "/tmp/test.file.copy"
+                      copy src dst
+              actual `shouldMeanIo` expected
 
 -- * Specs for the build order
 buildOrderSpecs :: Spec
@@ -282,10 +276,10 @@ localDirExamples =
        it "copies the temporary intermediate directory to all exports" $
            let exportsCmds =
                    dumpToStrings $
-                   do src' <- getRealPath "/BUILD/local-dir-XXXX"
+                   do src' <- mkTempDir "local-dir"
                       dest' <- ensureParentDir "/tmp/test.d"
-                      copyDir src' dest'
-           in actualCmds `shouldContain` exportsCmds
+                      moveDir src' dest'
+           in actualCmds `should've` exportsCmds
   where
     actualCmds =
         dumpToStrings $
@@ -322,29 +316,28 @@ cloudInitIsoImageExamples =
                    runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   tmpDir <- mkTempDir "file-system-content"
-                   let metaDataFile = tmpDir </> "meta-data"
-                       expectedContent = minimalMetaData iid
+                   metaDataFile <- mkTemp "generated-content-0"
+                   let expectedContent = minimalMetaData iid
                        expectedEnv = Environment []
                    absMetaDataFile <- ensureParentDir metaDataFile
                    renderContentToFile
                        absMetaDataFile
                        expectedContent
                        expectedEnv
-           in actualCmds `shouldContain` expectedCmds
+           in actualCmds `should've` expectedCmds
        it "generates user-data into the file system image temp dir" $
            let actualCmds = dumpToStrings (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
                    let expectedContent = minimalUserData
                        expectedEnv = Environment []
-                       absUserDataFile =
-                           "/abs/path//BUILD/file-system-content-XXXX/user-data"
+                   userDataFile <- mkTemp "generated-content-2"
+                   absUserDataFile <- ensureParentDir userDataFile
                    renderContentToFile
                        absUserDataFile
                        expectedContent
                        expectedEnv
-           in actualCmds `shouldContain` expectedCmds
+           in actualCmds `should've` expectedCmds
        it "generates an ISO image" $
            let actualCmds = dumpToStrings (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
@@ -352,12 +345,13 @@ cloudInitIsoImageExamples =
                    let files = [fileSpec "meta-data", fileSpec "user-data"]
                        fsc = FileSystemCreation ISO9660 "cidata" 2 MB
                        tmpDir = "/BUILD/file-system-content-XXXX"
-                       tmpImg = "/BUILD/file-system-image-XXXX"
+                       tmpImg = "/BUILD/file-system-image-cidata-XXXX"
                        dstImg = "test.iso"
                    createFileSystem tmpImg fsc tmpDir files
+                   tmpImg' <- getRealPath tmpImg
                    dstImg' <- ensureParentDir dstImg
-                   copy tmpImg dstImg'
-           in actualCmds `shouldContain` expectedCmds
+                   copy tmpImg' dstImg'
+           in actualCmds `should've` expectedCmds
   where
     cloudInitIsoImage :: Program (Handle 'CloudInit)
     cloudInitIsoImage = do
@@ -371,20 +365,21 @@ cloudInitMultiVfatImageExamples =
     do it "generates test1.vfat" $
            let actualCmds = dumpToStrings (compile cloudInitVfatImage)
                expectedCmds = dumpToStrings (expectedProg "test1.vfat")
-           in actualCmds `shouldContain` expectedCmds
+           in actualCmds `should've` expectedCmds
        it "generates test2.vfat" $
            let actualCmds = dumpToStrings (compile cloudInitVfatImage)
                expectedCmds = dumpToStrings (expectedProg "test2.vfat")
-           in actualCmds `shouldContain` expectedCmds
+           in actualCmds `should've` expectedCmds
   where
     expectedProg dstImg = do
         let files = [fileSpec "meta-data", fileSpec "user-data"]
             fsc = FileSystemCreation VFAT "cidata" 2 MB
             tmpDir = "/BUILD/file-system-content-XXXX"
-            tmpImg = "/BUILD/file-system-image-XXXX"
+            tmpImg = "/BUILD/file-system-image-cidata-XXXX"
         createFileSystem tmpImg fsc tmpDir files
+        tmpImg' <- getRealPath tmpImg
         dstImg' <- ensureParentDir dstImg
-        copy tmpImg dstImg'
+        copy tmpImg' dstImg'
     cloudInitVfatImage :: Program (Handle 'CloudInit)
     cloudInitVfatImage = do
         i <- newCloudInit "test-instance-id"
@@ -402,27 +397,25 @@ cloudInitDirExamples =
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
-                      do void $ B9.B9IO.getBuildId
-                         t <- mkTempDir "local-dir"
-                         let m = t </> "meta-data"
-                         m' <- ensureParentDir m
-                         renderContentToFile
-                             m'
-                             (minimalMetaData iid)
-                             (Environment [])
-                         let u = t </> "user-data"
+                      do m <- mkTemp "generated-content-0"
+                         u <- mkTemp "generated-content-2"
                          u' <- ensureParentDir u
                          renderContentToFile
                              u'
                              minimalUserData
                              (Environment [])
-              actualCmds `shouldContain` renderMetaData
+                         m' <- ensureParentDir m
+                         renderContentToFile
+                             m'
+                             (minimalMetaData iid)
+                             (Environment [])
+              actualCmds `should've` renderMetaData
        it "copies the temporary directory to the destination directories" $
            do let copyToOutputDir =
                       dumpToStrings $
                       do destDir <- ensureParentDir "test.d"
-                         copyDir "/abs/path//BUILD/local-dir-XXXX" destDir
-              actualCmds `shouldContain` copyToOutputDir
+                         moveDir "/BUILD/local-dir-XXXX" destDir
+              actualCmds `should've` copyToOutputDir
   where
     cloudInitDir :: Program (Handle 'CloudInit)
     cloudInitDir = do
@@ -434,14 +427,14 @@ cloudInitWithContentExamples :: Spec
 cloudInitWithContentExamples =
     describe "compile cloudInitWithContent" $
     do it "merges meta-data" $
-           cmds `shouldContain`
+           cmds `should've`
            (dumpToStrings (renderContentToFile mdPath mdContent templateVars))
        it "merges user-data" $
-           cmds `shouldContain`
+           cmds `should've`
            (dumpToStrings (renderContentToFile udPath udContent templateVars))
   where
-    mdPath = "/abs/path//BUILD/file-system-content-XXXX/meta-data"
-    udPath = "/abs/path//BUILD/file-system-content-XXXX/user-data"
+    mdPath = "/abs/path//BUILD/generated-content-0-XXXX"
+    udPath = "/abs/path//BUILD/generated-content-2-XXXX"
     templateVars = Environment [("x","3")]
     mdContent =
         Concat
@@ -464,7 +457,7 @@ cloudInitWithContentExamples =
                                   [ASTObj [("path", ASTString "file1.txt")
                                           ,("owner", ASTString "user1:group1")
                                           ,("permissions", ASTString "0642")
-                                          ,("content", ASTEmbed (FromString "file1"))]])]
+                                          ,("content", ASTEmbed (FromBinaryFile "/BUILD/tmp-file-XXXX"))]])]
                        , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
     (Handle _ iid, cmds) = runPureDump $ compile cloudInitWithContent
     cloudInitWithContent = do

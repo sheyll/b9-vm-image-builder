@@ -36,7 +36,7 @@ ciDir = do
     writeCloudInitDir c "/tmp/instance-xyz"
     addTemplate c "src/tests/B9/BuilderSpec.test.template"
     addFile c "/etc/passwd"
-    "var" $= "value1" -- it doesn't where the variable binding occurs
+    "var" $= "value1" -- it doesn't matter where the variable binding occurs
 
 ciIso :: Program ()
 ciIso = do

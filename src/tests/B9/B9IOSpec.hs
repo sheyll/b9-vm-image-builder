@@ -25,7 +25,7 @@ actionSpec =
            in dumpToStrings p `shouldBe` []
        it "handles LogTrace" $
            let p = logTrace "test-trace"
-           in dumpToStrings p `shouldBe` ["logTrace test-trace"]
+           in dumpToStrings p `shouldBe` ["logTrace"]
        it "handles MkTemp" $
            let p = mkTemp "test-prefix"
            in dumpToStrings p `shouldBe` ["mkTemp test-prefix"]

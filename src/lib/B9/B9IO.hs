@@ -69,7 +69,7 @@ data Action next
     deriving (Functor)
 
 instance Show (Action a) where
-    show (LogTrace m _) = "logTrace " ++ m
+    show (LogTrace m _) = "logTrace"
     show (GetBuildId _) = "getBuildId"
     show (GetBuildDir _) = "getBuildDir"
     show (Copy s d _) = printf "copy %s %s" s d
