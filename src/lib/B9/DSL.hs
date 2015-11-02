@@ -10,7 +10,8 @@ import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..),
-        VmImageSpec(..), vmImgType, vmImgResize, vmImgResize)
+        VmImageSpec(..), vmImgType, vmImgResize, vmImgResize,
+        PartitionSpec(..))
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
@@ -83,6 +84,7 @@ export hnd out = liftF $ Export hnd out id
 
 data Artifact
     = VmImage
+    | PartitionedVmImage
     | CloudInit
     | CloudInitMetaData
     | CloudInitUserData
@@ -102,6 +104,7 @@ data Artifact
 
 data SArtifact k where
         SVmImage :: SArtifact 'VmImage
+        SPartitionedVmImage :: SArtifact 'PartitionedVmImage
         SCloudInit :: SArtifact 'CloudInit
         SCloudInitMetaData :: SArtifact 'CloudInitMetaData
         SCloudInitUserData :: SArtifact 'CloudInitUserData
@@ -119,6 +122,7 @@ data SArtifact k where
 
 instance Show (SArtifact k) where
     show SVmImage = "SVmImage"
+    show SPartitionedVmImage = "SPartitionedVmImage"
     show SCloudInit = "SCloudInit"
     show SCloudInitUserData = "SCloudInitUserData"
     show SCloudInitMetaData = "SCloudInitMetaData"
@@ -159,6 +163,7 @@ handle = Handle
 
 type family CreateSpec (a :: Artifact) :: * where
         CreateSpec 'VmImage = (Handle 'ReadOnlyFile, VmImageSpec)
+        CreateSpec 'PartitionedVmImage = Handle 'ReadOnlyFile
         CreateSpec 'CloudInit = String
         CreateSpec 'LinuxVm = LinuxVmArgs
         CreateSpec 'GeneratedContent = Content
@@ -203,6 +208,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'CloudInit = ()
         ExportSpec 'VmImage = (Maybe FilePath, Maybe VmImageSpec)
+        ExportSpec 'PartitionedVmImage = (Maybe FilePath, PartitionSpec)
         ExportSpec 'LocalDirectory = Maybe FilePath
         ExportSpec 'FileSystemImage = Maybe FilePath
         ExportSpec 'ReadOnlyFile = Maybe FilePath
@@ -212,6 +218,7 @@ type family ExportResult (a :: Artifact) :: * where
         ExportResult 'CloudInit =
                                 (Handle 'GeneratedContent, Handle 'GeneratedContent)
         ExportResult 'VmImage = Handle 'ReadOnlyFile
+        ExportResult 'PartitionedVmImage = Handle 'ReadOnlyFile
         ExportResult 'LocalDirectory = Handle 'LocalDirectory
         ExportResult 'FileSystemImage = Handle 'ReadOnlyFile
         ExportResult 'ReadOnlyFile = Handle 'ReadOnlyFile

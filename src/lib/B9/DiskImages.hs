@@ -86,13 +86,6 @@ data ImageSource
                  ImageType
                  ImageSize
     |
-      -- | Create an image containig the files of a directory.
-      ImageFromDir FilePath
-                   FSLabel
-                   FileSystem
-                   ImageType
-                   ImageSize
-    |
       -- | __DEPRECATED__
       CopyOnWrite Image
     |
@@ -115,7 +108,7 @@ instance Hashable ImageSource
 instance Binary ImageSource
 instance NFData ImageSource
 
--- | The partition to extract.
+-- | The partition to extract TODO obsoleted by 'PartitionSpec'.
 data Partition
     = NoPT  -- ^ There is no partition table on the image
     | Partition Int -- ^ Extract partition @n@ @n@ must be in @0..3@
@@ -124,6 +117,16 @@ data Partition
 instance Hashable Partition
 instance Binary Partition
 instance NFData Partition
+
+
+-- | The partition to extract.
+data PartitionSpec =
+    MBRPartition Int
+    deriving (Eq,Show,Read,Typeable,Data,Generic)
+
+instance Hashable PartitionSpec
+instance Binary PartitionSpec
+instance NFData PartitionSpec
 
 -- | A vm disk image file consisting of a path to the image file, and the type
 -- and file system.
@@ -398,14 +401,12 @@ changeImageDirectory dir (Image img fmt fs) = Image img' fmt fs
 -- * Constructors and accessors for 'ImageSource's
 getImageSourceImageType :: ImageSource -> Maybe ImageType
 getImageSourceImageType (EmptyImage _ _ t _) = Just t
-getImageSourceImageType (ImageFromDir _ _ _ t _) = Just t
 getImageSourceImageType (CopyOnWrite i) = Just $ imageImageType i
 getImageSourceImageType (SourceImage i _ _) = Just $ imageImageType i
 getImageSourceImageType (From _ _) = Nothing
 
 getImageSourceFileSystem :: ImageSource -> Maybe FileSystem
 getImageSourceFileSystem (EmptyImage _ fs _ _) = Just fs
-getImageSourceFileSystem (ImageFromDir _ _ fs _ _) = Just fs
 getImageSourceFileSystem (CopyOnWrite i) = Just $ imageFileSystem i
 getImageSourceFileSystem (SourceImage i _ _) = Just $ imageFileSystem i
 getImageSourceFileSystem (From _ _) = Nothing

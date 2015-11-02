@@ -22,6 +22,7 @@ spec = do
     cloudInitDirExamples
     cloudInitWithContentExamples
     vmImageCreationSpec
+    partitionedDiskSpec
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
@@ -241,117 +242,6 @@ candySpecs = do
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                 actual `hasSameEffect` expected
 
--- TODO error when converting file systems!
--- * vmImage tests
-
-vmImageCreationSpec :: Spec
-vmImageCreationSpec =
-    describe "compile VmImage" $
-    do it
-           "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
-           let expected = do
-                   src <- mkTemp "tmp-file"
-                   cf <- mkTemp "converted-img-file"
-                   src' <- getRealPath src
-                   cf' <- ensureParentDir cf
-                   convertVmImage src' Raw cf' QCow2
-                   resizeVmImage
-                       (Image cf' QCow2 Ext4)
-                       (ResizeImage (ImageSize 3 MB))
-                   dest' <- ensureParentDir "/tmp/test.qcow2"
-                   moveFile cf' dest'
-               actual = do
-                   -- create a raw Ext4 image
-                   rawImg <-
-                       create
-                           SFileSystemImage
-                           (FileSystemCreation Ext4 "" 10 MB)
-                   rawFile <- export rawImg Nothing
-                   -- convert to qcow2
-                   qcow2Img <-
-                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
-                   export
-                       qcow2Img
-                       ( Just "/tmp/test.qcow2"
-                       , Just $
-                         VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
-           in actual `shouldMeanIo` expected
-       it
-           "it resizes an image twice, first with the input and then with the output resize parameter" $
-           let expected = do
-                   src <- mkTemp "tmp-file"
-                   r1 <- mkTemp "resized-src-img-file"
-                   cf <- mkTemp "converted-img-file"
-                   src' <- getRealPath src
-                   r1' <- ensureParentDir r1
-                   copy src' r1'
-                   resizeVmImage (Image r1' Raw Ext4) ShrinkToMinimum
-                   cf' <- ensureParentDir cf
-                   convertVmImage r1' Raw cf' QCow2
-                   resizeVmImage
-                       (Image cf' QCow2 Ext4)
-                       (ResizeImage (ImageSize 3 MB))
-                   dest' <- ensureParentDir "/tmp/test.qcow2"
-                   moveFile cf' dest'
-               actual = do
-                   -- create a raw Ext4 image
-                   rawImg <-
-                       create
-                           SFileSystemImage
-                           (FileSystemCreation Ext4 "" 10 MB)
-                   rawFile <- export rawImg Nothing
-                   -- convert to qcow2
-                   qcow2Img <-
-                       create
-                           SVmImage
-                           (rawFile, VmImageSpec Raw Ext4 ShrinkToMinimum)
-                   export
-                       qcow2Img
-                       ( Just "/tmp/test.qcow2"
-                       , Just $
-                         VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
-           in actual `shouldMeanIo` expected
-       it
-           "doesn't resize the image if both input and output size are == 'KeepSize'" $
-           let actual = do
-                   rawImg <-
-                       create
-                           SFileSystemImage
-                           (FileSystemCreation Ext4 "" 10 MB)
-                   rawFile <- export rawImg Nothing
-                   qcow2Img <-
-                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
-                   export
-                       qcow2Img
-                       ( Just "dest.qcow2"
-                       , Just $ VmImageSpec QCow2 Ext4 KeepSize)
-               expected = do
-                   raw <- mkTemp "tmp-file"
-                   converted <- mkTemp "converted-img-file"
-                   raw' <- ensureParentDir raw
-                   converted' <- ensureParentDir converted
-                   convertVmImage raw' Raw converted' QCow2
-                   dst' <- ensureParentDir "dest.qcow2"
-                   moveFile converted' dst'
-           in actual `shouldMeanIo` expected
-       it "fails if creation and export spec contain different file systems" $
-           let actual = do
-                   -- create a raw Ext4 image
-                   rawImg <-
-                       create
-                           SFileSystemImage
-                           (FileSystemCreation Ext4 "" 10 MB)
-                   rawFile <- export rawImg Nothing
-                   -- convert to qcow2
-                   qcow2Img <-
-                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
-                   export
-                       qcow2Img
-                       ( Just "/tmp/test.qcow2"
-                       , Just $ VmImageSpec Raw VFAT KeepSize)
-           in (print $ length $ toList actual) `shouldThrow` anyException
-
-
 -- * 'SLocalDirectory' examples
 
 localDirExamples :: Spec
@@ -543,6 +433,135 @@ cloudInitWithContentExamples =
         addFileFromContent i (FromString "file1") (FileSpec "file1.txt" (0,6,4,2) "user1" "group1")
         sh i "ls -la /tmp"
         return i
+
+-- * vmImage tests
+
+vmImageCreationSpec :: Spec
+vmImageCreationSpec =
+    describe "compile VmImage" $
+    do it
+           "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
+           let expected = do
+                   src <- mkTemp "tmp-file"
+                   cf <- mkTemp "converted-img-file"
+                   src' <- getRealPath src
+                   cf' <- ensureParentDir cf
+                   convertVmImage src' Raw cf' QCow2
+                   resizeVmImage
+                       (Image cf' QCow2 Ext4)
+                       (ResizeImage (ImageSize 3 MB))
+                   dest' <- ensureParentDir "/tmp/test.qcow2"
+                   moveFile cf' dest'
+               actual = do
+                   -- create a raw Ext4 image
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   -- convert to qcow2
+                   qcow2Img <-
+                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
+                   export
+                       qcow2Img
+                       ( Just "/tmp/test.qcow2"
+                       , Just $
+                         VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
+           in actual `shouldMeanIo` expected
+       it
+           "it resizes an image twice, first with the input and then with the output resize parameter" $
+           let expected = do
+                   src <- mkTemp "tmp-file"
+                   r1 <- mkTemp "resized-src-img-file"
+                   cf <- mkTemp "converted-img-file"
+                   src' <- getRealPath src
+                   r1' <- ensureParentDir r1
+                   copy src' r1'
+                   resizeVmImage (Image r1' Raw Ext4) ShrinkToMinimum
+                   cf' <- ensureParentDir cf
+                   convertVmImage r1' Raw cf' QCow2
+                   resizeVmImage
+                       (Image cf' QCow2 Ext4)
+                       (ResizeImage (ImageSize 3 MB))
+                   dest' <- ensureParentDir "/tmp/test.qcow2"
+                   moveFile cf' dest'
+               actual = do
+                   -- create a raw Ext4 image
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   -- convert to qcow2
+                   qcow2Img <-
+                       create
+                           SVmImage
+                           (rawFile, VmImageSpec Raw Ext4 ShrinkToMinimum)
+                   export
+                       qcow2Img
+                       ( Just "/tmp/test.qcow2"
+                       , Just $
+                         VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
+           in actual `shouldMeanIo` expected
+       it
+           "doesn't resize the image if both input and output size are == 'KeepSize'" $
+           let actual = do
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   qcow2Img <-
+                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
+                   export
+                       qcow2Img
+                       ( Just "dest.qcow2"
+                       , Just $ VmImageSpec QCow2 Ext4 KeepSize)
+               expected = do
+                   raw <- mkTemp "tmp-file"
+                   converted <- mkTemp "converted-img-file"
+                   raw' <- ensureParentDir raw
+                   converted' <- ensureParentDir converted
+                   convertVmImage raw' Raw converted' QCow2
+                   dst' <- ensureParentDir "dest.qcow2"
+                   moveFile converted' dst'
+           in actual `shouldMeanIo` expected
+       it "fails if creation and export spec contain different file systems" $
+           let actual = do
+                   -- create a raw Ext4 image
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   -- convert to qcow2
+                   qcow2Img <-
+                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
+                   export
+                       qcow2Img
+                       ( Just "/tmp/test.qcow2"
+                       , Just $ VmImageSpec Raw VFAT KeepSize)
+           in (print $ length $ toList actual) `shouldThrow` anyException
+
+-- * Partition extraction examples
+
+partitionedDiskSpec :: Spec
+partitionedDiskSpec =
+    describe "compile PartionedVmImage" $
+    do it "extracts the selected partition" $
+           let actual = do
+                   rawPartitionedFile <-
+                       create SReadOnlyFile "/tmp/partitioned.raw"
+                   partitionedImg <-
+                       create SPartitionedVmImage rawPartitionedFile
+                   _rawPart2File <-
+                       export partitionedImg (Just "/tmp/part2.raw", MBRPartition 2)
+                   return ()
+               expected = do
+                   src <- getRealPath "/tmp/partitioned.raw"
+                   dst <- ensureParentDir "/tmp/part2.raw"
+                   extractPartition (MBRPartition 2) src dst
+           in actual `shouldMeanIo` expected
 
 -- * DSL examples
 

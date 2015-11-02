@@ -6,14 +6,14 @@
 {-# LANGUAGE DeriveFunctor #-}
 module B9.B9IO where
 
-import           B9.Content
-import           B9.DiskImages
-import           B9.QCUtil
-import           Control.Monad.Free
-import           Control.Monad.Trans.Writer.Lazy
-import           System.FilePath
-import           Test.QuickCheck
-import           Text.Printf
+import B9.Content
+import B9.DiskImages
+import B9.QCUtil
+import Control.Monad.Free
+import Control.Monad.Trans.Writer.Lazy
+import System.FilePath
+import Test.QuickCheck
+import Text.Printf
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
@@ -73,6 +73,10 @@ data Action next
     | ResizeVmImage Image
                     ImageResize
                     next
+    | ExtractPartition PartitionSpec
+                       FilePath
+                       FilePath
+                       next
     deriving (Functor)
 
 instance Show (Action a) where
@@ -96,6 +100,8 @@ instance Show (Action a) where
         printf "convertVmImage %s %s %s %s" srcF (show srcT) dstF (show dstT)
     show (ResizeVmImage img imgResize _) =
         printf "resizeVmImage %s %s" (show img) (show imgResize)
+    show (ExtractPartition p s d _) =
+        printf "extractPartition %s %s %s" (show p)  s d
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
@@ -189,6 +195,11 @@ convertVmImage srcF srcT dstF dstT = liftF $ ConvertVmImage srcF srcT dstF dstT 
 resizeVmImage :: Image -> ImageResize -> IoProgram ()
 resizeVmImage img imgResize = liftF $ ResizeVmImage img imgResize ()
 
+-- | Extract a partition from a partitioned disk image file and copy it as raw
+-- image into a new file.
+extractPartition :: PartitionSpec -> FilePath -> FilePath -> IoProgram ()
+extractPartition p s d = liftF $ ExtractPartition p s d ()
+
 -- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogTrace' are logged via 'LogTrace'.
 traceEveryAction :: IoProgram a -> IoProgram a
@@ -262,6 +273,10 @@ traceEveryAction = run traceAction
     traceAction a@(ResizeVmImage img imgResize n) = do
         logTrace $ show a
         resizeVmImage img imgResize
+        return n
+    traceAction a@(ExtractPartition p s d n) = do
+        logTrace $ show a
+        extractPartition p s d
         return n
 
 -- * Testing support
@@ -337,6 +352,9 @@ runPureDump p = runWriter $ run dump p
     dump a@(ResizeVmImage _img _imgResize n) = do
         tell [show a]
         return n
+    dump a@(ExtractPartition _p _s _d n) = do
+        tell [show a]
+        return n
 
 arbitraryIoProgram :: Gen (IoProgram ())
 arbitraryIoProgram = arbitraryFree
@@ -378,4 +396,8 @@ instance Arbitrary a => Arbitrary (Action a) where
               smaller arbitrary <*>
               smaller arbitrary
             , ResizeVmImage <$> smaller arbitrary <*> smaller arbitrary <*>
+              smaller arbitrary
+            , ExtractPartition <$> (MBRPartition <$> smaller arbitrary) <*>
+              smaller arbitraryFilePath <*>
+              smaller arbitraryFilePath <*>
               smaller arbitrary]

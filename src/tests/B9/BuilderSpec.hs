@@ -9,8 +9,8 @@ import Text.Printf
 
 spec :: Spec
 spec =
-#ifdef INTEGRATION_TESTS
     describe "runProgramWithConfigAndCliArgs" $
+#ifdef INTEGRATION_TESTS
     do it "creates a cloud-init directory with user-data and meta-data" $
            do runProgramWithConfigAndCliArgs ciDir `shouldReturn` True
               doesDirectoryExist "/tmp/instance-xyz" `shouldReturn` True
@@ -25,8 +25,14 @@ spec =
            do runProgramWithConfigAndCliArgs ciVfat `shouldReturn` True
               doesFileExist "/tmp/instance-123.vfat" `shouldReturn` True
               removeFile "/tmp/instance-123.vfat"
+       it "extracts a partition from a qcow2 image" $
+           do (runProgramWithConfigAndCliArgs $
+                 extractPartitionOfQCow2 "/tmp/test-parted.raw" "/tmp/test.qcow2")
+                 `shouldReturn` True
+              doesFileExist "/tmp/test.qcow2" `shouldReturn` True
+              removeFile "/tmp/test.qcow2"
 #else
-    describe "runProgramWithConfigAndCliArgs *DISABLED*" $ return ()
+    return ()
 #endif
 
 ciDir :: Program ()
@@ -49,3 +55,13 @@ ciVfat = do
     doc "test"
     c <- newCloudInit "instance-123"
     writeCloudInit c ISO9660 "/tmp/instance-123.vfat"
+
+extractPartitionOfQCow2 :: FilePath -> FilePath -> Program ()
+extractPartitionOfQCow2 srcFile dstFile = do
+    doc
+        "It's expected that there is a raw image laying around here some where with a partition 1 inside it"
+    p <- create SReadOnlyFile srcFile
+    partImg <- create SPartitionedVmImage p
+    p1 <- export partImg (Nothing, MBRPartition 1)
+    destI <- create SVmImage (p1, VmImageSpec Raw Ext4 KeepSize)
+    void $ export destI (Just dstFile, Just $ VmImageSpec QCow2 Ext4 KeepSize)

@@ -1,14 +1,12 @@
 {-| Utility module to extract a primary partition from an MBR partition on a
     raw image file. -}
-module B9.MBR ( getPartition
-              , PrimaryPartition (..)
-              , MBR(..)
-              , CHS(..)) where
+module B9.MBR
+       (getPartition, PrimaryPartition(..), MBR(..), CHS(..)) where
 
-import Data.Binary.Get
-import Data.Word
-import Text.Printf
+import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
+import           Data.Word
+import           Text.Printf
 
 getPartition :: Int -> FilePath -> IO (Word64, Word64)
 getPartition n f = decodeMBR <$> BL.readFile f
@@ -38,27 +36,27 @@ sectorSize = 512
 bootCodeSize :: Int
 bootCodeSize = 446
 
-data MBR = MBR { mbrPart1 :: !PrimaryPartition
-               , mbrPart2 :: !PrimaryPartition
-               , mbrPart3 :: !PrimaryPartition
-               , mbrPart4 :: !PrimaryPartition
-               }
-  deriving Show
+data MBR = MBR
+    { mbrPart1 :: !PrimaryPartition
+    , mbrPart2 :: !PrimaryPartition
+    , mbrPart3 :: !PrimaryPartition
+    , mbrPart4 :: !PrimaryPartition
+    } deriving (Show)
 
-data PrimaryPartition = PrimaryPartition { primPartStatus :: !Word8
-                                         , primPartChsStart :: !CHS
-                                         , primPartPartType :: !Word8
-                                         , primPartChsEnd :: !CHS
-                                         , primPartLbaStart :: !Word32
-                                         , primPartSectors :: !Word32
-                                         }
-  deriving Show
+data PrimaryPartition = PrimaryPartition
+    { primPartStatus :: !Word8
+    , primPartChsStart :: !CHS
+    , primPartPartType :: !Word8
+    , primPartChsEnd :: !CHS
+    , primPartLbaStart :: !Word32
+    , primPartSectors :: !Word32
+    } deriving (Show)
 
-data CHS = CHS { chsH :: !Word8
-               , chs_CUpper2_S :: !Word8
-               , chs_CLower8 :: !Word8
-               }
-  deriving Show
+data CHS = CHS
+    { chsH :: !Word8
+    , chs_CUpper2_S :: !Word8
+    , chs_CLower8 :: !Word8
+    } deriving (Show)
 
 getMBR :: Get MBR
 getMBR = skip bootCodeSize >>

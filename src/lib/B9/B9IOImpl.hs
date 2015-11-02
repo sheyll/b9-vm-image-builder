@@ -2,18 +2,21 @@
 module B9.B9IOImpl where
 
 import           B9.B9IO
-import           B9.QemuImg
 import qualified B9.B9Monad as B9Monad
 import           B9.Content
+import           B9.MBR
+import           B9.DiskImages
+import           B9.QemuImg
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import           System.Directory
 import           System.FilePath
 import           System.Random
 import           Text.Printf
-import qualified Data.ByteString as B
 
 
 -- | Execute a 'B9IO' Program in the 'B9' monad.
@@ -47,7 +50,7 @@ executeIoProg p = run go p
         B9Monad.cmdRaw "cp" ["-r", s, d]
         return n
     go (MoveFile s d n) = do
-        liftIO $ renameFile s d
+        B9Monad.cmdRaw "mv" [s, d]
         return n
     go (MoveDir s d n) = do
         exists <- liftIO $ doesDirectoryExist d
@@ -75,4 +78,21 @@ executeIoProg p = run go p
         return n
     go (ResizeVmImage i r n) = do
         resizeImage r i
+        return n
+    go (ExtractPartition (MBRPartition partIndex) s d n) = do
+        (start,len) <- liftIO $ B9.MBR.getPartition partIndex s
+        B9Monad.traceL $
+            printf
+                "extracting MBR partition %d starting at %d with a length of %d (bytes) from %s to %s"
+                partIndex
+                start
+                len
+                s
+                d
+        liftIO $
+            do part <-
+                   (BL.copy .
+                    BL.take (fromIntegral len) . BL.drop (fromIntegral start)) <$>
+                   BL.readFile s
+               BL.writeFile d part
         return n
