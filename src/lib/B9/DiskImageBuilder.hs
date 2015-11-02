@@ -145,3 +145,57 @@ createDestinationImage buildImg dest =
             buildId <- getBuildId
             liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
         Transient -> return ()
+
+
+-- | Convert the directory of an image file to an absolute path and create the
+-- directory if it doesn't exist.
+ensureAbsoluteImageDirExists :: Image -> IO Image
+ensureAbsoluteImageDirExists img@(Image path _ _) = do
+    let dir = takeDirectory path
+    createDirectoryIfMissing True dir
+    dirAbs <- canonicalizePath dir
+    return $ changeImageDirectory dirAbs img
+
+createEmptyImage :: String
+                 -> FileSystem
+                 -> ImageType
+                 -> ImageSize
+                 -> Image
+                 -> B9 ()
+createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
+  | fsType /= fsType' =
+      error
+          (printf
+               "Conflicting createEmptyImage parameters. Requested is file system %s but the destination image has %s."
+               (show fsType)
+               (show fsType'))
+  | imgType /= imgType' =
+      error
+          (printf
+               "Conflicting createEmptyImage parameters. Requested is image type %s but the destination image has type %s."
+               (show imgType)
+               (show imgType'))
+  | otherwise = do
+      let (Image imgFile imgFmt imgFs) = dest
+      dbgL
+          (printf
+               "Creating empty raw image '%s' with size %s"
+               imgFile
+               (toQemuSizeOptVal imgSize))
+      cmd
+          (printf
+               "qemu-img create -f %s '%s' '%s'"
+               (imageFileExtension imgFmt imgFs)
+               imgFile
+               (toQemuSizeOptVal imgSize))
+      case (imgFmt, imgFs) of
+          (Raw,Ext4) -> do
+              let fsCmd = "mkfs.ext4"
+              dbgL (printf "Creating file system %s" (show imgFs))
+              cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
+          (it,fs) ->
+              error
+                  (printf
+                       "Cannot create file system %s in image type %s"
+                       (show fs)
+                       (show it))

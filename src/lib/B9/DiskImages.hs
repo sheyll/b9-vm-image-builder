@@ -3,6 +3,7 @@ images.-}
 module B9.DiskImages where
 
 import           B9.QCUtil
+import           Control.Lens hiding ((<.>), elements)
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
@@ -16,6 +17,7 @@ import           Text.Printf
 
 -- * Data types for disk image description, e.g. 'ImageTarget',
 -- 'ImageDestination', 'Image', 'MountPoint', 'SharedImage'
+
 
 -- | Build target for disk images; the destination, format and size of the image
 -- to generate, as well as how to create or obtain the image before a
@@ -225,6 +227,21 @@ instance NFData ImageResize
 -- 'MountPoint'
 type Mounted a = (a, MountPoint)
 
+-- | VM Image type, file system and resize specification. Used for reading and
+-- writing vm image files. The '_vmImgResize' field specifies how the image
+-- should be resized when reading/writing image files.
+data VmImageSpec = VmImageSpec
+    { _vmImgType :: ImageType
+    , _vmImgFileSystem :: FileSystem
+    , _vmImgResize :: ImageResize
+    } deriving (Read,Show,Typeable,Data,Eq,Generic)
+
+instance Hashable VmImageSpec
+instance Binary VmImageSpec
+instance NFData VmImageSpec
+
+makeLenses ''VmImageSpec
+
 -- * Shared Images
 
 -- | 'SharedImage' holds all data necessary to describe an __instance__ of a shared
@@ -356,7 +373,7 @@ imageFileExtension Raw ISO9660 = "iso"
 imageFileExtension Raw VFAT = "vfat"
 imageFileExtension Raw _ = "raw"
 imageFileExtension QCow2 _ = "qcow2"
-imageFileExtension Vmdk _ = "qcow2"
+imageFileExtension Vmdk _ = "vmdk"
 
 -- | Change the image file format and also rename the image file name to
 -- have the appropriate file name extension. See 'imageFileExtension' and

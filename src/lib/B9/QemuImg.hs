@@ -1,3 +1,4 @@
+-- | Internal module wrapping @qemu-img@
 module B9.QemuImg where
 
 import B9.B9Monad
@@ -13,6 +14,7 @@ import System.FilePath
 import Text.Printf (printf)
 
 
+-- | Create an empty file with a given size.
 createEmptyFile :: FilePath -> Int -> SizeUnit -> B9 ()
 createEmptyFile f s su = do
     cmdRaw "truncate" ["--size", show s ++ formattedSizeUnit, f]
@@ -24,6 +26,7 @@ createEmptyFile f s su = do
             KB -> "K"
             B -> ""
 
+-- | Create a file system inside a file with a given list of file contents.
 createFSWithFiles :: FilePath
                   -> FileSystemCreation
                   -> FilePath
@@ -48,6 +51,67 @@ createFSWithFiles dst c srcD fs =
         (show c)
         srcD
         (show fs)
+
+-- | Resize an image, including the file system inside the image.
+resizeImage :: ImageResize -> Image -> B9 ()
+resizeImage KeepSize _ = return ()
+resizeImage (Resize newSize) (Image img Raw Ext4) = do
+    let sizeOpt = toQemuSizeOptVal newSize
+    cmd (printf "e2fsck -p '%s'" img)
+    cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
+resizeImage (ResizeImage newSize) (Image img _ _) = do
+    let sizeOpt = toQemuSizeOptVal newSize
+    cmd (printf "qemu-img resize -q '%s' %s" img sizeOpt)
+resizeImage ShrinkToMinimum (Image img Raw Ext4) = do
+    cmd (printf "e2fsck -p '%s'" img)
+    cmd (printf "resize2fs -f -M '%s'" img)
+resizeImage _ img =
+    error
+        (printf
+             "Invalid image type or filesystem, cannot resize image: %s"
+             (show img))
+
+-- | Convert vm images using @qemu-img convert@
+convertImageType :: FilePath -> ImageType -> FilePath -> ImageType -> B9 ()
+convertImageType fSrc tSrc fDst tDst = do
+    cmdRaw
+        "qemu-img"
+        [ "convert"
+        , "-q"
+        , "-f"
+        , toQemuImageType tSrc
+        , "-O"
+        , toQemuImageType tDst
+        , fSrc
+        , fDst]
+
+-- | Return the __format__ parameter string for @qemu-img@.
+toQemuImageType :: ImageType -> String
+toQemuImageType Raw = "raw"
+toQemuImageType QCow2 = "qcow2"
+toQemuImageType Vmdk = "vmdk"
+
+-- | Return the __size unit__ parameter string for @qemu-img@.
+toQemuSizeOptVal :: ImageSize -> String
+toQemuSizeOptVal (ImageSize amount u) =
+    show amount ++
+    case u of
+        GB -> "G"
+        MB -> "M"
+        KB -> "K"
+        B -> ""
+
+-- * /old/ API
+
+createCOWImage :: Image -> Image -> B9 ()
+createCOWImage (Image backingFile _ _) (Image imgOut imgFmt imgFS) = do
+  dbgL (printf "Creating COW image '%s' backed by '%s'" imgOut backingFile)
+  cmd
+    (printf
+       "qemu-img create -f %s -o backing_file='%s' '%s'"
+       (imageFileExtension imgFmt imgFS)
+       backingFile
+       imgOut)
 
 -- | Import a disk image from some external source into the build directory
 -- if necessary convert the image.
@@ -81,94 +145,6 @@ canConvertTo f t =
       | a == b = True
       | otherwise = False
 
--- | Convert the directory of an image file to an absolute path and create the
--- directory if it doesn't exist.
-ensureAbsoluteImageDirExists :: Image -> IO Image
-ensureAbsoluteImageDirExists img@(Image path _ _) = do
-    let dir = takeDirectory path
-    createDirectoryIfMissing True dir
-    dirAbs <- canonicalizePath dir
-    return $ changeImageDirectory dirAbs img
-
-createEmptyImage :: String
-                 -> FileSystem
-                 -> ImageType
-                 -> ImageSize
-                 -> Image
-                 -> B9 ()
-createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
-  | fsType /= fsType' =
-      error
-          (printf
-               "Conflicting createEmptyImage parameters. Requested is file system %s but the destination image has %s."
-               (show fsType)
-               (show fsType'))
-  | imgType /= imgType' =
-      error
-          (printf
-               "Conflicting createEmptyImage parameters. Requested is image type %s but the destination image has type %s."
-               (show imgType)
-               (show imgType'))
-  | otherwise = do
-      let (Image imgFile imgFmt imgFs) = dest
-      dbgL
-          (printf
-               "Creating empty raw image '%s' with size %s"
-               imgFile
-               (toQemuSizeOptVal imgSize))
-      cmd
-          (printf
-               "qemu-img create -f %s '%s' '%s'"
-               (imageFileExtension imgFmt imgFs)
-               imgFile
-               (toQemuSizeOptVal imgSize))
-      case (imgFmt, imgFs) of
-          (Raw,Ext4) -> do
-              let fsCmd = "mkfs.ext4"
-              dbgL (printf "Creating file system %s" (show imgFs))
-              cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
-          (it,fs) ->
-              error
-                  (printf
-                       "Cannot create file system %s in image type %s"
-                       (show fs)
-                       (show it))
-
-
-createCOWImage :: Image -> Image -> B9 ()
-createCOWImage (Image backingFile _ _) (Image imgOut imgFmt imgFS) = do
-  dbgL (printf "Creating COW image '%s' backed by '%s'" imgOut backingFile)
-  cmd
-    (printf
-       "qemu-img create -f %s -o backing_file='%s' '%s'"
-       (imageFileExtension imgFmt imgFS)
-       backingFile
-       imgOut)
-
--- | Resize an image, including the file system inside the image.
-resizeImage :: ImageResize -> Image -> B9 ()
-resizeImage KeepSize _ = return ()
-resizeImage (Resize newSize) (Image img Raw Ext4) = do
-    let sizeOpt = toQemuSizeOptVal newSize
-    dbgL (printf "Resizing ext4 filesystem on raw image to %s" sizeOpt)
-    cmd (printf "e2fsck -p '%s'" img)
-    cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
-
-resizeImage (ResizeImage newSize) (Image img _ _) = do
-    let sizeOpt = toQemuSizeOptVal newSize
-    dbgL (printf "Resizing image to %s" sizeOpt)
-    cmd (printf "qemu-img resize -q '%s' %s" img sizeOpt)
-
-resizeImage ShrinkToMinimum (Image img Raw Ext4) = do
-    dbgL "Shrinking image to minimum size"
-    cmd (printf "e2fsck -p '%s'" img)
-    cmd (printf "resize2fs -f -M '%s'" img)
-
-resizeImage _ img =
-    error
-        (printf
-             "Invalid image type or filesystem, cannot resize image: %s"
-             (show img))
 
 -- | Convert/Copy/Move images
 convert :: Bool -> Image -> Image -> B9 ()
@@ -205,12 +181,3 @@ convert doMove ii@(Image imgIn fmtIn fsIn) io@(Image imgOut fmtOut fsOut)
       when doMove $
           do dbgL (printf "Removing '%s'" imgIn)
              liftIO (removeFile imgIn)
-
-toQemuSizeOptVal :: ImageSize -> String
-toQemuSizeOptVal (ImageSize amount u) =
-    show amount ++
-    case u of
-        GB -> "G"
-        MB -> "M"
-        KB -> "K"
-        B -> ""

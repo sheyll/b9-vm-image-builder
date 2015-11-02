@@ -77,10 +77,19 @@ actionSpec =
                (createFileSystem
                     "test"
                     (FileSystemCreation Ext4 "label" 10 MB)
-                    "test.d" [fileSpec "test"]) `shouldBe`
+                    "test.d"
+                    [fileSpec "test"]) `shouldBe`
            ( ()
            , [ "createFileSystem test FileSystemCreation Ext4 \"label\" 10 MB " ++
-              "test.d " ++ show [(fileSpec "test")]])
+               "test.d " ++ show [(fileSpec "test")]])
+       it "handles ConvertVmImage" $
+           runPureDump (convertVmImage "in" QCow2 "out" Vmdk) `shouldBe`
+           ( ()
+           , [ "convertVmImage in QCow2 out Vmdk" ])
+       it "handles ResizeVmImage" $
+           runPureDump (resizeVmImage (Image "test" QCow2 Ext4) ShrinkToMinimum) `shouldBe`
+           ( ()
+           , [ "resizeVmImage Image \"test\" QCow2 Ext4 ShrinkToMinimum" ])
        it "handles any program, really" $
            property $
            do prog <- arbitraryIoProgram

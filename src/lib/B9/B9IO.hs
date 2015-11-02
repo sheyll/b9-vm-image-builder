@@ -11,7 +11,6 @@ import           B9.DiskImages
 import           B9.QCUtil
 import           Control.Monad.Free
 import           Control.Monad.Trans.Writer.Lazy
-import qualified Data.ByteString as B
 import           System.FilePath
 import           Test.QuickCheck
 import           Text.Printf
@@ -66,10 +65,18 @@ data Action next
                        FilePath
                        [FileSpec]
                        next
+    | ConvertVmImage FilePath
+                     ImageType
+                     FilePath
+                     ImageType
+                     next
+    | ResizeVmImage Image
+                    ImageResize
+                    next
     deriving (Functor)
 
 instance Show (Action a) where
-    show (LogTrace m _) = "logTrace"
+    show (LogTrace _m _) = "logTrace"
     show (GetBuildId _) = "getBuildId"
     show (GetBuildDir _) = "getBuildDir"
     show (Copy s d _) = printf "copy %s %s" s d
@@ -85,6 +92,10 @@ instance Show (Action a) where
         printf "renderContentToFile %s %s %s" f (show c) (show e)
     show (CreateFileSystem dst fs srcDir files _) =
         printf "createFileSystem %s %s %s %s" dst (show fs) srcDir (show files)
+    show (ConvertVmImage srcF srcT dstF dstT _) =
+        printf "convertVmImage %s %s %s %s" srcF (show srcT) dstF (show dstT)
+    show (ResizeVmImage img imgResize _) =
+        printf "resizeVmImage %s %s" (show img) (show imgResize)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
@@ -170,6 +181,14 @@ createFileSystem :: FilePath
 createFileSystem dst fs srcDir files =
     liftF $ CreateFileSystem dst fs srcDir files ()
 
+-- | Convert a virtual machine disk image file into another format.
+convertVmImage :: FilePath -> ImageType -> FilePath -> ImageType -> IoProgram ()
+convertVmImage srcF srcT dstF dstT = liftF $ ConvertVmImage srcF srcT dstF dstT ()
+
+-- | Resize a virtual machine disk image (and file system).
+resizeVmImage :: Image -> ImageResize -> IoProgram ()
+resizeVmImage img imgResize = liftF $ ResizeVmImage img imgResize ()
+
 -- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogTrace' are logged via 'LogTrace'.
 traceEveryAction :: IoProgram a -> IoProgram a
@@ -235,6 +254,14 @@ traceEveryAction = run traceAction
     traceAction a@(CreateFileSystem dst fs srcDir files n) = do
         logTrace $ show a
         createFileSystem dst fs srcDir files
+        return n
+    traceAction a@(ConvertVmImage srcF srcT dstF dstT n) = do
+        logTrace $ show a
+        convertVmImage srcF srcT dstF dstT
+        return n
+    traceAction a@(ResizeVmImage img imgResize n) = do
+        logTrace $ show a
+        resizeVmImage img imgResize
         return n
 
 -- * Testing support
@@ -304,6 +331,12 @@ runPureDump p = runWriter $ run dump p
     dump a@(CreateFileSystem _f _c _d _fs n) = do
         tell [show a]
         return n
+    dump a@(ConvertVmImage _srcF _srcT _dstF _dstT n) = do
+        tell [show a]
+        return n
+    dump a@(ResizeVmImage _img _imgResize n) = do
+        tell [show a]
+        return n
 
 arbitraryIoProgram :: Gen (IoProgram ())
 arbitraryIoProgram = arbitraryFree
@@ -316,11 +349,14 @@ instance Arbitrary a => Arbitrary (Action a) where
             , GetBuildDir <$> arbitrary
             , Copy <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
               smaller arbitrary
-            , CopyDir <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+            , CopyDir <$> smaller arbitraryFilePath <*>
+              smaller arbitraryFilePath <*>
               smaller arbitrary
-            , MoveFile <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+            , MoveFile <$> smaller arbitraryFilePath <*>
+              smaller arbitraryFilePath <*>
               smaller arbitrary
-            , MoveDir <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
+            , MoveDir <$> smaller arbitraryFilePath <*>
+              smaller arbitraryFilePath <*>
               smaller arbitrary
             , MkDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkTemp <$> smaller arbitraryFilePath <*> smaller arbitrary
@@ -335,4 +371,11 @@ instance Arbitrary a => Arbitrary (Action a) where
               smaller arbitrary <*>
               smaller arbitraryFilePath <*>
               smaller arbitrary <*>
+              smaller arbitrary
+            , ConvertVmImage <$> smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller arbitrary
+            , ResizeVmImage <$> smaller arbitrary <*> smaller arbitrary <*>
               smaller arbitrary]

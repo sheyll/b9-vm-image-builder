@@ -63,9 +63,16 @@ executeIoProg p = run go p
         return $ k (takeFileName f)
     go (RenderContentToFile f c e n) = do
         result <- runReaderT (render c) e
-        B9Monad.traceL $ printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result))
+        B9Monad.traceL $
+            printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result))
         liftIO $ B.writeFile f result
         return n
     go (CreateFileSystem dst fs srcDir files n) = do
         createFSWithFiles dst fs srcDir files
+        return n
+    go (ConvertVmImage s st d dt n) = do
+        convertImageType s st d dt
+        return n
+    go (ResizeVmImage i r n) = do
+        resizeImage r i
         return n
