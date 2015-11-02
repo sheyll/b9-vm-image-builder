@@ -125,8 +125,20 @@ compile :: Program a -> IoProgram a
 compile p = evalStateT compileSt def
   where
     compileSt = do
+        lift $
+            do b <- getBuildId
+               logTrace $
+                   printf
+                       "==[B9-PREPARE]=======================================================[%s]"
+                       b
         result <- interpret p
         runAllActions
+        lift $
+            do b <- getBuildId
+               logTrace $
+                   printf
+                       "==[B9-FINISHED]======================================================[%s]"
+                       b
         return result
 
 -- | Compile a 'Program' but run no actions, instead just print out information
@@ -147,12 +159,15 @@ inspect p = evalStateT compileSt def
 -- | Run all actions in correct order according to the dependency graph.
 runAllActions :: IoCompiler ()
 runAllActions = do
+    lift $
+        do b <- getBuildId
+           logTrace $
+               printf
+                   "==[B9-EXECUTE]=======================================================[%s]"
+                   b
     mG <- dependencyGraph
     case mG of
         Just g -> do
-            lift $ logTrace "Artifact dependency forest:"
-            handles <- use vToH
-            lift $ logTrace $ printDependencyGraph g handles
             forM_ (Graph.topSort g) runActionForVertex
         Nothing -> do
             lift $ logTrace "No artifacts."
@@ -176,15 +191,26 @@ dependencyGraph = do
 printDependencyGraph :: Graph.Graph -> Map.Map Graph.Vertex SomeHandle -> String
 printDependencyGraph g handles =
     unlines $
+    "digraph artifactDependencyGraph {" :
+    (fmap (printEdge handles) (edges g)) ++
+    "}" :
     "Dependency forest:" :
-    Tree.drawForest
-        (fmap (printSomeHandle . flip Map.lookup handles) <$> Graph.dff g) :
-    "Build order:" :
-    ((printSomeHandle . flip Map.lookup handles) <$> Graph.topSort g)
-  where
-    printSomeHandle :: Maybe SomeHandle -> String
-    printSomeHandle (Just (SomeHandle (Handle _s t))) = t
-    printSomeHandle Nothing = "??error??"
+    Tree.drawForest (fmap (printVertex handles) <$> Graph.dff g) :
+    "Build order:" : (printVertex handles <$> Graph.topSort g)
+
+-- | Convert an edge to a formatted string
+printEdge :: Map.Map Graph.Vertex SomeHandle -> Graph.Edge -> String
+printEdge handles (u,v) = printf "  %s   ->    %s" (show (printVertex handles u)) (show (printVertex handles v))
+
+-- | Convert a vertex to a formatted string
+printVertex :: Map.Map Graph.Vertex SomeHandle -> Graph.Vertex -> String
+printVertex handles v =
+    printf "%s(%d)" (printSomeHandle $ Map.lookup v handles) v
+
+-- | Convert maybe a handle to a string
+printSomeHandle :: Maybe SomeHandle -> String
+printSomeHandle (Just (SomeHandle (Handle _s t))) = t
+printSomeHandle Nothing = "??error??"
 
 instance Interpreter IoCompiler where
     -- Create
@@ -409,28 +435,48 @@ copyReadOnlyFile' srcH dstSpec dstDir =
 
 -- * Utilities
 
--- | Create a new unique handle and store it in the state
+-- | Create a new unique handle and store it in the state.
 allocHandle :: SArtifact a -> String -> IoCompiler (Handle a, SomeHandle)
 allocHandle sa str = do
-    v <- use nextVertex
-    nextVertex += 1
-    let h =
-            handle sa $
-            if str == ""
-                then (show v)
-                else (str ++ "-" ++ show v)
-        h' = SomeHandle h
-    hToV . at h' ?= v
-    vToH . at v ?= h'
-    actions . at v ?= []
+    v <- addVertex
+    let h = formatHandle v sa str
+    h' <- storeHandle h v
+    actions . at v ?=
+        [ lift $ logTrace $
+          printf "==[B9-EXEC-ARTIFACT]==============[%s//%s]" (show sa) str]
     return (h, h')
+
+-- | Add a handle to the vertex <-> handle maps in the state and return the
+-- existential 'SomeHandle' that was stored in place of the polymorphic 'Handle
+-- a'.
+storeHandle :: Handle a -> Graph.Vertex -> IoCompiler SomeHandle
+storeHandle h v = do
+  let h' = SomeHandle h
+  hToV . at h' ?= v
+  vToH . at v ?= h'
+  return h'
+
+-- | Return a new and unique vertex (i.e. artifact id)
+addVertex :: IoCompiler Graph.Vertex
+addVertex = do
+  v <- use nextVertex
+  nextVertex += 1
+  return v
+
+-- | Generate a handle with formatted title
+formatHandle :: Graph.Vertex -> SArtifact a -> String -> Handle a
+formatHandle v sa str =
+    handle sa $
+    if str == ""
+        then (show v)
+        else (str ++ "-" ++ show v)
 
 -- | Add a dependency of one resource to another
 (-->) :: Handle a -> Handle b -> IoCompiler ()
 h --> h' = do
-  Just v <- lookupVertex h
-  Just v' <- lookupVertex h'
-  dependencies <>= [(v,v')]
+    Just v <- lookupVertex h
+    Just v' <- lookupVertex h'
+    dependencies <>= [(v, v')]
 
 -- | Add a build action to a handle
 addAction :: Handle a -> IoCompiler () -> IoCompiler ()

@@ -603,3 +603,8 @@ vmImageResizeBoth = do
             , Just $ VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
     addFile rawImg "/etc/passwd"
     add rawImg2 SReadOnlyFile (fileSpec "img", qcow2F)
+    rawImg3 <- create SFileSystemImage (FileSystemCreation Ext4 "data-3-fs" 10 MB)
+    void $ export rawImg3 Nothing
+    rawFile3 <- export rawImg3 Nothing
+    add rawImg2 SReadOnlyFile (fileSpec "xxx.3", rawFile3)
+    void $ export rawImg3 Nothing
