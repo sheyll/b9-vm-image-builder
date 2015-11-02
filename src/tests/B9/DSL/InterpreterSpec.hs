@@ -15,22 +15,13 @@ spec = do
         do it "traces documentation" $
                (doc "test") `shouldMeanIo` (logTrace "test")
     readOnlyFileExamples
-    buildOrderSpecs
     candySpecs
     localDirExamples
     cloudInitIsoImageExamples
     cloudInitMultiVfatImageExamples
     cloudInitDirExamples
     cloudInitWithContentExamples
-
-toList :: Program a -> [String]
-toList = toListIo . compile
-
-toListIo :: IoProgram a -> [String]
-toListIo = dumpToStrings . void
-
-shouldMeanIo :: Program a -> IoProgram b -> Expectation
-shouldMeanIo actual expected = (toList actual) `should've` (toListIo expected)
+    vmImageCreationSpec
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
@@ -168,11 +159,6 @@ readOnlyFileExamples =
                       copy src dst
               actual `shouldMeanIo` expected
 
--- * Specs for the build order
-buildOrderSpecs :: Spec
-buildOrderSpecs = do
-    describe "" $ return ()
-
 -- * Specs for /candy/ functions.
 candySpecs :: Spec
 candySpecs = do
@@ -185,8 +171,7 @@ candySpecs = do
                    d <- newDirectory
                    addFileFull
                        d
-                       (Source NoConversion "/some/path/test.txt")
-                       (fileSpec "test.txt")
+                       (Source NoConversion "/some/path/test.txt") (fileSpec "test.txt")
            actual `hasSameEffectAs` expected
     describe "addExe" $
         it "is equal to addFile, but changes permissions to 0755" $
@@ -255,13 +240,117 @@ candySpecs = do
                             (Source ExpandVariables "/some/path/test.txt")
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                 actual `hasSameEffect` expected
-  where
-    hasSameEffectAs :: Program a -> Program a -> IO ()
-    hasSameEffectAs = shouldContain `on` (dumpToStrings . compile)
-    hasSameEffect
-        :: Eq a
-        => Program a -> Program a -> Bool
-    hasSameEffect = isInfixOf `on` (dumpToStrings . compile)
+
+-- TODO error when converting file systems!
+-- * vmImage tests
+
+vmImageCreationSpec :: Spec
+vmImageCreationSpec =
+    describe "compile VmImage" $
+    do it
+           "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
+           let expected = do
+                   src <- mkTemp "tmp-file"
+                   cf <- mkTemp "converted-img-file"
+                   src' <- getRealPath src
+                   cf' <- ensureParentDir cf
+                   convertVmImage src' Raw cf' QCow2
+                   resizeVmImage
+                       (Image cf' QCow2 Ext4)
+                       (ResizeImage (ImageSize 3 MB))
+                   dest' <- ensureParentDir "/tmp/test.qcow2"
+                   moveFile cf' dest'
+               actual = do
+                   -- create a raw Ext4 image
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   -- convert to qcow2
+                   qcow2Img <-
+                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
+                   export
+                       qcow2Img
+                       ( Just "/tmp/test.qcow2"
+                       , Just $
+                         VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
+           in actual `shouldMeanIo` expected
+       it
+           "it resizes an image twice, first with the input and then with the output resize parameter" $
+           let expected = do
+                   src <- mkTemp "tmp-file"
+                   r1 <- mkTemp "resized-src-img-file"
+                   cf <- mkTemp "converted-img-file"
+                   src' <- getRealPath src
+                   r1' <- ensureParentDir r1
+                   copy src' r1'
+                   resizeVmImage (Image r1' Raw Ext4) ShrinkToMinimum
+                   cf' <- ensureParentDir cf
+                   convertVmImage r1' Raw cf' QCow2
+                   resizeVmImage
+                       (Image cf' QCow2 Ext4)
+                       (ResizeImage (ImageSize 3 MB))
+                   dest' <- ensureParentDir "/tmp/test.qcow2"
+                   moveFile cf' dest'
+               actual = do
+                   -- create a raw Ext4 image
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   -- convert to qcow2
+                   qcow2Img <-
+                       create
+                           SVmImage
+                           (rawFile, VmImageSpec Raw Ext4 ShrinkToMinimum)
+                   export
+                       qcow2Img
+                       ( Just "/tmp/test.qcow2"
+                       , Just $
+                         VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
+           in actual `shouldMeanIo` expected
+       it
+           "doesn't resize the image if both input and output size are == 'KeepSize'" $
+           let actual = do
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   qcow2Img <-
+                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
+                   export
+                       qcow2Img
+                       ( Just "dest.qcow2"
+                       , Just $ VmImageSpec QCow2 Ext4 KeepSize)
+               expected = do
+                   raw <- mkTemp "tmp-file"
+                   converted <- mkTemp "converted-img-file"
+                   raw' <- ensureParentDir raw
+                   converted' <- ensureParentDir converted
+                   convertVmImage raw' Raw converted' QCow2
+                   dst' <- ensureParentDir "dest.qcow2"
+                   moveFile converted' dst'
+           in actual `shouldMeanIo` expected
+       it "fails if creation and export spec contain different file systems" $
+           let actual = do
+                   -- create a raw Ext4 image
+                   rawImg <-
+                       create
+                           SFileSystemImage
+                           (FileSystemCreation Ext4 "" 10 MB)
+                   rawFile <- export rawImg Nothing
+                   -- convert to qcow2
+                   qcow2Img <-
+                       create SVmImage (rawFile, VmImageSpec Raw Ext4 KeepSize)
+                   export
+                       qcow2Img
+                       ( Just "/tmp/test.qcow2"
+                       , Just $ VmImageSpec Raw VFAT KeepSize)
+           in (print $ length $ toList actual) `shouldThrow` anyException
+
 
 -- * 'SLocalDirectory' examples
 
@@ -269,21 +358,18 @@ localDirExamples :: Spec
 localDirExamples =
     describe "compile exportDir" $
     do it "creates a temporary intermediate directory" $
-           let expectedCmds = dumpToStrings $ mkTempDir "local-dir"
-           in actualCmds `shouldContain` expectedCmds
+           let expectedCmds = mkTempDir "local-dir"
+           in actualCmds `shouldMeanIo` expectedCmds
        it "copies the temporary intermediate directory to all exports" $
-           let exportsCmds =
-                   dumpToStrings $
-                   do src' <- mkTempDir "local-dir"
-                      dest' <- ensureParentDir "/tmp/test.d"
-                      moveDir src' dest'
-           in actualCmds `should've` exportsCmds
+           let exportsCmds = do
+                   src' <- mkTempDir "local-dir"
+                   dest' <- ensureParentDir "/tmp/test.d"
+                   moveDir src' dest'
+           in actualCmds `shouldMeanIo` exportsCmds
   where
-    actualCmds =
-        dumpToStrings $
-        compile $
-        do d <- newDirectory
-           exportDir d "/tmp/test.d"
+    actualCmds = do
+        d <- newDirectory
+        exportDir d "/tmp/test.d"
 
 -- * Cloud init examples
 
@@ -300,8 +386,7 @@ cloudInitIsoImageExamples :: Spec
 cloudInitIsoImageExamples =
     describe "compile cloudInitIsoImage" $
     do it "appends the build id to the instance id" $
-           dumpToStrings (compile cloudInitIsoImage) `shouldContain`
-           ["getBuildId"]
+           cloudInitIsoImage `shouldMeanIo` B9.B9IO.getBuildId
        it "creates unique cloud-init handles" $
            dumpToResult
                (compile $
@@ -324,9 +409,7 @@ cloudInitIsoImageExamples =
                        expectedEnv
            in actualCmds `should've` expectedCmds
        it "generates user-data into the file system image temp dir" $
-           let actualCmds = dumpToStrings (compile cloudInitIsoImage)
-               expectedCmds = dumpToStrings expectedProg
-               expectedProg = do
+           let expectedProg = do
                    let expectedContent = minimalUserData
                        expectedEnv = Environment []
                    userDataFile <- mkTemp "generated-content-2"
@@ -335,11 +418,9 @@ cloudInitIsoImageExamples =
                        absUserDataFile
                        expectedContent
                        expectedEnv
-           in actualCmds `should've` expectedCmds
+           in cloudInitIsoImage `shouldMeanIo` expectedProg
        it "generates an ISO image" $
-           let actualCmds = dumpToStrings (compile cloudInitIsoImage)
-               expectedCmds = dumpToStrings expectedProg
-               expectedProg = do
+           let expectedProg = do
                    let files = [fileSpec "meta-data", fileSpec "user-data"]
                        fsc = FileSystemCreation ISO9660 "cidata" 2 MB
                        tmpDir = "/BUILD/file-system-content-XXXX"
@@ -349,7 +430,7 @@ cloudInitIsoImageExamples =
                    tmpImg' <- getRealPath tmpImg
                    dstImg' <- ensureParentDir dstImg
                    copy tmpImg' dstImg'
-           in actualCmds `should've` expectedCmds
+           in cloudInitIsoImage `shouldMeanIo` expectedProg
   where
     cloudInitIsoImage :: Program (Handle 'CloudInit)
     cloudInitIsoImage = do
@@ -361,13 +442,9 @@ cloudInitMultiVfatImageExamples :: Spec
 cloudInitMultiVfatImageExamples =
     describe "compile cloudInitVfatImage" $
     do it "generates test1.vfat" $
-           let actualCmds = dumpToStrings (compile cloudInitVfatImage)
-               expectedCmds = dumpToStrings (expectedProg "test1.vfat")
-           in actualCmds `should've` expectedCmds
+           cloudInitVfatImage `shouldMeanIo` (expectedProg "test1.vfat")
        it "generates test2.vfat" $
-           let actualCmds = dumpToStrings (compile cloudInitVfatImage)
-               expectedCmds = dumpToStrings (expectedProg "test2.vfat")
-           in actualCmds `should've` expectedCmds
+           cloudInitVfatImage `shouldMeanIo` (expectedProg "test2.vfat")
   where
     expectedProg dstImg = do
         let files = [fileSpec "meta-data", fileSpec "user-data"]
@@ -390,8 +467,7 @@ cloudInitDirExamples =
     describe "compile cloudInitDir" $
     do let (Handle _ iid,actualCmds) = runPureDump $ compile cloudInitDir
        it "generates a temporary directory" $
-           do let createTempDirCmds = dumpToStrings $ do mkTempDir "local-dir"
-              actualCmds `shouldContain` createTempDirCmds
+           do cloudInitDir `shouldMeanIo` (mkTempDir "local-dir")
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
@@ -468,41 +544,7 @@ cloudInitWithContentExamples =
         sh i "ls -la /tmp"
         return i
 
--- * vmImage tests
-
-vmImageExport :: Program ()
-vmImageExport = do
-    i1 <- from "test"
-    void $ writeImg i1 "test.qcow" QCow2 Ext4 ShrinkToMinimum
-
-vmImageMultiExport :: Program ()
-vmImageMultiExport = do
-    i1 <- from "test"
-    void $ writeImg i1 "test-1" QCow2 Ext4 ShrinkToMinimum
-    void $ writeImg i1 "test-2" Vmdk Ext4 KeepSize
-
-vmImageMount :: Program ()
-vmImageMount = do
-    i1 <- from "test"
-    e <- lxc "test"
-    mount e i1 "/mnt/test"
-
-vmImageMultiMountAndExport :: Program ()
-vmImageMultiMountAndExport = do
-    i1 <- from "test"
-    e <- lxc "test"
-    mount e i1 "/mnt/test-1"
-    mount e i1 "/mnt/test-2"
-    void $ writeImg i1 "test-1" QCow2 Ext4 ShrinkToMinimum
-    void $ writeImg i1 "test-2" Vmdk Ext4 KeepSize
-
-vmImageMultiEnvMultiMount :: Program ()
-vmImageMultiEnvMultiMount = do
-    i1 <- from "test"
-    e1 <- lxc "test-e1"
-    e2 <- lxc "test-e2"
-    mount e1 i1 "/mnt/test-1"
-    mount e2 i1 "/mnt/test-2"
+-- * DSL examples
 
 dslExample1 :: Program ()
 dslExample1 = do
@@ -525,13 +567,39 @@ dslExample1 = do
     doc "From here there be dragons:"
     rootImage "fedora" "testv1-root" e
     dataImage "testv1-data" e
+    {-
     img <- from "schlupfi"
     mountDir e "/tmp" "/mnt/HOST_TMP"
     share img "wupfi"
     resize img 64 GB
     resizeToMinimum img
+    -}
 
 dslExample2 :: Program ()
 dslExample2 = do
     env <- lxc "c1"
     sh env "ls -lR /"
+
+vmImageResizeBoth :: Program ()
+vmImageResizeBoth = do
+    -- create a raw Ext4 image
+    rawImg <- create SFileSystemImage (FileSystemCreation Ext4 "data-fs" 10 MB)
+    rawFile <- export rawImg Nothing
+    -- convert to qcow2
+    qcow2Img <- create SVmImage (rawFile, VmImageSpec Raw Ext4 ShrinkToMinimum)
+    qcow2F <-
+        export
+            qcow2Img
+            ( Just "/tmp/test1.qcow2"
+            , Just $ VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
+    rawImg2 <- create SFileSystemImage (FileSystemCreation Ext4 "root-fs" 10 MB)
+    rawFile2 <- export rawImg2 Nothing
+    -- convert to qcow2
+    qcow2Img2 <- create SVmImage (rawFile2, VmImageSpec Raw Ext4 ShrinkToMinimum)
+    void $
+        export
+            qcow2Img2
+            ( Just "/tmp/test1.qcow2"
+            , Just $ VmImageSpec QCow2 Ext4 (ResizeImage (ImageSize 3 MB)))
+    addFile rawImg "/etc/passwd"
+    add rawImg2 SReadOnlyFile (fileSpec "img", qcow2F)

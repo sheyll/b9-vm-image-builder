@@ -13,7 +13,8 @@ import B9.DSL
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..))
+        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..),
+        VmImageSpec(..), vmImgResize, vmImgType, vmImgFileSystem)
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
 import Control.Monad.State
@@ -53,6 +54,7 @@ data Ctx = Ctx
     , _localDirs :: Map.Map (Handle 'LocalDirectory) DirCtx
     , _fileSystems :: Map.Map (Handle 'FileSystemImage) FsCtx
     , _roFiles :: Map.Map (Handle 'ReadOnlyFile) RofCtx
+    , _vmImages :: Map.Map (Handle 'VmImage) VmImgCtx
     , _actions :: Map.Map Graph.Vertex [IoCompiler ()]
     , _hToV :: Map.Map SomeHandle Graph.Vertex
     , _vToH :: Map.Map Graph.Vertex SomeHandle
@@ -60,7 +62,7 @@ data Ctx = Ctx
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def def def []
+    def = Ctx 0 def def def def def def def def def def []
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -104,12 +106,19 @@ data RofCtx = RofCtx
     { _rofFileName :: FilePath
     } deriving (Show)
 
+-- | Context of a 'SVmImage'
+data VmImgCtx = VmImgCtx
+    { _vmiFileHandle :: Handle 'ReadOnlyFile
+    , _vmiSpec :: VmImageSpec
+    } deriving (Show)
+
 makeLenses ''Ctx
 makeLenses ''CiCtx
 makeLenses ''ContentCtx
 makeLenses ''DirCtx
 makeLenses ''FsCtx
 makeLenses ''RofCtx
+makeLenses ''VmImgCtx
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
@@ -117,25 +126,62 @@ compile p = evalStateT compileSt def
   where
     compileSt = do
         result <- interpret p
-        maxVertex <- use nextVertex
-        unless (maxVertex == 0) $
-            do deps <- use dependencies
-               let g = Graph.buildG (0, maxVertex - 1) deps
-               -- TODO find cycles!
-               lift $
-                   logTrace "Artifact dependency forrest:"
-               handles <- use vToH
-               lift
-                   (logTrace
-                        (Tree.drawForest
-                             (fmap (printSomeHandle . flip Map.lookup handles) <$>
-                              Graph.dff g)))
-               forM_ (Graph.topSort g) $
-                   \vertex ->
-                        do actionsForVertex <-
-                               use $ actions . at vertex . to fromJust
-                           sequence_ actionsForVertex
+        runAllActions
         return result
+
+-- | Compile a 'Program' but run no actions, instead just print out information
+-- about the program using 'logTrace'
+inspect :: Show a => Program a -> IoProgram String
+inspect p = evalStateT compileSt def
+  where
+    compileSt = do
+        res <- interpret $ p
+        mG <- dependencyGraph
+        case mG of
+            Just g -> do
+                handles <- use vToH
+                return $ printDependencyGraph g handles
+            Nothing -> do
+                return $ "No artifacts." ++ show res
+
+-- | Run all actions in correct order according to the dependency graph.
+runAllActions :: IoCompiler ()
+runAllActions = do
+    mG <- dependencyGraph
+    case mG of
+        Just g -> do
+            lift $ logTrace "Artifact dependency forest:"
+            handles <- use vToH
+            lift $ logTrace $ printDependencyGraph g handles
+            forM_ (Graph.topSort g) runActionForVertex
+        Nothing -> do
+            lift $ logTrace "No artifacts."
+            return ()
+  where
+    runActionForVertex vertex = do
+        actionsForVertex <- use $ actions . at vertex . to fromJust
+        sequence_ actionsForVertex
+
+-- | Generate a graph from the artifact dependencies in the compiler context.
+dependencyGraph :: IoCompiler (Maybe Graph.Graph)
+dependencyGraph = do
+    maxVertex <- use nextVertex
+    if (maxVertex > 0)
+        then do
+            deps <- use dependencies
+            return $ Just $ Graph.buildG (0, maxVertex - 1) deps
+        else return Nothing
+
+-- | Show the dependency graph from the compiler context.
+printDependencyGraph :: Graph.Graph -> Map.Map Graph.Vertex SomeHandle -> String
+printDependencyGraph g handles =
+    unlines $
+    "Dependency forest:" :
+    Tree.drawForest
+        (fmap (printSomeHandle . flip Map.lookup handles) <$> Graph.dff g) :
+    "Build order:" :
+    ((printSomeHandle . flip Map.lookup handles) <$> Graph.topSort g)
+  where
     printSomeHandle :: Maybe SomeHandle -> String
     printSomeHandle (Just (SomeHandle (Handle _s t))) = t
     printSomeHandle Nothing = "??error??"
@@ -192,6 +238,28 @@ instance Interpreter IoCompiler where
     runCreate SReadOnlyFile fn = do
         (hnd,_) <- allocHandle SReadOnlyFile fn
         roFiles . at hnd ?= RofCtx fn
+        return hnd
+    runCreate SVmImage (fileHnd,vmSpec) = do
+        (hnd,_) <- allocHandle SVmImage "vm-image"
+        -- If input file resize is necessary, export the file handle and attach
+        -- a resize action.
+        if (vmSpec ^. vmImgResize /= KeepSize)
+            then do
+                resizedSrcFile <- lift $ mkTemp "resized-src-img-file"
+                resizedSrcFileH <- runExport fileHnd $ Just resizedSrcFile
+                resizedSrcFileH --> hnd
+                addAction resizedSrcFileH $ lift $
+                    do resizedSrcFile' <- getRealPath resizedSrcFile
+                       let i =
+                               Image
+                                   resizedSrcFile'
+                                   (vmSpec ^. vmImgType)
+                                   (vmSpec ^. vmImgFileSystem)
+                       resizeVmImage i (vmSpec ^. vmImgResize)
+                vmImages . at hnd ?= VmImgCtx resizedSrcFileH vmSpec
+            else do
+                fileHnd --> hnd
+                vmImages . at hnd ?= VmImgCtx fileHnd vmSpec
         return hnd
     runCreate sa _src = return $ singletonHandle sa
     -- Update
@@ -261,7 +329,47 @@ instance Interpreter IoCompiler where
     runExport hnd@(Handle SGeneratedContent _) mDestFile = do
         tmpH <- use $ generatedContent . at hnd . to fromJust . cFileH
         runExport tmpH mDestFile
-
+    runExport hnd@(Handle SVmImage _) (mDestFile,mDestSpec) = do
+        -- NOTE: This step is done on every export since it is expected that the
+        -- typical use case is to export an image only once. This enables us to
+        -- use a move instruction instead of a copy, which takes more time and
+        -- disk space.
+        -- Convert the image from the source file to a temp file:
+        VmImgCtx srcFileH srcSpec <- use $ vmImages . at hnd . to fromJust
+        let destSpec = fromMaybe (srcSpec & vmImgResize .~ KeepSize) mDestSpec
+        when (srcSpec ^. vmImgFileSystem /= destSpec ^. vmImgFileSystem) $ fail $
+            printf
+                "file system conversion not supported: %s -> %s"
+                (show $ srcSpec ^. vmImgFileSystem)
+                (show $ destSpec ^. vmImgFileSystem)
+        tmpFile <- lift $ mkTemp "converted-img-file"
+        tmpH <- runCreate SReadOnlyFile tmpFile
+        hnd --> tmpH
+        srcFile <- use $ roFiles . at srcFileH . to fromJust . rofFileName
+        addAction tmpH $ lift $
+            do srcFile' <- getRealPath srcFile
+               tmpFile' <- ensureParentDir tmpFile
+               convertVmImage
+                   srcFile'
+                   (srcSpec ^. vmImgType)
+                   tmpFile'
+                   (destSpec ^. vmImgType)
+        -- Resize the temp file and move it to the destination:
+        destFile <- lift $ maybe (mkTemp "tmp-img-file") return mDestFile
+        destH <- runCreate SReadOnlyFile destFile
+        tmpH --> destH
+        addAction destH $ lift $
+            do tmpFile' <- ensureParentDir tmpFile
+               let tmpImg =
+                       Image
+                           tmpFile'
+                           (destSpec ^. vmImgType)
+                           (destSpec ^. vmImgFileSystem)
+                   r = destSpec ^. vmImgResize
+               unless (r == KeepSize) $ resizeVmImage tmpImg r
+               destFile' <- ensureParentDir destFile
+               moveFile tmpFile' destFile'
+        return destH
     runExport _hnd _dest = fail "Not Yet Implemented"
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.

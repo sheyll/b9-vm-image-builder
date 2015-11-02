@@ -9,7 +9,8 @@ import B9.Content
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..))
+        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..),
+        VmImageSpec(..), vmImgType, vmImgResize, vmImgResize)
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
@@ -156,9 +157,8 @@ singletonHandle sa = Handle sa (show sa)
 handle :: SArtifact a -> String -> Handle a
 handle = Handle
 
-
 type family CreateSpec (a :: Artifact) :: * where
-        CreateSpec 'VmImage = ImageSource
+        CreateSpec 'VmImage = (Handle 'ReadOnlyFile, VmImageSpec)
         CreateSpec 'CloudInit = String
         CreateSpec 'LinuxVm = LinuxVmArgs
         CreateSpec 'GeneratedContent = Content
@@ -202,7 +202,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'CloudInit = ()
-        ExportSpec 'VmImage = ImageDestination
+        ExportSpec 'VmImage = (Maybe FilePath, Maybe VmImageSpec)
         ExportSpec 'LocalDirectory = Maybe FilePath
         ExportSpec 'FileSystemImage = Maybe FilePath
         ExportSpec 'ReadOnlyFile = Maybe FilePath
@@ -409,61 +409,18 @@ exportCloudInit chH destH dest = do
 
 -- * Image import
 
-imageSource :: ImageSource -> Program (Handle 'VmImage)
-imageSource src = create SVmImage src
-
-createImage :: String
-            -> FileSystem
-            -> ImageType
-            -> ImageSize
-            -> Program (Handle 'VmImage)
-createImage s fs it is = imageSource $ EmptyImage s fs it is
-
-importImage
-    :: FilePath
-    -> ImageType
-    -> FileSystem
-    -> Partition
-    -> ImageResize
-    -> Program (Handle 'VmImage)
-importImage f it fs pt is = imageSource $ SourceImage (Image f it fs) pt is
-
+{-
 from :: String -> Program (Handle 'VmImage)
-from = fromResized KeepSize
-
-fromResized :: ImageResize -> String -> Program (Handle 'VmImage)
-fromResized r s = imageSource $ From s r
-
-resize :: Handle 'VmImage -> Int -> SizeUnit -> Program ()
-resize hnd s u = update hnd (Resize (ImageSize s u))
-
-resizeToMinimum :: Handle 'VmImage -> Program ()
-resizeToMinimum hnd = update hnd ShrinkToMinimum
-
+from sharedImgName = do
+    export sharedImageCacheHandle (SharedImageName sharedIamgeName)
+-}
 -- * Image export
-
-exportImageDestination :: Handle 'VmImage
-                       -> ImageDestination
-                       -> Program (Handle 'ReadOnlyFile)
-exportImageDestination hnd dst = export hnd dst
-
-share :: Handle 'VmImage -> String -> Program ()
-share hnd name = void $ exportImageDestination hnd $ Share name QCow2 KeepSize
-
-toLiveImg :: Handle 'VmImage -> String -> FilePath -> ImageResize -> Program ()
-toLiveImg hnd imgName outDir rs =
-    void $ exportImageDestination hnd $ LiveInstallerImage imgName outDir rs
-
-writeImg
-    :: Handle 'VmImage
-    -> FilePath
-    -> ImageType
-    -> FileSystem
-    -> ImageResize
-    -> Program (Handle 'ReadOnlyFile)
-writeImg hnd name it fs rs =
-    exportImageDestination hnd $ LocalFile (Image name it fs) rs
-
+{-
+share :: Handle 'VmImage -> Program ()
+share hnd = do
+    (vmImageFileHandle,imageSpec) <- export hnd KeepSize
+    add sharedImageCacheHandle SVmImage (vmImageFileHandle, imageSpec)
+-}
 -- * Execution environment
 
 boot :: String -> ExecEnvType -> CPUArch -> Program (Handle 'LinuxVm)
@@ -516,10 +473,7 @@ mountAndShareSharedImage :: String
                          -> Handle 'LinuxVm
                          -> Program (Handle 'VmImage)
 mountAndShareSharedImage nameFrom nameExport mountPoint env = do
-    img <- from nameFrom
-    share img nameExport
-    mount env img mountPoint
-    return img
+  return undefined
 
 mountAndShareNewImage
     :: String
@@ -529,10 +483,7 @@ mountAndShareNewImage
     -> Handle 'LinuxVm
     -> Program (Handle 'VmImage)
 mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
-    img <- createImage fsLabel Ext4 QCow2 (ImageSize sizeGB GB)
-    share img nameExport
-    mount env img mountPoint
-    return img
+  return undefined
 
 -- * DSL Interpreter
 
