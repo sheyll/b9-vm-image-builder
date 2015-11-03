@@ -14,7 +14,7 @@ import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..))
-import B9.FileSystems (FileSystemResize(..), FileSystemCreation(..))
+import B9.FileSystems (FileSystemResize(..), FileSystemSpec(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
 import Control.Monad.State
@@ -100,6 +100,7 @@ data FsCtx = FsCtx
     { _fsFiles :: [FileSpec]
     , _fsTempDir :: FilePath
     , _fsFileH :: Handle 'ReadOnlyFile
+    , _fsType :: FileSystem
     } deriving (Show)
 
 -- | Context of a 'SReadOnlyFile'
@@ -251,27 +252,25 @@ instance Interpreter IoCompiler where
         (hnd,_) <- allocHandle SLocalDirectory tmp
         localDirs . at hnd ?= (def & dirTempDir .~ tmp)
         return hnd
-    runCreate SFileSystemImage fsCreate@(FileSystemCreation _ fsLabel _ _) = do
+    runCreate SFileSystemImage fsSpec@(FileSystemSpec t fsLabel _ _) = do
         (hnd,_) <- allocHandle SFileSystemImage fsLabel
         out <- lift $ mkTemp $ intercalate "-" ["file-system-image", fsLabel]
         fH <- runCreate SReadOnlyFile out
         hnd --> fH
         tmpDir <- lift $ mkTempDir "file-system-content"
-        fileSystems . at hnd ?= FsCtx [] tmpDir fH
+        fileSystems . at hnd ?= FsCtx [] tmpDir fH t
         addAction fH $
             do Just fileSys <- use $ fileSystems . at hnd
-               lift $ createFileSystem out fsCreate tmpDir (fileSys ^. fsFiles)
+               lift $ createFileSystem out fsSpec tmpDir (fileSys ^. fsFiles)
         return hnd
     runCreate SReadOnlyFile fn = do
         (hnd,_) <- allocHandle SReadOnlyFile fn
         roFiles . at hnd ?= RofCtx fn
         return hnd
-    runCreate SVmImage (fileHnd,vmt) = do
+    runCreate SVmImage (srcFileH,vmt) = do
         (hnd,_) <- allocHandle SVmImage ("vm-image-" ++ show vmt)
-        -- If input file resize is necessary, export the file handle and attach
-        -- a resize action.
-        vmImages . at hnd ?= VmImgCtx fileHnd vmt
-        fileHnd --> hnd
+        vmImages . at hnd ?= VmImgCtx srcFileH vmt
+        srcFileH --> hnd
         return hnd
     runCreate SPartitionedVmImage fileHandle = do
         (hnd,_) <- allocHandle SPartitionedVmImage "partitioned-disk"
@@ -337,9 +336,19 @@ instance Interpreter IoCompiler where
             do destDir' <- lift $ ensureParentDir destDir
                lift $ moveDir tmpDir destDir'
         return destDirH
-    runExport hnd@(Handle SFileSystemImage _) mDestFile = do
+    runExport hnd@(Handle SFileSystemImage _) (mDestFile,mDestSize) = do
         Just fileSys <- use $ fileSystems . at hnd
-        let tmpH = fileSys ^. fsFileH
+        let srcH = fileSys ^. fsFileH
+            srcT = fileSys ^. fsType
+        tmpH <- -- TODO inspect where getRealPath is called, and where not
+            case mDestSize of -- TODO inspect carefully all '-->'
+                Nothing -> return srcH
+                Just destSize -> do
+                    tmpFile <- lift $ mkTemp "file-system-resize"
+                    tmpH <- runExport srcH (Just tmpFile)
+                    addAction tmpH $ lift $
+                        resizeFileSystem tmpFile destSize srcT
+                    return tmpH
         runExport tmpH mDestFile
     runExport hnd@(Handle SReadOnlyFile _) mDestFile = do
         destFile <- lift $ maybe (mkTemp "tmp-file") return mDestFile
@@ -351,46 +360,52 @@ instance Interpreter IoCompiler where
         Just genCntCtx <- use $ generatedContent . at hnd
         let tmpH = genCntCtx ^. cFileH
         runExport tmpH mDestFile
-    runExport hnd@(Handle SVmImage _) (mDestFile,mDestType,mNewSize) = do
-        -- NOTE: This step is done on every export since it is expected that the
-        -- typical use case is to export an image only once. This enables us to
-        -- use a move instruction instead of a copy, which takes more time and
-        -- disk space.
+    runExport hnd@(Handle SVmImage _) (mDestFile,mDestType,mDestSize) = do
         -- Convert the image from the source file to a temp file:
         Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at hnd
-        let destSpec = fromMaybe (srcSpec & vmImgResize .~ KeepSize) mDestSpec
-        when (srcSpec ^. vmImgFileSystem /= destSpec ^. vmImgFileSystem) $ fail $
-            printf
-                "file system conversion not supported: %s -> %s"
-                (show $ srcSpec ^. vmImgFileSystem)
-                (show $ destSpec ^. vmImgFileSystem)
-        tmpFile <- lift $ mkTemp "converted-img-file"
-        tmpH <- runCreate SReadOnlyFile tmpFile
-        hnd --> tmpH
-        Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
-        addAction tmpH $ lift $
-            do srcFile' <- getRealPath srcFile
-               tmpFile' <- ensureParentDir tmpFile
-               convertVmImage
-                   srcFile'
-                   (srcSpec ^. vmImgType)
-                   tmpFile'
-                   (destSpec ^. vmImgType)
+        convertedH <-
+            case mDestType of
+                Just destType
+                  | destType /= srcType -> do
+                      Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
+                      convertedFile <- lift $ mkTemp "converted-img-file"
+                      convertedH <- runCreate SReadOnlyFile convertedFile
+                      addAction convertedH $ lift $
+                          do srcFile' <- getRealPath srcFile
+                             convertedFile' <- ensureParentDir convertedFile
+                             convertVmImage
+                                 srcFile'
+                                 srcType
+                                 convertedFile'
+                                 destType
+                      srcFileH --> convertedH
+                      return convertedH
+                _ -> runExport srcFileH Nothing
         -- Resize the temp file and move it to the destination:
-        destFile <- lift $ maybe (mkTemp "tmp-img-file") return mDestFile
+        sequence_ $
+            do (ImageSize destSize destSizeU) <- mDestSize
+               return $ addAction convertedH $
+                   do Just (RofCtx convertedFile) <-
+                          use $ roFiles . at convertedH
+                      lift $
+                          do convertedFile' <- ensureParentDir convertedFile
+                             resizeVmImage
+                                 convertedFile'
+                                 destSize
+                                 destSizeU
+                                 (fromMaybe srcType mDestType)
+        -- Move the temp file to the destination:
+        destFile <- lift $ maybe (mkTemp "resized-img-file") return mDestFile
+        addAction convertedH $
+            do Just (RofCtx convertedFile) <- use $ roFiles . at convertedH
+               lift $
+                   do convertedFile' <- getRealPath convertedFile
+                      destFile' <- ensureParentDir destFile
+                      moveFile convertedFile' destFile'
         destH <- runCreate SReadOnlyFile destFile
-        tmpH --> destH
-        addAction destH $ lift $
-            do tmpFile' <- ensureParentDir tmpFile
-               let tmpImg =
-                       Image
-                           tmpFile'
-                           (destSpec ^. vmImgType)
-                           (destSpec ^. vmImgFileSystem)
-                   r = destSpec ^. vmImgResize
-               unless (r == KeepSize) $ resizeVmImage tmpImg r
-               destFile' <- ensureParentDir destFile
-               moveFile tmpFile' destFile'
+        -- this vm image is not 'finished' until all conversions/resizes are done.
+        hnd -->
+            destH
         return destH
     runExport hnd@(Handle SPartitionedVmImage _) (mDestFile,partSpec) = do
         destFile <-
@@ -400,10 +415,10 @@ instance Interpreter IoCompiler where
         hnd --> destH
         Just srcFileH <- use $ partitionedImgs . at hnd
         Just (RofCtx srcFileName) <- use $ roFiles . at srcFileH
-        addAction hnd $ lift $ do
-          src <- getRealPath srcFileName
-          dst <- ensureParentDir destFile
-          extractPartition partSpec src dst
+        addAction hnd $ lift $
+            do src <- getRealPath srcFileName
+               dst <- ensureParentDir destFile
+               extractPartition partSpec src dst
         return destH
     runExport _hnd _dest = fail "Not Yet Implemented"
 

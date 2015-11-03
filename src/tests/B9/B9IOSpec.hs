@@ -77,11 +77,11 @@ actionSpec =
            runPureDump
                (createFileSystem
                     "test"
-                    (FileSystemCreation Ext4 "label" 10 MB)
+                    (FileSystemSpec Ext4 "label" 10 MB)
                     "test.d"
                     [fileSpec "test"]) `shouldBe`
            ( ()
-           , [ "createFileSystem test FileSystemCreation Ext4 \"label\" 10 MB " ++
+           , [ "createFileSystem test FileSystemSpec Ext4 \"label\" 10 MB " ++
                "test.d " ++ show [(fileSpec "test")]])
        it "handles ResizeFileSystem" $
            dumpToStrings (resizeFileSystem "in" ShrinkFileSystem Ext4) `shouldBe`

@@ -1,6 +1,5 @@
 -- | A /pure/ abstraction off the IO related actions available in B9. This is useful
 -- to enable unit testing, OS-independence and debugging.
-
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -62,7 +61,7 @@ data Action next
                           Environment
                           next
     | CreateFileSystem FilePath
-                       FileSystemCreation
+                       FileSystemSpec
                        FilePath
                        [FileSpec]
                        next
@@ -186,10 +185,10 @@ renderContentToFile :: FilePath -> Content -> Environment -> IoProgram ()
 renderContentToFile f c e = liftF $ RenderContentToFile f c e ()
 
 -- | Create a 'FileSystem' inside a file, such that the criteria in a
--- 'FileSystemCreation' record are matched and all files listed in the third
+-- 'FileSystemSpec' record are matched and all files listed in the third
 -- parameter are copied into the file system.
 createFileSystem :: FilePath
-                 -> FileSystemCreation
+                 -> FileSystemSpec
                  -> FilePath
                  -> [FileSpec]
                  -> IoProgram ()

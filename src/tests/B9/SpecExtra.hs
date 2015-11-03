@@ -1,7 +1,7 @@
 {- | Extra utilities for HSpec based unit tests -}
 module B9.SpecExtra
        (should've, toList, toListIo, hasSameEffectAs, hasSameEffect,
-        shouldMeanIo)
+        shouldDoIo)
        where
 
 import B9.B9IO
@@ -42,8 +42,8 @@ hasSameEffect
 hasSameEffect = isInfixOf `on` (dumpToStrings . compile)
 
 -- | Expect that a 'Program' contains at least a given 'IoProgram'.
-shouldMeanIo :: Program a -> IoProgram b -> Expectation
-shouldMeanIo actual expected = (toList actual) `should've` (toListIo expected)
+shouldDoIo :: Program a -> IoProgram b -> Expectation
+shouldDoIo actual expected = (toList actual) `should've` (toListIo expected)
 
 
 spec :: Spec

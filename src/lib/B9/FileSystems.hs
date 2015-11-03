@@ -19,16 +19,16 @@ import qualified Text.PrettyPrint.Boxes as Boxes
 import           Text.Printf
 
 -- | Descibe how a 'FileSystem' should be created.
-data FileSystemCreation =
-    FileSystemCreation FileSystem
-                       FSLabel
-                       Int
-                       SizeUnit
+data FileSystemSpec =
+    FileSystemSpec FileSystem
+                   FSLabel
+                   Int
+                   SizeUnit
     deriving (Read,Show,Generic,Eq,Data,Typeable)
 
-instance Hashable FileSystemCreation
-instance Binary FileSystemCreation
-instance NFData FileSystemCreation
+instance Hashable FileSystemSpec
+instance Binary FileSystemSpec
+instance NFData FileSystemSpec
 
 -- | How to resize a file system.
 data FileSystemResize
@@ -85,21 +85,23 @@ createEmptyFile f s su = do
 
 -- | Create a file system inside a file with a given list of file contents.
 createFSWithFiles :: FilePath
-                  -> FileSystemCreation
+                  -> FileSystemSpec
                   -> FilePath
                   -> [FileSpec]
                   -> B9 ()
-createFSWithFiles dst (FileSystemCreation ISO9660 l _s _su) srcDir _fs = do
+createFSWithFiles dst (FileSystemSpec ISO9660 l _s _su) srcDir _fs = do
     cmdRaw "genisoimage" ["-output", dst, "-volid", l, "-rock", "-d", srcDir]
-createFSWithFiles dst (FileSystemCreation VFAT l s su) srcDir fs = do
+createFSWithFiles dst (FileSystemSpec VFAT l s su) srcDir fs = do
     createEmptyFile dst s su
     cmdRaw "mkfs.vfat" ["-n", l, dst]
-    cmdRaw "mcopy" (("-oi" : dst : (((srcDir </>) . view fileSpecPath) <$> fs)) ++ ["::"])
-createFSWithFiles dst (FileSystemCreation Ext4 l s su) _ fs = do
-  when (not (null fs)) $
-    fail "Creating non-empty Ext4 file systems is not yet implemented"
-  createEmptyFile dst s su
-  cmdRaw "mkfs.ext4" ["-L", l, "-q", dst]
+    cmdRaw
+        "mcopy"
+        (("-oi" : dst : (((srcDir </>) . view fileSpecPath) <$> fs)) ++ ["::"])
+createFSWithFiles dst (FileSystemSpec Ext4 l s su) _ fs = do
+    when (not (null fs)) $
+        fail "Creating non-empty Ext4 file systems is not yet implemented"
+    createEmptyFile dst s su
+    cmdRaw "mkfs.ext4" ["-L", l, "-q", dst]
 createFSWithFiles dst c srcD fs =
     fail $
     printf
@@ -111,9 +113,9 @@ createFSWithFiles dst c srcD fs =
 
 -- * 'Arbitrary' instances for quickcheck
 
-instance Arbitrary FileSystemCreation where
+instance Arbitrary FileSystemSpec where
     arbitrary =
-        FileSystemCreation <$> smaller arbitrary <*> smaller arbitrary <*>
+        FileSystemSpec <$> smaller arbitrary <*> smaller arbitrary <*>
         smaller arbitrary <*>
         smaller arbitrary
 

@@ -10,7 +10,7 @@ import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..), PartitionSpec(..))
-import B9.FileSystems (FileSystemCreation(..), FileSystemResize(..))
+import B9.FileSystems (FileSystemSpec(..), FileSystemResize(..))
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
@@ -168,7 +168,7 @@ type family CreateSpec (a :: Artifact) :: * where
         CreateSpec 'GeneratedContent = Content
         CreateSpec 'LocalDirectory = ()
         CreateSpec 'ReadOnlyFile = FilePath
-        CreateSpec 'FileSystemImage = FileSystemCreation
+        CreateSpec 'FileSystemImage = FileSystemSpec
 
 type family UpdateSpec (a :: Artifact) :: * where
         UpdateSpec 'VmImage = ImageResize
@@ -399,7 +399,7 @@ writeCloudInit' :: Handle 'CloudInit
                 -> FilePath
                 -> Program (Handle 'ReadOnlyFile)
 writeCloudInit' h fs dst = do
-    fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
+    fsH <- create SFileSystemImage (FileSystemSpec fs "cidata" 2 MB)
     exportCloudInit h fsH (Just dst, Nothing)
 
 exportCloudInit
