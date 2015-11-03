@@ -13,44 +13,13 @@ import System.Directory
 import System.FilePath
 import Text.Printf (printf)
 
-
--- | Create an empty file with a given size.
-createEmptyFile :: FilePath -> Int -> SizeUnit -> B9 ()
-createEmptyFile f s su = do
-    cmdRaw "truncate" ["--size", show s ++ formattedSizeUnit, f]
-  where
-    formattedSizeUnit =
-        case su of
-            GB -> "G"
-            MB -> "M"
-            KB -> "K"
-            B -> ""
-
--- | Create a file system inside a file with a given list of file contents.
-createFSWithFiles :: FilePath
-                  -> FileSystemCreation
-                  -> FilePath
-                  -> [FileSpec]
-                  -> B9 ()
-createFSWithFiles dst (FileSystemCreation ISO9660 l _s _su) srcDir _fs = do
-    cmdRaw "genisoimage" ["-output", dst, "-volid", l, "-rock", "-d", srcDir]
-createFSWithFiles dst (FileSystemCreation VFAT l s su) srcDir fs = do
-    createEmptyFile dst s su
-    cmdRaw "mkfs.vfat" ["-n", l, dst]
-    cmdRaw "mcopy" (("-oi" : dst : (((srcDir </>) . view fileSpecPath) <$> fs)) ++ ["::"])
-createFSWithFiles dst (FileSystemCreation Ext4 l s su) _ fs = do
-  when (not (null fs)) $
-    fail "Creating non-empty Ext4 file systems is not yet implemented"
-  createEmptyFile dst s su
-  cmdRaw "mkfs.ext4" ["-L", l, "-q", dst]
-createFSWithFiles dst c srcD fs =
-    fail $
-    printf
-        "Not implemented: createFSWithFiles '%s' '%s' '%s' %s"
-        dst
-        (show c)
-        srcD
-        (show fs)
+-- | Resize a vm image.
+resizeImage_ :: ImageSize -> FilePath -> ImageType -> B9 ()
+resizeImage_ newSize img t
+  | t `elem` [QCow2, Vmdk, Raw] =
+      let sizeOpt = toQemuSizeOptVal newSize
+      in cmdRaw "qemu-img" ["resize", "-q", img, sizeOpt]
+  | otherwise = fail $ printf "unsupported image type %s" (show t)
 
 -- | Resize an image, including the file system inside the image.
 resizeImage :: ImageResize -> Image -> B9 ()

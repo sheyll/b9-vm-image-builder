@@ -1,8 +1,9 @@
 module B9.B9IOSpec (spec) where
 
-import B9.DiskImages
 import B9.B9IO
 import B9.Content
+import B9.DiskImages
+import B9.FileSystems
 import Data.List
 import System.FilePath
 import Test.Hspec
@@ -82,13 +83,15 @@ actionSpec =
            ( ()
            , [ "createFileSystem test FileSystemCreation Ext4 \"label\" 10 MB " ++
                "test.d " ++ show [(fileSpec "test")]])
+       it "handles ResizeFileSystem" $
+           dumpToStrings (resizeFileSystem "in" ShrinkFileSystem Ext4) `shouldBe`
+           ["resizeFileSystem in ShrinkFileSystem Ext4"]
        it "handles ConvertVmImage" $
            dumpToStrings (convertVmImage "in" QCow2 "out" Vmdk) `shouldBe`
            ["convertVmImage in QCow2 out Vmdk"]
        it "handles ResizeVmImage" $
-           dumpToStrings
-               (resizeVmImage (Image "test" QCow2 Ext4) ShrinkToMinimum) `shouldBe`
-           ["resizeVmImage Image \"test\" QCow2 Ext4 ShrinkToMinimum"]
+           dumpToStrings (resizeVmImage "test" 10 MB QCow2) `shouldBe`
+           ["resizeVmImage test 10 MB QCow2"]
        it "handles ExtractPartition" $
            dumpToStrings (extractPartition (MBRPartition 1) "src" "dest") `shouldBe`
            ["extractPartition MBRPartition 1 src dest"]

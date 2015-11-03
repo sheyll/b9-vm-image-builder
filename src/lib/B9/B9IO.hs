@@ -8,6 +8,7 @@ module B9.B9IO where
 
 import B9.Content
 import B9.DiskImages
+import B9.FileSystems
 import B9.QCUtil
 import Control.Monad.Free
 import Control.Monad.Trans.Writer.Lazy
@@ -65,13 +66,19 @@ data Action next
                        FilePath
                        [FileSpec]
                        next
+    | ResizeFileSystem FilePath
+                       FileSystemResize
+                       FileSystem
+                       next
     | ConvertVmImage FilePath
                      ImageType
                      FilePath
                      ImageType
                      next
-    | ResizeVmImage Image
-                    ImageResize
+    | ResizeVmImage FilePath
+                    Int
+                    SizeUnit
+                    ImageType
                     next
     | ExtractPartition PartitionSpec
                        FilePath
@@ -96,10 +103,12 @@ instance Show (Action a) where
         printf "renderContentToFile %s %s %s" f (show c) (show e)
     show (CreateFileSystem dst fs srcDir files _) =
         printf "createFileSystem %s %s %s %s" dst (show fs) srcDir (show files)
+    show (ResizeFileSystem fs fsResize fsType  _) =
+        printf "resizeFileSystem %s %s %s" fs (show fsResize) (show fsType)
     show (ConvertVmImage srcF srcT dstF dstT _) =
         printf "convertVmImage %s %s %s %s" srcF (show srcT) dstF (show dstT)
-    show (ResizeVmImage img imgResize _) =
-        printf "resizeVmImage %s %s" (show img) (show imgResize)
+    show (ResizeVmImage img s u imgT  _) =
+        printf "resizeVmImage %s %d %s %s" img s (show u) (show imgT)
     show (ExtractPartition p s d _) =
         printf "extractPartition %s %s %s" (show p)  s d
 
@@ -187,13 +196,17 @@ createFileSystem :: FilePath
 createFileSystem dst fs srcDir files =
     liftF $ CreateFileSystem dst fs srcDir files ()
 
+-- | Resize a file system in a raw disk image.
+resizeFileSystem :: FilePath -> FileSystemResize -> FileSystem -> IoProgram ()
+resizeFileSystem f r t = liftF $ ResizeFileSystem f r t ()
+
 -- | Convert a virtual machine disk image file into another format.
 convertVmImage :: FilePath -> ImageType -> FilePath -> ImageType -> IoProgram ()
 convertVmImage srcF srcT dstF dstT = liftF $ ConvertVmImage srcF srcT dstF dstT ()
 
--- | Resize a virtual machine disk image (and file system).
-resizeVmImage :: Image -> ImageResize -> IoProgram ()
-resizeVmImage img imgResize = liftF $ ResizeVmImage img imgResize ()
+-- | Resize a virtual machine disk image.
+resizeVmImage :: FilePath -> Int -> SizeUnit -> ImageType -> IoProgram ()
+resizeVmImage i s u t = liftF $ ResizeVmImage i s u t ()
 
 -- | Extract a partition from a partitioned disk image file and copy it as raw
 -- image into a new file.
@@ -266,13 +279,17 @@ traceEveryAction = run traceAction
         logTrace $ show a
         createFileSystem dst fs srcDir files
         return n
+    traceAction a@(ResizeFileSystem f r t n) = do
+        logTrace $ show a
+        resizeFileSystem f r t
+        return n
     traceAction a@(ConvertVmImage srcF srcT dstF dstT n) = do
         logTrace $ show a
         convertVmImage srcF srcT dstF dstT
         return n
-    traceAction a@(ResizeVmImage img imgResize n) = do
+    traceAction a@(ResizeVmImage i s u t n) = do
         logTrace $ show a
-        resizeVmImage img imgResize
+        resizeVmImage i s u t
         return n
     traceAction a@(ExtractPartition p s d n) = do
         logTrace $ show a
@@ -346,10 +363,13 @@ runPureDump p = runWriter $ run dump p
     dump a@(CreateFileSystem _f _c _d _fs n) = do
         tell [show a]
         return n
+    dump a@(ResizeFileSystem _f _r _t n) = do
+        tell [show a]
+        return n
     dump a@(ConvertVmImage _srcF _srcT _dstF _dstT n) = do
         tell [show a]
         return n
-    dump a@(ResizeVmImage _img _imgResize n) = do
+    dump a@(ResizeVmImage _i _s _u _t n) = do
         tell [show a]
         return n
     dump a@(ExtractPartition _p _s _d n) = do
@@ -390,12 +410,18 @@ instance Arbitrary a => Arbitrary (Action a) where
               smaller arbitraryFilePath <*>
               smaller arbitrary <*>
               smaller arbitrary
+            , ResizeFileSystem <$> smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller arbitrary <*>
+              smaller arbitrary
             , ConvertVmImage <$> smaller arbitraryFilePath <*>
               smaller arbitrary <*>
               smaller arbitraryFilePath <*>
               smaller arbitrary <*>
               smaller arbitrary
-            , ResizeVmImage <$> smaller arbitrary <*> smaller arbitrary <*>
+            , ResizeVmImage <$> smaller arbitraryFilePath <*> smaller arbitrary <*>
+              smaller arbitrary <*>
+              smaller arbitrary <*>
               smaller arbitrary
             , ExtractPartition <$> (MBRPartition <$> smaller arbitrary) <*>
               smaller arbitraryFilePath <*>

@@ -13,8 +13,8 @@ import B9.DSL
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..),
-        VmImageSpec(..), vmImgResize, vmImgType, vmImgFileSystem)
+        SizeUnit(..), Mounted, MountPoint(..))
+import B9.FileSystems (FileSystemResize(..), FileSystemCreation(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
 import Control.Monad.State
@@ -110,7 +110,7 @@ data RofCtx = RofCtx
 -- | Context of a 'SVmImage'
 data VmImgCtx = VmImgCtx
     { _vmiFileHandle :: Handle 'ReadOnlyFile
-    , _vmiSpec :: VmImageSpec
+    , _vmiType :: ImageType
     } deriving (Show)
 
 makeLenses ''Ctx
@@ -266,27 +266,12 @@ instance Interpreter IoCompiler where
         (hnd,_) <- allocHandle SReadOnlyFile fn
         roFiles . at hnd ?= RofCtx fn
         return hnd
-    runCreate SVmImage (fileHnd,vmSpec) = do
-        (hnd,_) <- allocHandle SVmImage "vm-image"
+    runCreate SVmImage (fileHnd,vmt) = do
+        (hnd,_) <- allocHandle SVmImage ("vm-image-" ++ show vmt)
         -- If input file resize is necessary, export the file handle and attach
         -- a resize action.
-        if (vmSpec ^. vmImgResize /= KeepSize)
-            then do
-                resizedSrcFile <- lift $ mkTemp "resized-src-img-file"
-                resizedSrcFileH <- runExport fileHnd $ Just resizedSrcFile
-                resizedSrcFileH --> hnd
-                addAction resizedSrcFileH $ lift $
-                    do resizedSrcFile' <- getRealPath resizedSrcFile
-                       let i =
-                               Image
-                                   resizedSrcFile'
-                                   (vmSpec ^. vmImgType)
-                                   (vmSpec ^. vmImgFileSystem)
-                       resizeVmImage i (vmSpec ^. vmImgResize)
-                vmImages . at hnd ?= VmImgCtx resizedSrcFileH vmSpec
-            else do
-                fileHnd --> hnd
-                vmImages . at hnd ?= VmImgCtx fileHnd vmSpec
+        vmImages . at hnd ?= VmImgCtx fileHnd vmt
+        fileHnd --> hnd
         return hnd
     runCreate SPartitionedVmImage fileHandle = do
         (hnd,_) <- allocHandle SPartitionedVmImage "partitioned-disk"
@@ -366,13 +351,13 @@ instance Interpreter IoCompiler where
         Just genCntCtx <- use $ generatedContent . at hnd
         let tmpH = genCntCtx ^. cFileH
         runExport tmpH mDestFile
-    runExport hnd@(Handle SVmImage _) (mDestFile,mDestSpec) = do
+    runExport hnd@(Handle SVmImage _) (mDestFile,mDestType,mNewSize) = do
         -- NOTE: This step is done on every export since it is expected that the
         -- typical use case is to export an image only once. This enables us to
         -- use a move instruction instead of a copy, which takes more time and
         -- disk space.
         -- Convert the image from the source file to a temp file:
-        Just (VmImgCtx srcFileH srcSpec) <- use $ vmImages . at hnd
+        Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at hnd
         let destSpec = fromMaybe (srcSpec & vmImgResize .~ KeepSize) mDestSpec
         when (srcSpec ^. vmImgFileSystem /= destSpec ^. vmImgFileSystem) $ fail $
             printf

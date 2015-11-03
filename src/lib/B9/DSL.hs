@@ -9,9 +9,8 @@ import B9.Content
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), FileSystemCreation(..),
-        VmImageSpec(..), vmImgType, vmImgResize, vmImgResize,
-        PartitionSpec(..))
+        SizeUnit(..), Mounted, MountPoint(..), PartitionSpec(..))
+import B9.FileSystems (FileSystemCreation(..), FileSystemResize(..))
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
@@ -162,7 +161,7 @@ handle :: SArtifact a -> String -> Handle a
 handle = Handle
 
 type family CreateSpec (a :: Artifact) :: * where
-        CreateSpec 'VmImage = (Handle 'ReadOnlyFile, VmImageSpec)
+        CreateSpec 'VmImage = (Handle 'ReadOnlyFile, ImageType)
         CreateSpec 'PartitionedVmImage = Handle 'ReadOnlyFile
         CreateSpec 'CloudInit = String
         CreateSpec 'LinuxVm = LinuxVmArgs
@@ -207,10 +206,10 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
 
 type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'CloudInit = ()
-        ExportSpec 'VmImage = (Maybe FilePath, Maybe VmImageSpec)
+        ExportSpec 'VmImage = (Maybe FilePath, Maybe ImageType, Maybe ImageSize)
         ExportSpec 'PartitionedVmImage = (Maybe FilePath, PartitionSpec)
         ExportSpec 'LocalDirectory = Maybe FilePath
-        ExportSpec 'FileSystemImage = Maybe FilePath
+        ExportSpec 'FileSystemImage = (Maybe FilePath, Maybe FileSystemResize)
         ExportSpec 'ReadOnlyFile = Maybe FilePath
         ExportSpec 'GeneratedContent = Maybe FilePath
 
@@ -401,7 +400,7 @@ writeCloudInit' :: Handle 'CloudInit
                 -> Program (Handle 'ReadOnlyFile)
 writeCloudInit' h fs dst = do
     fsH <- create SFileSystemImage (FileSystemCreation fs "cidata" 2 MB)
-    exportCloudInit h fsH (Just dst)
+    exportCloudInit h fsH (Just dst, Nothing)
 
 exportCloudInit
     :: (CanAdd a 'ReadOnlyFile, Show (ExportSpec a), Show (ExportResult a))
@@ -554,8 +553,8 @@ instance Interpreter IO where
     runExport hnd@(Handle SLocalDirectory _) dest = do
         printf "export %s to %s\n" (show hnd) (show dest)
         return $ handle SLocalDirectory (fromMaybe "xxx" dest)
-    runExport hnd@(Handle SFileSystemImage _) dest = do
-        printf "export %s to %s\n" (show hnd) (show dest)
+    runExport hnd@(Handle SFileSystemImage _) (dest,res) = do
+        printf "export %s to %s resize: %s\n" (show hnd) (show dest) (show res)
         return (handle SReadOnlyFile (fromMaybe "xxx" dest))
     runExport hnd dest = do
         printf "export %s to %s\n" (show hnd) (show dest)

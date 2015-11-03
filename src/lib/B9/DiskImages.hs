@@ -152,31 +152,6 @@ instance Hashable ImageType
 instance Binary ImageType
 instance NFData ImageType
 
-
--- | Descibe how a 'FileSystem' should be created.
-data FileSystemCreation =
-    FileSystemCreation FileSystem
-                       FSLabel
-                       Int
-                       SizeUnit
-    deriving (Read,Show,Generic,Eq,Data,Typeable)
-
-instance Hashable FileSystemCreation
-instance Binary FileSystemCreation
-instance NFData FileSystemCreation
-
--- | The file systems that b9 can use and convert.
-data FileSystem
-    = NoFileSystem
-    | Ext4
-    | ISO9660
-    | VFAT
-    deriving (Eq,Show,Read,Typeable,Data,Generic)
-
-instance Hashable FileSystem
-instance Binary FileSystem
-instance NFData FileSystem
-
 -- | A data type for image file or file system size; instead of passing 'Int's
 -- around this also captures a size unit so that the 'Int' can be kept small
 data ImageSize =
@@ -230,21 +205,6 @@ instance NFData ImageResize
 -- 'MountPoint'
 type Mounted a = (a, MountPoint)
 
--- | VM Image type, file system and resize specification. Used for reading and
--- writing vm image files. The '_vmImgResize' field specifies how the image
--- should be resized when reading/writing image files.
-data VmImageSpec = VmImageSpec
-    { _vmImgType :: ImageType
-    , _vmImgFileSystem :: FileSystem
-    , _vmImgResize :: ImageResize
-    } deriving (Read,Show,Typeable,Data,Eq,Generic)
-
-instance Hashable VmImageSpec
-instance Binary VmImageSpec
-instance NFData VmImageSpec
-
-makeLenses ''VmImageSpec
-
 -- * Shared Images
 
 -- | 'SharedImage' holds all data necessary to describe an __instance__ of a shared
@@ -261,6 +221,20 @@ data SharedImage =
 instance Hashable SharedImage
 instance Binary SharedImage
 instance NFData SharedImage
+
+
+-- | The file systems that b9 can use and convert. TODO move to FileSystems
+data FileSystem
+    = NoFileSystem
+    | Ext4
+    | ISO9660
+    | VFAT
+    deriving (Eq,Show,Read,Typeable,Data,Generic)
+
+instance Hashable FileSystem
+instance Binary FileSystem
+instance NFData FileSystem
+
 
 -- | The name of the image is the de-facto identifier for push, pull, 'From' and
 --   'Share'.  B9 always selects the newest version the shared image identified
@@ -614,9 +588,6 @@ instance Arbitrary Image where
     arbitrary =
         Image "img-file-name" <$> smaller arbitrary <*> smaller arbitrary
 
-instance Arbitrary FileSystem where
-    arbitrary = elements [Ext4]
-
 instance Arbitrary ImageType where
     arbitrary = elements [Raw, QCow2, Vmdk]
 
@@ -629,12 +600,10 @@ instance Arbitrary SizeUnit where
 instance Arbitrary SharedImageName where
     arbitrary = SharedImageName <$> arbitrarySharedImageName
 
-instance Arbitrary FileSystemCreation where
-    arbitrary =
-        FileSystemCreation <$> smaller arbitrary <*> smaller arbitrary <*>
-        smaller arbitrary <*>
-        smaller arbitrary
-
 arbitrarySharedImageName :: Gen String
 arbitrarySharedImageName =
     elements [printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3]]
+
+-- TODO move to file systems
+instance Arbitrary FileSystem where
+    arbitrary = elements [Ext4]

@@ -4,8 +4,9 @@ module B9.B9IOImpl where
 import           B9.B9IO
 import qualified B9.B9Monad as B9Monad
 import           B9.Content
-import           B9.MBR
 import           B9.DiskImages
+import           B9.FileSystems
+import           B9.MBR
 import           B9.QemuImg
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
@@ -73,11 +74,14 @@ executeIoProg p = run go p
     go (CreateFileSystem dst fs srcDir files n) = do
         createFSWithFiles dst fs srcDir files
         return n
+    go (ResizeFileSystem f r t n) = do
+        resizeFS r f t
+        return n
     go (ConvertVmImage s st d dt n) = do
         convertImageType s st d dt
         return n
-    go (ResizeVmImage i r n) = do
-        resizeImage r i
+    go (ResizeVmImage i s u t n) = do
+        resizeImage_ (ImageSize s u) i t
         return n
     go (ExtractPartition (MBRPartition partIndex) s d n) = do
         (start,len) <- liftIO $ B9.MBR.getPartition partIndex s
