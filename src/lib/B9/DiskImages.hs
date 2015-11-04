@@ -216,7 +216,7 @@ data SharedImage =
                 SharedImageDate
                 SharedImageBuildId
                 ImageType
-                FileSystem
+                FileSystem -- TODO the file system should not be a parameter!
     deriving (Eq,Read,Show,Typeable,Data,Generic)
 
 instance Hashable SharedImage

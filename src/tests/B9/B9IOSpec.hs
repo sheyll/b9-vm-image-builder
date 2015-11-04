@@ -97,14 +97,12 @@ actionSpec =
            ["extractPartition MBRPartition 1 src dest"]
        it "handles ImageRepoLookup" $
            runPureDump (imageRepoLookup (SharedImageName "src")) `shouldBe`
-           (testSharedImage, ["imageRepoLookup SharedImageName \"src\""])
-       it "handles ImageRepoGet" $
-           dumpToStrings (imageRepoGet testSharedImage "test") `shouldBe`
-           [printf "imageRepoGet %s test" (show testSharedImage)]
-       it "handles ImageRepoPut" $
+           ( (testSharedImage, "~/.b9/cache/xxx.qcow2")
+           , ["imageRepoLookup SharedImageName \"src\""])
+       it "handles ImageRepoPublish" $
            dumpToStrings
-               (imageRepoPut "test" QCow2 Ext4 (SharedImageName "dst")) `shouldBe`
-           ["imageRepoPut test QCow2 Ext4 SharedImageName \"dst\""]
+               (imageRepoPublish "test" QCow2 (SharedImageName "dst")) `shouldBe`
+           ["imageRepoPublish test QCow2 SharedImageName \"dst\""]
        it "handles any program, really" $
            property $
            do prog <- arbitraryIoProgram

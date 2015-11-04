@@ -105,7 +105,7 @@ executeIoProg p = run go p
         si <- getLatestSharedImageByNameFromCache s
         src <- getSharedImageCachedFilePath si
         return $ k (si, src)
-    go (ImageRepoPublish f t fs sn n) = do
-        let i = Image f t fs
+    go (ImageRepoPublish f t sn n) = do
+        let i = Image f t Ext4 -- TODO the file system should not be a parameter
         void $ shareImage i sn
         return n

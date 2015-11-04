@@ -633,9 +633,7 @@ sharedImageSpec =
                  imageRepoPublish
                      cachedImg'
                      QCow2
-                     Ext4
                      (SharedImageName "out-shared")))
-
 
 -- * DSL examples
 

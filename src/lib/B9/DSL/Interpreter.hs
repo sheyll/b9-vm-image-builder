@@ -318,7 +318,7 @@ instance Interpreter IoCompiler where
         Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
         addAction vmI $ lift $
             do srcFile' <- getRealPath srcFile
-               imageRepoPublish srcFile' srcType Ext4 sn
+               imageRepoPublish srcFile' srcType sn
         return ()
     runAdd hnde sa _src =
         fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)

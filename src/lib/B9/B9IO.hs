@@ -87,7 +87,6 @@ data Action next
                       ((SharedImage, FilePath) -> next)
     | ImageRepoPublish FilePath
                        ImageType
-                       FileSystem
                        SharedImageName
                        next
     deriving (Functor)
@@ -118,8 +117,8 @@ instance Show (Action a) where
     show (ExtractPartition p s d _) =
         printf "extractPartition %s %s %s" (show p) s d
     show (ImageRepoLookup sn _) = printf "imageRepoLookup %s" (show sn)
-    show (ImageRepoPublish f t fs n _) =
-        printf "imageRepoPublish %s %s %s %s" f (show t) (show fs) (show n)
+    show (ImageRepoPublish f t n _) =
+        printf "imageRepoPublish %s %s %s" f (show t) (show n)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
@@ -230,10 +229,9 @@ imageRepoLookup sn =
 -- | Store a local vm image file in the image repository
 imageRepoPublish :: FilePath
                  -> ImageType
-                 -> FileSystem
                  -> SharedImageName
                  -> IoProgram ()
-imageRepoPublish f t s n = liftF $ ImageRepoPublish f t s n ()
+imageRepoPublish f t n = liftF $ ImageRepoPublish f t n ()
 
 -- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogTrace' are logged via 'LogTrace'.
@@ -322,9 +320,9 @@ traceEveryAction = run traceAction
         r <- imageRepoLookup s
         logTrace $ printf " -> %s" (show r)
         return $ k r
-    traceAction a@(ImageRepoPublish f t fs sn n) = do
+    traceAction a@(ImageRepoPublish f t sn n) = do
         logTrace $ show a
-        imageRepoPublish f t fs sn
+        imageRepoPublish f t sn
         return n
 
 -- * Testing support
@@ -417,7 +415,7 @@ runPureDump p = runWriter $ run dump p
                       QCow2
                       Ext4
                 , "~/.b9/cache/xxx.qcow2")
-    dump a@(ImageRepoPublish _f _t _fs _sn n) = do
+    dump a@(ImageRepoPublish _f _t _sn n) = do
         tell [show a]
         return n
 
@@ -474,7 +472,6 @@ instance Arbitrary a => Arbitrary (Action a) where
               smaller arbitrary
             , ImageRepoLookup <$> smaller arbitrary <*> smaller arbitrary
             , ImageRepoPublish <$> smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
               smaller arbitrary <*>
               smaller arbitrary <*>
               smaller arbitrary]
