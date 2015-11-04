@@ -17,13 +17,13 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import           System.Directory
 import           System.FilePath
+import           System.IO
 import           System.Random
 import           Text.Printf
 
-
 -- | Execute a 'B9IO' Program in the 'B9' monad.
 executeIoProg :: IoProgram a -> B9Monad.B9 a
-executeIoProg p = run go p
+executeIoProg = run go
   where
     go :: Action a -> B9Monad.B9 a
     go (LogTrace s n) = do
@@ -35,9 +35,12 @@ executeIoProg p = run go p
     go (GetBuildId n) = do
         b <- B9Monad.getBuildId
         return (n b)
+    go (GetBuildDate k) = do
+        d <- B9Monad.getBuildDate
+        return (k d)
     go (MkTemp prefix k) = do
         let prefix' = takeFileName prefix
-        suffix <- liftIO $ sequence $ take 10 $ repeat (randomRIO ('A', 'Z'))
+        suffix <- liftIO $ replicateM 10 (randomRIO ('A', 'Z'))
         b <- B9Monad.getBuildDir
         return (k (b </> prefix' ++ "-" ++ suffix))
     go (MkDir d n) = do
@@ -59,12 +62,15 @@ executeIoProg p = run go p
         when exists (liftIO $ removeDirectoryRecursive d)
         B9Monad.cmdRaw "mv" [s, d]
         return n
-    go (GetParentDir f k) = do
+    go (GetParentDir f k) =
         return $ k (takeDirectory f)
+    go (ReadFileSize f k) = do
+        s <- liftIO $ withFile f ReadMode hFileSize
+        return $ k s
     go (GetRealPath f k) = do
         f' <- liftIO $ makeAbsolute f
         return $ k f'
-    go (GetFileName f k) = do
+    go (GetFileName f k) =
         return $ k (takeFileName f)
     go (RenderContentToFile f c e n) = do
         result <- runReaderT (render c) e

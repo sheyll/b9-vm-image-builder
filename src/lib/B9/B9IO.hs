@@ -34,6 +34,7 @@ data Action next
                next
     | GetBuildDir (FilePath -> next)
     | GetBuildId (String -> next)
+    | GetBuildDate (String -> next)
     | Copy FilePath
            FilePath
            next
@@ -46,6 +47,8 @@ data Action next
     | MoveDir FilePath
               FilePath
               next
+    | ReadFileSize FilePath
+                   (Integer -> next)
     | MkDir FilePath
             next
     | MkTemp FilePath
@@ -94,11 +97,13 @@ data Action next
 instance Show (Action a) where
     show (LogTrace _m _) = "logTrace"
     show (GetBuildId _) = "getBuildId"
+    show (GetBuildDate _) = "getBuildDate"
     show (GetBuildDir _) = "getBuildDir"
     show (Copy s d _) = printf "copy %s %s" s d
     show (CopyDir s d _) = printf "copyDir %s %s" s d
     show (MoveFile s d _) = printf "moveFile %s %s" s d
     show (MoveDir s d _) = printf "moveDir %s %s" s d
+    show (ReadFileSize f _) = printf "readFileSize %s" f
     show (MkDir d _) = printf "mkDir %s" d
     show (MkTemp p _) = printf "mkTemp %s" p
     show (GetRealPath p _) = printf "getRealPath %s" p
@@ -134,6 +139,12 @@ getBuildDir = liftF $ GetBuildDir id
 getBuildId :: IoProgram String
 getBuildId = liftF $ GetBuildId id
 
+-- | Get the system time at the start of the overall build formatted string,
+-- such that the lexicographical order of the strings is the same as the order
+-- of the correspondig time stamps.
+getBuildDate :: IoProgram String
+getBuildDate = liftF $ GetBuildDate id
+
 -- | Copy a file
 copy :: FilePath -> FilePath -> IoProgram ()
 copy from to = liftF $ Copy from to ()
@@ -153,6 +164,10 @@ moveDir from to = liftF $ MoveDir from to ()
 -- | Just like @mkdir -p@
 mkDir :: FilePath -> IoProgram ()
 mkDir d = liftF $ MkDir d ()
+
+-- | Get the size of the contents of a file in bytes.
+readFileSize :: FilePath -> IoProgram Integer
+readFileSize f = liftF $ ReadFileSize f id
 
 -- | Create a unique file path inside the build directory starting with a given
 -- prefix and ending with a unique random token.
@@ -251,6 +266,11 @@ traceEveryAction = run traceAction
         b <- getBuildId
         logTrace $ " -> " ++ b
         return $ k b
+    traceAction a@(GetBuildDate k) = do
+        logTrace $ show a
+        b <- getBuildDate
+        logTrace $ " -> " ++ b
+        return $ k b
     traceAction a@(MkTemp prefix k) = do
         logTrace $ show a
         t <- mkTemp prefix
@@ -276,6 +296,11 @@ traceEveryAction = run traceAction
         logTrace $ show a
         moveDir s d
         return n
+    traceAction a@(ReadFileSize f k) = do
+        logTrace $ show a
+        s <- readFileSize f
+        logTrace $ printf " -> %i" s
+        return $ k s
     traceAction a@(GetParentDir f k) = do
         logTrace $ show a
         p <- getParentDir f
@@ -356,6 +381,9 @@ runPureDump p = runWriter $ run dump p
     dump a@(GetBuildId n) = do
         tell [show a]
         return (n "build-id-1234")
+    dump a@(GetBuildDate n) = do
+        tell [show a]
+        return (n "1970-01-01 00:00:00")
     dump a@(MkTemp prefix n) = do
         tell [show a]
         return (n ("/BUILD" </> prefix ++ "-XXXX"))
@@ -374,6 +402,9 @@ runPureDump p = runWriter $ run dump p
     dump a@(MoveDir _s _d n) = do
         tell [show a]
         return n
+    dump a@(ReadFileSize _f n) = do
+        tell [show a]
+        return (n 1234)
     dump a@(GetParentDir f k) = do
         tell [show a]
         return (k (takeDirectory f))
@@ -428,6 +459,7 @@ instance Arbitrary a => Arbitrary (Action a) where
             [ LogTrace <$> smaller arbitraryNiceString <*> smaller arbitrary
             , GetBuildId <$> arbitrary
             , GetBuildDir <$> arbitrary
+            , GetBuildDate <$> arbitrary
             , Copy <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
               smaller arbitrary
             , CopyDir <$> smaller arbitraryFilePath <*>
@@ -439,6 +471,7 @@ instance Arbitrary a => Arbitrary (Action a) where
             , MoveDir <$> smaller arbitraryFilePath <*>
               smaller arbitraryFilePath <*>
               smaller arbitrary
+            , ReadFileSize <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkTemp <$> smaller arbitraryFilePath <*> smaller arbitrary
             , GetRealPath <$> smaller arbitraryFilePath <*> smaller arbitrary

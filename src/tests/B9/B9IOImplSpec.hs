@@ -42,6 +42,15 @@ spec =
              createFileSystem "/tmp/convert-in.raw" (FileSystemSpec Ext4 "test" 1 MB) "" []
              convertVmImage "/tmp/convert-in.raw" Raw "/tmp/convert-out.qcow2" QCow2
            doesFileExist "/tmp/convert-out.qcow2" `shouldReturn` True
+       it "always returns the same build id" $ do
+          (b1,b2) <- (execInB9 $ (,) <$> B9.B9IO.getBuildId <*> B9.B9IO.getBuildId)
+          b1 `shouldBe` b2
+       it "always returns the same build date" $ do
+          (b1,b2) <- (execInB9 $ (,) <$> B9.B9IO.getBuildDate <*> B9.B9IO.getBuildDate)
+          b1 `shouldBe` b2
+       it "can read a file size" $ do
+         execInB9 (do renderContentToFile "/tmp/reaadFileSizeTest" (FromString "hello") (Environment [])
+                      readFileSize "/tmp/reaadFileSizeTest") `shouldReturn` 5
 #else
     return ()
 #endif

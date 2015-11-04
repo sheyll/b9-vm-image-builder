@@ -27,6 +27,15 @@ actionSpec =
        it "handles LogTrace" $
            let p = logTrace "test-trace"
            in dumpToStrings p `shouldBe` ["logTrace"]
+       it "handles GetBuildDir" $
+           let p = getBuildDir
+           in runPureDump p `shouldBe` ("/BUILD", ["getBuildDir"])
+       it "handles GetBuildId" $
+           let p = getBuildId
+           in runPureDump p `shouldBe` ("build-id-1234", ["getBuildId"])
+       it "handles GetBuildDate" $
+           runPureDump B9.B9IO.getBuildDate `shouldBe`
+           ("1970-01-01 00:00:00", ["getBuildDate"])
        it "handles MkTemp" $
            let p = mkTemp "test-prefix"
            in dumpToStrings p `shouldBe` ["mkTemp test-prefix"]
@@ -42,6 +51,9 @@ actionSpec =
        it "handles MoveDir" $
            let p = moveDir "from" "to"
            in dumpToStrings p `shouldBe` ["moveDir from to"]
+       it "handles ReadFileSize" $
+           runPureDump (readFileSize "test") `shouldBe`
+           (1234, ["readFileSize test"])
        it "handles MkDir" $
            let p = mkDir "test-dir"
            in dumpToStrings p `shouldBe` ["mkDir test-dir"]
@@ -54,12 +66,6 @@ actionSpec =
        it "handles GetParentDir" $
            let p = getParentDir "from"
            in runPureDump p `shouldBe` (".", ["getParentDir from"])
-       it "handles GetBuildDir" $
-           let p = getBuildDir
-           in runPureDump p `shouldBe` ("/BUILD", ["getBuildDir"])
-       it "handles GetBuildId" $
-           let p = getBuildId
-           in runPureDump p `shouldBe` ("build-id-1234", ["getBuildId"])
        it "handles RenderContentToFile" $
            let p = renderContentToFile testFile testContent testEnv
                testFile = "test-file"

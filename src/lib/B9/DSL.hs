@@ -84,6 +84,8 @@ export hnd out = liftF $ Export hnd out id
 
 data Artifact
     = VmImage
+    | UpdateServerImage
+    | UpdateServerRoot
     | SharedVmImage
     | PartitionedVmImage
     | CloudInit
@@ -105,44 +107,48 @@ data Artifact
 
 
 data SArtifact k where
-        SVmImage :: SArtifact 'VmImage
-        SSharedVmImage :: SArtifact 'SharedVmImage
-        SPartitionedVmImage :: SArtifact 'PartitionedVmImage
-        SCloudInit :: SArtifact 'CloudInit
-        SCloudInitMetaData :: SArtifact 'CloudInitMetaData
-        SCloudInitUserData :: SArtifact 'CloudInitUserData
-        SDocumentation :: SArtifact 'Documentation
-        SLinuxVm :: SArtifact 'LinuxVm
-        STemplateVariable :: SArtifact 'TemplateVariable
-        SMountedHostDir :: SArtifact 'MountedHostDir
-        SMountedVmImage :: SArtifact 'MountedVmImage
-        SExecutableScript :: SArtifact 'ExecutableScript
-        SGeneratedContent :: SArtifact 'GeneratedContent
-        SVariableBindings :: SArtifact 'VariableBindings
-        SLocalDirectory :: SArtifact 'LocalDirectory
-        SReadOnlyFile :: SArtifact 'ReadOnlyFile
-        SFileSystemImage :: SArtifact 'FileSystemImage
-        SImageRepository :: SArtifact 'ImageRepository
+    SVmImage            :: SArtifact 'VmImage
+    SUpdateServerImage  :: SArtifact 'UpdateServerImage
+    SUpdateServerRoot   :: SArtifact 'UpdateServerRoot
+    SSharedVmImage      :: SArtifact 'SharedVmImage
+    SPartitionedVmImage :: SArtifact 'PartitionedVmImage
+    SCloudInit          :: SArtifact 'CloudInit
+    SCloudInitMetaData  :: SArtifact 'CloudInitMetaData
+    SCloudInitUserData  :: SArtifact 'CloudInitUserData
+    SDocumentation      :: SArtifact 'Documentation
+    SLinuxVm            :: SArtifact 'LinuxVm
+    STemplateVariable   :: SArtifact 'TemplateVariable
+    SMountedHostDir     :: SArtifact 'MountedHostDir
+    SMountedVmImage     :: SArtifact 'MountedVmImage
+    SExecutableScript   :: SArtifact 'ExecutableScript
+    SGeneratedContent   :: SArtifact 'GeneratedContent
+    SVariableBindings   :: SArtifact 'VariableBindings
+    SLocalDirectory     :: SArtifact 'LocalDirectory
+    SReadOnlyFile       :: SArtifact 'ReadOnlyFile
+    SFileSystemImage    :: SArtifact 'FileSystemImage
+    SImageRepository    :: SArtifact 'ImageRepository
 
 instance Show (SArtifact k) where
-    show SVmImage = "SVmImage"
-    show SSharedVmImage = "SSharedVmImage"
-    show SPartitionedVmImage = "SPartitionedVmImage"
-    show SCloudInit = "SCloudInit"
-    show SCloudInitUserData = "SCloudInitUserData"
-    show SCloudInitMetaData = "SCloudInitMetaData"
-    show SDocumentation = "SDocumentation"
-    show SLinuxVm = "SLinuxVm"
-    show STemplateVariable = "STemplateVariable"
-    show SMountedHostDir = "SMountedHostDir"
-    show SMountedVmImage = "SMountedVmImage"
-    show SExecutableScript = "SExecutableScript"
-    show SGeneratedContent = "SGeneratedContent"
-    show SVariableBindings = "SVariableBindings"
-    show SLocalDirectory = "SLocalDirectory"
-    show SReadOnlyFile = "SReadOnlyFile"
-    show SFileSystemImage = "SFileSystemImage"
-    show SImageRepository = "SImageRepository"
+    show SVmImage            = "VmImage"
+    show SUpdateServerImage  = "UpdateServerImage"
+    show SUpdateServerRoot   = "UpdateServerRoot"
+    show SSharedVmImage      = "SharedVmImage"
+    show SPartitionedVmImage = "PartitionedVmImage"
+    show SCloudInit          = "CloudInit"
+    show SCloudInitUserData  = "CloudInitUserData"
+    show SCloudInitMetaData  = "CloudInitMetaData"
+    show SDocumentation      = "Documentation"
+    show SLinuxVm            = "LinuxVm"
+    show STemplateVariable   = "TemplateVariable"
+    show SMountedHostDir     = "MountedHostDir"
+    show SMountedVmImage     = "MountedVmImage"
+    show SExecutableScript   = "ExecutableScript"
+    show SGeneratedContent   = "GeneratedContent"
+    show SVariableBindings   = "VariableBindings"
+    show SLocalDirectory     = "LocalDirectory"
+    show SReadOnlyFile       = "ReadOnlyFile"
+    show SFileSystemImage    = "FileSystemImage"
+    show SImageRepository    = "ImageRepository"
 
 instance Eq (SArtifact k) where
     x == y = show x == show y
@@ -168,72 +174,78 @@ handle :: SArtifact a -> String -> Handle a
 handle = Handle
 
 type family CreateSpec (a :: Artifact) :: * where
-        CreateSpec 'VmImage = (Handle 'ReadOnlyFile, ImageType)
-        CreateSpec 'PartitionedVmImage = Handle 'ReadOnlyFile
-        CreateSpec 'CloudInit = String
-        CreateSpec 'LinuxVm = LinuxVmArgs
-        CreateSpec 'GeneratedContent = Content
-        CreateSpec 'LocalDirectory = ()
-        CreateSpec 'ReadOnlyFile = FilePath
-        CreateSpec 'FileSystemImage = FileSystemSpec
+    CreateSpec 'VmImage            = (Handle 'ReadOnlyFile, ImageType)
+    CreateSpec 'UpdateServerImage  = (Handle 'ReadOnlyFile, ImageType)
+    CreateSpec 'PartitionedVmImage = Handle 'ReadOnlyFile
+    CreateSpec 'CloudInit          = String
+    CreateSpec 'LinuxVm            = LinuxVmArgs
+    CreateSpec 'GeneratedContent   = Content
+    CreateSpec 'LocalDirectory     = ()
+    CreateSpec 'ReadOnlyFile       = FilePath
+    CreateSpec 'FileSystemImage    = FileSystemSpec
 
 type family UpdateSpec (a :: Artifact) :: * where
-        UpdateSpec 'VmImage = ImageResize
-        UpdateSpec 'GeneratedContent = Content
+    UpdateSpec 'VmImage          = ImageResize
+    UpdateSpec 'GeneratedContent = Content
 
 type family AddSpec (a :: Artifact) :: * where
-        AddSpec 'Documentation = String
-        AddSpec 'GeneratedContent = Handle 'GeneratedContent
-        AddSpec 'ReadOnlyFile = (FileSpec, Handle 'ReadOnlyFile)
-        AddSpec 'ExecutableScript = Script
-        AddSpec 'MountedHostDir = Mounted HostDirMnt
-        AddSpec 'MountedVmImage = Mounted (Handle 'VmImage)
-        AddSpec 'TemplateVariable = (String, String)
-        AddSpec 'CloudInitMetaData = AST Content YamlObject
-        AddSpec 'CloudInitUserData = AST Content YamlObject
-        AddSpec 'SharedVmImage = (SharedImageName, Handle 'VmImage)
+    AddSpec 'Documentation     = String
+    AddSpec 'GeneratedContent  = Handle 'GeneratedContent
+    AddSpec 'ReadOnlyFile      = (FileSpec, Handle 'ReadOnlyFile)
+    AddSpec 'ExecutableScript  = Script
+    AddSpec 'MountedHostDir    = Mounted HostDirMnt
+    AddSpec 'MountedVmImage    = Mounted (Handle 'VmImage)
+    AddSpec 'TemplateVariable  = (String, String)
+    AddSpec 'CloudInitMetaData = AST Content YamlObject
+    AddSpec 'CloudInitUserData = AST Content YamlObject
+    AddSpec 'SharedVmImage     = (SharedImageName, Handle 'VmImage)
 
 type CanAdd env a = CanAddP env a ~ 'True
 
-type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
-     where
-        CanAddP 'LinuxVm 'MountedHostDir = 'True
-        CanAddP 'LinuxVm 'MountedVmImage = 'True
-        CanAddP 'LinuxVm 'ExecutableScript = 'True
-        CanAddP 'LinuxVm 'ReadOnlyFile = 'True
-        CanAddP 'GeneratedContent 'GeneratedContent = 'True
-        CanAddP 'CloudInit 'ReadOnlyFile = 'True
-        CanAddP 'CloudInit 'ExecutableScript = 'True
-        CanAddP 'CloudInit 'CloudInitMetaData = 'True
-        CanAddP 'CloudInit 'CloudInitUserData = 'True
-        CanAddP 'LocalDirectory 'ReadOnlyFile = 'True
-        CanAddP 'FileSystemImage 'ReadOnlyFile = 'True
-        CanAddP 'VariableBindings 'TemplateVariable = 'True
-        CanAddP 'Documentation 'Documentation = 'True
-        CanAddP 'ImageRepository 'SharedVmImage = 'True
-        CanAddP env a = 'False
+type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool where
+    CanAddP 'LinuxVm 'MountedHostDir            = 'True
+    CanAddP 'LinuxVm 'MountedVmImage            = 'True
+    CanAddP 'LinuxVm 'ExecutableScript          = 'True
+    CanAddP 'LinuxVm 'ReadOnlyFile              = 'True
+    CanAddP 'GeneratedContent 'GeneratedContent = 'True
+    CanAddP 'CloudInit 'ReadOnlyFile            = 'True
+    CanAddP 'CloudInit 'ExecutableScript        = 'True
+    CanAddP 'CloudInit 'CloudInitMetaData       = 'True
+    CanAddP 'CloudInit 'CloudInitUserData       = 'True
+    CanAddP 'LocalDirectory 'ReadOnlyFile       = 'True
+    CanAddP 'FileSystemImage 'ReadOnlyFile      = 'True
+    CanAddP 'VariableBindings 'TemplateVariable = 'True
+    CanAddP 'Documentation 'Documentation       = 'True
+    CanAddP 'ImageRepository 'SharedVmImage     = 'True
+    CanAddP env a                               = 'False
 
 type family ExportSpec (a :: Artifact) :: * where
-        ExportSpec 'CloudInit = ()
-        ExportSpec 'VmImage = (Maybe FilePath, Maybe ImageType, Maybe ImageSize)
-        ExportSpec 'PartitionedVmImage = (Maybe FilePath, PartitionSpec)
-        ExportSpec 'LocalDirectory = Maybe FilePath
-        ExportSpec 'FileSystemImage = (Maybe FilePath, Maybe FileSystemResize)
-        ExportSpec 'ReadOnlyFile = Maybe FilePath
-        ExportSpec 'GeneratedContent = Maybe FilePath
-        ExportSpec 'ImageRepository = SharedImageName
+    ExportSpec 'CloudInit          = ()
+    ExportSpec 'VmImage            = (Maybe FilePath
+                                     ,Maybe ImageType
+                                     ,Maybe ImageSize)
+    ExportSpec 'UpdateServerImage  = (Handle 'LocalDirectory)
+    ExportSpec 'PartitionedVmImage = (Maybe FilePath
+                                     ,PartitionSpec)
+    ExportSpec 'LocalDirectory     = Maybe FilePath
+    ExportSpec 'FileSystemImage    = (Maybe FilePath
+                                     ,Maybe FileSystemResize)
+    ExportSpec 'ReadOnlyFile       = Maybe FilePath
+    ExportSpec 'GeneratedContent   = Maybe FilePath
+    ExportSpec 'ImageRepository    = SharedImageName
 
 type family ExportResult (a :: Artifact) :: * where
-        ExportResult 'CloudInit =
-                                (Handle 'GeneratedContent, Handle 'GeneratedContent)
-        ExportResult 'VmImage = Handle 'ReadOnlyFile
-        ExportResult 'PartitionedVmImage = Handle 'ReadOnlyFile
-        ExportResult 'LocalDirectory = Handle 'LocalDirectory
-        ExportResult 'FileSystemImage = Handle 'ReadOnlyFile
-        ExportResult 'ReadOnlyFile = Handle 'ReadOnlyFile
-        ExportResult 'GeneratedContent = Handle 'ReadOnlyFile
-        ExportResult 'ImageRepository = Handle 'VmImage
-        ExportResult a = ()
+    ExportResult 'CloudInit          = (Handle 'GeneratedContent
+                                       ,Handle 'GeneratedContent)
+    ExportResult 'VmImage            = Handle 'ReadOnlyFile
+    ExportResult 'UpdateServerImage  = ()
+    ExportResult 'PartitionedVmImage = Handle 'ReadOnlyFile
+    ExportResult 'LocalDirectory     = Handle 'LocalDirectory
+    ExportResult 'FileSystemImage    = Handle 'ReadOnlyFile
+    ExportResult 'ReadOnlyFile       = Handle 'ReadOnlyFile
+    ExportResult 'GeneratedContent   = Handle 'ReadOnlyFile
+    ExportResult 'ImageRepository    = Handle 'VmImage
+    ExportResult a                   = ()
 
 -- | Instruct an environment to mount a host directory
 data HostDirMnt
@@ -248,7 +260,7 @@ data LinuxVmArgs =
                 CPUArch
     deriving (Read,Show,Generic,Eq,Data,Typeable)
 
--- * Share vm image repository support
+-- * Global Handles
 
 -- | A Global handle repesenting the (local) share image repository.
 imageRepositoryH :: Handle 'ImageRepository

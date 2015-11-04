@@ -636,6 +636,48 @@ sharedImageSpec =
                      QCow2
                      (SharedImageName "out-shared")))
 
+-- * LiveInstaller image generation
+
+updateServerImageSpec :: Spec
+updateServerImageSpec =
+    describe "compile LiveImage" $ do
+       let actual = do
+             srcImg <- create SReadOnlyFile srcFile
+             liveImg <- create SVmImage (srcImg, QCow2)
+             updateServerRoot <- create SUpdateServerRoot ()
+             add updateServerRoot SVmImage (
+             return ()
+           srcFile = "source.qcow2"
+           outDir = "EXPORT"
+       it "converts the input image to a temporary Raw image" $
+         shouldDoIo
+         actual
+         (do tmpDir <- mkTempDir "live-img"
+             let tmpImg = tmpDir </> "machines/blah/disks/raw/0.raw"
+                 tmpSize = tmpDir </> "machines/blah/disks/raw/0.size"
+                 tmpVersion = tmpDir </> "/machines/blah/disks/raw/VERSION"
+             src <- getRealPath srcFile
+             convertVmImage src QCow2 tmpImg Raw
+             size <- B9.B9IO.readFileSize tmpImg
+             renderContentToFile
+               tmpSize
+               (FromString (show size))
+               (Environment [])
+             bId <- B9.B9IO.getBuildId
+             bT <- B9.B9IO.getBuildDate
+             renderContentToFile
+               tmpVersion
+               (FromString (printf "%s-%s" bId bT))
+               (Environment [])
+             dst' <- ensureParentDir outDir
+             moveDir tmpImg dst'
+             return ()
+             )
+       it "writes the file size to machine/disks/raw/0.size" $
+         shouldDoIo
+         actual
+         (do return ())
+
 -- * DSL examples
 
 dslExample1 :: Program ()
