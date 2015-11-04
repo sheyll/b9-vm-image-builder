@@ -615,6 +615,7 @@ partitionedDiskSpec =
            in actual `shouldDoIo` expected
 
 -- * VmImage respository IO
+
 sharedImageSpec :: Spec
 sharedImageSpec =
     describe "compile ShareImageRepository" $

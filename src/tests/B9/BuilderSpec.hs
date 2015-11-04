@@ -63,5 +63,5 @@ extractPartitionOfQCow2 srcFile dstFile = do
     p <- create SReadOnlyFile srcFile
     partImg <- create SPartitionedVmImage p
     p1 <- export partImg (Nothing, MBRPartition 1)
-    destI <- create SVmImage (p1, VmImageSpec Raw Ext4 KeepSize)
-    void $ export destI (Just dstFile, Just $ VmImageSpec QCow2 Ext4 KeepSize)
+    destI <- create SVmImage (p1, Raw)
+    void $ export destI (Just dstFile, Just QCow2, Nothing)
