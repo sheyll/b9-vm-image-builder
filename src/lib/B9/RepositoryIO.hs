@@ -5,8 +5,9 @@ module B9.RepositoryIO
        (repoSearch, pushToRepo, pullFromRepo, shareImage,
         pushSharedImageLatestVersion, lookupSharedImages, getSharedImages,
         getSharedImagesCacheDir, getSelectedRepos, pullRemoteRepos,
-        getLatestImageByName, pullLatestImage, pullGlob, Repository(..),
-        toRemoteRepository, FilePathGlob(..))
+        getLatestImageByName, getLatestSharedImageByNameFromCache,
+        getSharedImageCachedFilePath, pullLatestImage, pullGlob,
+        Repository(..), toRemoteRepository, FilePathGlob(..))
        where
 
 import B9.B9Monad
@@ -141,6 +142,13 @@ getLatestImageByName name = do
     let image = changeImageDirectory cacheDir (sharedImageImage sharedImage)
     dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show image))
     return image
+
+-- | Return the path the to shared image in the local cache
+getSharedImageCachedFilePath :: SharedImage -> B9 FilePath
+getSharedImageCachedFilePath sharedImage = do
+    cacheDir <- getSharedImagesCacheDir
+    let (Image f _ _) = changeImageDirectory cacheDir (sharedImageImage sharedImage)
+    return f
 
 -- | Return the latest version of a shared image named 'name' from the local cache.
 getLatestSharedImageByNameFromCache :: SharedImageName -> B9 SharedImage

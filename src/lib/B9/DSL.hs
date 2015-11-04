@@ -9,7 +9,8 @@ import B9.Content
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), PartitionSpec(..))
+        SizeUnit(..), Mounted, MountPoint(..), PartitionSpec(..),
+        SharedImageName(..))
 import B9.FileSystems (FileSystemSpec(..), FileSystemResize(..))
 import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
@@ -83,6 +84,7 @@ export hnd out = liftF $ Export hnd out id
 
 data Artifact
     = VmImage
+    | SharedVmImage
     | PartitionedVmImage
     | CloudInit
     | CloudInitMetaData
@@ -98,11 +100,13 @@ data Artifact
     | LocalDirectory
     | ReadOnlyFile
     | FileSystemImage
+    | ImageRepository
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
 
 data SArtifact k where
         SVmImage :: SArtifact 'VmImage
+        SSharedVmImage :: SArtifact 'SharedVmImage
         SPartitionedVmImage :: SArtifact 'PartitionedVmImage
         SCloudInit :: SArtifact 'CloudInit
         SCloudInitMetaData :: SArtifact 'CloudInitMetaData
@@ -118,9 +122,11 @@ data SArtifact k where
         SLocalDirectory :: SArtifact 'LocalDirectory
         SReadOnlyFile :: SArtifact 'ReadOnlyFile
         SFileSystemImage :: SArtifact 'FileSystemImage
+        SImageRepository :: SArtifact 'ImageRepository
 
 instance Show (SArtifact k) where
     show SVmImage = "SVmImage"
+    show SSharedVmImage = "SSharedVmImage"
     show SPartitionedVmImage = "SPartitionedVmImage"
     show SCloudInit = "SCloudInit"
     show SCloudInitUserData = "SCloudInitUserData"
@@ -136,6 +142,7 @@ instance Show (SArtifact k) where
     show SLocalDirectory = "SLocalDirectory"
     show SReadOnlyFile = "SReadOnlyFile"
     show SFileSystemImage = "SFileSystemImage"
+    show SImageRepository = "SImageRepository"
 
 instance Eq (SArtifact k) where
     x == y = show x == show y
@@ -184,6 +191,7 @@ type family AddSpec (a :: Artifact) :: * where
         AddSpec 'TemplateVariable = (String, String)
         AddSpec 'CloudInitMetaData = AST Content YamlObject
         AddSpec 'CloudInitUserData = AST Content YamlObject
+        AddSpec 'SharedVmImage = (SharedImageName, Handle 'VmImage)
 
 type CanAdd env a = CanAddP env a ~ 'True
 
@@ -202,6 +210,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool
         CanAddP 'FileSystemImage 'ReadOnlyFile = 'True
         CanAddP 'VariableBindings 'TemplateVariable = 'True
         CanAddP 'Documentation 'Documentation = 'True
+        CanAddP 'ImageRepository 'SharedVmImage = 'True
         CanAddP env a = 'False
 
 type family ExportSpec (a :: Artifact) :: * where
@@ -212,6 +221,7 @@ type family ExportSpec (a :: Artifact) :: * where
         ExportSpec 'FileSystemImage = (Maybe FilePath, Maybe FileSystemResize)
         ExportSpec 'ReadOnlyFile = Maybe FilePath
         ExportSpec 'GeneratedContent = Maybe FilePath
+        ExportSpec 'ImageRepository = SharedImageName
 
 type family ExportResult (a :: Artifact) :: * where
         ExportResult 'CloudInit =
@@ -222,6 +232,7 @@ type family ExportResult (a :: Artifact) :: * where
         ExportResult 'FileSystemImage = Handle 'ReadOnlyFile
         ExportResult 'ReadOnlyFile = Handle 'ReadOnlyFile
         ExportResult 'GeneratedContent = Handle 'ReadOnlyFile
+        ExportResult 'ImageRepository = Handle 'VmImage
         ExportResult a = ()
 
 -- | Instruct an environment to mount a host directory
@@ -236,6 +247,12 @@ data LinuxVmArgs =
                 ExecEnvType
                 CPUArch
     deriving (Read,Show,Generic,Eq,Data,Typeable)
+
+-- * Share vm image repository support
+
+-- | A Global handle repesenting the (local) share image repository.
+imageRepositoryH :: Handle 'ImageRepository
+imageRepositoryH = singletonHandle SImageRepository
 
 -- * Inline documentation/comment support
 

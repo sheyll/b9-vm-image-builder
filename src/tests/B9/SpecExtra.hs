@@ -1,6 +1,6 @@
 {- | Extra utilities for HSpec based unit tests -}
 module B9.SpecExtra
-       (should've, toList, toListIo, hasSameEffectAs, hasSameEffect,
+       (should've, toList, toListIo, shouldDo, does,
         shouldDoIo)
        where
 
@@ -32,36 +32,15 @@ toListIo :: IoProgram a -> [String]
 toListIo = dumpToStrings . void
 
 -- | Expect that two programs have the same effects when executed.
-hasSameEffectAs :: Program a -> Program a -> IO ()
-hasSameEffectAs = shouldContain `on` (dumpToStrings . compile)
+shouldDo :: Program a -> Program a -> IO ()
+shouldDo = shouldContain `on` (dumpToStrings . compile)
 
--- | Like 'hasSameEffectAs' but as pure predicate.
-hasSameEffect
+-- | Like 'shouldDo' but as pure predicate.
+does
     :: Eq a
     => Program a -> Program a -> Bool
-hasSameEffect = isInfixOf `on` (dumpToStrings . compile)
+does = isInfixOf `on` (dumpToStrings . compile)
 
 -- | Expect that a 'Program' contains at least a given 'IoProgram'.
 shouldDoIo :: Program a -> IoProgram b -> Expectation
 shouldDoIo actual expected = (toList actual) `should've` (toListIo expected)
-
-
-spec :: Spec
-spec =
-    describe "should've" $
-    do it "returns an error for: [1] `should've` [2,1]" $
-           ([1 :: Int] `should've` [2, 1]) `shouldThrow` anyException
-       it "succeeds with: [] `should've` []" $
-           ([] `should've` ([] :: [Int]))
-       it "succeeds with: [1,2,3,4] `should've` []" $
-           ([1::Int,2,3,4] `should've` [])
-       it "succeeds with: [1,2,3,4] `should've` [2]" $
-           ([1::Int,2,3,4] `should've` [2,4])
-       it "succeeds with: [1,2,3,4] `should've` [2,4]" $
-           ([1::Int,2,3,4] `should've` [2,4])
-       it "succeeds with: [1,2,3,4] `should've` [1,2,3,4]" $
-           ([1::Int,2,3,4] `should've` [1,2,3,4])
-       it "returns an error for: [1,2,3,4] `should've` [3,2]" $
-           ([1::Int,2,3,4] `should've` [3,2]) `shouldThrow` anyException
-       it "returns an error for: [1,2,3,4] `should've` [1,2,3,4,5]" $
-           ([1::Int,2,3,4] `should've` [1,2,3,4,5]) `shouldThrow` anyException

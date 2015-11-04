@@ -151,6 +151,7 @@ data ImageType
 instance Hashable ImageType
 instance Binary ImageType
 instance NFData ImageType
+instance CoArbitrary ImageType
 
 -- | A data type for image file or file system size; instead of passing 'Int's
 -- around this also captures a size unit so that the 'Int' can be kept small
@@ -221,7 +222,7 @@ data SharedImage =
 instance Hashable SharedImage
 instance Binary SharedImage
 instance NFData SharedImage
-
+instance CoArbitrary SharedImage
 
 -- | The file systems that b9 can use and convert. TODO move to FileSystems
 data FileSystem
@@ -234,6 +235,7 @@ data FileSystem
 instance Hashable FileSystem
 instance Binary FileSystem
 instance NFData FileSystem
+instance CoArbitrary FileSystem
 
 
 -- | The name of the image is the de-facto identifier for push, pull, 'From' and
@@ -242,14 +244,14 @@ instance NFData FileSystem
 --   wrapper around a string that identifies a 'SharedImage'
 newtype SharedImageName =
     SharedImageName String
-    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
+    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary)
 
 -- | The exact time that build job __started__.
 --   This is a wrapper around a string contains the build date of a
 --   'SharedImage'; this is purely additional convenience and typesafety
 newtype SharedImageDate =
     SharedImageDate String
-    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
+    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary)
 
 -- | Every B9 build running in a 'B9Monad'
 --   contains a random unique id that is generated once per build (no matter how
@@ -259,7 +261,7 @@ newtype SharedImageDate =
 --   additional convenience and typesafety
 newtype SharedImageBuildId =
     SharedImageBuildId String
-    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
+    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary)
 
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
@@ -385,7 +387,7 @@ getImageSourceFileSystem (CopyOnWrite i) = Just $ imageFileSystem i
 getImageSourceFileSystem (SourceImage i _ _) = Just $ imageFileSystem i
 getImageSourceFileSystem (From _ _) = Nothing
 
--- * Constructors and accessors for 'SharedImage's
+-- * Constructors and accessors for 'SharedImage's TODO move to Repository.hs?
 
 -- | Return the name of a shared image.
 siName :: SharedImage -> SharedImageName
@@ -398,6 +400,14 @@ siDate (SharedImage _ n _ _ _) = n
 -- | Return the build id of a shared image.
 siBuildId :: SharedImage -> SharedImageBuildId
 siBuildId (SharedImage _ _ n _ _) = n
+
+-- | Return the 'ImageType' of a shared image.
+siImgType :: SharedImage -> ImageType
+siImgType (SharedImage _ _ _ t _) = t
+
+-- | Return the 'FileSystem' of a shared image.
+siFsType :: SharedImage -> FileSystem
+siFsType (SharedImage _ _ _ _ t) = t
 
 -- | Print the contents of the shared image in one line
 prettyPrintSharedImages :: [SharedImage] -> String
@@ -603,6 +613,20 @@ instance Arbitrary SharedImageName where
 arbitrarySharedImageName :: Gen String
 arbitrarySharedImageName =
     elements [printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3]]
+
+instance Arbitrary SharedImageBuildId where
+    arbitrary = pure $ SharedImageBuildId "000000000"
+
+instance Arbitrary SharedImageDate where
+    arbitrary = pure $ SharedImageDate "1970-01-01-00:00"
+
+instance Arbitrary SharedImage where
+    arbitrary =
+        SharedImage <$> smaller arbitrary <*> smaller arbitrary <*>
+        smaller arbitrary <*>
+        smaller arbitrary <*>
+        smaller arbitrary
+
 
 -- TODO move to file systems
 instance Arbitrary FileSystem where

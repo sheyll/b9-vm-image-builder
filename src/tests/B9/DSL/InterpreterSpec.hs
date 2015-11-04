@@ -14,21 +14,22 @@ spec = do
     describe "compile (General)" $
         do it "traces documentation" $
                (doc "test") `shouldDoIo` (logTrace "test")
-    readOnlyFileSpecs
-    fsImgSpecs
-    candySpecs
-    localDirSpecs
-    cloudInitIsoImageSpecs
-    cloudInitMultiVfatImageSpecs
-    cloudInitDirSpecs
+    readOnlyFileSpec
+    fsImgSpec
+    candySpec
+    localDirSpec
+    cloudInitIsoImageSpec
+    cloudInitMultiVfatImageSpec
+    cloudInitDirSpec
     cloudInitWithContentExamples
     vmImageCreationSpec
     partitionedDiskSpec
+    sharedImageSpec
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
-readOnlyFileSpecs :: Spec
-readOnlyFileSpecs =
+readOnlyFileSpec :: Spec
+readOnlyFileSpec =
     describe "ReadOnlyFile" $
     do it "has no effects if unused" $
            do let actual = do
@@ -161,9 +162,9 @@ readOnlyFileSpecs =
                       copy src dst
               actual `shouldDoIo` expected
 
--- * Specs for 'SFileSystemImage's
-fsImgSpecs :: Spec
-fsImgSpecs = do
+-- * Spec for 'SFileSystemImage's
+fsImgSpec :: Spec
+fsImgSpec = do
     describe "compile SFileSystemImage" $
         do it "creates an empty Ext4 image" $
                shouldDoIo
@@ -236,9 +237,9 @@ fsImgSpecs = do
                        dest2 <- ensureParentDir "out2.raw"
                        copy r2'' dest2)
 
--- * Specs for /candy/ functions.
-candySpecs :: Spec
-candySpecs = do
+-- * Spec for /candy/ functions.
+candySpec :: Spec
+candySpec = do
     describe "addFile" $
         it "strips the directory and  does not replace templates" $
         do let actual = do
@@ -321,8 +322,8 @@ candySpecs = do
 
 -- * 'SLocalDirectory' examples
 
-localDirSpecs :: Spec
-localDirSpecs =
+localDirSpec :: Spec
+localDirSpec =
     describe "compile exportDir" $
     do it "creates a temporary intermediate directory" $
            let expectedCmds = mkTempDir "local-dir"
@@ -349,8 +350,8 @@ minimalMetaData iid =
 minimalUserData :: Content
 minimalUserData = Concat [FromString "#cloud-config\n", RenderYaml (ASTObj [])]
 
-cloudInitIsoImageSpecs :: Spec
-cloudInitIsoImageSpecs =
+cloudInitIsoImageSpec :: Spec
+cloudInitIsoImageSpec =
     describe "compile cloudInitIsoImage" $
     do it "appends the build id to the instance id" $
            cloudInitIsoImage `shouldDoIo` B9.B9IO.getBuildId
@@ -405,8 +406,8 @@ cloudInitIsoImageSpecs =
         writeCloudInit i ISO9660 "test.iso"
         return i
 
-cloudInitMultiVfatImageSpecs :: Spec
-cloudInitMultiVfatImageSpecs =
+cloudInitMultiVfatImageSpec :: Spec
+cloudInitMultiVfatImageSpec =
     describe "compile cloudInitVfatImage" $
     do it "generates test1.vfat" $
            cloudInitVfatImage `shouldDoIo` (expectedProg "test1.vfat")
@@ -429,8 +430,8 @@ cloudInitMultiVfatImageSpecs =
         writeCloudInit i VFAT "test2.vfat"
         return i
 
-cloudInitDirSpecs :: Spec
-cloudInitDirSpecs =
+cloudInitDirSpec :: Spec
+cloudInitDirSpec =
     describe "compile cloudInitDir" $
     do let (Handle _ iid,actualCmds) = runPureDump $ compile cloudInitDir
        it "generates a temporary directory" $
@@ -613,12 +614,35 @@ partitionedDiskSpec =
                    extractPartition (MBRPartition 2) src dst
            in actual `shouldDoIo` expected
 
+-- * VmImage respository IO
+sharedImageSpec :: Spec
+sharedImageSpec =
+    describe "compile ShareImageRepository" $
+    it
+        "supports lookup, get and put vm-image operations"
+        (shouldDoIo
+             (do imgH <-
+                     export imageRepositoryH (SharedImageName "source-image")
+                 add
+                     imageRepositoryH
+                     SSharedVmImage
+                     (SharedImageName "out-shared", imgH))
+             (do (_,cachedImg) <-
+                     imageRepoLookup (SharedImageName "source-image")
+                 cachedImg' <- getRealPath cachedImg
+                 imageRepoPublish
+                     cachedImg'
+                     QCow2
+                     Ext4
+                     (SharedImageName "out-shared")))
+
+
 -- * DSL examples
 
 dslExample1 :: Program ()
 dslExample1 = do
     "x" $= "3"
-    c <- newCloudInit "blah-ci-${x}"
+    c <- newCloudInit "blah-ci"
     writeCloudInit c ISO9660 "test.iso"
     writeCloudInitDir c "test"
     writeCloudInit c VFAT "test.vfat"

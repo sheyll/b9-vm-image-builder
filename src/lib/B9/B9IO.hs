@@ -83,6 +83,13 @@ data Action next
                        FilePath
                        FilePath
                        next
+    | ImageRepoLookup SharedImageName
+                      ((SharedImage, FilePath) -> next)
+    | ImageRepoPublish FilePath
+                       ImageType
+                       FileSystem
+                       SharedImageName
+                       next
     deriving (Functor)
 
 instance Show (Action a) where
@@ -102,14 +109,17 @@ instance Show (Action a) where
         printf "renderContentToFile %s %s %s" f (show c) (show e)
     show (CreateFileSystem dst fs srcDir files _) =
         printf "createFileSystem %s %s %s %s" dst (show fs) srcDir (show files)
-    show (ResizeFileSystem fs fsResize fsType  _) =
+    show (ResizeFileSystem fs fsResize fsType _) =
         printf "resizeFileSystem %s %s %s" fs (show fsResize) (show fsType)
     show (ConvertVmImage srcF srcT dstF dstT _) =
         printf "convertVmImage %s %s %s %s" srcF (show srcT) dstF (show dstT)
-    show (ResizeVmImage img s u imgT  _) =
+    show (ResizeVmImage img s u imgT _) =
         printf "resizeVmImage %s %d %s %s" img s (show u) (show imgT)
     show (ExtractPartition p s d _) =
-        printf "extractPartition %s %s %s" (show p)  s d
+        printf "extractPartition %s %s %s" (show p) s d
+    show (ImageRepoLookup sn _) = printf "imageRepoLookup %s" (show sn)
+    show (ImageRepoPublish f t fs n _) =
+        printf "imageRepoPublish %s %s %s %s" f (show t) (show fs) (show n)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
@@ -212,6 +222,19 @@ resizeVmImage i s u t = liftF $ ResizeVmImage i s u t ()
 extractPartition :: PartitionSpec -> FilePath -> FilePath -> IoProgram ()
 extractPartition p s d = liftF $ ExtractPartition p s d ()
 
+-- | Lookup the latest 'SharedImage' by with a given name.
+imageRepoLookup :: SharedImageName -> IoProgram (SharedImage, FilePath)
+imageRepoLookup sn =
+  liftF $ ImageRepoLookup sn id
+
+-- | Store a local vm image file in the image repository
+imageRepoPublish :: FilePath
+                 -> ImageType
+                 -> FileSystem
+                 -> SharedImageName
+                 -> IoProgram ()
+imageRepoPublish f t s n = liftF $ ImageRepoPublish f t s n ()
+
 -- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogTrace' are logged via 'LogTrace'.
 traceEveryAction :: IoProgram a -> IoProgram a
@@ -294,6 +317,15 @@ traceEveryAction = run traceAction
         logTrace $ show a
         extractPartition p s d
         return n
+    traceAction a@(ImageRepoLookup s k) = do
+        logTrace $ show a
+        r <- imageRepoLookup s
+        logTrace $ printf " -> %s" (show r)
+        return $ k r
+    traceAction a@(ImageRepoPublish f t fs sn n) = do
+        logTrace $ show a
+        imageRepoPublish f t fs sn
+        return n
 
 -- * Testing support
 
@@ -374,6 +406,20 @@ runPureDump p = runWriter $ run dump p
     dump a@(ExtractPartition _p _s _d n) = do
         tell [show a]
         return n
+    dump a@(ImageRepoLookup s k) = do
+        tell [show a]
+        return $
+            k
+                ( SharedImage
+                      s
+                      (SharedImageDate "01-01-1970")
+                      (SharedImageBuildId "00000000")
+                      QCow2
+                      Ext4
+                , "~/.b9/cache/xxx.qcow2")
+    dump a@(ImageRepoPublish _f _t _fs _sn n) = do
+        tell [show a]
+        return n
 
 arbitraryIoProgram :: Gen (IoProgram ())
 arbitraryIoProgram = arbitraryFree
@@ -425,4 +471,10 @@ instance Arbitrary a => Arbitrary (Action a) where
             , ExtractPartition <$> (MBRPartition <$> smaller arbitrary) <*>
               smaller arbitraryFilePath <*>
               smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , ImageRepoLookup <$> smaller arbitrary <*> smaller arbitrary
+            , ImageRepoPublish <$> smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller arbitrary <*>
+              smaller arbitrary <*>
               smaller arbitrary]

@@ -13,7 +13,7 @@ import B9.DSL
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..))
+        SizeUnit(..), Mounted, MountPoint(..), SharedImageName(..), siImgType)
 import B9.FileSystems (FileSystemResize(..), FileSystemSpec(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
@@ -277,14 +277,16 @@ instance Interpreter IoCompiler where
         partitionedImgs . at hnd ?= fileHandle
         fileHandle --> hnd
         return hnd
-    runCreate sa _src = return $ singletonHandle sa
+    runCreate sa _src =
+        fail $ printf "Create %s: Not Yet Implemented" (show sa)
     -- Update
     runUpdate hnd@(Handle SGeneratedContent _) c = do
         generatedContent . at hnd . traverse . cContent %=
             \cOld ->
                  Concat [cOld, c]
         return ()
-    runUpdate _hnd _src = return ()
+    runUpdate hnd _src =
+        fail $ printf "Update %s: Not Yet Implemented" (show hnd)
     -- Add
     runAdd _ SDocumentation str = lift $ logTrace str
     runAdd _ STemplateVariable (k,v) = vars . at k ?= v
@@ -311,7 +313,15 @@ instance Interpreter IoCompiler where
             (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
     runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
         runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
-    runAdd _hnde _sa _src = return ()
+    runAdd (Handle SImageRepository _) SSharedVmImage (sn,vmI) = do
+        Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at vmI
+        Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
+        addAction vmI $ lift $
+            do srcFile' <- getRealPath srcFile
+               imageRepoPublish srcFile' srcType Ext4 sn
+        return ()
+    runAdd hnde sa _src =
+        fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)
     -- Export
     runExport hnd@(Handle SCloudInit _) () = do
         Just ciCtxInitial <- use $ ci . at hnd
@@ -340,8 +350,10 @@ instance Interpreter IoCompiler where
         Just fileSys <- use $ fileSystems . at hnd
         let srcH = fileSys ^. fsFileH
             srcT = fileSys ^. fsType
-        tmpH <- -- TODO inspect where getRealPath is called, and where not
-            case mDestSize of -- TODO inspect carefully all '-->'
+        tmpH    -- TODO inspect where getRealPath is called, and where not
+             <-
+            case mDestSize    -- TODO inspect carefully all '-->'
+                  of
                 Nothing -> return srcH
                 Just destSize -> do
                     tmpFile <- lift $ mkTemp "file-system-resize"
@@ -403,9 +415,7 @@ instance Interpreter IoCompiler where
                       destFile' <- ensureParentDir destFile
                       moveFile convertedFile' destFile'
         destH <- runCreate SReadOnlyFile destFile
-        -- this vm image is not 'finished' until all conversions/resizes are done.
-        hnd -->
-            destH
+        hnd --> destH
         return destH
     runExport hnd@(Handle SPartitionedVmImage _) (mDestFile,partSpec) = do
         destFile <-
@@ -420,7 +430,12 @@ instance Interpreter IoCompiler where
                dst <- ensureParentDir destFile
                extractPartition partSpec src dst
         return destH
-    runExport _hnd _dest = fail "Not Yet Implemented"
+    runExport (Handle SImageRepository _) sharedImgName@(SharedImageName sn) = do
+        (sharedImgInfo, cachedImage) <- lift $ imageRepoLookup sharedImgName
+        cachedH <- runCreate SReadOnlyFile cachedImage
+        runCreate SVmImage (cachedH, siImgType sharedImgInfo)
+    runExport hnd _dest =
+        fail $ printf "Export %s: Not Yet Implemented" (show hnd)
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.
 toUserDataWriteFilesAST :: FileSpec -> Content -> AST Content YamlObject

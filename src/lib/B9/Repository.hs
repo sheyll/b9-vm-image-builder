@@ -1,4 +1,4 @@
-{-| B9 has a concept of 'B9.DiskImages.SharedImaged'. Shared images can be pulled and
+{-| B9 has a concept of 'B9.DiskImages.SharedImage'. Shared images can be pulled and
 pushed to/from remote locations via rsync+ssh. B9 also maintains a local cache;
 the whole thing is supposed to be build-server-safe, that means no two builds
 shall interfere with each other. This is accomplished by refraining from
@@ -80,7 +80,6 @@ initRemoteRepo
     :: MonadIO m
     => RepoCache -> RemoteRepo -> m RemoteRepo
 initRemoteRepo cache repo = do
-    -- TODO logging traceL $ printf "Initializing remote repo: %s" (remoteRepoRepoId repo)
     repo' <- remoteRepoCheckSshPrivKey repo
     let (RemoteRepo repoId _ _ _ _) = repo'
     ensureDir (remoteRepoCacheDir cache repoId ++ "/")
@@ -95,10 +94,8 @@ cleanRemoteRepo
 cleanRemoteRepo cache repo = do
     let repoId = remoteRepoRepoId repo
         repoDir = remoteRepoCacheDir cache repoId ++ "/"
-    -- TODO logging infoL $ printf "Cleaning remote repo: %s" repoId
     ensureDir
         repoDir
-    -- TODO logging traceL $ printf "Deleting directory: %s" repoDir
     liftIO $
         removeDirectoryRecursive repoDir
     ensureDir repoDir

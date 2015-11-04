@@ -8,6 +8,7 @@ import           B9.DiskImages
 import           B9.FileSystems
 import           B9.MBR
 import           B9.QemuImg
+import           B9.RepositoryIO
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import qualified Data.ByteString as B
@@ -99,4 +100,12 @@ executeIoProg p = run go p
                     BL.take (fromIntegral len) . BL.drop (fromIntegral start)) <$>
                    BL.readFile s
                BL.writeFile d part
+        return n
+    go (ImageRepoLookup s k) = do
+        si <- getLatestSharedImageByNameFromCache s
+        src <- getSharedImageCachedFilePath si
+        return $ k (si, src)
+    go (ImageRepoPublish f t fs sn n) = do
+        let i = Image f t fs
+        void $ shareImage i sn
         return n
