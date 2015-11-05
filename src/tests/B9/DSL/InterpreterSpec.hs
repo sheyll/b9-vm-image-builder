@@ -25,6 +25,7 @@ spec = do
     vmImageCreationSpec
     partitionedDiskSpec
     sharedImageSpec
+    updateServerImageSpec
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
@@ -640,43 +641,45 @@ sharedImageSpec =
 
 updateServerImageSpec :: Spec
 updateServerImageSpec =
-    describe "compile LiveImage" $ do
-       let actual = do
-             srcImg <- create SReadOnlyFile srcFile
-             liveImg <- create SVmImage (srcImg, QCow2)
-             updateServerRoot <- create SUpdateServerRoot ()
-             add updateServerRoot SVmImage (
-             return ()
+    describe "exportForUpdateServer" $
+    do let actual = do
+               -- TODO extract this to DSL.h:
+               srcF <- create SReadOnlyFile srcFile
+               srcImg <- create SVmImage (srcF, QCow2)
+               outDirH <- create SLocalDirectory ()
+               usRoot <- create SUpdateServerRoot outDirH
+               add usRoot SSharedVmImage (SharedImageName machine, srcImg)
+               void $ export outDirH (Just outDir)
            srcFile = "source.qcow2"
            outDir = "EXPORT"
-       it "converts the input image to a temporary Raw image" $
-         shouldDoIo
-         actual
-         (do tmpDir <- mkTempDir "live-img"
-             let tmpImg = tmpDir </> "machines/blah/disks/raw/0.raw"
-                 tmpSize = tmpDir </> "machines/blah/disks/raw/0.size"
-                 tmpVersion = tmpDir </> "/machines/blah/disks/raw/VERSION"
-             src <- getRealPath srcFile
-             convertVmImage src QCow2 tmpImg Raw
-             size <- B9.B9IO.readFileSize tmpImg
-             renderContentToFile
-               tmpSize
-               (FromString (show size))
-               (Environment [])
-             bId <- B9.B9IO.getBuildId
-             bT <- B9.B9IO.getBuildDate
-             renderContentToFile
-               tmpVersion
-               (FromString (printf "%s-%s" bId bT))
-               (Environment [])
-             dst' <- ensureParentDir outDir
-             moveDir tmpImg dst'
-             return ()
-             )
-       it "writes the file size to machine/disks/raw/0.size" $
-         shouldDoIo
-         actual
-         (do return ())
+           machine = "webserver"
+       it
+           "converts an input image in arbitrary format to a temporary Raw image inside a given directory" $
+           shouldDoIo
+               actual
+               (do tmpDir <- mkTempDir "local-dir"
+                   let tmpImg = tmpBase </> "0.raw"
+                       tmpSize = tmpBase </> "0.size"
+                       tmpVersion = tmpBase </> "VERSION"
+                       tmpBase =
+                           tmpDir </> "machines" </> machine </> "disks/raw"
+                   src <- getRealPath srcFile
+                   mkDir tmpBase
+                   convertVmImage src QCow2 tmpImg Raw
+                   size <- B9.B9IO.readFileSize tmpImg
+                   renderContentToFile
+                       tmpSize
+                       (FromString (show size))
+                       (Environment [])
+                   bId <- B9.B9IO.getBuildId
+                   bT <- B9.B9IO.getBuildDate
+                   renderContentToFile
+                       tmpVersion
+                       (FromString (printf "%s-%s" bId bT))
+                       (Environment [])
+                   dst' <- ensureParentDir outDir
+                   moveDir tmpDir dst'
+                   return ())
 
 -- * DSL examples
 

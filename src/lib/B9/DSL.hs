@@ -84,7 +84,6 @@ export hnd out = liftF $ Export hnd out id
 
 data Artifact
     = VmImage
-    | UpdateServerImage
     | UpdateServerRoot
     | SharedVmImage
     | PartitionedVmImage
@@ -108,7 +107,6 @@ data Artifact
 
 data SArtifact k where
     SVmImage            :: SArtifact 'VmImage
-    SUpdateServerImage  :: SArtifact 'UpdateServerImage
     SUpdateServerRoot   :: SArtifact 'UpdateServerRoot
     SSharedVmImage      :: SArtifact 'SharedVmImage
     SPartitionedVmImage :: SArtifact 'PartitionedVmImage
@@ -130,7 +128,6 @@ data SArtifact k where
 
 instance Show (SArtifact k) where
     show SVmImage            = "VmImage"
-    show SUpdateServerImage  = "UpdateServerImage"
     show SUpdateServerRoot   = "UpdateServerRoot"
     show SSharedVmImage      = "SharedVmImage"
     show SPartitionedVmImage = "PartitionedVmImage"
@@ -175,7 +172,7 @@ handle = Handle
 
 type family CreateSpec (a :: Artifact) :: * where
     CreateSpec 'VmImage            = (Handle 'ReadOnlyFile, ImageType)
-    CreateSpec 'UpdateServerImage  = (Handle 'ReadOnlyFile, ImageType)
+    CreateSpec 'UpdateServerRoot   = Handle 'LocalDirectory
     CreateSpec 'PartitionedVmImage = Handle 'ReadOnlyFile
     CreateSpec 'CloudInit          = String
     CreateSpec 'LinuxVm            = LinuxVmArgs
@@ -217,6 +214,7 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool where
     CanAddP 'VariableBindings 'TemplateVariable = 'True
     CanAddP 'Documentation 'Documentation       = 'True
     CanAddP 'ImageRepository 'SharedVmImage     = 'True
+    CanAddP 'UpdateServerRoot 'SharedVmImage    = 'True
     CanAddP env a                               = 'False
 
 type family ExportSpec (a :: Artifact) :: * where
@@ -224,7 +222,6 @@ type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'VmImage            = (Maybe FilePath
                                      ,Maybe ImageType
                                      ,Maybe ImageSize)
-    ExportSpec 'UpdateServerImage  = (Handle 'LocalDirectory)
     ExportSpec 'PartitionedVmImage = (Maybe FilePath
                                      ,PartitionSpec)
     ExportSpec 'LocalDirectory     = Maybe FilePath
@@ -238,7 +235,6 @@ type family ExportResult (a :: Artifact) :: * where
     ExportResult 'CloudInit          = (Handle 'GeneratedContent
                                        ,Handle 'GeneratedContent)
     ExportResult 'VmImage            = Handle 'ReadOnlyFile
-    ExportResult 'UpdateServerImage  = ()
     ExportResult 'PartitionedVmImage = Handle 'ReadOnlyFile
     ExportResult 'LocalDirectory     = Handle 'LocalDirectory
     ExportResult 'FileSystemImage    = Handle 'ReadOnlyFile

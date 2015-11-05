@@ -56,6 +56,7 @@ data Ctx = Ctx
     , _roFiles :: Map.Map (Handle 'ReadOnlyFile) RofCtx
     , _vmImages :: Map.Map (Handle 'VmImage) VmImgCtx
     , _partitionedImgs :: Map.Map (Handle 'PartitionedVmImage) (Handle 'ReadOnlyFile)
+    , _updateServerRoots :: Map.Map (Handle 'UpdateServerRoot) (Handle 'LocalDirectory)
     , _actions :: Map.Map Graph.Vertex [IoCompiler ()]
     , _hToV :: Map.Map SomeHandle Graph.Vertex
     , _vToH :: Map.Map Graph.Vertex SomeHandle
@@ -63,7 +64,7 @@ data Ctx = Ctx
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def def def def def []
+    def = Ctx 0 def def def def def def def def def def def def []
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -223,16 +224,22 @@ instance Interpreter IoCompiler where
         (hnd@(Handle _ iid),_) <-
             allocHandle SCloudInit (iidPrefix ++ "-" ++ buildId)
         let ciCtx =
-                def & metaData .~ (ASTObj [("instance-id", ASTString iid)]) &
-                userData .~
-                (ASTObj []) &
-                metaDataH .~
-                mh &
-                userDataH .~
-                uh
+                def &
+                metaData  .~ (ASTObj [("instance-id", ASTString iid)]) &
+                userData  .~ (ASTObj []) &
+                metaDataH .~ mh &
+                userDataH .~ uh
         ci . at hnd ?= ciCtx
         hnd --> mh
+        addAction mh $
+            do Just ciCtx <- use $ ci . at hnd
+               let mC = ciCtx ^. metaData
+               interpret $ appendContent mh (RenderYaml mC)
         hnd --> uh
+        addAction uh $
+            do Just ciCtx <- use $ ci . at hnd
+               let uC = ciCtx ^. userData
+               interpret $ appendContent uh (RenderYaml uC)
         return hnd
     runCreate SGeneratedContent c = do
         (hnd@(Handle _ hndT),_) <-
@@ -256,9 +263,9 @@ instance Interpreter IoCompiler where
         (hnd,_) <- allocHandle SFileSystemImage fsLabel
         out <- lift $ mkTemp $ intercalate "-" ["file-system-image", fsLabel]
         fH <- runCreate SReadOnlyFile out
-        hnd --> fH
         tmpDir <- lift $ mkTempDir "file-system-content"
         fileSystems . at hnd ?= FsCtx [] tmpDir fH t
+        hnd --> fH
         addAction fH $
             do Just fileSys <- use $ fileSystems . at hnd
                lift $ createFileSystem out fsSpec tmpDir (fileSys ^. fsFiles)
@@ -277,6 +284,11 @@ instance Interpreter IoCompiler where
         partitionedImgs . at hnd ?= fileHandle
         fileHandle --> hnd
         return hnd
+    runCreate SUpdateServerRoot destDirH = do
+        (hnd,_) <- allocHandle SUpdateServerRoot "update-server-root"
+        hnd --> destDirH
+        updateServerRoots . at hnd ?= destDirH
+        return hnd
     runCreate sa _src =
         fail $ printf "Create %s: Not Yet Implemented" (show sa)
     -- Update
@@ -291,34 +303,65 @@ instance Interpreter IoCompiler where
     runAdd _ SDocumentation str = lift $ logTrace str
     runAdd _ STemplateVariable (k,v) = vars . at k ?= v
     runAdd dirH@(Handle SLocalDirectory _) SReadOnlyFile (fSpec,fH) = do
-        fH --> dirH
         Just localDir <- use $ localDirs . at dirH
-        addAction dirH $ do copyReadOnlyFile' fH fSpec (localDir ^. dirTempDir)
+        fH --> dirH
+        addAction dirH $ copyReadOnlyFile' fH fSpec (localDir ^. dirTempDir)
     runAdd fsH@(Handle SFileSystemImage _) SReadOnlyFile (fSpec,fH) = do
-        fH --> fsH
         fileSystems . at fsH . traverse . fsFiles <>= [fSpec]
         Just fileSys <- use $ fileSystems . at fsH
         let tmpDir = fileSys ^. fsTempDir
-        addAction fsH $ do copyReadOnlyFile' fH fSpec tmpDir
+        fH --> fsH
+        addAction fsH $ copyReadOnlyFile' fH fSpec tmpDir
     runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast =
         ci . at hnd . traverse . metaData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SCloudInitUserData ast =
         ci . at hnd . traverse . userData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SReadOnlyFile (fspec,fH) = do
-        fH --> hnd
         Just (RofCtx fName) <- use $ roFiles . at fH
+        fH --> hnd
         runAdd
             hnd
             SCloudInitUserData
             (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
     runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
         runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
-    runAdd (Handle SImageRepository _) SSharedVmImage (sn,vmI) = do
+    runAdd hnd@(Handle SImageRepository _) SSharedVmImage (sn,vmI) = do
         Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at vmI
         Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
-        addAction vmI $ lift $
+        vmI --> hnd
+        addAction hnd $ lift $
             do srcFile' <- getRealPath srcFile
                imageRepoPublish srcFile' srcType sn
+        return ()
+    runAdd hnd@(Handle SUpdateServerRoot _) SSharedVmImage (sn,vmI) = do
+        Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at vmI
+        Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
+        Just destDirH <- use $ updateServerRoots . at hnd
+        Just tmpDirCtx <- use $ localDirs . at destDirH
+        let destDir = tmpDirCtx ^. dirTempDir
+            vmDestDir = destDir </> "machines" </> snStr </> "disks" </> "raw"
+            SharedImageName snStr = sn
+        vmI --> hnd
+        addAction hnd $ lift $
+            do srcFile' <- getRealPath srcFile
+               let imgFile = vmDestDir </> "0.raw"
+                   sizeFile = vmDestDir </> "0.size"
+                   versionFile = vmDestDir </> "VERSION"
+               mkDir vmDestDir
+               if srcType /= Raw
+                   then convertVmImage srcFile' srcType imgFile Raw
+                   else copy srcFile' imgFile
+               size <- B9.B9IO.readFileSize imgFile
+               renderContentToFile
+                   sizeFile
+                   (FromString (show size))
+                   (Environment [])
+               bId <- B9.B9IO.getBuildId
+               bT <- B9.B9IO.getBuildDate
+               renderContentToFile
+                   versionFile
+                   (FromString (printf "%s-%s" bId bT))
+                   (Environment [])
         return ()
     runAdd hnde sa _src =
         fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)
@@ -327,14 +370,6 @@ instance Interpreter IoCompiler where
         Just ciCtxInitial <- use $ ci . at hnd
         let mH = ciCtxInitial ^. metaDataH
             uH = ciCtxInitial ^. userDataH
-        addAction mH $
-            do Just ciCtx <- use $ ci . at hnd
-               let mC = ciCtx ^. metaData
-               interpret $ appendContent mH (RenderYaml mC)
-        addAction uH $
-            do Just ciCtx <- use $ ci . at hnd
-               let uC = ciCtx ^. userData
-               interpret $ appendContent uH (RenderYaml uC)
         return (mH, uH)
     runExport hnd@(Handle SLocalDirectory _) mDestDir = do
         destDir <- lift $ maybe (mkTempDir "tmp-dir") return mDestDir
@@ -382,6 +417,7 @@ instance Interpreter IoCompiler where
                       Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
                       convertedFile <- lift $ mkTemp "converted-img-file"
                       convertedH <- runCreate SReadOnlyFile convertedFile
+                      srcFileH --> convertedH
                       addAction convertedH $ lift $
                           do srcFile' <- getRealPath srcFile
                              convertedFile' <- ensureParentDir convertedFile
@@ -390,7 +426,6 @@ instance Interpreter IoCompiler where
                                  srcType
                                  convertedFile'
                                  destType
-                      srcFileH --> convertedH
                       return convertedH
                 _ -> runExport srcFileH Nothing
         -- Resize the temp file and move it to the destination:
@@ -415,8 +450,10 @@ instance Interpreter IoCompiler where
                       destFile' <- ensureParentDir destFile
                       moveFile convertedFile' destFile'
         destH <- runCreate SReadOnlyFile destFile
-        hnd --> destH
-        return destH
+        convertedH --> destH
+        -- TODO should I: destH --> hnd ?
+        return
+            destH
     runExport hnd@(Handle SPartitionedVmImage _) (mDestFile,partSpec) = do
         destFile <-
             lift $
@@ -430,8 +467,8 @@ instance Interpreter IoCompiler where
                dst <- ensureParentDir destFile
                extractPartition partSpec src dst
         return destH
-    runExport (Handle SImageRepository _) sharedImgName@(SharedImageName sn) = do
-        (sharedImgInfo, cachedImage) <- lift $ imageRepoLookup sharedImgName
+    runExport (Handle SImageRepository _) sharedImgName = do
+        (sharedImgInfo,cachedImage) <- lift $ imageRepoLookup sharedImgName
         cachedH <- runCreate SReadOnlyFile cachedImage
         runCreate SVmImage (cachedH, siImgType sharedImgInfo)
     runExport hnd _dest =
