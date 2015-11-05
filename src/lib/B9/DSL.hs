@@ -35,8 +35,8 @@ data BuildStep next where
             (Show (UpdateSpec a)) =>
             Handle a -> UpdateSpec a -> next -> BuildStep next
         Add ::
-            (CanAdd env a, Show (AddSpec a)) =>
-            Handle env -> SArtifact a -> AddSpec a -> next -> BuildStep next
+            (CanAdd env a, Show (AddSpec a), Show (AddResult a)) =>
+            Handle env -> SArtifact a -> AddSpec a -> (AddResult a -> next) -> BuildStep next
         Export ::
             (Show (ExportSpec a), Show (ExportResult a)) =>
             Handle a -> ExportSpec a -> (ExportResult a -> next) -> BuildStep next
@@ -44,7 +44,7 @@ data BuildStep next where
 instance Functor BuildStep where
     fmap f (Create sa src k) = Create sa src (f . k)
     fmap f (Update hnd upd next) = Update hnd upd (f next)
-    fmap f (Add hndEnv sa importSpec next) = Add hndEnv sa importSpec (f next)
+    fmap f (Add hndEnv sa importSpec k) = Add hndEnv sa importSpec (f . k)
     fmap f (Export hnd out k) = Export hnd out (f . k)
 
 type Program a = Free BuildStep a
@@ -67,12 +67,9 @@ update hnd upd = liftF $ Update hnd upd ()
 
 -- | A build step that adds an artifact to an environment using an 'ImportSpec'.
 add
-    :: (CanAdd env b, Show (AddSpec b))
-    => Handle env
-    -> SArtifact b
-    -> AddSpec b
-    -> Program ()
-add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec ()
+    :: (CanAdd env b, Show (AddResult b), Show (AddSpec b))
+    => Handle env -> SArtifact b -> AddSpec b -> Program (AddResult b)
+add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec id
 
 -- | A build step the exports an object referenced by a handle a to an output.
 export
@@ -196,6 +193,10 @@ type family AddSpec (a :: Artifact) :: * where
     AddSpec 'CloudInitMetaData = AST Content YamlObject
     AddSpec 'CloudInitUserData = AST Content YamlObject
     AddSpec 'SharedVmImage     = (SharedImageName, Handle 'VmImage)
+
+type family AddResult (a :: Artifact) :: * where
+    AddResult 'MountedVmImage = Handle 'VmImage
+    AddResult a               = ()
 
 type CanAdd env a = CanAddP env a ~ 'True
 
@@ -448,8 +449,8 @@ fromShared sharedImgName = do
 
 -- | Store an image in the local cache with a name as key for lookups, e.g. from
 -- 'fromShared'
-sharedAs :: String -> Handle 'VmImage -> Program ()
-sharedAs name hnd = do
+sharedAs :: Handle 'VmImage -> String -> Program ()
+sharedAs hnd name = do
     add imageRepositoryH SSharedVmImage (SharedImageName name, hnd)
 
 -- * Execution environment
@@ -473,7 +474,7 @@ mountDirRW :: Handle 'LinuxVm -> FilePath -> FilePath -> Program ()
 mountDirRW e hostDir dest =
     add e SMountedHostDir (AddMountHostDirRW hostDir, MountPoint dest)
 
-mount :: Handle 'LinuxVm -> Handle 'VmImage -> FilePath -> Program ()
+mount :: Handle 'LinuxVm -> Handle 'VmImage -> FilePath -> Program (Handle 'VmImage)
 mount e imgHnd dest = add e SMountedVmImage (imgHnd, MountPoint dest)
 
 -- * Script Execution (inside a container)
@@ -502,9 +503,11 @@ mountAndShareSharedImage :: String
                          -> String
                          -> String
                          -> Handle 'LinuxVm
-                         -> Program (Handle 'VmImage)
-mountAndShareSharedImage nameFrom nameExport mountPoint env = do
-  return undefined
+                         -> Program ()
+mountAndShareSharedImage nameFrom nameTo mountPoint env = do
+  i <- fromShared nameFrom
+  i' <- mount env i mountPoint
+  i' `sharedAs` nameTo
 
 mountAndShareNewImage
     :: String
@@ -512,9 +515,9 @@ mountAndShareNewImage
     -> String
     -> FilePath
     -> Handle 'LinuxVm
-    -> Program (Handle 'VmImage)
+    -> Program ()
 mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
-  return undefined
+  return ()
 
 -- * DSL Interpreter
 
@@ -530,9 +533,9 @@ interpret = foldFree runInterpreter
     runInterpreter (Update hnd src next) = do
         runUpdate hnd src
         return next
-    runInterpreter (Add hnde sa addSpec next) = do
-        runAdd hnde sa addSpec
-        return next
+    runInterpreter (Add hnde sa addSpec k) = do
+        res <- runAdd hnde sa addSpec
+        return (k res)
     runInterpreter (Export hnd out k) = do
         res <- runExport hnd out
         return (k res)
@@ -546,44 +549,10 @@ class (Monad f) => Interpreter f  where
         :: (Show (UpdateSpec a))
         => Handle a -> UpdateSpec a -> f ()
     runAdd
-        :: (Show (AddSpec a))
-        => Handle env -> SArtifact a -> AddSpec a -> f ()
+        :: (Show (AddSpec a), Show (AddResult a))
+        => Handle env -> SArtifact a -> AddSpec a -> f (AddResult a)
     runExport
         :: (Show (ExportSpec a), Show (ExportResult a))
         => Handle a -> ExportSpec a -> f (ExportResult a)
-
--- | An interpreter that just prints out the Program
-instance Interpreter IO where
-    runCreate sa src = do
-        let hnd = singletonHandle sa
-        printf "create %s %s from %s\n" (show sa) (show hnd) (show src)
-        return hnd
-    runUpdate hnd src = do
-        printf "update %s using %s\n" (show hnd) (show src)
-    runAdd hnde sa src = do
-        let hnd = singletonHandle sa
-        printf
-            "add %s %s %s to %s\n"
-            (show sa)
-            (show hnd)
-            (show src)
-            (show hnde)
-        return ()
-    runExport hnd@(Handle SCloudInit _) dest = do
-        printf "export %s to %s\n" (show hnd) (show dest)
-        interpret $
-            do m <- createContent $ FromString "meta-data"
-               u <- createContent $ FromString "user-data"
-               return (m, u)
-    runExport hnd@(Handle SLocalDirectory _) dest = do
-        printf "export %s to %s\n" (show hnd) (show dest)
-        return $ handle SLocalDirectory (fromMaybe "xxx" dest)
-    runExport hnd@(Handle SFileSystemImage _) (dest,res) = do
-        printf "export %s to %s resize: %s\n" (show hnd) (show dest) (show res)
-        return (handle SReadOnlyFile (fromMaybe "xxx" dest))
-    runExport hnd dest = do
-        printf "export %s to %s\n" (show hnd) (show dest)
-        return undefined
-
 
 -- * QuickCheck instances

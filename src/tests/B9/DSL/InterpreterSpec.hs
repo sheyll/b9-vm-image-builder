@@ -165,6 +165,7 @@ readOnlyFileSpec =
               actual `shouldDoIo` expected
 
 -- * Spec for 'SFileSystemImage's
+
 fsImgSpec :: Spec
 fsImgSpec = do
     describe "compile SFileSystemImage" $
@@ -321,6 +322,16 @@ candySpec = do
                             (Source ExpandVariables "/some/path/test.txt")
                             (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                 actual `does` expected
+    describe "mountAndShareSharedImage" $
+        it "is implemented" $
+        shouldDo
+            (do env <- lxc "env"
+                mountAndShareSharedImage "from" "to" "mp" env)
+            (do env <- lxc "env"
+                h <- fromShared "from"
+                h' <- mount env h "mp"
+                h' `sharedAs` "to"
+            )
 
 -- * 'SLocalDirectory' examples
 
@@ -625,7 +636,7 @@ sharedImageSpec =
         "supports lookup, get and put vm-image operations"
         (shouldDoIo
              (do imgH <- fromShared "source-image"
-                 sharedAs "out-shared" imgH)
+                 sharedAs imgH "out-shared")
              (do (_,cachedImg) <-
                      imageRepoLookup (SharedImageName "source-image")
                  cachedImg' <- getRealPath cachedImg
