@@ -440,18 +440,18 @@ exportCloudInit chH destH dest = do
 
 -- * Image import
 
-{-
-from :: String -> Program (Handle 'VmImage)
-from sharedImgName = do
-    export sharedImageCacheHandle (SharedImageName sharedIamgeName)
--}
+fromShared :: String -> Program (Handle 'VmImage)
+fromShared sharedImgName = do
+    export imageRepositoryH (SharedImageName sharedImgName)
+
 -- * Image export
-{-
-share :: Handle 'VmImage -> Program ()
-share hnd = do
-    (vmImageFileHandle,imageSpec) <- export hnd KeepSize
-    add sharedImageCacheHandle SVmImage (vmImageFileHandle, imageSpec)
--}
+
+-- | Store an image in the local cache with a name as key for lookups, e.g. from
+-- 'fromShared'
+sharedAs :: String -> Handle 'VmImage -> Program ()
+sharedAs name hnd = do
+    add imageRepositoryH SSharedVmImage (SharedImageName name, hnd)
+
 -- * Execution environment
 
 boot :: String -> ExecEnvType -> CPUArch -> Program (Handle 'LinuxVm)

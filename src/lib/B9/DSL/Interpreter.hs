@@ -134,6 +134,7 @@ compile p = evalStateT compileSt def
                    printf
                        "==[B9-PREPARE]=======================================================[%s]"
                        b
+        createPredefinedHandles
         result <- interpret p
         runAllActions
         lift $
@@ -150,6 +151,7 @@ inspect :: Show a => Program a -> IoProgram String
 inspect p = evalStateT compileSt def
   where
     compileSt = do
+        createPredefinedHandles
         res <- interpret $ p
         mG <- dependencyGraph
         case mG of
@@ -158,6 +160,15 @@ inspect p = evalStateT compileSt def
                 return $ printDependencyGraph g handles
             Nothing -> do
                 return $ "No artifacts." ++ show res
+
+-- | Setup the predefined global handles, e.g. 'imageRepositoryH'
+createPredefinedHandles :: IoCompiler ()
+createPredefinedHandles = allocPredefinedHandle imageRepositoryH
+  where
+    allocPredefinedHandle h = do
+        v <- addVertex
+        storeHandle h v
+        actions . at v ?= []
 
 -- | Run all actions in correct order according to the dependency graph.
 runAllActions :: IoCompiler ()
@@ -325,11 +336,11 @@ instance Interpreter IoCompiler where
             (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
     runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
         runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
-    runAdd hnd@(Handle SImageRepository _) SSharedVmImage (sn,vmI) = do
+    runAdd (Handle SImageRepository _) SSharedVmImage (sn,vmI) = do
         Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at vmI
         Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
-        vmI --> hnd
-        addAction hnd $ lift $
+        vmI --> imageRepositoryH
+        addAction imageRepositoryH $ lift $
             do srcFile' <- getRealPath srcFile
                imageRepoPublish srcFile' srcType sn
         return ()

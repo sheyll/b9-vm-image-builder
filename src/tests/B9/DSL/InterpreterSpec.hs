@@ -26,6 +26,7 @@ spec = do
     partitionedDiskSpec
     sharedImageSpec
     updateServerImageSpec
+    containerExecutionSpec
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
@@ -149,7 +150,7 @@ readOnlyFileSpec =
                       fH <- writeContentTmp fcH
                       export fH (Just "/tmp/rendered-content.file")
                   expected = do
-                      src <- mkTemp "generated-content-0"
+                      src <- mkTemp "generated-content-1"
                       src' <- ensureParentDir src
                       renderContentToFile src' (FromString "test-content") (Environment [])
               actual `shouldDoIo` expected
@@ -368,7 +369,7 @@ cloudInitIsoImageSpec =
                    runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   metaDataFile <- mkTemp "generated-content-0"
+                   metaDataFile <- mkTemp "generated-content-1"
                    let expectedContent = minimalMetaData iid
                        expectedEnv = Environment []
                    absMetaDataFile <- ensureParentDir metaDataFile
@@ -381,7 +382,7 @@ cloudInitIsoImageSpec =
            let expectedProg = do
                    let expectedContent = minimalUserData
                        expectedEnv = Environment []
-                   userDataFile <- mkTemp "generated-content-2"
+                   userDataFile <- mkTemp "generated-content-3"
                    absUserDataFile <- ensureParentDir userDataFile
                    renderContentToFile
                        absUserDataFile
@@ -440,8 +441,8 @@ cloudInitDirSpec =
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
-                      do m <- mkTemp "generated-content-0"
-                         u <- mkTemp "generated-content-2"
+                      do m <- mkTemp "generated-content-1"
+                         u <- mkTemp "generated-content-3"
                          u' <- ensureParentDir u
                          renderContentToFile
                              u'
@@ -476,8 +477,8 @@ cloudInitWithContentExamples =
            cmds `should've`
            (dumpToStrings (renderContentToFile udPath udContent templateVars))
   where
-    mdPath = "/abs/path//BUILD/generated-content-0-XXXX"
-    udPath = "/abs/path//BUILD/generated-content-2-XXXX"
+    mdPath = "/abs/path//BUILD/generated-content-1-XXXX"
+    udPath = "/abs/path//BUILD/generated-content-3-XXXX"
     templateVars = Environment [("x","3")]
     mdContent =
         Concat
@@ -623,12 +624,8 @@ sharedImageSpec =
     it
         "supports lookup, get and put vm-image operations"
         (shouldDoIo
-             (do imgH <-
-                     export imageRepositoryH (SharedImageName "source-image")
-                 add
-                     imageRepositoryH
-                     SSharedVmImage
-                     (SharedImageName "out-shared", imgH))
+             (do imgH <- fromShared "source-image"
+                 sharedAs "out-shared" imgH)
              (do (_,cachedImg) <-
                      imageRepoLookup (SharedImageName "source-image")
                  cachedImg' <- getRealPath cachedImg
@@ -680,6 +677,19 @@ updateServerImageSpec =
                    dst' <- ensureParentDir outDir
                    moveDir tmpDir dst'
                    return ())
+
+-- * Containerized Build Specs
+
+containerExecutionSpec :: Spec
+containerExecutionSpec =
+  describe "lxc environment" $ do
+    it "can run a script inside a vm image" $
+      shouldDoIo
+       (do e <- lxc "test-container"
+           return ())
+       (do return ())
+
+
 
 -- * DSL examples
 
