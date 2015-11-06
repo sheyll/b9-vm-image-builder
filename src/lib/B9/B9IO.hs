@@ -53,6 +53,9 @@ data Action next
             next
     | MkTemp FilePath
              (FilePath -> next)
+    | MkTempIn FilePath
+               FilePath
+               (FilePath -> next)
     | GetRealPath FilePath
                   (FilePath -> next)
     | GetParentDir FilePath
@@ -105,6 +108,7 @@ instance Show (Action a) where
     show (MoveDir s d _) = printf "moveDir %s %s" s d
     show (ReadFileSize f _) = printf "readFileSize %s" f
     show (MkDir d _) = printf "mkDir %s" d
+    show (MkTempIn d p _) = printf "mkTempIn %s %s" d p
     show (MkTemp p _) = printf "mkTemp %s" p
     show (GetRealPath p _) = printf "getRealPath %s" p
     show (GetParentDir p _) = printf "getParentDir %s" p
@@ -173,6 +177,11 @@ readFileSize f = liftF $ ReadFileSize f id
 -- prefix and ending with a unique random token.
 mkTemp :: FilePath -> IoProgram FilePath
 mkTemp prefix = liftF $ MkTemp prefix id
+
+-- | Create a unique file path inside a given directory starting with a given
+-- prefix and ending with a unique random token.
+mkTempIn :: FilePath -> FilePath -> IoProgram FilePath
+mkTempIn parent prefix = liftF $ MkTempIn parent prefix id
 
 -- | Combination of 'mkTemp' and 'mkDir'
 mkTempDir :: FilePath -> IoProgram FilePath
@@ -274,6 +283,11 @@ traceEveryAction = run traceAction
     traceAction a@(MkTemp prefix k) = do
         logTrace $ show a
         t <- mkTemp prefix
+        logTrace $ printf " -> %s" t
+        return $ k t
+    traceAction a@(MkTempIn parent prefix k) = do
+        logTrace $ show a
+        t <- mkTempIn parent prefix
         logTrace $ printf " -> %s" t
         return $ k t
     traceAction a@(MkDir d n) = do
@@ -387,6 +401,9 @@ runPureDump p = runWriter $ run dump p
     dump a@(MkTemp prefix n) = do
         tell [show a]
         return (n ("/BUILD" </> prefix ++ "-XXXX"))
+    dump a@(MkTempIn parent prefix n) = do
+        tell [show a]
+        return (n (parent </> prefix ++ "-XXXX"))
     dump a@(MkDir _d n) = do
         tell [show a]
         return n
@@ -474,6 +491,9 @@ instance Arbitrary a => Arbitrary (Action a) where
             , ReadFileSize <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkTemp <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , MkTempIn <$> smaller arbitraryFilePath <*>
+              smaller arbitraryFilePath <*>
+              smaller arbitrary
             , GetRealPath <$> smaller arbitraryFilePath <*> smaller arbitrary
             , GetParentDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , GetFileName <$> smaller arbitraryFilePath <*> smaller arbitrary

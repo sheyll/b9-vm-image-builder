@@ -39,6 +39,9 @@ actionSpec =
        it "handles MkTemp" $
            let p = mkTemp "test-prefix"
            in dumpToStrings p `shouldBe` ["mkTemp test-prefix"]
+       it "handles MkTempIn" $
+           let p = mkTempIn "parent" "test-prefix"
+           in dumpToStrings p `shouldBe` ["mkTempIn parent test-prefix"]
        it "handles Copy" $
            let p = copy "from" "to"
            in dumpToStrings p `shouldBe` ["copy from to"]

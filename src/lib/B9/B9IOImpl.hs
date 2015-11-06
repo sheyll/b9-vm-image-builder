@@ -39,10 +39,12 @@ executeIoProg = run go
         d <- B9Monad.getBuildDate
         return (k d)
     go (MkTemp prefix k) = do
+        b <- B9Monad.getBuildDir
+        go (MkTempIn b prefix k)
+    go (MkTempIn parent prefix k) = do
         let prefix' = takeFileName prefix
         suffix <- liftIO $ replicateM 10 (randomRIO ('A', 'Z'))
-        b <- B9Monad.getBuildDir
-        return (k (b </> prefix' ++ "-" ++ suffix))
+        return (k (parent </> prefix' ++ "-" ++ suffix))
     go (MkDir d n) = do
         liftIO $ createDirectoryIfMissing True d
         return n
