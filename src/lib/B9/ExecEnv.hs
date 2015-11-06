@@ -5,23 +5,18 @@
     "B9.LibVirtLXC" should configure and execute
     build scripts, as defined in "B9.ShellScript" and "B9.Vm".
     -}
-module B9.ExecEnv (
-    ExecEnv(..),
-    Resources(..),
-    noResources,
-    SharedDirectory(..),
-    CPUArch(..),
-    RamSize(..),
-    ) where
+module B9.ExecEnv where
 
+import B9.DiskImages
+import Control.Lens
 import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
+import Data.Default
 import Data.Hashable
 import Data.Monoid
-
-import B9.DiskImages
 import GHC.Generics (Generic)
+
 
 data ExecEnv = ExecEnv
     { envName :: String
@@ -56,6 +51,9 @@ data Resources = Resources
 instance Hashable Resources
 instance Binary Resources
 instance NFData Resources
+
+instance Default Resources where
+  def = Resources AutomaticRamSize 2 X86_64
 
 instance Monoid Resources where
     mempty = Resources mempty 1 mempty
@@ -94,3 +92,35 @@ instance Monoid RamSize where
     AutomaticRamSize `mappend` x = x
     x `mappend` AutomaticRamSize = x
     r `mappend` r' = max r r'
+
+data ExecEnvType =
+    LibVirtLXC
+    deriving (Eq,Show,Ord,Read,Generic,Data,Typeable)
+instance Hashable ExecEnvType
+instance Binary ExecEnvType
+instance NFData ExecEnvType
+
+-- | Decribe how a linux container is supposed to be started.
+data ExecEnvSpec = ExecEnvSpec
+    { _execEnvTitle :: String
+    , _execEnvHypervisor :: ExecEnvType
+    , _execEnvLimits :: Resources
+    } deriving (Read,Show,Generic,Eq,Data,Typeable)
+
+instance Hashable ExecEnvSpec
+instance Binary ExecEnvSpec
+instance NFData ExecEnvSpec
+instance Default ExecEnvSpec where
+  def = ExecEnvSpec "exec-env" LibVirtLXC def
+
+makeLenses ''ExecEnvSpec
+
+-- | Instruct an environment to mount a host directory
+data HostDirMnt
+    = AddMountHostDirRW FilePath
+    | AddMountHostDirRO FilePath
+    deriving (Read,Show,Eq,Generic,Data,Typeable)
+
+instance Hashable HostDirMnt
+instance Binary HostDirMnt
+instance NFData HostDirMnt

@@ -693,14 +693,36 @@ updateServerImageSpec =
 
 containerExecutionSpec :: Spec
 containerExecutionSpec =
-  describe "lxc environment" $ do
-    it "can run a script inside a vm image" $
-      shouldDoIo
-       (do e <- lxc "test-container"
-           return ())
-       (do return ())
-
-
+    describe "lxc environment" $
+    do let envSpec =
+               ExecEnvSpec "test-env" LibVirtLXC $
+               Resources AutomaticRamSize 2 X86_64
+           testProg = do
+               e <- boot envSpec
+               sh e "touch /test1"
+               sh e "touch /test2"
+               rootImgFile <- create SReadOnlyFile "test-in.qcow2"
+               rootImg <- create SVmImage (rootImgFile, QCow2)
+               rootOutImg <- mount e rootImg "/"
+               void $ export rootOutImg (Nothing, Nothing, Nothing)
+       it "converts the input images into 'Raw' format" $
+           testProg `shouldDoIo`
+           do conv <- mkTemp "converted-img-file"
+              src' <- getRealPath "test-in.qcow2"
+              conv' <- ensureParentDir conv
+              convertVmImage src' QCow2 conv' Raw
+       it "exports the input images as new output images" $
+           testProg `shouldDoIo`
+           do conv <- mkTemp "converted-img-file"
+              dest <- mkTemp "resized-img-file"
+              conv' <- getRealPath conv
+              dest' <- ensureParentDir dest
+              moveFile conv' dest'
+       it "copies all added files to a special directory mounted in the guest" $
+           shouldDoIo testProg (do fail "todo")
+       it "generates a script to copy, chmod and chown the added files" $
+           shouldDoIo testProg (do fail "todo")
+       it "runs all added scripts" $ shouldDoIo testProg (do fail "todo")
 
 -- * DSL examples
 

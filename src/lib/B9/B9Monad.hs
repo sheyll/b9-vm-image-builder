@@ -10,6 +10,7 @@ module B9.B9Monad ( B9 , run , traceL , dbgL , infoL , errorL , getConfigParser
 getSelectedRemoteRepo , getRemoteRepos , getRepoCache , cmd, cmdRaw ) where
 
 import           B9.B9Config
+import           B9.ExecEnv
 import           B9.ConfigUtils
 import           B9.Repository
 import           Control.Applicative

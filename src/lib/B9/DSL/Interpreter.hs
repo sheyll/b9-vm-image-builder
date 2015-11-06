@@ -14,6 +14,7 @@ import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..), SharedImageName(..), siImgType)
+import B9.ExecEnv
 import B9.FileSystems (FileSystemResize(..), FileSystemSpec(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
@@ -57,6 +58,7 @@ data Ctx = Ctx
     , _vmImages :: Map.Map (Handle 'VmImage) VmImgCtx
     , _partitionedImgs :: Map.Map (Handle 'PartitionedVmImage) (Handle 'ReadOnlyFile)
     , _updateServerRoots :: Map.Map (Handle 'UpdateServerRoot) (Handle 'LocalDirectory)
+    , _execEnvs :: Map.Map (Handle 'ExecutionEnvironment) ExecEnvCtx
     , _actions :: Map.Map Graph.Vertex [IoCompiler ()]
     , _hToV :: Map.Map SomeHandle Graph.Vertex
     , _vToH :: Map.Map Graph.Vertex SomeHandle
@@ -64,7 +66,7 @@ data Ctx = Ctx
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def def def def def def []
+    def = Ctx 0 def def def def def def def def def def def def def []
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -115,6 +117,17 @@ data VmImgCtx = VmImgCtx
     , _vmiType :: ImageType
     } deriving (Show)
 
+-- | Context of a 'ExecutionEnvironment'
+data ExecEnvCtx = ExecEnvCtx
+    { _execImages :: Map.Map FilePath (Handle 'VmImage)
+    , _execDirectories :: ()
+    , _execScripts :: ()
+    , _execEnvSpec :: ExecEnvSpec
+    } deriving (Show)
+
+instance Default ExecEnvCtx where
+    def = ExecEnvCtx def def def def
+
 makeLenses ''Ctx
 makeLenses ''CiCtx
 makeLenses ''ContentCtx
@@ -122,6 +135,7 @@ makeLenses ''DirCtx
 makeLenses ''FsCtx
 makeLenses ''RofCtx
 makeLenses ''VmImgCtx
+makeLenses ''ExecEnvCtx
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
@@ -167,7 +181,7 @@ createPredefinedHandles = allocPredefinedHandle imageRepositoryH
   where
     allocPredefinedHandle h = do
         v <- addVertex
-        storeHandle h v
+        void $ storeHandle h v
         actions . at v ?= []
 
 -- | Run all actions in correct order according to the dependency graph.
@@ -234,13 +248,12 @@ instance Interpreter IoCompiler where
         uh <- interpret $ createContent (FromString "#cloud-config\n")
         (hnd@(Handle _ iid),_) <-
             allocHandle SCloudInit (iidPrefix ++ "-" ++ buildId)
-        let ciCtx =
-                def &
-                metaData  .~ (ASTObj [("instance-id", ASTString iid)]) &
-                userData  .~ (ASTObj []) &
-                metaDataH .~ mh &
-                userDataH .~ uh
-        ci . at hnd ?= ciCtx
+        ci . at hnd ?=
+            (def &~
+             do metaData .= (ASTObj [("instance-id", ASTString iid)])
+                userData .= (ASTObj [])
+                metaDataH .= mh
+                userDataH .= uh)
         hnd --> mh
         addAction mh $
             do Just ciCtx <- use $ ci . at hnd
@@ -299,6 +312,11 @@ instance Interpreter IoCompiler where
         (hnd,_) <- allocHandle SUpdateServerRoot "update-server-root"
         hnd --> destDirH
         updateServerRoots . at hnd ?= destDirH
+        return hnd
+    runCreate SExecutionEnvironment e = do
+        (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
+        execEnvs . at hnd ?= (def &~ do execEnvSpec .= e)
+        addAction hnd $ do return ()
         return hnd
     runCreate sa _src =
         fail $ printf "Create %s: Not Yet Implemented" (show sa)
@@ -362,10 +380,10 @@ instance Interpreter IoCompiler where
                if srcType /= Raw
                    then convertVmImage srcFile' srcType imgFile Raw
                    else copy srcFile' imgFile
-               size <- B9.B9IO.readFileSize imgFile
+               imgSize <- B9.B9IO.readFileSize imgFile
                renderContentToFile
                    sizeFile
-                   (FromString (show size))
+                   (FromString (show imgSize))
                    (Environment [])
                bId <- B9.B9IO.getBuildId
                bT <- B9.B9IO.getBuildDate
@@ -373,6 +391,21 @@ instance Interpreter IoCompiler where
                    versionFile
                    (FromString (printf "%s-%s" bId bT))
                    (Environment [])
+        return ()
+    runAdd hnd@(Handle SExecutionEnvironment _) SMountedVmImage (imgH,MountPoint mp) = do
+        imgH --> hnd
+        imgFileToMount <- runExport imgH (Nothing, Just Raw, Nothing)
+
+        hnd --> imgFileToMount
+        runCreate SVmImage (imgFileToMount, Raw)
+    runAdd hnd@(Handle SExecutionEnvironment _) SMountedHostDir mnts = do
+
+        return ()
+    runAdd hnd@(Handle SExecutionEnvironment _) SExecutableScript cmds = do
+
+        return ()
+    runAdd hnd@(Handle SExecutionEnvironment _) SReadOnlyFile (destSpec, srcH) = do
+
         return ()
     runAdd hnde sa _src =
         fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)

@@ -6,12 +6,13 @@ module B9.B9Config
        (B9Config(..), defaultB9ConfigFile, defaultRepositoryCache,
         defaultB9Config, getB9ConfigFile, writeB9Config,
         writeInitialB9Config, readB9Config, parseB9Config, LogLevel(..),
-        ExecEnvType(..), BuildVariables, GlobalOpts(..), parseGlobalOpts,
+        BuildVariables, GlobalOpts(..), parseGlobalOpts,
         parseBuildVars, getGlobalOptsFromCLI)
        where
 
 import B9.ConfigUtils
 import B9.Content
+import B9.ExecEnv
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
@@ -129,10 +130,6 @@ parseGlobalOpts =
            { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
            , cliB9Config = b9cfg'
            }
-
-data ExecEnvType =
-    LibVirtLXC
-    deriving (Eq,Show,Ord,Read,Generic,Data,Typeable)
 
 data LogLevel
     = LogTrace

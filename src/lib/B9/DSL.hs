@@ -1,7 +1,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 module B9.DSL where
 
-import B9.B9Config (ExecEnvType(..))
 import B9.Content
        (SourceFile(..), Content(..), FileSpec(..), AST(..),
         YamlObject(..), FileSpec, fileSpec, fileSpecPermissions,
@@ -11,8 +10,11 @@ import B9.DiskImages
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..), Mounted, MountPoint(..), PartitionSpec(..),
         SharedImageName(..))
+import B9.ExecEnv
+       (ExecEnvSpec(..), execEnvTitle, execEnvHypervisor, execEnvLimits,
+        ExecEnvType(..), CPUArch(..), Resources(..), RamSize(..),
+        HostDirMnt(..))
 import B9.FileSystems (FileSystemSpec(..), FileSystemResize(..))
-import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
 import Control.Monad.Free (Free(..), liftF, foldFree)
@@ -51,8 +53,7 @@ type Program a = Free BuildStep a
 
 -- ---------------------------------------------------------
 
--- | A build step that creates something from a source that can be referenced to
--- by a handle.
+-- | Create an artifact and return a handle for that artifact.
 create
     :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
@@ -88,7 +89,7 @@ data Artifact
     | CloudInitMetaData
     | CloudInitUserData
     | Documentation
-    | LinuxVm
+    | ExecutionEnvironment
     | TemplateVariable
     | MountedHostDir
     | MountedVmImage
@@ -111,7 +112,7 @@ data SArtifact k where
     SCloudInitMetaData  :: SArtifact 'CloudInitMetaData
     SCloudInitUserData  :: SArtifact 'CloudInitUserData
     SDocumentation      :: SArtifact 'Documentation
-    SLinuxVm            :: SArtifact 'LinuxVm
+    SExecutionEnvironment            :: SArtifact 'ExecutionEnvironment
     STemplateVariable   :: SArtifact 'TemplateVariable
     SMountedHostDir     :: SArtifact 'MountedHostDir
     SMountedVmImage     :: SArtifact 'MountedVmImage
@@ -132,7 +133,7 @@ instance Show (SArtifact k) where
     show SCloudInitUserData  = "CloudInitUserData"
     show SCloudInitMetaData  = "CloudInitMetaData"
     show SDocumentation      = "Documentation"
-    show SLinuxVm            = "LinuxVm"
+    show SExecutionEnvironment = "ExecutionEnvironment"
     show STemplateVariable   = "TemplateVariable"
     show SMountedHostDir     = "MountedHostDir"
     show SMountedVmImage     = "MountedVmImage"
@@ -168,18 +169,17 @@ handle :: SArtifact a -> String -> Handle a
 handle = Handle
 
 type family CreateSpec (a :: Artifact) :: * where
-    CreateSpec 'VmImage            = (Handle 'ReadOnlyFile, ImageType)
-    CreateSpec 'UpdateServerRoot   = Handle 'LocalDirectory
-    CreateSpec 'PartitionedVmImage = Handle 'ReadOnlyFile
-    CreateSpec 'CloudInit          = String
-    CreateSpec 'LinuxVm            = LinuxVmArgs
-    CreateSpec 'GeneratedContent   = Content
-    CreateSpec 'LocalDirectory     = ()
-    CreateSpec 'ReadOnlyFile       = FilePath
-    CreateSpec 'FileSystemImage    = FileSystemSpec
+    CreateSpec 'VmImage              = (Handle 'ReadOnlyFile, ImageType)
+    CreateSpec 'UpdateServerRoot     = Handle 'LocalDirectory
+    CreateSpec 'PartitionedVmImage   = Handle 'ReadOnlyFile
+    CreateSpec 'CloudInit            = String
+    CreateSpec 'ExecutionEnvironment = ExecEnvSpec
+    CreateSpec 'GeneratedContent     = Content
+    CreateSpec 'LocalDirectory       = ()
+    CreateSpec 'ReadOnlyFile         = FilePath
+    CreateSpec 'FileSystemImage      = FileSystemSpec
 
 type family UpdateSpec (a :: Artifact) :: * where
-    UpdateSpec 'VmImage          = ImageResize
     UpdateSpec 'GeneratedContent = Content
 
 type family AddSpec (a :: Artifact) :: * where
@@ -201,22 +201,22 @@ type family AddResult (a :: Artifact) :: * where
 type CanAdd env a = CanAddP env a ~ 'True
 
 type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool where
-    CanAddP 'LinuxVm 'MountedHostDir            = 'True
-    CanAddP 'LinuxVm 'MountedVmImage            = 'True
-    CanAddP 'LinuxVm 'ExecutableScript          = 'True
-    CanAddP 'LinuxVm 'ReadOnlyFile              = 'True
-    CanAddP 'GeneratedContent 'GeneratedContent = 'True
-    CanAddP 'CloudInit 'ReadOnlyFile            = 'True
-    CanAddP 'CloudInit 'ExecutableScript        = 'True
-    CanAddP 'CloudInit 'CloudInitMetaData       = 'True
-    CanAddP 'CloudInit 'CloudInitUserData       = 'True
-    CanAddP 'LocalDirectory 'ReadOnlyFile       = 'True
-    CanAddP 'FileSystemImage 'ReadOnlyFile      = 'True
-    CanAddP 'VariableBindings 'TemplateVariable = 'True
-    CanAddP 'Documentation 'Documentation       = 'True
-    CanAddP 'ImageRepository 'SharedVmImage     = 'True
-    CanAddP 'UpdateServerRoot 'SharedVmImage    = 'True
-    CanAddP env a                               = 'False
+    CanAddP 'ExecutionEnvironment 'MountedHostDir   = 'True
+    CanAddP 'ExecutionEnvironment 'MountedVmImage   = 'True
+    CanAddP 'ExecutionEnvironment 'ExecutableScript = 'True
+    CanAddP 'ExecutionEnvironment 'ReadOnlyFile     = 'True
+    CanAddP 'GeneratedContent 'GeneratedContent     = 'True
+    CanAddP 'CloudInit 'ReadOnlyFile                = 'True
+    CanAddP 'CloudInit 'ExecutableScript            = 'True
+    CanAddP 'CloudInit 'CloudInitMetaData           = 'True
+    CanAddP 'CloudInit 'CloudInitUserData           = 'True
+    CanAddP 'LocalDirectory 'ReadOnlyFile           = 'True
+    CanAddP 'FileSystemImage 'ReadOnlyFile          = 'True
+    CanAddP 'VariableBindings 'TemplateVariable     = 'True
+    CanAddP 'Documentation 'Documentation           = 'True
+    CanAddP 'ImageRepository 'SharedVmImage         = 'True
+    CanAddP 'UpdateServerRoot 'SharedVmImage        = 'True
+    CanAddP env a                                   = 'False
 
 type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'CloudInit          = ()
@@ -243,19 +243,6 @@ type family ExportResult (a :: Artifact) :: * where
     ExportResult 'GeneratedContent   = Handle 'ReadOnlyFile
     ExportResult 'ImageRepository    = Handle 'VmImage
     ExportResult a                   = ()
-
--- | Instruct an environment to mount a host directory
-data HostDirMnt
-    = AddMountHostDirRW FilePath
-    | AddMountHostDirRO FilePath
-    deriving (Read,Show,Eq,Generic,Data,Typeable)
-
--- | Decribe how a linux container is supposed to be started.
-data LinuxVmArgs =
-    LinuxVmArgs String
-                ExecEnvType
-                CPUArch
-    deriving (Read,Show,Generic,Eq,Data,Typeable)
 
 -- * Global Handles
 
@@ -455,26 +442,26 @@ sharedAs hnd name = do
 
 -- * Execution environment
 
-boot :: String -> ExecEnvType -> CPUArch -> Program (Handle 'LinuxVm)
-boot name et arch = create SLinuxVm (LinuxVmArgs name et arch)
+boot :: ExecEnvSpec -> Program (Handle 'ExecutionEnvironment)
+boot = create SExecutionEnvironment
 
-lxc :: String -> Program (Handle 'LinuxVm)
-lxc name = boot name LibVirtLXC X86_64
+lxc :: String -> Program (Handle 'ExecutionEnvironment)
+lxc name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 X86_64)
 
-lxc32 :: String -> Program (Handle 'LinuxVm)
-lxc32 name = boot name LibVirtLXC I386
+lxc32 :: String -> Program (Handle 'ExecutionEnvironment)
+lxc32 name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 I386)
 
 -- * Mounting
 
-mountDir :: Handle 'LinuxVm -> FilePath -> FilePath -> Program ()
+mountDir :: Handle 'ExecutionEnvironment -> FilePath -> FilePath -> Program ()
 mountDir e hostDir dest =
     add e SMountedHostDir (AddMountHostDirRO hostDir, MountPoint dest)
 
-mountDirRW :: Handle 'LinuxVm -> FilePath -> FilePath -> Program ()
+mountDirRW :: Handle 'ExecutionEnvironment -> FilePath -> FilePath -> Program ()
 mountDirRW e hostDir dest =
     add e SMountedHostDir (AddMountHostDirRW hostDir, MountPoint dest)
 
-mount :: Handle 'LinuxVm -> Handle 'VmImage -> FilePath -> Program (Handle 'VmImage)
+mount :: Handle 'ExecutionEnvironment -> Handle 'VmImage -> FilePath -> Program (Handle 'VmImage)
 mount e imgHnd dest = add e SMountedVmImage (imgHnd, MountPoint dest)
 
 -- * Script Execution (inside a container)
@@ -491,18 +478,18 @@ sh e s = runCommand e (Run s [])
 
 -- * Some utility vm builder lego
 
-rootImage :: String -> String -> Handle 'LinuxVm -> Program ()
+rootImage :: String -> String -> Handle 'ExecutionEnvironment -> Program ()
 rootImage nameFrom nameExport env =
     void $ mountAndShareSharedImage nameFrom nameExport "/" env
 
-dataImage :: String -> Handle 'LinuxVm -> Program ()
+dataImage :: String -> Handle 'ExecutionEnvironment -> Program ()
 dataImage nameExport env =
     void $ mountAndShareNewImage "data" 64 nameExport "/data" env
 
 mountAndShareSharedImage :: String
                          -> String
                          -> String
-                         -> Handle 'LinuxVm
+                         -> Handle 'ExecutionEnvironment
                          -> Program ()
 mountAndShareSharedImage nameFrom nameTo mountPoint env = do
   i <- fromShared nameFrom
@@ -514,7 +501,7 @@ mountAndShareNewImage
     -> Int
     -> String
     -> FilePath
-    -> Handle 'LinuxVm
+    -> Handle 'ExecutionEnvironment
     -> Program ()
 mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
   return ()
