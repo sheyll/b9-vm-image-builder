@@ -104,46 +104,46 @@ data Artifact
 
 
 data SArtifact k where
-    SVmImage            :: SArtifact 'VmImage
-    SUpdateServerRoot   :: SArtifact 'UpdateServerRoot
-    SSharedVmImage      :: SArtifact 'SharedVmImage
-    SPartitionedVmImage :: SArtifact 'PartitionedVmImage
-    SCloudInit          :: SArtifact 'CloudInit
-    SCloudInitMetaData  :: SArtifact 'CloudInitMetaData
-    SCloudInitUserData  :: SArtifact 'CloudInitUserData
-    SDocumentation      :: SArtifact 'Documentation
-    SExecutionEnvironment            :: SArtifact 'ExecutionEnvironment
-    STemplateVariable   :: SArtifact 'TemplateVariable
-    SMountedHostDir     :: SArtifact 'MountedHostDir
-    SMountedVmImage     :: SArtifact 'MountedVmImage
-    SExecutableScript   :: SArtifact 'ExecutableScript
-    SGeneratedContent   :: SArtifact 'GeneratedContent
-    SVariableBindings   :: SArtifact 'VariableBindings
-    SLocalDirectory     :: SArtifact 'LocalDirectory
-    SReadOnlyFile       :: SArtifact 'ReadOnlyFile
-    SFileSystemImage    :: SArtifact 'FileSystemImage
-    SImageRepository    :: SArtifact 'ImageRepository
+    SVmImage              :: SArtifact 'VmImage
+    SUpdateServerRoot     :: SArtifact 'UpdateServerRoot
+    SSharedVmImage        :: SArtifact 'SharedVmImage
+    SPartitionedVmImage   :: SArtifact 'PartitionedVmImage
+    SCloudInit            :: SArtifact 'CloudInit
+    SCloudInitMetaData    :: SArtifact 'CloudInitMetaData
+    SCloudInitUserData    :: SArtifact 'CloudInitUserData
+    SDocumentation        :: SArtifact 'Documentation
+    SExecutionEnvironment :: SArtifact 'ExecutionEnvironment
+    STemplateVariable     :: SArtifact 'TemplateVariable
+    SMountedHostDir       :: SArtifact 'MountedHostDir
+    SMountedVmImage       :: SArtifact 'MountedVmImage
+    SExecutableScript     :: SArtifact 'ExecutableScript
+    SGeneratedContent     :: SArtifact 'GeneratedContent
+    SVariableBindings     :: SArtifact 'VariableBindings
+    SLocalDirectory       :: SArtifact 'LocalDirectory
+    SReadOnlyFile         :: SArtifact 'ReadOnlyFile
+    SFileSystemImage      :: SArtifact 'FileSystemImage
+    SImageRepository      :: SArtifact 'ImageRepository
 
 instance Show (SArtifact k) where
-    show SVmImage            = "VmImage"
-    show SUpdateServerRoot   = "UpdateServerRoot"
-    show SSharedVmImage      = "SharedVmImage"
-    show SPartitionedVmImage = "PartitionedVmImage"
-    show SCloudInit          = "CloudInit"
-    show SCloudInitUserData  = "CloudInitUserData"
-    show SCloudInitMetaData  = "CloudInitMetaData"
-    show SDocumentation      = "Documentation"
+    show SVmImage              = "VmImage"
+    show SUpdateServerRoot     = "UpdateServerRoot"
+    show SSharedVmImage        = "SharedVmImage"
+    show SPartitionedVmImage   = "PartitionedVmImage"
+    show SCloudInit            = "CloudInit"
+    show SCloudInitUserData    = "CloudInitUserData"
+    show SCloudInitMetaData    = "CloudInitMetaData"
+    show SDocumentation        = "Documentation"
     show SExecutionEnvironment = "ExecutionEnvironment"
-    show STemplateVariable   = "TemplateVariable"
-    show SMountedHostDir     = "MountedHostDir"
-    show SMountedVmImage     = "MountedVmImage"
-    show SExecutableScript   = "ExecutableScript"
-    show SGeneratedContent   = "GeneratedContent"
-    show SVariableBindings   = "VariableBindings"
-    show SLocalDirectory     = "LocalDirectory"
-    show SReadOnlyFile       = "ReadOnlyFile"
-    show SFileSystemImage    = "FileSystemImage"
-    show SImageRepository    = "ImageRepository"
+    show STemplateVariable     = "TemplateVariable"
+    show SMountedHostDir       = "MountedHostDir"
+    show SMountedVmImage       = "MountedVmImage"
+    show SExecutableScript     = "ExecutableScript"
+    show SGeneratedContent     = "GeneratedContent"
+    show SVariableBindings     = "VariableBindings"
+    show SLocalDirectory       = "LocalDirectory"
+    show SReadOnlyFile         = "ReadOnlyFile"
+    show SFileSystemImage      = "FileSystemImage"
+    show SImageRepository      = "ImageRepository"
 
 instance Eq (SArtifact k) where
     x == y = show x == show y

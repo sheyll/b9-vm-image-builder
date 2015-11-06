@@ -341,9 +341,8 @@ instance Interpreter IoCompiler where
             (def &~
              do execEnvSpec .= e
                 execIncDir .= incDir)
-        -- addAction hnd $
-        return
-            hnd
+        addAction hnd $ do return ()
+        return hnd
     runCreate sa _src =
         fail $ printf "Create %s: Not Yet Implemented" (show sa)
     -- Update

@@ -747,8 +747,7 @@ containerExecutionSpec =
        it "copies both added file into a directory to mount" $
            shouldDoIo
                testProg
-               (do
-                   incDir <- mkTempDir "included-files"
+               (do incDir <- mkTempDir "included-files"
                    copyOfFile1 <- mkTemp "tmp-file"
                    includedFile1 <- mkTempIn incDir "added-file"
                    copyOfFile2 <- mkTemp "tmp-file"
@@ -766,11 +765,38 @@ containerExecutionSpec =
                    moveFile realPathCopyOfFile1 realPathIncFile1
                    -- move file 2
                    realPathIncFile2 <- ensureParentDir includedFile2
-                   moveFile realPathCopyOfFile2 realPathIncFile2
-               )
+                   moveFile realPathCopyOfFile2 realPathIncFile2)
        it "generates a script to copy, chmod and chown the added files" $
-           shouldDoIo testProg (do fail "todo")
+           shouldDoIo
+               testProg
+               (do buildId <- getBuildId
+                   incDir <- mkTempDir "included-files"
+                   inc1 <- mkTempIn incDir "added-file"
+                   inc2 <- mkTempIn incDir "added-file"
+                   conv <- mkTemp "converted-img-file"
+                   conv' <- ensureParentDir conv
+                   inc1' <- ensureParentDir inc1
+                   inc2' <- ensureParentDir inc2
+                   let addScript =
+                           copyIncludedFile
+                               (includedFileGuestFilePath buildId inc1)
+                               testFileSpec1 <>
+                           copyIncludedFile
+                               (includedFileGuestFilePath buildId inc1)
+                               testFileSpec2
+                   executeInEnv envSpec [])
        it "runs all added scripts" $ shouldDoIo testProg (do fail "todo")
+
+includedFileGuestFilePath :: String -> FilePath -> FilePath
+includedFileGuestFilePath buildId includedFile =
+    "/" ++ buildId </> "included-files" </> takeFileName includedFile
+
+copyIncludedFile :: FilePath -> FileSpec -> Script
+copyIncludedFile src (FileSpec destPath (s,u,g,o) userName groupName) =
+    Begin
+        [ Run "cp" [src, destPath]
+        , Run "chmod" [printf "%d%d%d%d" s u g o, destPath]
+        , Run "chown" [printf "%s:%s" userName groupName]]
 
 -- * DSL examples
 
