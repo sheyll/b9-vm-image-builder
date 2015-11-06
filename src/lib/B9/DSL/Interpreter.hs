@@ -120,13 +120,15 @@ data VmImgCtx = VmImgCtx
 -- | Context of a 'ExecutionEnvironment'
 data ExecEnvCtx = ExecEnvCtx
     { _execImages :: Map.Map FilePath (Handle 'VmImage)
-    , _execDirectories :: ()
+    , _execHostMounts :: ()
     , _execScripts :: ()
+    , _execIncFiles :: [(FilePath, FileSpec)] -- added files get a temp name (so they do not conflict)
+    , _execIncDir :: FilePath
     , _execEnvSpec :: ExecEnvSpec
     } deriving (Show)
 
 instance Default ExecEnvCtx where
-    def = ExecEnvCtx def def def def
+    def = ExecEnvCtx def def def def def def
 
 makeLenses ''Ctx
 makeLenses ''CiCtx
@@ -315,9 +317,14 @@ instance Interpreter IoCompiler where
         return hnd
     runCreate SExecutionEnvironment e = do
         (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
-        execEnvs . at hnd ?= (def &~ do execEnvSpec .= e)
-        addAction hnd $ do return ()
-        return hnd
+        incDir <- lift $ mkTempDir "included-files"
+        execEnvs . at hnd ?=
+            (def &~
+             do execEnvSpec .= e
+                execIncDir .= incDir)
+        -- addAction hnd $
+        return
+            hnd
     runCreate sa _src =
         fail $ printf "Create %s: Not Yet Implemented" (show sa)
     -- Update
@@ -395,17 +402,23 @@ instance Interpreter IoCompiler where
     runAdd hnd@(Handle SExecutionEnvironment _) SMountedVmImage (imgH,MountPoint mp) = do
         imgH --> hnd
         imgFileToMount <- runExport imgH (Nothing, Just Raw, Nothing)
-
         hnd --> imgFileToMount
         runCreate SVmImage (imgFileToMount, Raw)
     runAdd hnd@(Handle SExecutionEnvironment _) SMountedHostDir mnts = do
-
         return ()
     runAdd hnd@(Handle SExecutionEnvironment _) SExecutableScript cmds = do
-
         return ()
-    runAdd hnd@(Handle SExecutionEnvironment _) SReadOnlyFile (destSpec, srcH) = do
-
+    runAdd hnd@(Handle SExecutionEnvironment _) SReadOnlyFile (destSpec,srcH) = do
+        copyOfSrcH <- runExport srcH Nothing
+        Just (RofCtx copyOfSrcPath) <- use $ roFiles . at copyOfSrcH
+        Just eCxt <- use $ execEnvs . at hnd
+        incFile <- lift $ mkTempIn (eCxt ^. execIncDir) "added-file"
+        (execEnvs . at hnd . traverse . execIncFiles) <>= [(incFile, destSpec)]
+        copyOfSrcH --> hnd
+        addAction hnd $ lift $
+            do realPathCopyOfSrcPath <- getRealPath copyOfSrcPath
+               realPathIncFile <- ensureParentDir incFile
+               moveFile realPathCopyOfSrcPath realPathIncFile
         return ()
     runAdd hnde sa _src =
         fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)

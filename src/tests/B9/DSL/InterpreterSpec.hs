@@ -697,10 +697,16 @@ containerExecutionSpec =
     do let envSpec =
                ExecEnvSpec "test-env" LibVirtLXC $
                Resources AutomaticRamSize 2 X86_64
+           testFileSpec1 =
+               (FileSpec "/root/sub1/sub1.1/passwd" (0, 7, 6, 7) "root" "users")
+           testFileSpec2 =
+               (FileSpec "/build/issue" (0, 7, 7, 7) "root" "users")
            testProg = do
                e <- boot envSpec
                sh e "touch /test1"
                sh e "touch /test2"
+               addFileFull e (Source NoConversion "/etc/issue") testFileSpec2
+               addFileFull e (Source NoConversion "/etc/passwd") testFileSpec1
                rootImgFile <- create SReadOnlyFile "test-in.qcow2"
                rootImg <- create SVmImage (rootImgFile, QCow2)
                rootOutImg <- mount e rootImg "/"
@@ -718,8 +724,50 @@ containerExecutionSpec =
               conv' <- getRealPath conv
               dest' <- ensureParentDir dest
               moveFile conv' dest'
-       it "copies all added files to a special directory mounted in the guest" $
-           shouldDoIo testProg (do fail "todo")
+       it "copies one added file into a directory to mount" $
+           shouldDoIo
+               testProg
+               (do
+                   -- create a tmp dir that will containa all included files
+                   -- with unique names. this directory will be bind mounted in
+                   -- the container. all added files are exported and the
+                   -- resulting files are moved to new temp files in the tmp dir
+                   -- from above. the tmp dir artifact is an incoming dependency
+                   -- of the execution environment.
+                   incDir <- mkTempDir "included-files"
+                   copyOfFile1 <- mkTemp "tmp-file"
+                   includedFile1 <- mkTempIn incDir "added-file"
+                   -- export the ReadOnlyFile "/etc/passwd":
+                   realPathFile1 <- getRealPath "/etc/passwd"
+                   realPathCopyOfFile1 <- ensureParentDir copyOfFile1
+                   copy realPathFile1 realPathCopyOfFile1
+                   -- move the exported file into the mounted directory for inclusion
+                   realPathIncFile1 <- ensureParentDir includedFile1
+                   moveFile realPathCopyOfFile1 realPathIncFile1)
+       it "copies both added file into a directory to mount" $
+           shouldDoIo
+               testProg
+               (do
+                   incDir <- mkTempDir "included-files"
+                   copyOfFile1 <- mkTemp "tmp-file"
+                   includedFile1 <- mkTempIn incDir "added-file"
+                   copyOfFile2 <- mkTemp "tmp-file"
+                   includedFile2 <- mkTempIn incDir "added-file"
+                   -- copy file 1
+                   realPathFile1 <- getRealPath "/etc/passwd"
+                   realPathCopyOfFile1 <- ensureParentDir copyOfFile1
+                   copy realPathFile1 realPathCopyOfFile1
+                   -- copy file 2
+                   realPathFile2 <- getRealPath "/etc/issue"
+                   realPathCopyOfFile2 <- ensureParentDir copyOfFile2
+                   copy realPathFile2 realPathCopyOfFile2
+                   -- move file 1
+                   realPathIncFile1 <- ensureParentDir includedFile1
+                   moveFile realPathCopyOfFile1 realPathIncFile1
+                   -- move file 2
+                   realPathIncFile2 <- ensureParentDir includedFile2
+                   moveFile realPathCopyOfFile2 realPathIncFile2
+               )
        it "generates a script to copy, chmod and chown the added files" $
            shouldDoIo testProg (do fail "todo")
        it "runs all added scripts" $ shouldDoIo testProg (do fail "todo")

@@ -3,7 +3,7 @@ itself be structured, i.e. in Yaml, JSON or Erlang Term format, or unstructured
 raw strings or even binaries. -}
 module B9.Content
        (module X, FileSpec(..), fileSpec, Content(..), fileSpecPath,
-        fileSpecPermissions, fileSpecOwner, fileSpecGroup)
+        fileSpecPermissions, fileSpecOwner, fileSpecGroup, UnixUser(..))
        where
 
 import           B9.Content.AST as X
@@ -33,6 +33,10 @@ data FileSpec = FileSpec
     , _fileSpecOwner :: String
     , _fileSpecGroup :: String
     } deriving (Ord,Read,Eq,Data,Typeable,Generic)
+
+instance Hashable FileSpec
+instance Binary FileSpec
+instance NFData FileSpec
 
 instance Show FileSpec where
     show (FileSpec path (s,u,g,o) owner group) =
@@ -71,11 +75,20 @@ instance Show FileSpec where
 fileSpec :: FilePath -> FileSpec
 fileSpec f = FileSpec f (0,6,4,4) "root" "root"
 
+-- | A unix user or group specified by a context dependent user or group name,
+-- or specified through a numerical UID or GID respectively. --TODO use or
+-- discard? cloud-inits support for that is... well ... it's complicated
+data UnixUser
+    = UnixUserName String
+    | UnixUserId Word16
+    deriving (Ord,Read,Eq,Data,Typeable,Generic)
+
+instance Hashable UnixUser
+instance Binary UnixUser
+instance NFData UnixUser
+
 makeLenses ''FileSpec
 
-instance Hashable FileSpec
-instance Binary FileSpec
-instance NFData FileSpec
 
 {- TODO
 data Content

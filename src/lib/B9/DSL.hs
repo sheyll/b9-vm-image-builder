@@ -334,7 +334,12 @@ addFileFull
     :: (CanAdd e 'ReadOnlyFile)
     => Handle e -> SourceFile -> FileSpec -> Program ()
 addFileFull dstH srcFile dstSpec =
-    addFileFromContent dstH (FromTextFile srcFile) dstSpec
+    case srcFile of
+        (Source ExpandVariables _) ->
+            addFileFromContent dstH (FromTextFile srcFile) dstSpec
+        (Source NoConversion f) -> do
+            h <- create SReadOnlyFile f
+            add dstH SReadOnlyFile (dstSpec, h)
 
 -- | Generate a file with a content and add that file to an artifact at a
 -- 'FileSpec'.
