@@ -18,6 +18,7 @@ import B9.ExecEnv
 import B9.FileSystems (FileSystemResize(..), FileSystemSpec(..))
 import B9.ShellScript (Script(..), toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
+import Control.Monad.Reader
 import Control.Monad.State
 import Data.Default
 import Data.Function
@@ -31,6 +32,12 @@ import Text.Printf (printf)
 
 -- | The monad used to compile a 'Program' into an 'IoProgram'
 type IoCompiler = StateT Ctx IoProgram
+
+-- | This monad contains all information gathered in 'Ctx' but is
+-- 'ReaderT'. This is mainly to prevent an action added with 'addAction' to be
+-- able to change the state, especially by adding more actions (which would not
+-- be executed).
+type IoProgBuilder = ReaderT Ctx IoProgram
 
 -- | A wrapper around 'Handle' with existential quantification over the
 -- 'Artifact' type.
@@ -59,7 +66,7 @@ data Ctx = Ctx
     , _partitionedImgs :: Map.Map (Handle 'PartitionedVmImage) (Handle 'ReadOnlyFile)
     , _updateServerRoots :: Map.Map (Handle 'UpdateServerRoot) (Handle 'LocalDirectory)
     , _execEnvs :: Map.Map (Handle 'ExecutionEnvironment) ExecEnvCtx
-    , _actions :: Map.Map Graph.Vertex [IoCompiler ()]
+    , _actions :: Map.Map Graph.Vertex [IoProgBuilder ()]
     , _hToV :: Map.Map SomeHandle Graph.Vertex
     , _vToH :: Map.Map Graph.Vertex SomeHandle
     , _dependencies :: [Graph.Edge]
@@ -72,8 +79,8 @@ instance Default Ctx where
 data CiCtx = CiCtx
     { _metaData :: (AST Content YamlObject)
     , _userData :: (AST Content YamlObject)
-    , _metaDataH :: Handle 'GeneratedContent
-    , _userDataH :: Handle 'GeneratedContent
+    , _metaDataH :: Handle 'ReadOnlyFile
+    , _userDataH :: Handle 'ReadOnlyFile
     } deriving (Show)
 
 instance Default CiCtx where
@@ -81,8 +88,8 @@ instance Default CiCtx where
         CiCtx
             (ASTObj [])
             (ASTObj [])
-            (singletonHandle SGeneratedContent)
-            (singletonHandle SGeneratedContent)
+            (singletonHandle SReadOnlyFile)
+            (singletonHandle SReadOnlyFile)
 
 -- | Context of a 'SLocalDirectory'
 data ContentCtx = ContentCtx
@@ -122,7 +129,7 @@ data ExecEnvCtx = ExecEnvCtx
     { _execImages :: Map.Map FilePath (Handle 'VmImage)
     , _execHostMounts :: ()
     , _execScripts :: ()
-    , _execIncFiles :: [(FilePath, FileSpec)] -- added files get a temp name (so they do not conflict)
+    , _execIncFiles :: [(FilePath, FileSpec)]
     , _execIncDir :: FilePath
     , _execEnvSpec :: ExecEnvSpec
     } deriving (Show)
@@ -205,7 +212,7 @@ runAllActions = do
   where
     runActionForVertex vertex = do
         Just actionsForVertex <- use $ actions . at vertex
-        sequence_ actionsForVertex
+        runIoProgBuilder $ sequence_ actionsForVertex
 
 -- | Generate a graph from the artifact dependencies in the compiler context.
 dependencyGraph :: IoCompiler (Maybe Graph.Graph)
@@ -246,8 +253,10 @@ instance Interpreter IoCompiler where
     -- Create
     runCreate SCloudInit iidPrefix = do
         buildId <- lift $ getBuildId
-        mh <- interpret $ createContent (FromString "#cloud-config\n")
-        uh <- interpret $ createContent (FromString "#cloud-config\n")
+        metaDataFile <- lift $ mkTemp "meta-data"
+        userDataFile <- lift $ mkTemp "user-data"
+        mh <- runCreate SReadOnlyFile metaDataFile
+        uh <- runCreate SReadOnlyFile userDataFile
         (hnd@(Handle _ iid),_) <-
             allocHandle SCloudInit (iidPrefix ++ "-" ++ buildId)
         ci . at hnd ?=
@@ -256,16 +265,26 @@ instance Interpreter IoCompiler where
                 userData .= (ASTObj [])
                 metaDataH .= mh
                 userDataH .= uh)
+        addAction hnd $
+            do Just ciCtx <- view $ ci . at hnd
+               env <- views vars (Environment . Map.toList)
+               let c =
+                       Concat
+                           [ FromString "#cloud-config\n"
+                           , RenderYaml (ciCtx ^. metaData)]
+               absFile <- lift $ ensureParentDir metaDataFile
+               lift $ renderContentToFile absFile c env
         hnd --> mh
-        addAction mh $
-            do Just ciCtx <- use $ ci . at hnd
-               let mC = ciCtx ^. metaData
-               interpret $ appendContent mh (RenderYaml mC)
+        addAction hnd $
+            do Just ciCtx <- view $ ci . at hnd
+               env <- views vars (Environment . Map.toList)
+               let c =
+                       Concat
+                           [ FromString "#cloud-config\n"
+                           , RenderYaml (ciCtx ^. userData)]
+               absFile <- lift $ ensureParentDir userDataFile
+               lift $ renderContentToFile absFile c env
         hnd --> uh
-        addAction uh $
-            do Just ciCtx <- use $ ci . at hnd
-               let uC = ciCtx ^. userData
-               interpret $ appendContent uh (RenderYaml uC)
         return hnd
     runCreate SGeneratedContent c = do
         (hnd@(Handle _ hndT),_) <-
@@ -275,9 +294,9 @@ instance Interpreter IoCompiler where
         generatedContent . at hnd ?= ContentCtx c destFileH
         hnd --> destFileH
         addAction destFileH $
-            do env <- uses vars (Environment . Map.toList)
+            do env <- views vars (Environment . Map.toList)
                destFile' <- lift $ ensureParentDir destFile
-               Just cCtx <- use $ generatedContent . at hnd
+               Just cCtx <- view $ generatedContent . at hnd
                lift $ renderContentToFile destFile' (cCtx ^. cContent) env
         return hnd
     runCreate SLocalDirectory () = do
@@ -293,7 +312,7 @@ instance Interpreter IoCompiler where
         fileSystems . at hnd ?= FsCtx [] tmpDir fH t
         hnd --> fH
         addAction fH $
-            do Just fileSys <- use $ fileSystems . at hnd
+            do Just fileSys <- view $ fileSystems . at hnd
                lift $ createFileSystem out fsSpec tmpDir (fileSys ^. fsFiles)
         return hnd
     runCreate SReadOnlyFile fn = do
@@ -340,14 +359,17 @@ instance Interpreter IoCompiler where
     runAdd _ STemplateVariable (k,v) = vars . at k ?= v
     runAdd dirH@(Handle SLocalDirectory _) SReadOnlyFile (fSpec,fH) = do
         Just localDir <- use $ localDirs . at dirH
+        Just (RofCtx src) <- use $ roFiles . at fH
         fH --> dirH
-        addAction dirH $ copyReadOnlyFile' fH fSpec (localDir ^. dirTempDir)
+        addAction dirH $ lift $
+            copyReadOnlyFile' src fSpec (localDir ^. dirTempDir)
     runAdd fsH@(Handle SFileSystemImage _) SReadOnlyFile (fSpec,fH) = do
         fileSystems . at fsH . traverse . fsFiles <>= [fSpec]
+        Just (RofCtx src) <- use $ roFiles . at fH
         Just fileSys <- use $ fileSystems . at fsH
         let tmpDir = fileSys ^. fsTempDir
         fH --> fsH
-        addAction fsH $ copyReadOnlyFile' fH fSpec tmpDir
+        addAction fsH $ lift $ copyReadOnlyFile' src fSpec tmpDir
     runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast =
         ci . at hnd . traverse . metaData %= (`astMerge` ast)
     runAdd hnd@(Handle SCloudInit _) SCloudInitUserData ast =
@@ -434,9 +456,9 @@ instance Interpreter IoCompiler where
         let tmpDir = tmpDirCtx ^. dirTempDir
         destDirH <- runCreate SLocalDirectory ()
         hnd --> destDirH
-        addAction destDirH $
-            do destDir' <- lift $ ensureParentDir destDir
-               lift $ moveDir tmpDir destDir'
+        addAction destDirH $ lift $
+            do destDir' <- ensureParentDir destDir
+               moveDir tmpDir destDir'
         return destDirH
     runExport hnd@(Handle SFileSystemImage _) (mDestFile,mDestSize) = do
         Just fileSys <- use $ fileSystems . at hnd
@@ -458,7 +480,8 @@ instance Interpreter IoCompiler where
         destFile <- lift $ maybe (mkTemp "tmp-file") return mDestFile
         destH <- runCreate SReadOnlyFile destFile
         hnd --> destH
-        addAction destH $ copyReadOnlyFile hnd destFile
+        Just (RofCtx src) <- use $ roFiles . at hnd
+        addAction destH $ lift $ copyReadOnlyFile src destFile
         return destH
     runExport hnd@(Handle SGeneratedContent _) mDestFile = do
         Just genCntCtx <- use $ generatedContent . at hnd
@@ -485,27 +508,23 @@ instance Interpreter IoCompiler where
                                  destType
                       return convertedH
                 _ -> runExport srcFileH Nothing
+        Just (RofCtx convertedFile) <- use $ roFiles . at convertedH
         -- Resize the temp file and move it to the destination:
         sequence_ $
             do (ImageSize destSize destSizeU) <- mDestSize
-               return $ addAction convertedH $
-                   do Just (RofCtx convertedFile) <-
-                          use $ roFiles . at convertedH
-                      lift $
-                          do convertedFile' <- ensureParentDir convertedFile
-                             resizeVmImage
-                                 convertedFile'
-                                 destSize
-                                 destSizeU
-                                 (fromMaybe srcType mDestType)
+               return $ addAction convertedH $ lift $
+                   do convertedFile' <- ensureParentDir convertedFile
+                      resizeVmImage
+                          convertedFile'
+                          destSize
+                          destSizeU
+                          (fromMaybe srcType mDestType)
         -- Move the temp file to the destination:
         destFile <- lift $ maybe (mkTemp "resized-img-file") return mDestFile
-        addAction convertedH $
-            do Just (RofCtx convertedFile) <- use $ roFiles . at convertedH
-               lift $
-                   do convertedFile' <- getRealPath convertedFile
-                      destFile' <- ensureParentDir destFile
-                      moveFile convertedFile' destFile'
+        addAction convertedH $ lift $
+            do convertedFile' <- getRealPath convertedFile
+               destFile' <- ensureParentDir destFile
+               moveFile convertedFile' destFile'
         destH <- runCreate SReadOnlyFile destFile
         convertedH --> destH
         -- TODO should I: destH --> hnd ?
@@ -550,21 +569,20 @@ toUserDataRunCmdAST scr = ASTObj [("runcmd", ASTArr [ASTString cmd])]
     cmd = toBashOneLiner scr
 
 -- | Copy a 'ReadOnlyFile' to a non-existing output file.
-copyReadOnlyFile :: Handle 'ReadOnlyFile -> FilePath -> IoCompiler ()
-copyReadOnlyFile srcH dst = do
-    Just (RofCtx src) <- use $ roFiles . at srcH
-    src' <- lift $ getRealPath src
-    dst' <- lift $ ensureParentDir dst
-    lift $ copy src' dst'
+copyReadOnlyFile :: FilePath -> FilePath -> IoProgram ()
+copyReadOnlyFile src dst = do
+    src' <- getRealPath src
+    dst' <- ensureParentDir dst
+    copy src' dst'
 
 -- | Copy a 'ReadOnlyFile' to a directory and 'FileSpec' and create
 --   missing intermediate directories.
-copyReadOnlyFile' :: Handle 'ReadOnlyFile
+copyReadOnlyFile' :: FilePath
                   -> FileSpec
                   -> FilePath
-                  -> IoCompiler ()
-copyReadOnlyFile' srcH dstSpec dstDir =
-    copyReadOnlyFile srcH (dstDir </> (dstSpec ^. fileSpecPath))
+                  -> IoProgram ()
+copyReadOnlyFile' src dstSpec dstDir =
+    copyReadOnlyFile src (dstDir </> (dstSpec ^. fileSpecPath))
 
 -- * Utilities
 
@@ -611,12 +629,20 @@ h --> h' = do
     Just v' <- lookupVertex h'
     dependencies <>= [(v, v')]
 
+-- | Return the vertex of a handle.
+lookupVertex :: Handle a -> IoCompiler (Maybe Graph.Vertex)
+lookupVertex h = use $ hToV . at (SomeHandle h)
+
+-- * Support for 'IoProgBuilder's
+
 -- | Add a build action to a handle
-addAction :: Handle a -> IoCompiler () -> IoCompiler ()
+addAction :: Handle a -> IoProgBuilder () -> IoCompiler ()
 addAction h a = do
   Just v <- lookupVertex h
   actions . at v . traverse <>= [a]
 
--- | Return the vertex of a handle.
-lookupVertex :: Handle a -> IoCompiler (Maybe Graph.Vertex)
-lookupVertex h = use $ hToV . at (SomeHandle h)
+-- | Run an 'IoProgBuilder' action.
+runIoProgBuilder :: IoProgBuilder a -> IoCompiler a
+runIoProgBuilder a = do
+  ctx <- get
+  lift $ runReaderT a ctx

@@ -21,7 +21,7 @@ spec = do
     cloudInitIsoImageSpec
     cloudInitMultiVfatImageSpec
     cloudInitDirSpec
-    cloudInitWithContentExamples
+    cloudInitWithContentSpec
     vmImageCreationSpec
     partitionedDiskSpec
     sharedImageSpec
@@ -380,7 +380,7 @@ cloudInitIsoImageSpec =
                    runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   metaDataFile <- mkTemp "generated-content-1"
+                   metaDataFile <- mkTemp "meta-data"
                    let expectedContent = minimalMetaData iid
                        expectedEnv = Environment []
                    absMetaDataFile <- ensureParentDir metaDataFile
@@ -393,7 +393,7 @@ cloudInitIsoImageSpec =
            let expectedProg = do
                    let expectedContent = minimalUserData
                        expectedEnv = Environment []
-                   userDataFile <- mkTemp "generated-content-3"
+                   userDataFile <- mkTemp "user-data"
                    absUserDataFile <- ensureParentDir userDataFile
                    renderContentToFile
                        absUserDataFile
@@ -452,17 +452,17 @@ cloudInitDirSpec =
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
-                      do m <- mkTemp "generated-content-1"
-                         u <- mkTemp "generated-content-3"
-                         u' <- ensureParentDir u
-                         renderContentToFile
-                             u'
-                             minimalUserData
-                             (Environment [])
+                      do m <- mkTemp "meta-data"
+                         u <- mkTemp "user-data"
                          m' <- ensureParentDir m
                          renderContentToFile
                              m'
                              (minimalMetaData iid)
+                             (Environment [])
+                         u' <- ensureParentDir u
+                         renderContentToFile
+                             u'
+                             minimalUserData
                              (Environment [])
               actualCmds `should've` renderMetaData
        it "copies the temporary directory to the destination directories" $
@@ -478,8 +478,8 @@ cloudInitDirSpec =
         writeCloudInitDir i "test.d"
         return i
 
-cloudInitWithContentExamples :: Spec
-cloudInitWithContentExamples =
+cloudInitWithContentSpec :: Spec
+cloudInitWithContentSpec =
     describe "compile cloudInitWithContent" $
     do it "merges meta-data" $
            cmds `should've`
@@ -488,8 +488,8 @@ cloudInitWithContentExamples =
            cmds `should've`
            (dumpToStrings (renderContentToFile udPath udContent templateVars))
   where
-    mdPath = "/abs/path//BUILD/generated-content-1-XXXX"
-    udPath = "/abs/path//BUILD/generated-content-3-XXXX"
+    mdPath = "/abs/path//BUILD/meta-data-XXXX"
+    udPath = "/abs/path//BUILD/user-data-XXXX"
     templateVars = Environment [("x","3")]
     mdContent =
         Concat

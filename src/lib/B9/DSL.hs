@@ -233,8 +233,8 @@ type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'ImageRepository    = SharedImageName
 
 type family ExportResult (a :: Artifact) :: * where
-    ExportResult 'CloudInit          = (Handle 'GeneratedContent
-                                       ,Handle 'GeneratedContent)
+    ExportResult 'CloudInit          = (Handle 'ReadOnlyFile
+                                       ,Handle 'ReadOnlyFile)
     ExportResult 'VmImage            = Handle 'ReadOnlyFile
     ExportResult 'PartitionedVmImage = Handle 'ReadOnlyFile
     ExportResult 'LocalDirectory     = Handle 'LocalDirectory
@@ -425,10 +425,8 @@ exportCloudInit
     => Handle 'CloudInit -> Handle a -> ExportSpec a -> Program (ExportResult a)
 exportCloudInit chH destH dest = do
     (metaDataH,userDataH) <- export chH ()
-    metaDataFileH <- writeContentTmp metaDataH
-    userDataFileH <- writeContentTmp userDataH
-    add destH SReadOnlyFile (fileSpec "meta-data", metaDataFileH)
-    add destH SReadOnlyFile (fileSpec "user-data", userDataFileH)
+    add destH SReadOnlyFile (fileSpec "meta-data", metaDataH)
+    add destH SReadOnlyFile (fileSpec "user-data", userDataH)
     export destH dest
 
 -- * Image import
