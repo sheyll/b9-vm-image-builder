@@ -8,6 +8,7 @@
 module B9.ExecEnv where
 
 import B9.DiskImages
+import B9.QCUtil
 import Control.Lens
 import Control.Parallel.Strategies
 import Data.Binary
@@ -16,7 +17,7 @@ import Data.Default
 import Data.Hashable
 import Data.Monoid
 import GHC.Generics (Generic)
-
+import Test.QuickCheck
 
 data ExecEnv = ExecEnv
     { envName :: String
@@ -124,3 +125,27 @@ data HostDirMnt
 instance Hashable HostDirMnt
 instance Binary HostDirMnt
 instance NFData HostDirMnt
+
+instance Arbitrary ExecEnvSpec where
+    arbitrary =
+        ExecEnvSpec <$> smaller arbitraryNiceString <*> pure LibVirtLXC <*>
+        smaller arbitrary
+
+instance Arbitrary Resources where
+    arbitrary =
+        Resources <$> smaller arbitrary <*> smaller arbitrary <*>
+        smaller arbitrary
+
+instance Arbitrary RamSize where
+    arbitrary = RamSize <$> smaller arbitrary <*> smaller arbitrary
+
+instance Arbitrary CPUArch where
+    arbitrary = Test.QuickCheck.elements [X86_64, I386]
+
+instance Arbitrary SharedDirectory where
+    arbitrary =
+        oneof
+            [ SharedDirectory <$> smaller arbitraryFilePath <*>
+              (MountPoint <$> smaller arbitraryFilePath)
+            , SharedDirectoryRO <$> smaller arbitraryFilePath <*>
+              (MountPoint <$> smaller arbitraryFilePath)]

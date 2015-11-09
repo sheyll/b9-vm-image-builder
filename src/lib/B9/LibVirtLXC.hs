@@ -284,7 +284,6 @@ fsImage (img,mnt) =
                 Raw -> ("type='loop'", "format='raw'")
                 QCow2 -> ("type='nbd'", "format='qcow2'")
                 Vmdk -> ("type='nbd'", "format='vmdk'")
-                other -> error (printf "Unsupported format: %s" (show other))
     fsImgSource (Image src _fmt _fs) = "<source file='" ++ src ++ "'/>"
 
 fsSharedDir :: SharedDirectory -> String

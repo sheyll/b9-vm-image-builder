@@ -2,6 +2,7 @@ module B9.BuilderSpec (spec) where
 
 import B9
 import B9.DSL
+import B9.FileSystems
 import System.Directory
 import Test.Hspec
 import Test.QuickCheck
@@ -65,3 +66,16 @@ extractPartitionOfQCow2 srcFile dstFile = do
     p1 <- export partImg (Nothing, MBRPartition 1)
     destI <- create SVmImage (p1, Raw)
     void $ export destI (Just dstFile, Just QCow2, Nothing)
+
+-- copyEtcPasswdOntoSharedImage :: Program ()
+-- copyEtcPasswdOntoSharedImage = do
+--   root <- fromShared "prod-el7.centos-15.3.0"
+--   e <- lxc "juhu"
+--   addFileFull e (Source NoConversion "/home/sven/Downloads/wdrhoerspielspeicher_2014-10-31_00-02.mp3") (fileSpec "/test.mp3")
+--   outImgRaw <- mount e root "/"
+
+--   rwFs <- convert outImgRaw SFileSystemImage ()
+--   vmImg <- convert rwFs  SVmImage (Just ShrinkFileSystem)
+--   vmQCow <- convert vmImg SVmImage (Just QCow2, Nothing)
+--   vmQCow `sharedAs` "juhu-out"
+-- TODO

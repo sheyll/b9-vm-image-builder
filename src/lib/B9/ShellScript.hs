@@ -6,16 +6,19 @@ module B9.ShellScript
         CmdVerbosity(..), Cwd(..), User(..), Script(..))
        where
 
+import B9.QCUtil
 import Control.Monad.Reader
 import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
+import Data.Default
 import Data.Hashable
 import Data.List ( intercalate )
 import GHC.Generics (Generic)
 import System.Directory ( getPermissions
                         , setPermissions
                         , setOwnerExecutable )
+import Test.QuickCheck
 
 data Script
     = In FilePath
@@ -44,6 +47,9 @@ instance Monoid Script where
     (Begin ss) `mappend` s' = Begin (ss ++ [s'])
     s `mappend` (Begin ss') = Begin (s : ss')
     s `mappend` s' = Begin [s, s']
+
+instance Default Script where
+    def = mempty
 
 data Cmd =
     Cmd String
@@ -188,3 +194,18 @@ cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
             Verbose -> []
             OnlyStdErr -> [">", "/dev/null"]
             Quiet -> ["&>", "/dev/null"]
+
+instance Arbitrary Script where
+    arbitrary =
+        oneof
+            [ Run <$> smaller arbitraryNiceString <*>
+              smaller (listOf arbitraryNiceString)
+            , Begin <$> smaller arbitrary
+            , In <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , As <$> smaller arbitraryNiceString <*> smaller arbitrary
+            , pure NoOP
+            , IgnoreErrors <$> smaller arbitrary <*> smaller arbitrary
+            , Verbosity <$> smaller arbitrary <*> smaller arbitrary]
+
+instance Arbitrary CmdVerbosity where
+    arbitrary = elements [Debug, Verbose, OnlyStdErr, Quiet]

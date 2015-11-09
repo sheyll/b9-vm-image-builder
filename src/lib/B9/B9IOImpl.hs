@@ -5,10 +5,14 @@ import           B9.B9IO
 import qualified B9.B9Monad as B9Monad
 import           B9.Content
 import           B9.DiskImages
+import           B9.ExecEnv
 import           B9.FileSystems
+import qualified B9.LibVirtLXC as LXC
 import           B9.MBR
 import           B9.QemuImg
 import           B9.RepositoryIO
+import           B9.ShellScript
+import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import qualified Data.ByteString as B
@@ -64,16 +68,14 @@ executeIoProg = run go
         when exists (liftIO $ removeDirectoryRecursive d)
         B9Monad.cmdRaw "mv" [s, d]
         return n
-    go (GetParentDir f k) =
-        return $ k (takeDirectory f)
+    go (GetParentDir f k) = return $ k (takeDirectory f)
     go (ReadFileSize f k) = do
         s <- liftIO $ withFile f ReadMode hFileSize
         return $ k s
     go (GetRealPath f k) = do
         f' <- liftIO $ makeAbsolute f
         return $ k f'
-    go (GetFileName f k) =
-        return $ k (takeFileName f)
+    go (GetFileName f k) = return $ k (takeFileName f)
     go (RenderContentToFile f c e n) = do
         result <- runReaderT (render c) e
         B9Monad.traceL $
@@ -116,4 +118,15 @@ executeIoProg = run go
     go (ImageRepoPublish f t sn n) = do
         let i = Image f t Ext4 -- TODO the file system should not be a parameter
         void $ shareImage i sn
+        return n
+    go (ExecuteInEnv e s d i n) = do
+        let env = ExecEnv (e ^. execEnvTitle) i d (e ^. execEnvLimits)
+        res <- LXC.runInEnvironment env s
+        when
+            (not res)
+            (fail $
+             printf
+                 "CONTAINER EXECUTION ERROR!\n== Failed to execute this script: == \n================================================================================\nIn that environment: %s\n"
+                 (toBash $ toCmds s)
+                 (show env))
         return n

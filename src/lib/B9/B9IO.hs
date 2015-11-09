@@ -7,8 +7,10 @@ module B9.B9IO where
 
 import B9.Content
 import B9.DiskImages
+import B9.ExecEnv
 import B9.FileSystems
 import B9.QCUtil
+import B9.ShellScript
 import Control.Monad.Free
 import Control.Monad.Trans.Writer.Lazy
 import System.FilePath
@@ -95,6 +97,11 @@ data Action next
                        ImageType
                        SharedImageName
                        next
+    | ExecuteInEnv ExecEnvSpec
+                   Script
+                   [SharedDirectory]
+                   [Mounted Image]
+                   next
     deriving (Functor)
 
 instance Show (Action a) where
@@ -128,6 +135,8 @@ instance Show (Action a) where
     show (ImageRepoLookup sn _) = printf "imageRepoLookup %s" (show sn)
     show (ImageRepoPublish f t n _) =
         printf "imageRepoPublish %s %s %s" f (show t) (show n)
+    show (ExecuteInEnv e s d i _) =
+        printf "executeInEnv %s %s %s %s" (show e) (show s) (show d) (show i)
 
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
@@ -257,7 +266,19 @@ imageRepoPublish :: FilePath
                  -> IoProgram ()
 imageRepoPublish f t n = liftF $ ImageRepoPublish f t n ()
 
--- * Wrap a interpreter for a 'IoProgram' such that all invokations except for
+-- * Container execution
+
+-- | Run a 'Script' in an isolated environment specified by an 'ExecEnvSpec'.
+executeInEnv :: ExecEnvSpec
+             -> Script
+             -> [SharedDirectory]
+             -> [Mounted Image]
+             -> IoProgram ()
+executeInEnv e s d i = liftF $ ExecuteInEnv e s d i ()
+
+-- * Program transformation
+
+-- | Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogTrace' are logged via 'LogTrace'.
 traceEveryAction :: IoProgram a -> IoProgram a
 traceEveryAction = run traceAction
@@ -363,6 +384,10 @@ traceEveryAction = run traceAction
         logTrace $ show a
         imageRepoPublish f t sn
         return n
+    traceAction a@(ExecuteInEnv e s d i n) = do
+        logTrace $ show a
+        executeInEnv e s d i
+        return n
 
 -- * Testing support
 
@@ -466,6 +491,9 @@ runPureDump p = runWriter $ run dump p
     dump a@(ImageRepoPublish _f _t _sn n) = do
         tell [show a]
         return n
+    dump a@(ExecuteInEnv _e _s _d _i n) = do
+        tell [show a]
+        return n
 
 arbitraryIoProgram :: Gen (IoProgram ())
 arbitraryIoProgram = arbitraryFree
@@ -525,6 +553,10 @@ instance Arbitrary a => Arbitrary (Action a) where
               smaller arbitrary
             , ImageRepoLookup <$> smaller arbitrary <*> smaller arbitrary
             , ImageRepoPublish <$> smaller arbitraryFilePath <*>
+              smaller arbitrary <*>
+              smaller arbitrary <*>
+              smaller arbitrary
+            , ExecuteInEnv <$> smaller arbitrary <*> smaller arbitrary <*>
               smaller arbitrary <*>
               smaller arbitrary <*>
               smaller arbitrary]

@@ -533,7 +533,7 @@ vmImageCreationSpec =
     do it
            "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
            let expected = do
-                   src <- mkTemp "tmp-file"
+                   src <- mkTemp "file-system-image-"
                    cf <- mkTemp "converted-img-file"
                    src' <- getRealPath src
                    cf' <- ensureParentDir cf
@@ -543,15 +543,14 @@ vmImageCreationSpec =
                    moveFile cf' dest'
                actual = do
                    -- create a raw Ext4 image
-                   rawImg <-
+                   rawFS <-
                        create
                            SFileSystemImage
                            (FileSystemSpec Ext4 "" 10 MB)
-                   rawFile <- export rawImg (Nothing, Nothing)
                    -- convert to qcow2
-                   qcow2Img <- create SVmImage (rawFile, Raw)
+                   rawImg <- convert rawFS SVmImage Nothing
                    export
-                       qcow2Img
+                       rawImg
                        ( Just "/tmp/test.qcow2"
                        , Just QCow2
                        , Just (ImageSize 3 MB))
@@ -559,9 +558,9 @@ vmImageCreationSpec =
        it
            "it converts an image from Raw to Vmdk" $
            let expected = do
-                   src <- mkTemp "tmp-file"
+                   src <- mkTemp "file-system-image-root"
                    conv <- mkTemp "converted-img-file"
-                   src' <- ensureParentDir src
+                   src' <- getRealPath src
                    conv' <- ensureParentDir conv
                    convertVmImage src' Raw conv' Vmdk
                    dest' <- ensureParentDir "/tmp/test.vmdk"
@@ -569,15 +568,13 @@ vmImageCreationSpec =
                    return ()
                actual = do
                    -- create a raw Ext4 image
-                   rawImg <-
+                   rawFS <-
                        create
                            SFileSystemImage
                            (FileSystemSpec Ext4 "root" 10 MB)
-                   rawFile <- export rawImg (Nothing, Nothing)
-                   -- convert to qcow2
-                   qcow2Img <- create SVmImage (rawFile, Raw)
+                   rawImg <- convert rawFS SVmImage Nothing
                    export
-                       qcow2Img
+                       rawImg
                        ( Just "/tmp/test.vmdk"
                        , Just Vmdk
                        , Nothing)
@@ -585,22 +582,20 @@ vmImageCreationSpec =
        it
            "copies and moves an image if neither conversion nor resize is required" $
            let actual = do
-                   rawImg <-
+                   rawFS <-
                        create
                            SFileSystemImage
                            (FileSystemSpec Ext4 "root" 10 MB)
-                   rawFile <- export rawImg (Nothing, Nothing)
-                   qcow2Img <-
-                       create SVmImage (rawFile, Raw)
+                   rawImg <- convert rawFS SVmImage Nothing
                    export
-                       qcow2Img
+                       rawImg
                        ( Just "/tmp/dest.raw"
                        , Nothing
                        , Nothing)
                expected = do
-                   raw <- mkTemp "tmp-file"
+                   src <- mkTemp "file-system-image-root"
                    tmp <- mkTemp "tmp-file"
-                   raw' <- getRealPath raw
+                   raw' <- getRealPath src
                    tmp' <- ensureParentDir tmp
                    copy raw' tmp'
                    dst <- ensureParentDir "/tmp/dest.raw"
@@ -725,78 +720,64 @@ containerExecutionSpec =
               dest' <- ensureParentDir dest
               moveFile conv' dest'
        it "copies one added file into a directory to mount" $
-           shouldDoIo
-               testProg
-               (do
-                   -- create a tmp dir that will containa all included files
-                   -- with unique names. this directory will be bind mounted in
-                   -- the container. all added files are exported and the
-                   -- resulting files are moved to new temp files in the tmp dir
-                   -- from above. the tmp dir artifact is an incoming dependency
-                   -- of the execution environment.
-                   incDir <- mkTempDir "included-files"
-                   copyOfFile1 <- mkTemp "tmp-file"
-                   includedFile1 <- mkTempIn incDir "added-file"
-                   -- export the ReadOnlyFile "/etc/passwd":
-                   realPathFile1 <- getRealPath "/etc/passwd"
-                   realPathCopyOfFile1 <- ensureParentDir copyOfFile1
-                   copy realPathFile1 realPathCopyOfFile1
-                   -- move the exported file into the mounted directory for inclusion
-                   realPathIncFile1 <- ensureParentDir includedFile1
-                   moveFile realPathCopyOfFile1 realPathIncFile1)
-       it "copies both added file into a directory to mount" $
-           shouldDoIo
-               testProg
-               (do incDir <- mkTempDir "included-files"
-                   copyOfFile1 <- mkTemp "tmp-file"
-                   includedFile1 <- mkTempIn incDir "added-file"
-                   copyOfFile2 <- mkTemp "tmp-file"
-                   includedFile2 <- mkTempIn incDir "added-file"
-                   -- copy file 1
-                   realPathFile1 <- getRealPath "/etc/passwd"
-                   realPathCopyOfFile1 <- ensureParentDir copyOfFile1
-                   copy realPathFile1 realPathCopyOfFile1
-                   -- copy file 2
-                   realPathFile2 <- getRealPath "/etc/issue"
-                   realPathCopyOfFile2 <- ensureParentDir copyOfFile2
-                   copy realPathFile2 realPathCopyOfFile2
-                   -- move file 1
-                   realPathIncFile1 <- ensureParentDir includedFile1
-                   moveFile realPathCopyOfFile1 realPathIncFile1
-                   -- move file 2
-                   realPathIncFile2 <- ensureParentDir includedFile2
-                   moveFile realPathCopyOfFile2 realPathIncFile2)
-       it "generates a script to copy, chmod and chown the added files" $
-           shouldDoIo
-               testProg
-               (do buildId <- getBuildId
-                   incDir <- mkTempDir "included-files"
-                   inc1 <- mkTempIn incDir "added-file"
-                   inc2 <- mkTempIn incDir "added-file"
-                   conv <- mkTemp "converted-img-file"
-                   conv' <- ensureParentDir conv
-                   inc1' <- ensureParentDir inc1
-                   inc2' <- ensureParentDir inc2
-                   let addScript =
-                           copyIncludedFile
-                               (includedFileGuestFilePath buildId inc1)
-                               testFileSpec1 <>
-                           copyIncludedFile
-                               (includedFileGuestFilePath buildId inc1)
-                               testFileSpec2
-                   executeInEnv envSpec [])
-       it "runs all added scripts" $ shouldDoIo testProg (do fail "todo")
-
-includedFileGuestFilePath :: String -> FilePath -> FilePath
-includedFileGuestFilePath buildId includedFile =
-    "/" ++ buildId </> "included-files" </> takeFileName includedFile
-
-copyIncludedFile :: FilePath -> FileSpec -> Script
-copyIncludedFile src (FileSpec destPath (s,u,g,o) userName groupName) =
-    Begin
-        [ Run "cp" [src, destPath]
-        , Run "chmod" [printf "%d%d%d%d" s u g o, destPath]
-        , Run "chown" [printf "%s:%s" userName groupName]]
+           shouldDoIo testProg $
+           do incDir <- mkTempDir "included-files"
+              includedFile1 <- mkTempIn incDir "added-file"
+              -- export the ReadOnlyFile "/etc/passwd":
+              realPathFile1 <- getRealPath "/etc/passwd"
+              realPathCopyOfFile1 <- ensureParentDir includedFile1
+              copy realPathFile1 realPathCopyOfFile1
+       it "copies all added files into a directory to mount" $
+           shouldDoIo testProg $
+           do incDir <- mkTempDir "included-files"
+              includedFile1 <- mkTempIn incDir "added-file"
+              includedFile2 <- mkTempIn incDir "added-file"
+              -- copy file 1
+              realPathFile1 <- getRealPath "/etc/passwd"
+              realPathCopyOfFile1 <- ensureParentDir includedFile1
+              copy realPathFile1 realPathCopyOfFile1
+              -- copy file 2
+              realPathFile2 <- getRealPath "/etc/issue"
+              realPathCopyOfFile2 <- ensureParentDir includedFile2
+              copy realPathFile2 realPathCopyOfFile2
+       it "generates a script to copy, chmod and chown all added files" $
+           shouldDoIo testProg $
+           do buildId <- B9.B9IO.getBuildId
+              incDir <- mkTempDir "included-files"
+              inc1 <- mkTempIn incDir "added-file"
+              inc2 <- mkTempIn incDir "added-file"
+              dest <- mkTemp "resized-img-file"
+              let incScript =
+                      incFileScript buildId inc2 testFileSpec2 <>
+                      incFileScript buildId inc1 testFileSpec1
+              executeInEnv
+                  envSpec
+                  incScript
+                  [ SharedDirectoryRO
+                        incDir
+                        (MountPoint $ includedFileContainerPath buildId)]
+                  [(Image dest Raw Ext4, MountPoint "/")]
+       it "creates the output image AFTER script execution" $
+           shouldDoIo testProg $
+           do buildId <- B9.B9IO.getBuildId
+              incDir <- mkTempDir "included-files"
+              inc1 <- mkTempIn incDir "added-file"
+              inc2 <- mkTempIn incDir "added-file"
+              tmpImg <- mkTemp "tmp-file"
+              destImg <- mkTemp "resized-img-file"
+              let incScript =
+                      incFileScript buildId inc2 testFileSpec2 <>
+                      incFileScript buildId inc1 testFileSpec1
+              executeInEnv
+                  envSpec
+                  incScript
+                  [ SharedDirectoryRO
+                        incDir
+                        (MountPoint $ includedFileContainerPath buildId)]
+                  [(Image destImg Raw Ext4, MountPoint "/")]
+              tmpImg' <- ensureParentDir tmpImg
+              destImg' <- ensureParentDir destImg
+              moveFile tmpImg' destImg'
 
 -- * DSL examples
 
@@ -824,7 +805,7 @@ dslExample1 = do
     {-
     img <- from "schlupfi"
     mountDir e "/tmp" "/mnt/HOST_TMP"
-    share img "wupfi"
+    sharedAs img "wupfi"
     resize img 64 GB
     resizeToMinimum img
     -}

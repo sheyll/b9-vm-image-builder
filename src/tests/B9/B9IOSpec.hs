@@ -4,6 +4,7 @@ import B9.B9IO
 import B9.Content
 import B9.DiskImages
 import B9.FileSystems
+import Data.Default
 import Data.List
 import System.FilePath
 import Test.Hspec
@@ -112,6 +113,9 @@ actionSpec =
            dumpToStrings
                (imageRepoPublish "test" QCow2 (SharedImageName "dst")) `shouldBe`
            ["imageRepoPublish test QCow2 SharedImageName \"dst\""]
+       it "handles ExecuteInEnv" $
+           dumpToStrings (executeInEnv def def def def) `shouldBe`
+           [ "executeInEnv ExecEnvSpec {_execEnvTitle = \"exec-env\", _execEnvHypervisor = LibVirtLXC, _execEnvLimits = Resources {maxMemory = AutomaticRamSize, cpuCount = 2, cpuArch = X86_64}} NoOP [] []"]
        it "handles any program, really" $
            property $
            do prog <- arbitraryIoProgram

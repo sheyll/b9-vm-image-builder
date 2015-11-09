@@ -38,45 +38,61 @@ data BuildStep next where
             Handle a -> UpdateSpec a -> next -> BuildStep next
         Add ::
             (CanAdd env a, Show (AddSpec a), Show (AddResult a)) =>
-            Handle env -> SArtifact a -> AddSpec a -> (AddResult a -> next) -> BuildStep next
+            Handle env ->
+              SArtifact a -> AddSpec a -> (AddResult a -> next) -> BuildStep next
+        Convert ::
+            (CanConvert a b, Show (ConvSpec a b)) =>
+            Handle a ->
+              SArtifact b ->
+                ConvSpec a b -> (Handle b -> next) -> BuildStep next
         Export ::
             (Show (ExportSpec a), Show (ExportResult a)) =>
-            Handle a -> ExportSpec a -> (ExportResult a -> next) -> BuildStep next
+            Handle a ->
+              ExportSpec a -> (ExportResult a -> next) -> BuildStep next
 
 instance Functor BuildStep where
     fmap f (Create sa src k) = Create sa src (f . k)
     fmap f (Update hnd upd next) = Update hnd upd (f next)
-    fmap f (Add hndEnv sa importSpec k) = Add hndEnv sa importSpec (f . k)
+    fmap f (Add hndEnv sa addSpec k) = Add hndEnv sa addSpec (f . k)
+    fmap f (Convert hA sB conv k) = Convert hA sB conv (f . k)
     fmap f (Export hnd out k) = Export hnd out (f . k)
 
 type Program a = Free BuildStep a
 
 -- ---------------------------------------------------------
 
--- | Create an artifact and return a handle for that artifact.
+-- | Create an artifact.
 create
     :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
 create sa src = liftF $ Create sa src id
 
--- | A build step the updates an object referenced by a handle from according to
--- an update specification.
+-- | Update an artifact according to an update specification.
 update
     :: (Show (UpdateSpec a))
     => Handle a -> UpdateSpec a -> Program ()
 update hnd upd = liftF $ Update hnd upd ()
 
--- | A build step that adds an artifact to an environment using an 'ImportSpec'.
+-- | Add an artifact to another artifact.
 add
     :: (CanAdd env b, Show (AddResult b), Show (AddSpec b))
     => Handle env -> SArtifact b -> AddSpec b -> Program (AddResult b)
 add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec id
 
--- | A build step the exports an object referenced by a handle a to an output.
+-- | Convert an artifact referenced by a handle to a different kind
+--  of artifact and return the handle of the new artifact.
+convert
+    :: (CanConvert a b, Show (ConvSpec a b))
+    => Handle a -> SArtifact b -> ConvSpec a b -> Program (Handle b)
+convert hA sB convSpec = liftF $ Convert hA sB convSpec id
+
+-- | Exports an artifact referenced by a handle a to a /real/ output,
+-- i.e. something that is not necessarily referenced to by 'Handle'.
 export
     :: (Show (ExportSpec a), Show (ExportResult a))
     => Handle a -> ExportSpec a -> Program (ExportResult a)
 export hnd out = liftF $ Export hnd out id
+
 
 -- ---------------------------------------------------------
 
@@ -99,6 +115,7 @@ data Artifact
     | LocalDirectory
     | ReadOnlyFile
     | FileSystemImage
+    | FileSystemImageRO
     | ImageRepository
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
@@ -122,6 +139,7 @@ data SArtifact k where
     SLocalDirectory       :: SArtifact 'LocalDirectory
     SReadOnlyFile         :: SArtifact 'ReadOnlyFile
     SFileSystemImage      :: SArtifact 'FileSystemImage
+    SFileSystemImageRO    :: SArtifact 'FileSystemImageRO
     SImageRepository      :: SArtifact 'ImageRepository
 
 instance Show (SArtifact k) where
@@ -143,6 +161,7 @@ instance Show (SArtifact k) where
     show SLocalDirectory       = "LocalDirectory"
     show SReadOnlyFile         = "ReadOnlyFile"
     show SFileSystemImage      = "FileSystemImage"
+    show SFileSystemImageRO    = "FileSystemImageRO"
     show SImageRepository      = "ImageRepository"
 
 instance Eq (SArtifact k) where
@@ -168,8 +187,10 @@ singletonHandle sa = Handle sa (show sa)
 handle :: SArtifact a -> String -> Handle a
 handle = Handle
 
+-- * Creation type families
+
 type family CreateSpec (a :: Artifact) :: * where
-    CreateSpec 'VmImage              = (Handle 'ReadOnlyFile, ImageType)
+    CreateSpec 'VmImage              = (FilePath, ImageType)
     CreateSpec 'UpdateServerRoot     = Handle 'LocalDirectory
     CreateSpec 'PartitionedVmImage   = Handle 'ReadOnlyFile
     CreateSpec 'CloudInit            = String
@@ -179,8 +200,12 @@ type family CreateSpec (a :: Artifact) :: * where
     CreateSpec 'ReadOnlyFile         = FilePath
     CreateSpec 'FileSystemImage      = FileSystemSpec
 
+-- * Update type families
+
 type family UpdateSpec (a :: Artifact) :: * where
     UpdateSpec 'GeneratedContent = Content
+
+-- * Add type families
 
 type family AddSpec (a :: Artifact) :: * where
     AddSpec 'Documentation     = String
@@ -217,6 +242,35 @@ type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool where
     CanAddP 'ImageRepository 'SharedVmImage         = 'True
     CanAddP 'UpdateServerRoot 'SharedVmImage        = 'True
     CanAddP env a                                   = 'False
+
+-- * Conversion type families
+
+type family CanConvertP (a :: Artifact) (b :: Artifact) :: Bool where
+    CanConvertP 'ReadOnlyFile 'FileSystemImageRO = 'True
+    CanConvertP 'ReadOnlyFile 'VmImage = 'True
+    CanConvertP 'ReadOnlyFile 'ReadOnlyFile = 'True
+    CanConvertP 'VmImage 'FileSystemImageRO = 'True
+    CanConvertP 'VmImage 'ReadOnlyFile = 'True
+    CanConvertP 'VmImage 'VmImage = 'True
+    CanConvertP 'FileSystemImageRO 'VmImage = 'True
+    CanConvertP 'FileSystemImageRO 'ReadOnlyFile = 'True
+    CanConvertP 'FileSystemImageRO 'FileSystemImageRO = 'True
+    CanConvertP 'FileSystemImage 'ReadOnlyFile = 'True
+    CanConvertP 'FileSystemImage 'VmImage = 'True
+    CanConvertP a b = 'False
+
+type CanConvert a b = CanConvertP a b ~ 'True
+
+type family ConvSpec (a :: Artifact) (b :: Artifact) :: * where
+    ConvSpec 'ReadOnlyFile 'FileSystemImageRO = FileSystem
+    ConvSpec 'ReadOnlyFile 'VmImage = ImageType
+    ConvSpec 'VmImage 'VmImage = (Maybe ImageType, Maybe ImageSize)
+    ConvSpec 'FileSystemImage 'VmImage = Maybe FileSystemResize
+    ConvSpec 'FileSystemImageRO 'FileSystemImageRO = Maybe FileSystemResize
+    ConvSpec a 'ReadOnlyFile = Maybe String
+    ConvSpec a b = ()
+
+-- * Export type families
 
 type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'CloudInit          = ()
@@ -526,6 +580,9 @@ interpret = foldFree runInterpreter
     runInterpreter (Add hnde sa addSpec k) = do
         res <- runAdd hnde sa addSpec
         return (k res)
+    runInterpreter (Convert hA sB conv k) = do
+        res <- runConvert hA sB conv
+        return (k res)
     runInterpreter (Export hnd out k) = do
         res <- runExport hnd out
         return (k res)
@@ -541,6 +598,9 @@ class (Monad f) => Interpreter f  where
     runAdd
         :: (Show (AddSpec a), Show (AddResult a))
         => Handle env -> SArtifact a -> AddSpec a -> f (AddResult a)
+    runConvert
+        :: (Show (ConvSpec a b))
+        => Handle a -> SArtifact b -> ConvSpec a b -> f (Handle b)
     runExport
         :: (Show (ExportSpec a), Show (ExportResult a))
         => Handle a -> ExportSpec a -> f (ExportResult a)

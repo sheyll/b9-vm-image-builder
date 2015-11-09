@@ -126,9 +126,9 @@ data VmImgCtx = VmImgCtx
 
 -- | Context of a 'ExecutionEnvironment'
 data ExecEnvCtx = ExecEnvCtx
-    { _execImages :: Map.Map FilePath (Handle 'VmImage)
-    , _execHostMounts :: ()
-    , _execScripts :: ()
+    { _execImages :: [Mounted Image]
+    , _execBindMounts :: [SharedDirectory]
+    , _execScript :: Script
     , _execIncFiles :: [(FilePath, FileSpec)]
     , _execIncDir :: FilePath
     , _execEnvSpec :: ExecEnvSpec
@@ -319,8 +319,9 @@ instance Interpreter IoCompiler where
         (hnd,_) <- allocHandle SReadOnlyFile fn
         roFiles . at hnd ?= RofCtx fn
         return hnd
-    runCreate SVmImage (srcFileH,vmt) = do
+    runCreate SVmImage (srcFile,vmt) = do
         (hnd,_) <- allocHandle SVmImage ("vm-image-" ++ show vmt)
+        srcFileH <- runCreate SReadOnlyFile srcFile
         vmImages . at hnd ?= VmImgCtx srcFileH vmt
         srcFileH --> hnd
         return hnd
@@ -337,11 +338,23 @@ instance Interpreter IoCompiler where
     runCreate SExecutionEnvironment e = do
         (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
         incDir <- lift $ mkTempDir "included-files"
+        buildId <- lift $ B9.B9IO.getBuildId
         execEnvs . at hnd ?=
             (def &~
              do execEnvSpec .= e
-                execIncDir .= incDir)
-        addAction hnd $ do return ()
+                execIncDir .= incDir
+                execBindMounts .=
+                    [ SharedDirectoryRO
+                          incDir
+                          (MountPoint $ includedFileContainerPath buildId)])
+        addAction hnd $
+            do Just es <- view (execEnvs . at hnd)
+               lift $
+                   executeInEnv
+                       (es ^. execEnvSpec)
+                       (es ^. execScript)
+                       (es ^. execBindMounts)
+                       (es ^. execImages)
         return hnd
     runCreate sa _src =
         fail $ printf "Create %s: Not Yet Implemented" (show sa)
@@ -420,29 +433,116 @@ instance Interpreter IoCompiler where
                    (FromString (printf "%s-%s" bId bT))
                    (Environment [])
         return ()
-    runAdd hnd@(Handle SExecutionEnvironment _) SMountedVmImage (imgH,MountPoint mp) = do
-        imgH --> hnd
-        imgFileToMount <- runExport imgH (Nothing, Just Raw, Nothing)
-        hnd --> imgFileToMount
-        runCreate SVmImage (imgFileToMount, Raw)
+    runAdd hnd@(Handle SExecutionEnvironment _) SMountedVmImage (imgH,mp) = do
+        rawImgH <- runConvert imgH SVmImage (Just Raw, Nothing)
+        rawImgH --> hnd
+        Just (VmImgCtx rawImgFileH srcType) <- use $ vmImages . at rawImgH
+        Just (RofCtx rawImgFile) <- use $ roFiles . at rawImgFileH
+        (execEnvs . at hnd . traverse . execImages) <>=
+            [(Image rawImgFile Raw Ext4, mp)] -- TODO pass along or get rid of the file system type!
+        outH <- runConvert rawImgH SVmImage (Nothing, Nothing)
+        hnd --> outH
+        return outH
     runAdd hnd@(Handle SExecutionEnvironment _) SMountedHostDir mnts = do
         return ()
     runAdd hnd@(Handle SExecutionEnvironment _) SExecutableScript cmds = do
         return ()
     runAdd hnd@(Handle SExecutionEnvironment _) SReadOnlyFile (destSpec,srcH) = do
-        copyOfSrcH <- runExport srcH Nothing
-        Just (RofCtx copyOfSrcPath) <- use $ roFiles . at copyOfSrcH
+        srcH --> hnd
         Just eCxt <- use $ execEnvs . at hnd
         incFile <- lift $ mkTempIn (eCxt ^. execIncDir) "added-file"
+        void $ runExport srcH (Just incFile)
         (execEnvs . at hnd . traverse . execIncFiles) <>= [(incFile, destSpec)]
-        copyOfSrcH --> hnd
-        addAction hnd $ lift $
-            do realPathCopyOfSrcPath <- getRealPath copyOfSrcPath
-               realPathIncFile <- ensureParentDir incFile
-               moveFile realPathCopyOfSrcPath realPathIncFile
+        bId <- lift $ B9.B9IO.getBuildId
+        (execEnvs . at hnd . traverse . execScript) <>=
+            incFileScript bId incFile destSpec
         return ()
     runAdd hnde sa _src =
         fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)
+    -- Conversion
+    runConvert hnd@(Handle SReadOnlyFile _) SReadOnlyFile mTempName = do
+        Just (RofCtx srcFile) <- use $ roFiles . at hnd
+        destFile <- lift $ mkTemp $ "tmp-file" `fromMaybe` mTempName
+        outH <- runCreate SReadOnlyFile destFile
+        hnd --> outH
+        addAction outH $ lift $ copyReadOnlyFile srcFile destFile
+        return outH
+    runConvert hnd@(Handle SVmImage _) SReadOnlyFile mTempName = do
+        Just (VmImgCtx srcFileH _srcType) <- use $ vmImages . at hnd
+        outH <- runConvert srcFileH SReadOnlyFile mTempName
+        hnd --> outH
+        return outH
+    runConvert hnd@(Handle SReadOnlyFile _) SVmImage imgT = do
+        imgH <- runCreate SVmImage (hnd, imgT)
+        hnd --> imgH
+        return imgH
+    -- runConvert hnd@(Handle SVmImage _) SFileSystemImageRO () = do
+    --     hnd' <- runConvert hnd SVmImage (Just Raw, Nothing)
+    --     Just (VmImgCtx srcFileH Raw) <- use $ vmImages . at hnd'
+    --     runConvert srcFileH SFileSystemImage Ext4 -- TODO
+    runConvert hnd@(Handle SFileSystemImage _) SVmImage mDestSize = do
+        Just fileSys <- use $ fileSystems . at hnd
+        let srcH = fileSys ^. fsFileH
+            srcT = fileSys ^. fsType
+        tmpH <-
+            case mDestSize of
+                Nothing -> return srcH
+                Just destSize -> do
+                    tmpFile <- lift $ mkTemp "file-system-resize"
+                    tmpH <- runExport srcH (Just tmpFile)
+                    addAction tmpH $ lift $
+                        resizeFileSystem tmpFile destSize srcT
+                    return tmpH
+        runCreate SVmImage (tmpH, Raw)
+    runConvert hnd@(Handle SVmImage _) SVmImage (mDestType,mDestSize) = do
+        -- Convert the image from the source file to a temp file:
+        Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at hnd
+        (destType,convertedH) <-
+            case mDestType of
+                Just destType
+                  | destType /= srcType -> do
+                      Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
+                      convertedFile <- lift $ mkTemp "converted-img-file"
+                      convertedH <- runCreate SReadOnlyFile convertedFile
+                      srcFileH --> convertedH
+                      addAction convertedH $ lift $
+                          do srcFile' <- getRealPath srcFile
+                             convertedFile' <- ensureParentDir convertedFile
+                             convertVmImage
+                                 srcFile'
+                                 srcType
+                                 convertedFile'
+                                 destType
+                      return (destType, convertedH)
+                _ -> do
+                    convertedH <- runExport srcFileH Nothing
+                    return (srcType, convertedH)
+        hnd --> convertedH
+        Just (RofCtx convertedFile) <- use $ roFiles . at convertedH
+        -- Resize the temp file and move it to the destination:
+        sequence_ $
+            do (ImageSize destSize destSizeU) <- mDestSize
+               return $ addAction convertedH $ lift $
+                   do convertedFile' <- ensureParentDir convertedFile
+                      resizeVmImage
+                          convertedFile'
+                          destSize
+                          destSizeU
+                          (fromMaybe srcType mDestType)
+        -- Move the temp file to the destination:
+        destFile <- lift $ mkTemp "resized-img-file"
+        addAction convertedH $ lift $
+            do convertedFile' <- getRealPath convertedFile
+               destFile' <- ensureParentDir destFile
+               moveFile convertedFile' destFile'
+        destH <- runCreate SReadOnlyFile destFile
+        convertedH --> destH
+        outH <- runCreate SVmImage (destH, destType)
+        hnd --> outH
+        return outH
+    runConvert hA sB _src =
+        fail $
+        printf "Convert %s -> %s: Not Yet Implemented" (show hA) (show sB)
     -- Export
     runExport hnd@(Handle SCloudInit _) () = do
         Just ciCtxInitial <- use $ ci . at hnd
@@ -496,7 +596,6 @@ instance Interpreter IoCompiler where
                       Just (RofCtx srcFile) <- use $ roFiles . at srcFileH
                       convertedFile <- lift $ mkTemp "converted-img-file"
                       convertedH <- runCreate SReadOnlyFile convertedFile
-                      srcFileH --> convertedH
                       addAction convertedH $ lift $
                           do srcFile' <- getRealPath srcFile
                              convertedFile' <- ensureParentDir convertedFile
@@ -507,6 +606,7 @@ instance Interpreter IoCompiler where
                                  destType
                       return convertedH
                 _ -> runExport srcFileH Nothing
+        hnd --> convertedH
         Just (RofCtx convertedFile) <- use $ roFiles . at convertedH
         -- Resize the temp file and move it to the destination:
         sequence_ $
@@ -631,6 +731,25 @@ h --> h' = do
 -- | Return the vertex of a handle.
 lookupVertex :: Handle a -> IoCompiler (Maybe Graph.Vertex)
 lookupVertex h = use $ hToV . at (SomeHandle h)
+
+-- | Generate a 'Script' that copies an included file in a
+-- container from the mounted directory to the actual destination.
+incFileScript :: String -> FilePath -> FileSpec -> Script
+incFileScript buildId tmpIncFile fSpec =
+    Begin
+        [ Run "cp" [srcPath, destPath]
+        , Run "chmod" [printf "%d%d%d%d" s u g o, destPath]
+        , Run "chown" [printf "%s:%s" userName groupName, destPath]]
+  where
+    (FileSpec destPath (s,u,g,o) userName groupName) = fSpec
+    srcPath = includedFileContainerPath buildId </> incFile
+    incFile = takeFileName tmpIncFile
+
+-- | Return the mount point for files from the build host to be
+-- included in the container.
+includedFileContainerPath :: String -> FilePath
+includedFileContainerPath buildId =
+    "/" ++ buildId <.> "mnt" </> "included-files"
 
 -- * Support for 'IoProgBuilder's
 
