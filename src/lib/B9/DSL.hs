@@ -3,8 +3,8 @@ module B9.DSL where
 
 import B9.Content
        (SourceFile(..), Content(..), FileSpec(..), AST(..),
-        YamlObject(..), FileSpec, fileSpec, fileSpecPermissions,
-        SourceFileConversion(..))
+        YamlObject(..), FileSpec, fileSpec, fileSpecPath,
+        fileSpecPermissions, SourceFileConversion(..))
 import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
@@ -41,21 +41,20 @@ data BuildStep next where
             Handle env ->
               SArtifact a -> AddSpec a -> (AddResult a -> next) -> BuildStep next
         Convert ::
-            (CanConvert a b, Show (ConvSpec a b)) =>
+            (Show (ConvSpec a b)) =>
             Handle a ->
-              SArtifact b ->
-                ConvSpec a b -> (Handle b -> next) -> BuildStep next
+              SArtifact b -> ConvSpec a b -> (Handle b -> next) -> BuildStep next
         Export ::
             (Show (ExportSpec a), Show (ExportResult a)) =>
             Handle a ->
               ExportSpec a -> (ExportResult a -> next) -> BuildStep next
 
 instance Functor BuildStep where
-    fmap f (Create sa src k) = Create sa src (f . k)
-    fmap f (Update hnd upd next) = Update hnd upd (f next)
+    fmap f (Create sa src k)         = Create sa src (f . k)
+    fmap f (Update hnd upd next)     = Update hnd upd (f next)
     fmap f (Add hndEnv sa addSpec k) = Add hndEnv sa addSpec (f . k)
-    fmap f (Convert hA sB conv k) = Convert hA sB conv (f . k)
-    fmap f (Export hnd out k) = Export hnd out (f . k)
+    fmap f (Convert hA sB conv k)    = Convert hA sB conv (f . k)
+    fmap f (Export hnd out k)        = Export hnd out (f . k)
 
 type Program a = Free BuildStep a
 
@@ -63,33 +62,33 @@ type Program a = Free BuildStep a
 
 -- | Create an artifact.
 create
-    :: (Show (CreateSpec a))
+ :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
 create sa src = liftF $ Create sa src id
 
 -- | Update an artifact according to an update specification.
 update
-    :: (Show (UpdateSpec a))
+ :: (Show (UpdateSpec a))
     => Handle a -> UpdateSpec a -> Program ()
 update hnd upd = liftF $ Update hnd upd ()
 
 -- | Add an artifact to another artifact.
 add
-    :: (CanAdd env b, Show (AddResult b), Show (AddSpec b))
+ :: (CanAdd env b, Show (AddResult b), Show (AddSpec b))
     => Handle env -> SArtifact b -> AddSpec b -> Program (AddResult b)
 add hndEnv sa importSpec = liftF $ Add hndEnv sa importSpec id
 
 -- | Convert an artifact referenced by a handle to a different kind
 --  of artifact and return the handle of the new artifact.
 convert
-    :: (CanConvert a b, Show (ConvSpec a b))
+ :: (Show (ConvSpec a b))
     => Handle a -> SArtifact b -> ConvSpec a b -> Program (Handle b)
 convert hA sB convSpec = liftF $ Convert hA sB convSpec id
 
 -- | Exports an artifact referenced by a handle a to a /real/ output,
 -- i.e. something that is not necessarily referenced to by 'Handle'.
 export
-    :: (Show (ExportSpec a), Show (ExportResult a))
+ :: (Show (ExportSpec a), Show (ExportResult a))
     => Handle a -> ExportSpec a -> Program (ExportResult a)
 export hnd out = liftF $ Export hnd out id
 
@@ -97,7 +96,7 @@ export hnd out = liftF $ Export hnd out id
 -- ---------------------------------------------------------
 
 data Artifact
-    = VmImage
+ = VmImage
     | UpdateServerRoot
     | SharedVmImage
     | PartitionedVmImage
@@ -113,9 +112,10 @@ data Artifact
     | GeneratedContent
     | VariableBindings
     | LocalDirectory
-    | ReadOnlyFile
+    | ExternalFile
+    | FreeFile
+    | FileSystemBuilder
     | FileSystemImage
-    | FileSystemImageRO
     | ImageRepository
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
@@ -137,9 +137,10 @@ data SArtifact k where
     SGeneratedContent     :: SArtifact 'GeneratedContent
     SVariableBindings     :: SArtifact 'VariableBindings
     SLocalDirectory       :: SArtifact 'LocalDirectory
-    SReadOnlyFile         :: SArtifact 'ReadOnlyFile
-    SFileSystemImage      :: SArtifact 'FileSystemImage
-    SFileSystemImageRO    :: SArtifact 'FileSystemImageRO
+    SExternalFile         :: SArtifact 'ExternalFile
+    SFreeFile            :: SArtifact 'FreeFile
+    SFileSystemBuilder      :: SArtifact 'FileSystemBuilder
+    SFileSystemImage    :: SArtifact 'FileSystemImage
     SImageRepository      :: SArtifact 'ImageRepository
 
 instance Show (SArtifact k) where
@@ -159,9 +160,10 @@ instance Show (SArtifact k) where
     show SGeneratedContent     = "GeneratedContent"
     show SVariableBindings     = "VariableBindings"
     show SLocalDirectory       = "LocalDirectory"
-    show SReadOnlyFile         = "ReadOnlyFile"
-    show SFileSystemImage      = "FileSystemImage"
-    show SFileSystemImageRO    = "FileSystemImageRO"
+    show SExternalFile         = "ExternalFile"
+    show SFreeFile            = "FreeFile"
+    show SFileSystemBuilder      = "FileSystemBuilder"
+    show SFileSystemImage    = "FileSystemImage"
     show SImageRepository      = "ImageRepository"
 
 instance Eq (SArtifact k) where
@@ -192,13 +194,15 @@ handle = Handle
 type family CreateSpec (a :: Artifact) :: * where
     CreateSpec 'VmImage              = (FilePath, ImageType)
     CreateSpec 'UpdateServerRoot     = Handle 'LocalDirectory
-    CreateSpec 'PartitionedVmImage   = Handle 'ReadOnlyFile
+    CreateSpec 'PartitionedVmImage   = FilePath
     CreateSpec 'CloudInit            = String
-    CreateSpec 'ExecutionEnvironment = ExecEnvSpec
     CreateSpec 'GeneratedContent     = Content
     CreateSpec 'LocalDirectory       = ()
-    CreateSpec 'ReadOnlyFile         = FilePath
-    CreateSpec 'FileSystemImage      = FileSystemSpec
+    CreateSpec 'FileSystemImage      = (FilePath, FileSystem)
+    CreateSpec 'FileSystemBuilder    = FileSystemSpec
+    CreateSpec 'ExternalFile         = FilePath
+    CreateSpec 'ExecutionEnvironment = ExecEnvSpec
+    CreateSpec 'FreeFile             = Maybe String
 
 -- * Update type families
 
@@ -209,12 +213,11 @@ type family UpdateSpec (a :: Artifact) :: * where
 
 type family AddSpec (a :: Artifact) :: * where
     AddSpec 'Documentation     = String
-    AddSpec 'GeneratedContent  = Handle 'GeneratedContent
-    AddSpec 'ReadOnlyFile      = (FileSpec, Handle 'ReadOnlyFile)
+    AddSpec 'TemplateVariable  = (String, String)
+    AddSpec 'FreeFile          = (FileSpec, Handle 'FreeFile)
     AddSpec 'ExecutableScript  = Script
     AddSpec 'MountedHostDir    = Mounted HostDirMnt
     AddSpec 'MountedVmImage    = Mounted (Handle 'VmImage)
-    AddSpec 'TemplateVariable  = (String, String)
     AddSpec 'CloudInitMetaData = AST Content YamlObject
     AddSpec 'CloudInitUserData = AST Content YamlObject
     AddSpec 'SharedVmImage     = (SharedImageName, Handle 'VmImage)
@@ -226,77 +229,58 @@ type family AddResult (a :: Artifact) :: * where
 type CanAdd env a = CanAddP env a ~ 'True
 
 type family CanAddP (env :: Artifact) (a :: Artifact) :: Bool where
-    CanAddP 'ExecutionEnvironment 'MountedHostDir   = 'True
-    CanAddP 'ExecutionEnvironment 'MountedVmImage   = 'True
-    CanAddP 'ExecutionEnvironment 'ExecutableScript = 'True
-    CanAddP 'ExecutionEnvironment 'ReadOnlyFile     = 'True
-    CanAddP 'GeneratedContent 'GeneratedContent     = 'True
-    CanAddP 'CloudInit 'ReadOnlyFile                = 'True
+    CanAddP 'Documentation 'Documentation           = 'True
+    CanAddP 'VariableBindings 'TemplateVariable     = 'True
+    CanAddP 'LocalDirectory 'FreeFile               = 'True
+    CanAddP 'FileSystemBuilder 'FreeFile            = 'True
     CanAddP 'CloudInit 'ExecutableScript            = 'True
     CanAddP 'CloudInit 'CloudInitMetaData           = 'True
     CanAddP 'CloudInit 'CloudInitUserData           = 'True
-    CanAddP 'LocalDirectory 'ReadOnlyFile           = 'True
-    CanAddP 'FileSystemImage 'ReadOnlyFile          = 'True
-    CanAddP 'VariableBindings 'TemplateVariable     = 'True
-    CanAddP 'Documentation 'Documentation           = 'True
+    CanAddP 'CloudInit 'FreeFile                    = 'True
     CanAddP 'ImageRepository 'SharedVmImage         = 'True
     CanAddP 'UpdateServerRoot 'SharedVmImage        = 'True
+    CanAddP 'ExecutionEnvironment 'MountedVmImage   = 'True
+    CanAddP 'ExecutionEnvironment 'MountedHostDir   = 'True
+    CanAddP 'ExecutionEnvironment 'ExecutableScript = 'True
+    CanAddP 'ExecutionEnvironment 'FreeFile         = 'True
     CanAddP env a                                   = 'False
 
 -- * Conversion type families
 
-type family CanConvertP (a :: Artifact) (b :: Artifact) :: Bool where
-    CanConvertP 'ReadOnlyFile 'FileSystemImageRO = 'True
-    CanConvertP 'ReadOnlyFile 'VmImage = 'True
-    CanConvertP 'ReadOnlyFile 'ReadOnlyFile = 'True
-    CanConvertP 'VmImage 'FileSystemImageRO = 'True
-    CanConvertP 'VmImage 'ReadOnlyFile = 'True
-    CanConvertP 'VmImage 'VmImage = 'True
-    CanConvertP 'FileSystemImageRO 'VmImage = 'True
-    CanConvertP 'FileSystemImageRO 'ReadOnlyFile = 'True
-    CanConvertP 'FileSystemImageRO 'FileSystemImageRO = 'True
-    CanConvertP 'FileSystemImage 'ReadOnlyFile = 'True
-    CanConvertP 'FileSystemImage 'VmImage = 'True
-    CanConvertP a b = 'False
-
-type CanConvert a b = CanConvertP a b ~ 'True
-
 type family ConvSpec (a :: Artifact) (b :: Artifact) :: * where
-    ConvSpec 'ReadOnlyFile 'FileSystemImageRO = FileSystem
-    ConvSpec 'ReadOnlyFile 'VmImage = ImageType
-    ConvSpec 'VmImage 'VmImage = (Maybe ImageType, Maybe ImageSize)
-    ConvSpec 'FileSystemImage 'VmImage = Maybe FileSystemResize
-    ConvSpec 'FileSystemImageRO 'FileSystemImageRO = Maybe FileSystemResize
-    ConvSpec a 'ReadOnlyFile = Maybe String
-    ConvSpec a b = ()
+    ConvSpec 'FreeFile 'FreeFile = String
+    ConvSpec 'FreeFile 'VmImage = ImageType
+    ConvSpec 'FreeFile 'FileSystemImage = FileSystem
+    ConvSpec 'FreeFile 'ExternalFile = FilePath
+    ConvSpec 'VmImage 'VmImage = Either ImageType ImageSize
+    ConvSpec 'VmImage 'FileSystemImage = ()
+    ConvSpec 'VmImage 'FreeFile = ()
+    ConvSpec 'FileSystemBuilder 'FileSystemImage = ()
+    ConvSpec 'FileSystemImage 'VmImage = ()
+    ConvSpec 'FileSystemImage 'FileSystemImage = FileSystemResize
+    ConvSpec 'PartitionedVmImage 'FreeFile = PartitionSpec
+    ConvSpec 'CloudInit 'CloudInitUserData = ()
+    ConvSpec 'CloudInit 'CloudInitMetaData = ()
+    ConvSpec 'CloudInitUserData 'GeneratedContent = ()
+    ConvSpec 'CloudInitMetaData 'GeneratedContent = ()
+    ConvSpec 'GeneratedContent 'FreeFile = String
+    ConvSpec 'ExternalFile 'FreeFile = ()
 
 -- * Export type families
 
 type family ExportSpec (a :: Artifact) :: * where
-    ExportSpec 'CloudInit          = ()
-    ExportSpec 'VmImage            = (Maybe FilePath
-                                     ,Maybe ImageType
-                                     ,Maybe ImageSize)
-    ExportSpec 'PartitionedVmImage = (Maybe FilePath
-                                     ,PartitionSpec)
     ExportSpec 'LocalDirectory     = Maybe FilePath
-    ExportSpec 'FileSystemImage    = (Maybe FilePath
-                                     ,Maybe FileSystemResize)
-    ExportSpec 'ReadOnlyFile       = Maybe FilePath
-    ExportSpec 'GeneratedContent   = Maybe FilePath
+    ExportSpec 'VmImage            = FilePath
+    ExportSpec 'FileSystemBuilder  = (FilePath,Maybe FileSystemResize)
+    ExportSpec 'FreeFile           = FilePath
+    ExportSpec 'ExternalFile       = FilePath
     ExportSpec 'ImageRepository    = SharedImageName
 
 type family ExportResult (a :: Artifact) :: * where
-    ExportResult 'CloudInit          = (Handle 'ReadOnlyFile
-                                       ,Handle 'ReadOnlyFile)
-    ExportResult 'VmImage            = Handle 'ReadOnlyFile
-    ExportResult 'PartitionedVmImage = Handle 'ReadOnlyFile
-    ExportResult 'LocalDirectory     = Handle 'LocalDirectory
-    ExportResult 'FileSystemImage    = Handle 'ReadOnlyFile
-    ExportResult 'ReadOnlyFile       = Handle 'ReadOnlyFile
-    ExportResult 'GeneratedContent   = Handle 'ReadOnlyFile
-    ExportResult 'ImageRepository    = Handle 'VmImage
-    ExportResult a                   = ()
+    ExportResult 'LocalDirectory   = Handle 'LocalDirectory
+    ExportResult 'GeneratedContent = Handle 'ExternalFile
+    ExportResult 'ImageRepository  = Handle 'VmImage
+    ExportResult a                 = ()
 
 -- * Global Handles
 
@@ -333,20 +317,20 @@ var $= val = add variableBindings STemplateVariable (var, val)
 -- @blob.conf@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addFile
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> FilePath -> Program ()
 addFile d f = addFileP d f (0, 6, 4, 4)
 
 -- | Same as 'addFile' but set the destination file permissions to @0755@
 -- (executable for all).
 addExe
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> FilePath -> Program ()
 addExe d f = addFileP d f (0, 7, 5, 5)
 
 -- | Same as 'addFile' but with an extra output file permission parameter.
 addFileP
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
 addFileP d f p = do
     let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
@@ -360,7 +344,7 @@ addFileP d f p = do
 -- be @foo.cfg@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addTemplate
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> FilePath -> Program ()
 addTemplate d f = do
   addTemplateP d f (0,6,4,4)
@@ -368,14 +352,14 @@ addTemplate d f = do
 -- | Same as 'addTemplate' but set the destination file permissions to @0755@
 -- (executable for all).
 addTemplateExe
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> FilePath -> Program ()
 addTemplateExe d f = do
     addTemplateP d f (0, 6, 4, 4)
 
 -- | Same as 'addTemplate' but with an extra output file permission parameter.
 addTemplateP
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> Program ()
 addTemplateP d f p = do
     let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
@@ -385,25 +369,26 @@ addTemplateP d f p = do
 -- | Add an existing file from the file system, optionally with template
 -- variable expansion to an artifact at a 'FileSpec'.
 addFileFull
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> SourceFile -> FileSpec -> Program ()
 addFileFull dstH srcFile dstSpec =
     case srcFile of
         (Source ExpandVariables _) ->
             addFileFromContent dstH (FromTextFile srcFile) dstSpec
         (Source NoConversion f) -> do
-            h <- create SReadOnlyFile f
-            add dstH SReadOnlyFile (dstSpec, h)
+            origH <- create SExternalFile f
+            tmpH <- convert origH SFreeFile ()
+            add dstH SFreeFile (dstSpec, tmpH)
 
 -- | Generate a file with a content and add that file to an artifact at a
 -- 'FileSpec'.
 addFileFromContent
-    :: (CanAdd e 'ReadOnlyFile)
+    :: (CanAdd e 'FreeFile)
     => Handle e -> Content -> FileSpec -> Program ()
 addFileFromContent dstH content dstSpec = do
     cH <- createContent content
-    tmpFileH <- writeContentTmp cH
-    add dstH SReadOnlyFile (dstSpec, tmpFileH)
+    tmpFileH <- convert cH SFreeFile (takeFileName $ dstSpec ^. fileSpecPath)
+    add dstH SFreeFile (dstSpec, tmpFileH)
 
 -- * /Low-level/ 'Content' generation functions
 
@@ -415,20 +400,6 @@ createContent = create SGeneratedContent
 --   handle obtained by e.g. 'createContent'
 appendContent :: Handle 'GeneratedContent -> Content -> Program ()
 appendContent hnd c = update hnd c
-
--- | Add 'GeneratedContent' to a given artifact.
-addContent
-    :: (CanAdd e 'GeneratedContent)
-    => Handle e -> Handle 'GeneratedContent -> Program ()
-addContent hnd c = add hnd SGeneratedContent c
-
--- | Write 'GeneratedContent' to a temporary file and return the file handle.
-writeContentTmp :: Handle 'GeneratedContent -> Program (Handle 'ReadOnlyFile)
-writeContentTmp hnd = export hnd Nothing
-
--- | Write 'GeneratedContent' to a given file and return the file handle.
-writeContent :: Handle 'GeneratedContent -> FilePath -> Program (Handle 'ReadOnlyFile)
-writeContent hnd = export hnd . Just
 
 -- * directories
 
@@ -464,23 +435,22 @@ writeCloudInitDir' h dst = do
     exportCloudInit h dirH (Just dst)
 
 writeCloudInit :: Handle 'CloudInit -> FileSystem -> FilePath -> Program ()
-writeCloudInit h fs dst = void $ writeCloudInit' h fs dst
-
-writeCloudInit' :: Handle 'CloudInit
-                -> FileSystem
-                -> FilePath
-                -> Program (Handle 'ReadOnlyFile)
-writeCloudInit' h fs dst = do
-    fsH <- create SFileSystemImage (FileSystemSpec fs "cidata" 2 MB)
-    exportCloudInit h fsH (Just dst, Nothing)
+writeCloudInit h fs dst = do
+    fsH <- create SFileSystemBuilder (FileSystemSpec fs "cidata" 2 MB)
+    exportCloudInit h fsH (dst, Nothing)
 
 exportCloudInit
-    :: (CanAdd a 'ReadOnlyFile, Show (ExportSpec a), Show (ExportResult a))
+    :: (CanAdd a 'FreeFile, Show (ExportSpec a), Show (ExportResult a))
     => Handle 'CloudInit -> Handle a -> ExportSpec a -> Program (ExportResult a)
 exportCloudInit chH destH dest = do
-    (metaDataH,userDataH) <- export chH ()
-    add destH SReadOnlyFile (fileSpec "meta-data", metaDataH)
-    add destH SReadOnlyFile (fileSpec "user-data", userDataH)
+    metaData <- convert chH SCloudInitMetaData ()
+    metaDataContent <- convert metaData SGeneratedContent ()
+    metaDataFile <- convert metaDataContent SFreeFile "meta-data"
+    add destH SFreeFile (fileSpec "meta-data", metaDataFile)
+    userData <- convert chH SCloudInitUserData ()
+    userDataContent <- convert userData SGeneratedContent ()
+    userDataFile <- convert userDataContent SFreeFile "user-data"
+    add destH SFreeFile (fileSpec "user-data", userDataFile)
     export destH dest
 
 -- * Image import

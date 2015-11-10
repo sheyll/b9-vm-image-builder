@@ -73,8 +73,8 @@ extractPartitionOfQCow2 srcFile dstFile = do
 --   e <- lxc "juhu"
 --   addFileFull e (Source NoConversion "/home/sven/Downloads/wdrhoerspielspeicher_2014-10-31_00-02.mp3") (fileSpec "/test.mp3")
 --   outImgRaw <- mount e root "/"
-
---   rwFs <- convert outImgRaw SFileSystemImage ()
+--
+--   rwFs <- convert outImgRaw SFileSystemImageRO ()
 --   vmImg <- convert rwFs  SVmImage (Just ShrinkFileSystem)
 --   vmQCow <- convert vmImg SVmImage (Just QCow2, Nothing)
 --   vmQCow `sharedAs` "juhu-out"

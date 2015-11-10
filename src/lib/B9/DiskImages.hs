@@ -553,6 +553,14 @@ partition1ToLocalImage srcName destName mountPoint =
         (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
         (MountPoint mountPoint)
 
+-- | Format a mount point to a human readable string, containing no slashes.
+printMountPoint :: MountPoint -> String
+printMountPoint NotMounted = "not-mounted"
+printMountPoint (MountPoint m) =
+    case m of
+        "/" -> "root"
+        _ -> takeFileName m
+
 -- * 'Arbitrary' instances for quickcheck
 
 instance Arbitrary ImageTarget where
