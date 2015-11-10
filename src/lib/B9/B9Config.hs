@@ -23,7 +23,6 @@ import Data.Monoid
 import GHC.Generics (Generic)
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
-import Paths_b9 (version)
 import System.Directory
 import Text.Printf
 

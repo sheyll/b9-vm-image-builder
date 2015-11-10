@@ -3,7 +3,6 @@ images.-}
 module B9.DiskImages where
 
 import           B9.QCUtil
-import           Control.Lens hiding ((<.>), elements)
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data

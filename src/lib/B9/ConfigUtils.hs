@@ -14,7 +14,6 @@ import Data.ConfigFile
 import Data.Data
 import Data.Function ( on )
 import Data.Monoid
-import Data.Typeable
 import Data.Word ( Word16, Word32 )
 import System.Directory
 import System.FilePath

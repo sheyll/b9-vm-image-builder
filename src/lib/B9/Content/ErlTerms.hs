@@ -203,7 +203,7 @@ erlFloatParser = do
   -- issues.
   sign <- option "" ((char '-' >> return "-") <|> (char '+' >> return ""))
   s1 <- many digit
-  char '.'
+  _ <- char '.'
   s2 <- many1 digit
   e <- do expSym <- choice [char 'e', char 'E']
           expSign <- option "" ((char '-' >> return "-") <|> (char '+' >> return "+"))
@@ -245,26 +245,24 @@ decimalLiteral =
 
 erlStringParser :: Parser SimpleErlangTerm
 erlStringParser = do
-  char '"'
+  _ <- char '"'
   str <- many (erlCharEscaped <|> noneOf "\"")
-  char '"'
+  _ <- char '"'
   return (ErlString str)
 
 erlCharEscaped :: Parser Char
 erlCharEscaped =
   char '\\'
-  >> (do char '^'
-         choice (zipWith escapedChar ccodes creplacements)
-
+  >> ((char '^' >> choice (zipWith escapedChar ccodes creplacements))
       <|>
-      do char 'x'
+      do _ <- char 'x'
          do ds <- between (char '{') (char '}') (fmap hexVal <$> many1 hexDigit)
             let val = foldl (\acc v -> acc * 16 + v) 0 ds
             return (toEnum val)
-          <|>
-          do x1 <- hexVal <$> hexDigit
-             x2 <- hexVal <$> hexDigit;
-             return (toEnum ((x1*16)+x2))
+         <|>
+         do x1 <- hexVal <$> hexDigit
+            x2 <- hexVal <$> hexDigit;
+            return (toEnum ((x1*16)+x2))
 
       <|>
       do o1 <- octVal <$> octDigit
@@ -293,12 +291,8 @@ erlCharEscaped =
 
 erlBinaryParser :: Parser SimpleErlangTerm
 erlBinaryParser =
-  do string "<<"
-     spaces
-     ErlString str <- option (ErlString "") erlStringParser
-     string ">>"
-     spaces
-     return (ErlBinary str)
+  ErlBinary <$>
+  string "<<" *> spaces *> option (ErlString "") erlStringParser <* string ">>" <* spaces
 
 erlListParser :: Parser SimpleErlangTerm
 erlListParser = ErlList <$> erlNestedParser (char '[') (char ']')

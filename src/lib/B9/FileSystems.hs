@@ -11,11 +11,9 @@ import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
 import           Data.Hashable
-import           Data.Semigroup
 import           GHC.Generics (Generic)
 import           System.FilePath
 import           Test.QuickCheck
-import qualified Text.PrettyPrint.Boxes as Boxes
 import           Text.Printf
 
 -- | Descibe how a 'FileSystem' should be created.

@@ -6,14 +6,11 @@ import B9.Content
         YamlObject(..), FileSpec, fileSpec, fileSpecPath,
         fileSpecPermissions, SourceFileConversion(..))
 import B9.DiskImages
-       (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
-        Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
-        SizeUnit(..), Mounted, MountPoint(..), PartitionSpec(..),
-        SharedImageName(..))
+       (FileSystem(..), ImageSize(..), ImageType(..), SizeUnit(..),
+        Mounted, MountPoint(..), PartitionSpec(..), SharedImageName(..))
 import B9.ExecEnv
-       (ExecEnvSpec(..), execEnvTitle, execEnvHypervisor, execEnvLimits,
-        ExecEnvType(..), CPUArch(..), Resources(..), RamSize(..),
-        HostDirMnt(..))
+       (ExecEnvSpec(..), ExecEnvType(..), CPUArch(..), Resources(..),
+        RamSize(..), HostDirMnt(..))
 import B9.FileSystems (FileSystemSpec(..), FileSystemResize(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from)
@@ -22,10 +19,8 @@ import Data.Binary
 import Data.Data
 import Data.Function (on)
 import Data.Functor (void)
-import Data.Maybe
 import GHC.Generics (Generic)
 import System.FilePath
-import Text.Printf (printf)
 
 -- ---------------------------------------------------------
 
@@ -271,7 +266,7 @@ type family ConvSpec (a :: Artifact) (b :: Artifact) :: * where
 type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'LocalDirectory     = Maybe FilePath
     ExportSpec 'VmImage            = FilePath
-    ExportSpec 'FileSystemBuilder  = (FilePath,Maybe FileSystemResize)
+    ExportSpec 'FileSystemImage    = FilePath
     ExportSpec 'FreeFile           = FilePath
     ExportSpec 'ExternalFile       = FilePath
     ExportSpec 'ImageRepository    = SharedImageName
@@ -432,17 +427,20 @@ writeCloudInitDir h dst = void $ writeCloudInitDir' h dst
 writeCloudInitDir' :: Handle 'CloudInit -> FilePath -> Program (Handle 'LocalDirectory)
 writeCloudInitDir' h dst = do
     dirH <- newDirectory
-    exportCloudInit h dirH (Just dst)
+    addCloudInitToArtifact h dirH
+    export dirH (Just dst)
 
 writeCloudInit :: Handle 'CloudInit -> FileSystem -> FilePath -> Program ()
 writeCloudInit h fs dst = do
     fsH <- create SFileSystemBuilder (FileSystemSpec fs "cidata" 2 MB)
-    exportCloudInit h fsH (dst, Nothing)
+    fsI <- convert fsH SFileSystemImage ()
+    export fsI dst
+    addCloudInitToArtifact h fsH
 
-exportCloudInit
-    :: (CanAdd a 'FreeFile, Show (ExportSpec a), Show (ExportResult a))
-    => Handle 'CloudInit -> Handle a -> ExportSpec a -> Program (ExportResult a)
-exportCloudInit chH destH dest = do
+addCloudInitToArtifact
+    :: (CanAdd a 'FreeFile)
+    => Handle 'CloudInit -> Handle a -> Program (AddResult 'FreeFile)
+addCloudInitToArtifact chH destH = do
     metaData <- convert chH SCloudInitMetaData ()
     metaDataContent <- convert metaData SGeneratedContent ()
     metaDataFile <- convert metaDataContent SFreeFile "meta-data"
@@ -451,7 +449,6 @@ exportCloudInit chH destH dest = do
     userDataContent <- convert userData SGeneratedContent ()
     userDataFile <- convert userDataContent SFreeFile "user-data"
     add destH SFreeFile (fileSpec "user-data", userDataFile)
-    export destH dest
 
 -- * Image import
 
@@ -530,7 +527,7 @@ mountAndShareNewImage
     -> FilePath
     -> Handle 'ExecutionEnvironment
     -> Program ()
-mountAndShareNewImage fsLabel sizeGB nameExport mountPoint env = do
+mountAndShareNewImage _fsLabel _sizeGB _nameExport _mountPoint _env = do
   return ()
 
 -- * DSL Interpreter
