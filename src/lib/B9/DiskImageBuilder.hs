@@ -6,25 +6,19 @@ module B9.DiskImageBuilder
        where
 
 import           B9.B9Monad
-import           B9.ConfigUtils
 import           B9.Content
 import           B9.DiskImages
 import qualified B9.PartitionTable as P
 import           B9.QemuImg
 import           B9.RepositoryIO
-import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Data
-import           Data.Function
 import           Data.Generics.Aliases
 import           Data.Generics.Schemes
-import           Data.List
-import           Data.Maybe
 import           System.Directory
 import           System.FilePath
 import           Text.Printf (printf)
-import           Text.Show.Pretty (ppShow)
 
 
 -- | Replace $... variables inside an 'ImageTarget'

@@ -15,7 +15,6 @@ import B9.QemuImg
 import B9.ConfigUtils
 import B9.DiskImages
 import B9.Repository
-import Control.Applicative
 import Control.Monad
 import Control.Exception
 import Control.Monad.IO.Class

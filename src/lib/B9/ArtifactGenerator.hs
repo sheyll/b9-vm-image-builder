@@ -11,7 +11,6 @@ module B9.ArtifactGenerator
        where
 
 import B9.Content
-import B9.Content.StringTemplate
 import B9.DiskImages
 import B9.QCUtil
 import B9.Vm

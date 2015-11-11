@@ -3,14 +3,11 @@ module B9.QemuImg where
 
 import B9.B9Monad
 import B9.ConfigUtils
-import B9.Content
 import B9.DiskImages
-import Control.Lens (view)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Function
 import System.Directory
-import System.FilePath
 import Text.Printf (printf)
 
 -- | Resize a vm image.

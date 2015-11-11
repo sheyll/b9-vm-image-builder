@@ -13,7 +13,6 @@ import           B9.Vm
 import           B9.VmBuilder
 import           Control.Arrow
 import           Control.Monad.Error
-import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.Writer
 import qualified Data.ByteString as B
