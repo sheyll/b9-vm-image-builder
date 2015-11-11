@@ -90,10 +90,8 @@ instance Default CiCtx where
 -- | Context of a 'SLocalDirectory'
 data DirCtx = DirCtx -- TODO reduce
     { _dirTempDir :: FilePath
+    , _dirExports :: [FilePath]
     } deriving (Show)
-
-instance Default DirCtx where
-    def = DirCtx "/tmp"
 
 -- | Context of a 'SFileSystemBuilder'
 data FsBuilderCtx = FsBuilderCtx
@@ -338,7 +336,17 @@ instance Interpreter IoCompiler where
     runCreate SLocalDirectory () = do
         tmp <- lift (mkTempDir "local-dir" >>= ensureParentDir)
         (hnd,_) <- allocHandle SLocalDirectory tmp
-        localDirs . at hnd ?= DirCtx tmp
+        localDirs . at hnd ?= DirCtx tmp []
+        addAction hnd $
+            do Just (DirCtx src dests) <- view $ localDirs . at hnd
+               case reverse dests of
+                   [] ->
+                       lift $ logTrace $
+                       printf "Warning: '%s' not exported." (show hnd)
+                   (lastDest:firstDests) ->
+                       lift $
+                       do mapM_ (copyDir src) (reverse firstDests)
+                          moveDir src lastDest
         return hnd
     runCreate sa _src =
         fail $ printf "Create %s: Not Yet Implemented" (show sa)
@@ -540,13 +548,13 @@ instance Interpreter IoCompiler where
         updateServerRoots . at hnd ?= destDirH
         return hnd
     runConvert hnd@(Handle SPartitionedVmImage hndT) SFreeFile partSpec@(MBRPartition pIndex) = do
-        let dest = hndT ++ "-part-" ++ show pIndex ++ "-tmp-file"
+        let dest = hndT ++ "-partition-" ++ show pIndex
         Just srcFileH <- use $ partitionedImgs . at hnd
         Just (FileCtx srcFileName _) <- use $ localFiles . at srcFileH
         destH <- runCreate SFreeFile $ Just $ dest
         Just (FileCtx destFile _) <- use $ localFiles . at destH
         hnd --> destH
-        addAction destH $ lift $ extractPartition partSpec srcFileName destFile
+        addAction hnd $ lift $ extractPartition partSpec srcFileName destFile
         return destH
     runConvert hnd@(Handle SVmImage _) SFileSystemImage () = do
         hnd' <- runConvert hnd SVmImage (Left Raw)
@@ -588,14 +596,8 @@ instance Interpreter IoCompiler where
     runExport hnd@(Handle SFreeFile _) destFile =
         (lift $ ensureParentDir destFile) >>= copyFreeFile hnd
     runExport hnd@(Handle SLocalDirectory _) destDir = do
-        Just tmpDirCtx <- use $ localDirs . at hnd
-        let tmpDir = tmpDirCtx ^. dirTempDir
-        destDirH <- runCreate SLocalDirectory ()
-        hnd --> destDirH
-        addAction destDirH $ lift $
-            do destDir' <- ensureParentDir destDir
-               moveDir tmpDir destDir'
-        return destDirH
+        destDir' <- lift $ ensureParentDir destDir
+        localDirs . at hnd . traverse . dirExports <>= [destDir']
     runExport hnd@(Handle SVmImage _) destFile = do
         Just (VmImgCtx fH _) <- use $ vmImages . at hnd
         runExport fH destFile

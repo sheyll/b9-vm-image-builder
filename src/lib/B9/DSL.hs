@@ -245,8 +245,7 @@ type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'VmImage         = FilePath
 
 type family ExportResult (a :: Artifact) :: * where
-    ExportResult 'LocalDirectory   = Handle 'LocalDirectory
-    ExportResult a                 = ()
+    ExportResult a = ()
 
 -- * Global Handles
 
@@ -394,7 +393,7 @@ newDirectory :: Program (Handle 'LocalDirectory)
 newDirectory = create SLocalDirectory ()
 
 -- | Render the directory to the actual destination (which must not exist)
-exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program (Handle 'LocalDirectory)
+exportDir :: (Handle 'LocalDirectory) -> FilePath -> Program ()
 exportDir dirH dest = export dirH dest
 
 -- * cloud init
@@ -411,7 +410,7 @@ addUserData hnd ast = add hnd SCloudInitUserData ast
 writeCloudInitDir :: Handle 'CloudInit -> FilePath -> Program ()
 writeCloudInitDir h dst = void $ writeCloudInitDir' h dst
 
-writeCloudInitDir' :: Handle 'CloudInit -> FilePath -> Program (Handle 'LocalDirectory)
+writeCloudInitDir' :: Handle 'CloudInit -> FilePath -> Program ()
 writeCloudInitDir' h dst = do
     dirH <- newDirectory
     addCloudInitToArtifact h dirH

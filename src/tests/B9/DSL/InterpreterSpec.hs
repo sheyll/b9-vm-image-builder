@@ -359,19 +359,29 @@ candySpec = do
 localDirSpec :: Spec
 localDirSpec =
     describe "compile exportDir" $
-    do it "creates a temporary intermediate directory" $
-           let expectedCmds = mkTempDir "local-dir"
-           in actualCmds `shouldDoIo` expectedCmds
-       it "copies the temporary intermediate directory to all exports" $
-           let exportsCmds = do
-                   src' <- mkTempDir "local-dir" >>= ensureParentDir
-                   dest' <- ensureParentDir "/tmp/test.d"
-                   moveDir src' dest'
-           in actualCmds `shouldDoIo` exportsCmds
-  where
-    actualCmds = do
-        d <- newDirectory
-        exportDir d "/tmp/test.d"
+    do it "copies the temporary intermediate directory to all exports" $
+           shouldDoIo
+               (do d <- newDirectory
+                   exportDir d "/tmp/test1.d"
+                   exportDir d "/tmp/test2.d"
+                   exportDir d "/tmp/test3.d"
+                   exportDir d "/tmp/test4.d")
+               (do src <- mkTempDir "local-dir" >>= ensureParentDir
+                   dest1 <- ensureParentDir "/tmp/test1.d"
+                   dest2 <- ensureParentDir "/tmp/test2.d"
+                   dest3 <- ensureParentDir "/tmp/test3.d"
+                   dest4 <- ensureParentDir "/tmp/test4.d"
+                   copyDir src dest1
+                   copyDir src dest2
+                   copyDir src dest3
+                   moveDir src dest4)
+       it "creates the exported copies" $
+           shouldDoIo
+               (do d <- newDirectory
+                   exportDir d "/tmp/test1.d")
+               (do src <- mkTempDir "local-dir" >>= ensureParentDir
+                   dest1 <- ensureParentDir "/tmp/test1.d"
+                   moveDir src dest1)
 
 -- * Cloud init examples
 
@@ -523,7 +533,7 @@ cloudInitWithContentSpec =
                                   [ASTObj [("path", ASTString "file1.txt")
                                           ,("owner", ASTString "user1:group1")
                                           ,("permissions", ASTString "0642")
-                                          ,("content", ASTEmbed (FromBinaryFile "/abs/path//abs/path//BUILD/contents-of-file1.txt-9-XXXX-TO-file1.txt-XXXX"))]])]
+                                          ,("content", ASTEmbed (FromBinaryFile "/abs/path//abs/path//BUILD/contents-of-file1.txt-9-XXXX-file1.txt-XXXX"))]])]
                        , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
     (Handle _ iid, cmds) = runPureDump $ compile cloudInitWithContent
     cloudInitWithContent = do
@@ -544,12 +554,16 @@ vmImageCreationSpec =
     do it
            "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
            let expected = do
-                   fs <- mkTemp "Ext4-image" >>= ensureParentDir
-                   fsD <- mkTempDir "Ext4-image.d" >>= ensureParentDir
-                   raw <- mkTemp "Ext4-image-2-Raw-image" >>= ensureParentDir
-                   convSrc <- mkTemp "vm-image-Raw-5-conversion-src" >>= ensureParentDir
-                   convDst <- mkTemp "vm-image-Raw-5-converted-to-QCow2" >>= ensureParentDir
-                   resized <- mkTemp "resized-10-MB" >>= ensureParentDir
+                   convSrc <-
+                       mkTemp "Ext4-image-2-Raw-image-XXXX-conversion-src" >>=
+                       ensureParentDir
+                   convDst <-
+                       mkTemp "vm-image-Raw-5-converted-to-QCow2" >>=
+                       ensureParentDir
+                   resized <-
+                       mkTemp
+                           "vm-image-Raw-5-converted-to-QCow2-6-resized-3-MB" >>=
+                       ensureParentDir
                    dest <- ensureParentDir "/tmp/test.qcow2"
                    convertVmImage convSrc Raw convDst QCow2
                    resizeVmImage resized 3 MB QCow2
@@ -568,41 +582,31 @@ vmImageCreationSpec =
            in actual `shouldDoIo` expected
        it "it converts an image from Raw to Vmdk" $
            let expected = do
-                   src <- mkTemp "file-system-image-root"
-                   conv <- mkTemp "converted-img-file"
-                   src' <- getRealPath src
-                   conv' <- ensureParentDir conv
-                   convertVmImage src' Raw conv' Vmdk
-                   dest' <- ensureParentDir "/tmp/test.vmdk"
-                   moveFile conv' dest'
+                   origFile <- getRealPath "in.raw"
+                   srcFile <- mkTemp "in.raw-1-copy" >>= ensureParentDir
+                   srcImg <-
+                       mkTemp "in.raw-1-copy-2-vm-image-QCow2" >>=
+                       ensureParentDir
+                   convSrc <-
+                       mkTemp
+                           "in.raw-1-copy-2-vm-image-QCow2-XXXX-conversion-src" >>=
+                       ensureParentDir
+                   convDest <-
+                       mkTemp "vm-image-QCow2-4-converted-to-Vmdk" >>=
+                       ensureParentDir
+                   dest <- ensureParentDir "/tmp/test.vmdk"
+                   copy origFile srcFile
+                   moveFile srcFile srcImg
+                   moveFile srcImg convSrc
+                   convertVmImage convSrc QCow2 convDest Vmdk
+                   moveFile convDest dest
                    return ()
                actual = do
                    -- create a raw Ext4 image
-                   rawFS <-
-                       create
-                           SFileSystemBuilder
-                           (FileSystemSpec Ext4 "root" 10 MB)
-                   rawImg <- convert rawFS SVmImage ()
+                   rawFile <- use "in.raw"
+                   rawImg <- convert rawFile SVmImage QCow2
                    vmdkImg <- convert rawImg SVmImage (Left Vmdk)
                    export vmdkImg "/tmp/test.vmdk"
-           in actual `shouldDoIo` expected
-       it
-           "copies and moves an image if neither conversion nor resize is required" $
-           let actual = do
-                   rawFS <-
-                       create
-                           SFileSystemBuilder
-                           (FileSystemSpec Ext4 "root" 10 MB)
-                   rawImg <- convert rawFS SVmImage ()
-                   export rawImg "/tmp/dest.raw"
-               expected = do
-                   src <- mkTemp "file-system-image-root"
-                   tmp <- mkTemp "tmp-file"
-                   raw' <- getRealPath src
-                   tmp' <- ensureParentDir tmp
-                   copy raw' tmp'
-                   dst <- ensureParentDir "/tmp/dest.raw"
-                   moveFile tmp' dst
            in actual `shouldDoIo` expected
 
 -- * Partition extraction examples
@@ -612,15 +616,27 @@ partitionedDiskSpec =
     describe "compile PartionedVmImage" $
     do it "extracts the selected partition" $
            let actual = do
-                   rawPartitionedFile <- use "/tmp/partitioned.raw"
+                   rawPartitionedFile <- use "/tmp/in.raw"
                    partitionedImg <-
                        convert rawPartitionedFile SPartitionedVmImage ()
-                   rawPart2File <- convert partitionedImg SFreeFile (MBRPartition 2)
+                   rawPart2File <-
+                       convert partitionedImg SFreeFile (MBRPartition 2)
                    export rawPart2File "/tmp/part2.raw"
                expected = do
-                   src <- getRealPath "/tmp/partitioned.raw"
+                   src <- getRealPath "/tmp/in.raw"
+                   raw <- mkTemp "in.raw-1-copy" >>= ensureParentDir
+                   img <-
+                       mkTemp "in.raw-1-copy-2-partitioned-vm-image" >>=
+                       ensureParentDir
+                   extracted <-
+                       mkTemp
+                           "in.raw-1-copy-2-partitioned-vm-image-3-partition-2" >>=
+                       ensureParentDir
                    dst <- ensureParentDir "/tmp/part2.raw"
-                   extractPartition (MBRPartition 2) src dst
+                   copy src raw
+                   moveFile raw img
+                   extractPartition (MBRPartition 2) img extracted
+                   moveFile extracted dst
            in actual `shouldDoIo` expected
 
 -- * VmImage respository IO
@@ -636,8 +652,12 @@ sharedImageSpec =
              (do (_,cachedImg) <-
                      imageRepoLookup (SharedImageName "source-image")
                  cachedImg' <- getRealPath cachedImg
+                 srcTmp <- mkTemp "xxx.qcow2-1-copy" >>= ensureParentDir
+                 outTmp <- mkTemp "xxx.qcow2-1-copy-XXXX-out-shared" >>= ensureParentDir
+                 copy cachedImg' srcTmp
+                 moveFile srcTmp outTmp
                  imageRepoPublish
-                     cachedImg'
+                     outTmp
                      QCow2
                      (SharedImageName "out-shared")))
 
@@ -653,7 +673,7 @@ updateServerImageSpec =
                outDirH <- create SLocalDirectory ()
                usRoot <- convert outDirH SUpdateServerRoot ()
                add usRoot SVmImage (SharedImageName machine, srcImg)
-               void $ export outDirH outDir
+               export outDirH outDir
            srcFile = "source.qcow2"
            outDir = "EXPORT"
            machine = "webserver"
@@ -661,15 +681,23 @@ updateServerImageSpec =
            "converts an input image in arbitrary format to a temporary Raw image inside a given directory" $
            shouldDoIo
                actual
-               (do tmpDir <- mkTempDir "local-dir"
+               (do
+                   src <- getRealPath srcFile
+                   srcCopy <- mkTemp "source.qcow2-1-copy" >>= ensureParentDir
+                   srcImg <- mkTemp "source.qcow2-1-copy-2-vm-image-QCow2" >>= ensureParentDir
+                   tmpDir <- mkTempDir "local-dir" >>= ensureParentDir
+                   srcImgCopy <- mkTemp "source.qcow2-1-copy-2-vm-image-QCow2-XXXX-webserver" >>= ensureParentDir
+                   dst <- ensureParentDir outDir
+                   copy src srcCopy
+                   moveFile srcCopy srcImg
+                   moveFile srcImg srcImgCopy
                    let tmpImg = tmpBase </> "0.raw"
                        tmpSize = tmpBase </> "0.size"
                        tmpVersion = tmpBase </> "VERSION"
                        tmpBase =
                            tmpDir </> "machines" </> machine </> "disks/raw"
-                   src <- getRealPath srcFile
                    mkDir tmpBase
-                   convertVmImage src QCow2 tmpImg Raw
+                   convertVmImage srcImgCopy QCow2 tmpImg Raw
                    size <- B9.B9IO.readFileSize tmpImg
                    renderContentToFile
                        tmpSize
@@ -681,8 +709,7 @@ updateServerImageSpec =
                        tmpVersion
                        (FromString (printf "%s-%s" bId bT))
                        (Environment [])
-                   dst' <- ensureParentDir outDir
-                   moveDir tmpDir dst'
+                   moveDir tmpDir dst
                    return ())
 
 -- * Containerized Build Specs
