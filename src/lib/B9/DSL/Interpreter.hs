@@ -570,7 +570,7 @@ instance Interpreter IoCompiler where
         Just (VmImgCtx srcImgFileH srcType) <- use $ vmImages . at hnd
         srcFileCopy <- freeFileTempCopy srcImgFileH $ "conversion-src"
         destImgFileH <-
-            runCreate SFreeFile $ Just $ hndT ++ "-conversion-dest-" ++
+            runCreate SFreeFile $ Just $ hndT ++ "-converted-to-" ++
             show destType
         Just (FileCtx destImgFile _) <- use $ localFiles . at destImgFileH
         srcImgFileH --> hnd
@@ -611,7 +611,13 @@ copyFreeFile src dest = localFiles . at src . traverse . fCopies <>= [dest]
 freeFileTempCopy :: Handle 'FreeFile -> String -> IoCompiler FilePath
 freeFileTempCopy src name = do
     Just fileCtx <- use $ localFiles . at src
-    dest <- lift $ mkTemp $ printf "%s-TO-%s" (fileCtx ^. fFileName) name
+    dest <-
+        lift $
+        mkTemp $
+        printf
+            "%s-%s"
+            (takeFileName (fileCtx ^. fFileName))
+            (takeFileName name)
     dest' <- lift $ ensureParentDir dest
     copyFreeFile src dest'
     return dest'

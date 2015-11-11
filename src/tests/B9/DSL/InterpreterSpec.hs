@@ -547,13 +547,13 @@ vmImageCreationSpec =
                    fs <- mkTemp "Ext4-image" >>= ensureParentDir
                    fsD <- mkTempDir "Ext4-image.d" >>= ensureParentDir
                    raw <- mkTemp "Ext4-image-2-Raw-image" >>= ensureParentDir
-                   conv <- mkTemp " vm-image-Raw-5-conversion-dest-QCow2" >>= ensureParentDir
-                   src' <- getRealPath src
-                   cf' <- ensureParentDir cf
-                   convertVmImage src' Raw cf' QCow2
-                   resizeVmImage cf' 3 MB QCow2
-                   dest' <- ensureParentDir "/tmp/test.qcow2"
-                   moveFile cf' dest'
+                   convSrc <- mkTemp "vm-image-Raw-5-conversion-src" >>= ensureParentDir
+                   convDst <- mkTemp "vm-image-Raw-5-converted-to-QCow2" >>= ensureParentDir
+                   resized <- mkTemp "resized-10-MB" >>= ensureParentDir
+                   dest <- ensureParentDir "/tmp/test.qcow2"
+                   convertVmImage convSrc Raw convDst QCow2
+                   resizeVmImage resized 3 MB QCow2
+                   moveFile resized dest
                actual = do
                    -- create a raw Ext4 image
                    rawFS <-
