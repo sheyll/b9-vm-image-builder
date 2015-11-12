@@ -44,7 +44,7 @@ fileInclusionSpec =
                       export fH "/tmp/test.file.copy"
                   expected = do
                       src <- getRealPath "/tmp/test.file"
-                      tmp <- mkTemp "test.file-1-copy" >>= ensureParentDir
+                      tmp <- mkTempCreateParents "test.file-1-copy"
                       dst' <- ensureParentDir "/tmp/test.file.copy"
                       copy src tmp
                       moveFile tmp dst'
@@ -58,7 +58,7 @@ fileInclusionSpec =
                       export fH "/tmp/test.file.copy4"
                   expected = do
                       src <- getRealPath "/tmp/test.file"
-                      tmp <- mkTemp "test.file-1-copy" >>= ensureParentDir
+                      tmp <- mkTempCreateParents "test.file-1-copy"
                       dst1 <- ensureParentDir "/tmp/test.file.copy1"
                       dst2 <- ensureParentDir "/tmp/test.file.copy2"
                       dst3 <- ensureParentDir "/tmp/test.file.copy3"
@@ -76,8 +76,8 @@ fileInclusionSpec =
                       add dirH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       ext <- getRealPath "/tmp/test.file"
-                      src <- mkTemp "test.file-1-copy" >>= ensureParentDir
-                      tmpDir <- mkTempDir "local-dir" >>= ensureParentDir
+                      src <- mkTempCreateParents "test.file-1-copy"
+                      tmpDir <- mkTempDir "local-dir"
                       copy ext src
                       let dst = tmpDir </> "test.file"
                       moveFile src dst
@@ -92,10 +92,10 @@ fileInclusionSpec =
                       add fsH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       ext <- getRealPath "/tmp/test.file"
-                      src <- mkTemp "test.file-1-copy" >>= ensureParentDir
-                      img <- mkTemp "ISO9660-cidata" >>= ensureParentDir
+                      src <- mkTempCreateParents "test.file-1-copy"
+                      img <- mkTempCreateParents "ISO9660-cidata"
                       tmpDir <-
-                          mkTempDir "ISO9660-cidata.d" >>= ensureParentDir
+                          mkTempDir "ISO9660-cidata.d"
                       copy ext src
                       let dst = tmpDir </> "test.file"
                       moveFile src dst
@@ -124,12 +124,12 @@ fileInclusionSpec =
                   expected = do
                       -- Allocate all /automatic/ file names:
                       ext <- getRealPath "/tmp/test.file"
-                      src1 <- mkTemp "test.file-1-copy" >>= ensureParentDir
-                      img1 <- mkTemp "ISO9660-cidata" >>= ensureParentDir
+                      src1 <- mkTempCreateParents "test.file-1-copy"
+                      img1 <- mkTempCreateParents "ISO9660-cidata"
                       tmpDir1 <-
-                          mkTempDir "ISO9660-cidata.d" >>= ensureParentDir
-                      img2 <- mkTemp "VFAT-blub" >>= ensureParentDir
-                      tmpDir2 <- mkTempDir "VFAT-blub.d" >>= ensureParentDir
+                          mkTempDir "ISO9660-cidata.d"
+                      img2 <- mkTempCreateParents "VFAT-blub"
+                      tmpDir2 <- mkTempDir "VFAT-blub.d"
                       -- Copy the input file to the directory from which the ISO
                       -- is created:
                       copy
@@ -160,7 +160,7 @@ fileInclusionSpec =
                       add c SFreeFile (fileSpec "test.file", fH)
                       writeCloudInitDir c "/tmp/ci.d"
                   expected = do
-                      src <- mkTempDir "local-dir" >>= ensureParentDir
+                      src <- mkTempDir "local-dir"
                       dst <- ensureParentDir "/tmp/ci.d"
                       moveDir src dst
               actual `shouldDoIo` expected
@@ -191,8 +191,8 @@ fsImgSpec = do
                                (FileSystemSpec Ext4 "test-label" 10 MB)
                        fsImg <- convert fs SFileSystemImage ()
                        export fsImg "out-img.raw")
-                   (do fs <- mkTemp "Ext4-test-label" >>= ensureParentDir
-                       c <- mkTempDir "Ext4-test-label.d" >>= ensureParentDir
+                   (do fs <- mkTempCreateParents "Ext4-test-label"
+                       c <- mkTempDir "Ext4-test-label.d"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
                            fs
@@ -210,11 +210,9 @@ fsImgSpec = do
                        fsImgShrunk <-
                            convert fsImg SFileSystemImage ShrinkFileSystem
                        export fsImgShrunk "out-img.raw")
-                   (do fs <- mkTemp "Ext4-test-label" >>= ensureParentDir
-                       c <- mkTempDir "Ext4-test-label.d" >>= ensureParentDir
-                       r <-
-                           mkTemp "Ext4-test-label-2-resized" >>=
-                           ensureParentDir
+                   (do fs <- mkTempCreateParents "Ext4-test-label"
+                       c <- mkTempDir "Ext4-test-label.d"
+                       r <- mkTempCreateParents "Ext4-test-label-2-resized"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
                            fs
@@ -240,14 +238,12 @@ fsImgSpec = do
                            convert fsImg SFileSystemImage ShrinkFileSystem
                        export fsImg10MB "out1.raw"
                        export fsImgShrunk "out2.raw")
-                   (do fs <- mkTemp "Ext4-test-label" >>= ensureParentDir
-                       c <- mkTempDir "Ext4-test-label.d" >>= ensureParentDir
+                   (do fs <- mkTempCreateParents "Ext4-test-label"
+                       c <- mkTempDir "Ext4-test-label.d"
                        r1 <-
-                           mkTemp "Ext4-test-label-2-resized" >>=
-                           ensureParentDir
+                           mkTempCreateParents "Ext4-test-label-2-resized"
                        r2 <-
-                           mkTemp "Ext4-test-label-2-resized" >>=
-                           ensureParentDir
+                           mkTempCreateParents "Ext4-test-label-2-resized"
                        dest1 <- ensureParentDir "out1.raw"
                        dest2 <- ensureParentDir "out2.raw"
                        createFileSystem
@@ -366,7 +362,7 @@ localDirSpec =
                    exportDir d "/tmp/test2.d"
                    exportDir d "/tmp/test3.d"
                    exportDir d "/tmp/test4.d")
-               (do src <- mkTempDir "local-dir" >>= ensureParentDir
+               (do src <- mkTempDir "local-dir"
                    dest1 <- ensureParentDir "/tmp/test1.d"
                    dest2 <- ensureParentDir "/tmp/test2.d"
                    dest3 <- ensureParentDir "/tmp/test3.d"
@@ -379,7 +375,7 @@ localDirSpec =
            shouldDoIo
                (do d <- newDirectory
                    exportDir d "/tmp/test1.d")
-               (do src <- mkTempDir "local-dir" >>= ensureParentDir
+               (do src <- mkTempDir "local-dir"
                    dest1 <- ensureParentDir "/tmp/test1.d"
                    moveDir src dest1)
 
@@ -411,13 +407,13 @@ cloudInitIsoImageSpec =
                    runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   tmpIso <- mkTemp "ISO9660-cidata" >>= ensureParentDir
-                   isoDir <- mkTempDir "ISO9660-cidata.d" >>= ensureParentDir
+                   tmpIso <- mkTempCreateParents "ISO9660-cidata"
+                   isoDir <- mkTempDir "ISO9660-cidata.d"
                    isoDst <- ensureParentDir "test.iso"
                    metaDataFile <-
-                       mkTemp "iid-123-meta-data-2" >>= ensureParentDir
+                       mkTempCreateParents "iid-123-meta-data-2"
                    userDataFile <-
-                       mkTemp "iid-123-user-data-3" >>= ensureParentDir
+                       mkTempCreateParents "iid-123-user-data-3"
                    renderContentToFile
                        metaDataFile
                        (minimalMetaData iid)
@@ -474,8 +470,8 @@ cloudInitDirSpec =
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
-                      do m <- mkTemp "iid-123-meta-data-2" >>= ensureParentDir
-                         u <- mkTemp "iid-123-user-data-3" >>= ensureParentDir
+                      do m <- mkTempCreateParents "iid-123-meta-data-2"
+                         u <- mkTempCreateParents "iid-123-user-data-3"
                          renderContentToFile
                              m
                              (minimalMetaData iid)
@@ -488,7 +484,7 @@ cloudInitDirSpec =
        it "copies the temporary directory to the destination directories" $
            do let copyToOutputDir =
                       dumpToStrings $
-                      do srcDir <- mkTempDir "local-dir" >>= ensureParentDir
+                      do srcDir <- mkTempDir "local-dir"
                          destDir <- ensureParentDir "test.d"
                          moveDir srcDir destDir
               actualCmds `should've` copyToOutputDir
@@ -533,7 +529,7 @@ cloudInitWithContentSpec =
                                   [ASTObj [("path", ASTString "file1.txt")
                                           ,("owner", ASTString "user1:group1")
                                           ,("permissions", ASTString "0642")
-                                          ,("content", ASTEmbed (FromBinaryFile "/abs/path//abs/path//BUILD/contents-of-file1.txt-9-XXXX-file1.txt-XXXX"))]])]
+                                          ,("content", ASTEmbed (FromBinaryFile "/abs/path//BUILD/contents-of-file1.txt-9-XXXX-file1.txt-XXXX"))]])]
                        , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
     (Handle _ iid, cmds) = runPureDump $ compile cloudInitWithContent
     cloudInitWithContent = do
@@ -555,15 +551,13 @@ vmImageCreationSpec =
            "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
            let expected = do
                    convSrc <-
-                       mkTemp "Ext4-image-2-Raw-image-XXXX-conversion-src" >>=
-                       ensureParentDir
+                       mkTempCreateParents
+                           "Ext4-image-2-Raw-image-XXXX-conversion-src"
                    convDst <-
-                       mkTemp "vm-image-Raw-5-converted-to-QCow2" >>=
-                       ensureParentDir
+                       mkTempCreateParents "vm-image-Raw-5-converted-to-QCow2"
                    resized <-
-                       mkTemp
-                           "vm-image-Raw-5-converted-to-QCow2-6-resized-3-MB" >>=
-                       ensureParentDir
+                       mkTempCreateParents
+                           "vm-image-Raw-5-converted-to-QCow2-6-resized-3-MB"
                    dest <- ensureParentDir "/tmp/test.qcow2"
                    convertVmImage convSrc Raw convDst QCow2
                    resizeVmImage resized 3 MB QCow2
@@ -583,17 +577,14 @@ vmImageCreationSpec =
        it "it converts an image from Raw to Vmdk" $
            let expected = do
                    origFile <- getRealPath "in.raw"
-                   srcFile <- mkTemp "in.raw-1-copy" >>= ensureParentDir
+                   srcFile <- mkTempCreateParents "in.raw-1-copy"
                    srcImg <-
-                       mkTemp "in.raw-1-copy-2-vm-image-QCow2" >>=
-                       ensureParentDir
+                       mkTempCreateParents "in.raw-1-copy-2-vm-image-QCow2"
                    convSrc <-
-                       mkTemp
-                           "in.raw-1-copy-2-vm-image-QCow2-XXXX-conversion-src" >>=
-                       ensureParentDir
+                       mkTempCreateParents
+                           "in.raw-1-copy-2-vm-image-QCow2-XXXX-conversion-src"
                    convDest <-
-                       mkTemp "vm-image-QCow2-4-converted-to-Vmdk" >>=
-                       ensureParentDir
+                       mkTempCreateParents "vm-image-QCow2-4-converted-to-Vmdk"
                    dest <- ensureParentDir "/tmp/test.vmdk"
                    copy origFile srcFile
                    moveFile srcFile srcImg
@@ -624,14 +615,12 @@ partitionedDiskSpec =
                    export rawPart2File "/tmp/part2.raw"
                expected = do
                    src <- getRealPath "/tmp/in.raw"
-                   raw <- mkTemp "in.raw-1-copy" >>= ensureParentDir
+                   raw <- mkTempCreateParents "in.raw-1-copy"
                    img <-
-                       mkTemp "in.raw-1-copy-2-partitioned-vm-image" >>=
-                       ensureParentDir
+                       mkTempCreateParents "in.raw-1-copy-2-partitioned-vm-image"
                    extracted <-
-                       mkTemp
-                           "in.raw-1-copy-2-partitioned-vm-image-3-partition-2" >>=
-                       ensureParentDir
+                       mkTempCreateParents
+                           "in.raw-1-copy-2-partitioned-vm-image-3-partition-2"
                    dst <- ensureParentDir "/tmp/part2.raw"
                    copy src raw
                    moveFile raw img
@@ -652,14 +641,12 @@ sharedImageSpec =
              (do (_,cachedImg) <-
                      imageRepoLookup (SharedImageName "source-image")
                  cachedImg' <- getRealPath cachedImg
-                 srcTmp <- mkTemp "xxx.qcow2-1-copy" >>= ensureParentDir
-                 outTmp <- mkTemp "xxx.qcow2-1-copy-XXXX-out-shared" >>= ensureParentDir
+                 srcTmp <- mkTempCreateParents "xxx.qcow2-1-copy"
+                 outTmp <-
+                     mkTempCreateParents "xxx.qcow2-1-copy-XXXX-out-shared"
                  copy cachedImg' srcTmp
                  moveFile srcTmp outTmp
-                 imageRepoPublish
-                     outTmp
-                     QCow2
-                     (SharedImageName "out-shared")))
+                 imageRepoPublish outTmp QCow2 (SharedImageName "out-shared")))
 
 -- * LiveInstaller image generation
 
@@ -681,12 +668,15 @@ updateServerImageSpec =
            "converts an input image in arbitrary format to a temporary Raw image inside a given directory" $
            shouldDoIo
                actual
-               (do
-                   src <- getRealPath srcFile
-                   srcCopy <- mkTemp "source.qcow2-1-copy" >>= ensureParentDir
-                   srcImg <- mkTemp "source.qcow2-1-copy-2-vm-image-QCow2" >>= ensureParentDir
-                   tmpDir <- mkTempDir "local-dir" >>= ensureParentDir
-                   srcImgCopy <- mkTemp "source.qcow2-1-copy-2-vm-image-QCow2-XXXX-webserver" >>= ensureParentDir
+               (do src <- getRealPath srcFile
+                   srcCopy <- mkTempCreateParents "source.qcow2-1-copy"
+                   srcImg <-
+                       mkTempCreateParents
+                           "source.qcow2-1-copy-2-vm-image-QCow2"
+                   tmpDir <- mkTempDir "local-dir"
+                   srcImgCopy <-
+                       mkTempCreateParents
+                           "source.qcow2-1-copy-2-vm-image-QCow2-XXXX-webserver"
                    dst <- ensureParentDir outDir
                    copy src srcCopy
                    moveFile srcCopy srcImg
@@ -714,98 +704,80 @@ updateServerImageSpec =
 
 -- * Containerized Build Specs
 
+fromFile
+    :: Show (ConvSpec 'FreeFile b)
+    => FilePath -> SArtifact b -> ConvSpec 'FreeFile b -> Program (Handle b)
+fromFile f a conversionArg = do
+    h <- use f
+    convert h a conversionArg
+
 containerExecutionSpec :: Spec
 containerExecutionSpec =
     describe "lxc environment" $
     do let envSpec =
                ExecEnvSpec "test-env" LibVirtLXC $
                Resources AutomaticRamSize 2 X86_64
-           testFileSpec1 =
+           passwdSpec =
                (FileSpec "/root/sub1/sub1.1/passwd" (0, 7, 6, 7) "root" "users")
-           testFileSpec2 =
-               (FileSpec "/build/issue" (0, 7, 7, 7) "root" "users")
+           issueSpec = (FileSpec "/build/issue" (0, 7, 7, 7) "root" "users")
            testProg = do
                e <- boot envSpec
                sh e "touch /test1"
+               addFileFull e (Source NoConversion "/etc/issue") issueSpec
                sh e "touch /test2"
-               addFileFull e (Source NoConversion "/etc/issue") testFileSpec2
-               addFileFull e (Source NoConversion "/etc/passwd") testFileSpec1
-               rootImgFile <- use "test-in.qcow2"
-               rootImg <- convert rootImgFile SVmImage QCow2
+               addFileFull e (Source NoConversion "/etc/passwd") passwdSpec
+               rootImg <- fromFile "test-in.qcow2" SVmImage QCow2
                rootOutImg <- mount e rootImg "/"
-               void $ export rootOutImg "img-out.qcow"
-       it "converts the input images into 'Raw' format" $
-           testProg `shouldDoIo`
-           do conv <- mkTemp "converted-img-file"
-              src' <- getRealPath "test-in.qcow2"
-              conv' <- ensureParentDir conv
-              convertVmImage src' QCow2 conv' Raw
-       it "exports the input images as new output images" $
-           testProg `shouldDoIo`
-           do conv <- mkTemp "converted-img-file"
-              dest <- mkTemp "resized-img-file"
-              conv' <- getRealPath conv
-              dest' <- ensureParentDir dest
-              moveFile conv' dest'
-       it "copies one added file into a directory to mount" $
-           shouldDoIo testProg $
-           do incDir <- mkTempDir "included-files"
-              includedFile1 <- mkTempIn incDir "added-file"
-              -- export the ReadOnlyFile "/etc/passwd":
-              realPathFile1 <- getRealPath "/etc/passwd"
-              realPathCopyOfFile1 <- ensureParentDir includedFile1
-              copy realPathFile1 realPathCopyOfFile1
-       it "copies all added files into a directory to mount" $
-           shouldDoIo testProg $
-           do incDir <- mkTempDir "included-files"
-              includedFile1 <- mkTempIn incDir "added-file"
-              includedFile2 <- mkTempIn incDir "added-file"
-              -- copy file 1
-              realPathFile1 <- getRealPath "/etc/passwd"
-              realPathCopyOfFile1 <- ensureParentDir includedFile1
-              copy realPathFile1 realPathCopyOfFile1
-              -- copy file 2
-              realPathFile2 <- getRealPath "/etc/issue"
-              realPathCopyOfFile2 <- ensureParentDir includedFile2
-              copy realPathFile2 realPathCopyOfFile2
-       it "generates a script to copy, chmod and chown all added files" $
-           shouldDoIo testProg $
-           do buildId <- B9.B9IO.getBuildId
-              incDir <- mkTempDir "included-files"
-              inc1 <- mkTempIn incDir "added-file"
-              inc2 <- mkTempIn incDir "added-file"
-              dest <- mkTemp "resized-img-file"
-              let incScript =
-                      incFileScript buildId inc2 testFileSpec2 <>
-                      incFileScript buildId inc1 testFileSpec1
-              executeInEnv
-                  envSpec
-                  incScript
-                  [ SharedDirectoryRO
-                        incDir
-                        (MountPoint $ includedFileContainerPath buildId)]
-                  [(Image dest Raw Ext4, MountPoint "/")]
+               void $ export rootOutImg "img-out.raw"
        it "creates the output image AFTER script execution" $
-           shouldDoIo testProg $
+           shouldDoIoNoBS testProg $
            do buildId <- B9.B9IO.getBuildId
               incDir <- mkTempDir "included-files"
-              inc1 <- mkTempIn incDir "added-file"
-              inc2 <- mkTempIn incDir "added-file"
-              tmpImg <- mkTemp "tmp-file"
-              destImg <- mkTemp "resized-img-file"
+              issueIn <- getRealPath "/etc/issue"
+              issue <- mkTempCreateParents "issue-2-copy"
+              issueInc <- mkTempInCreateParents incDir "added-file"
+              passwdIn <- getRealPath "/etc/passwd"
+              passwd <- mkTempCreateParents "passwd-4-copy"
+              passwdInc <- mkTempInCreateParents incDir "added-file"
+              imgIn <- getRealPath "test-in.qcow2"
+              img <- mkTempCreateParents "test-in.qcow2-6-copy"
+              imgCopy <-
+                  mkTempCreateParents "test-in.qcow2-6-copy-7-vm-image-QCow2"
+              imgConvSrc <-
+                  mkTempCreateParents
+                      "test-in.qcow2-6-copy-7-vm-image-QCow2-XXXX-conversion-src"
+              rawImg <-
+                  mkTempCreateParents "vm-image-QCow2-9-converted-to-Raw"
+              mountedImg <-
+                  mkTempCreateParents
+                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root"
+              mountedImgCopy <-
+                  mkTempCreateParents
+                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root-12-vm-image-Raw"
+              imgOut <- ensureParentDir "img-out.raw"
+              copy imgIn img
+              moveFile img imgCopy
+              moveFile imgCopy imgConvSrc
+              convertVmImage imgConvSrc QCow2 rawImg Raw
+              moveFile rawImg mountedImg
+              copy passwdIn passwd
+              moveFile passwd passwdInc
+              copy issueIn issue
+              moveFile issue issueInc
               let incScript =
-                      incFileScript buildId inc2 testFileSpec2 <>
-                      incFileScript buildId inc1 testFileSpec1
+                      (Run "touch /test1" []) <>
+                      incFileScript buildId issueInc issueSpec <>
+                      (Run "touch /test2" []) <>
+                      incFileScript buildId passwdInc passwdSpec
               executeInEnv
                   envSpec
                   incScript
                   [ SharedDirectoryRO
                         incDir
                         (MountPoint $ includedFileContainerPath buildId)]
-                  [(Image destImg Raw Ext4, MountPoint "/")]
-              tmpImg' <- ensureParentDir tmpImg
-              destImg' <- ensureParentDir destImg
-              moveFile tmpImg' destImg'
+                  [(Image mountedImg Raw Ext4, MountPoint "/")]
+              moveFile mountedImg mountedImgCopy
+              moveFile mountedImgCopy imgOut
 
 -- * DSL examples
 

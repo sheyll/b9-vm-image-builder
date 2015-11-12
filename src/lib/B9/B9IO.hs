@@ -187,17 +187,28 @@ readFileSize f = liftF $ ReadFileSize f id
 mkTemp :: FilePath -> IoProgram FilePath
 mkTemp prefix = liftF $ MkTemp prefix id
 
+-- | Like 'mkTemp' but also create the parent directory of the tempfile and
+-- return an absolute path.
+mkTempCreateParents :: FilePath -> IoProgram FilePath
+mkTempCreateParents prefix = mkTemp prefix >>= ensureParentDir
+
 -- | Create a unique file path inside a given directory starting with a given
 -- prefix and ending with a unique random token.
 mkTempIn :: FilePath -> FilePath -> IoProgram FilePath
 mkTempIn parent prefix = liftF $ MkTempIn parent prefix id
+
+-- | Like 'mkTempIn' but also create the parent directory of the tempfile and
+-- return an absolute path.
+mkTempInCreateParents :: FilePath -> FilePath -> IoProgram FilePath
+mkTempInCreateParents parent prefix =
+    mkTempIn parent prefix >>= ensureParentDir
 
 -- | Combination of 'mkTemp' and 'mkDir'
 mkTempDir :: FilePath -> IoProgram FilePath
 mkTempDir prefix = do
     tmp <- mkTemp prefix
     mkDir tmp
-    return tmp
+    getRealPath tmp
 
 -- | Return the canonical path of a relative path. NOTE: The file should exist!
 getRealPath :: FilePath -> IoProgram FilePath

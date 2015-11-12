@@ -1,7 +1,7 @@
 {- | Extra utilities for HSpec based unit tests -}
 module B9.SpecExtra
-       (should've, toList, toListIo, shouldDo, does,
-        shouldDoIo)
+       (should've, toList, toListIo, shouldDo, does, shouldDoIo,
+        shouldDoIoNoBS, noBS)
        where
 
 import B9.B9IO
@@ -44,3 +44,19 @@ does = isInfixOf `on` (dumpToStrings . compile)
 -- | Expect that a 'Program' contains at least a given 'IoProgram'.
 shouldDoIo :: Program a -> IoProgram b -> Expectation
 shouldDoIo actual expected = (toList actual) `should've` (toListIo expected)
+
+-- | Expect that a 'Program' contains at least a given 'IoProgram' - minus the
+-- noise
+shouldDoIoNoBS :: Show a => Program a -> IoProgram b -> Expectation
+shouldDoIoNoBS actual expected = do
+    putStrLn $ dumpToResult $ inspect actual
+    (noBS $ toList actual) `should've` (noBS $ toListIo expected)
+
+-- | Remove noise from IoProgram listings.
+noBS :: [String] -> [String]
+noBS =
+    filter (not . ("logTrace" `isPrefixOf`)) .
+    filter (not . ("mkDir" `isPrefixOf`)) .
+    filter (not . ("getRealPath" `isPrefixOf`)) .
+    filter (not . ("getParentDir" `isPrefixOf`)) .
+    filter (not . ("getFileName" `isPrefixOf`))
