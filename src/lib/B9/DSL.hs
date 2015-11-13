@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module B9.DSL
        (module X, BuildStep(..), Program, create, add, convert, export,
         Artifact(..), SArtifact(..), Handle(..), CreateSpec, AddSpec,
@@ -35,21 +36,21 @@ import Text.Printf (printf)
 -- ---------------------------------------------------------
 
 data BuildStep next where
-        Create :: -- Inject
-            (Show (CreateSpec a)) =>
-            SArtifact a -> CreateSpec a -> (Handle a -> next) -> BuildStep next
-        Add :: -- Compose w/o result
-            (Show (AddSpec env a)) =>
-            Handle env ->
-              SArtifact a -> AddSpec env a -> next -> BuildStep next
-        Convert :: -- Compose
-            (Show (ConvSpec a b)) =>
-            Handle a ->
-              SArtifact b -> ConvSpec a b -> (Handle b -> next) -> BuildStep next
-        Export :: -- Project
-            (Show (ExportSpec a), Show (ExportResult a)) =>
-            Handle a ->
-              ExportSpec a -> (ExportResult a -> next) -> BuildStep next
+    Create :: -- Inject
+        (Show (CreateSpec a)) =>
+        SArtifact a -> CreateSpec a -> (Handle a -> next) -> BuildStep next
+    Add :: -- Compose w/o result
+        (Show (AddSpec env a)) =>
+        Handle env ->
+          SArtifact a -> AddSpec env a -> next -> BuildStep next
+    Convert :: -- Compose
+        (Show (ConvSpec a b)) =>
+        Handle a ->
+          SArtifact b -> ConvSpec a b -> (Handle b -> next) -> BuildStep next
+    Export :: -- Project
+        (Show (ExportSpec a), Show (ExportResult a)) =>
+        Handle a ->
+          ExportSpec a -> (ExportResult a -> next) -> BuildStep next
 
 instance Functor BuildStep where
     fmap f (Create sa src k)            = Create sa src (f . k)
@@ -63,27 +64,27 @@ type Program a = Free BuildStep a
 
 -- | Declare an artifact.
 create
- :: (Show (CreateSpec a))
+    :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
 create sa src = liftF $ Create sa src id
 
 -- | Add an artifact to another artifact.
 add
- :: (Show (AddSpec a b))
+    :: (Show (AddSpec a b))
     => Handle a -> SArtifact b -> AddSpec a b -> Program ()
 add hndA sB addSpec = liftF $ Add hndA sB addSpec ()
 
 -- | Convert an artifact referenced by a handle to a different kind
 --  of artifact and return the handle of the new artifact.
 convert
- :: (Show (ConvSpec a b))
+    :: (Show (ConvSpec a b))
     => Handle a -> SArtifact b -> ConvSpec a b -> Program (Handle b)
 convert hndA sB convSpec = liftF $ Convert hndA sB convSpec id
 
 -- | Exports an artifact referenced by a handle a to a /real/ output,
 -- i.e. something that is not necessarily referenced to by 'Handle'.
 export
- :: (Show (ExportSpec a), Show (ExportResult a))
+    :: (Show (ExportSpec a), Show (ExportResult a))
     => Handle a -> ExportSpec a -> Program (ExportResult a)
 export hnd out = liftF $ Export hnd out id
 
@@ -91,7 +92,7 @@ export hnd out = liftF $ Export hnd out id
 -- ---------------------------------------------------------
 
 data Artifact
- = VmImage
+    = VmImage
     | UpdateServerRoot
     | PartitionedVmImage
     | CloudInit
@@ -260,8 +261,8 @@ doc str = add documentation SDocumentation str
 
 (#) :: Program a -> String -> Program a
 m # str = do
-  doc str
-  m
+    doc str
+    m
 
 -- * Incorporating external files
 
@@ -273,8 +274,8 @@ externalFile = create SExternalFile
 -- can be modified.
 use :: FilePath -> Program (Handle 'FreeFile)
 use f = do
-  extH <- externalFile f
-  convert extH SFreeFile ()
+    extH <- externalFile f
+    convert extH SFreeFile ()
 
 -- | 'use' an external file to introduce an artifact with the help of a
 --  artifact dependent extra arguement and return the artifacts handle.
@@ -520,9 +521,9 @@ mountAndShareSharedImage :: String
                          -> Handle 'ExecutionEnvironment
                          -> Program ()
 mountAndShareSharedImage nameFrom nameTo mountPoint env = do
-  i <- fromShared nameFrom
-  i' <- mount env i mountPoint
-  i' `sharedAs` nameTo
+    i <- fromShared nameFrom
+    i' <- mount env i mountPoint
+    i' `sharedAs` nameTo
 
 mountAndShareNewImage
     :: String

@@ -184,7 +184,6 @@ test-suite spec
   other-modules:     B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
-                   , B9.DiskImagesSpec
                    , B9.DSL.InterpreterSpec
                    , B9.SpecExtra
                    , B9.B9IOSpec

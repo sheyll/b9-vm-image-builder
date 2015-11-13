@@ -76,17 +76,15 @@ extractPartitionOfQCow2 p srcFile dstFile = do
 
 copyEtcPasswdOntoSharedImage :: Program ()
 copyEtcPasswdOntoSharedImage = do
-   root <- fromShared "prod-fc22-15.3.0"
-   e <- lxc "juhu"
-   addFileFull e (Source NoConversion "test.mp3") (fileSpec "/test.mp3")
-   outImgRaw <- mount e root "/"
-
-   rwFs <- convert outImgRaw SFileSystemImage ()
-   vmImg <- convert rwFs  SVmImage ()
-   vmQCow <- convert vmImg SVmImage (Left QCow2)
-   vmQCow `sharedAs` "juhu-out"
-
-   outputFile e "/etc/passwd" "/home/sven/fc-passwd"
+    root <- fromShared "prod-fc22-15.3.0" # "test"
+    e <- lxc "juhu" # "sdfsfaf"
+    addFileFull e (Source NoConversion "test.mp3") (fileSpec "/test.mp3")
+    outImgRaw <- mount e root "/"
+    rwFs <- convert outImgRaw SFileSystemImage ()
+    vmImg <- convert rwFs SVmImage ()
+    vmQCow <- convert vmImg SVmImage (Left QCow2)
+    vmQCow `sharedAs` "juhu-out"
+    outputFile e "/etc/passwd" "/home/sven/fc-passwd"
 
 dslExample1 :: Program ()
 dslExample1 = do
