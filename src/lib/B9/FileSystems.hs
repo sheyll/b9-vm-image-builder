@@ -1,20 +1,14 @@
 -- | A module for general file system creation and resize.
 module B9.FileSystems where
 
-import           B9.B9Monad
-import           B9.Content
-import           B9.DiskImages
-import           B9.QCUtil
-import           Control.Lens hiding ((<.>), elements)
-import           Control.Monad
-import           Control.Parallel.Strategies
-import           Data.Binary
-import           Data.Data
-import           Data.Hashable
-import           GHC.Generics (Generic)
-import           System.FilePath
-import           Test.QuickCheck
-import           Text.Printf
+import B9.CommonTypes
+import B9.QCUtil
+import Control.Parallel.Strategies
+import Data.Binary
+import Data.Data
+import Data.Hashable
+import GHC.Generics (Generic)
+import Test.QuickCheck
 
 -- | Descibe how a 'FileSystem' should be created.
 data FileSystemSpec =
@@ -24,9 +18,24 @@ data FileSystemSpec =
                    SizeUnit
     deriving (Read,Show,Generic,Eq,Data,Typeable)
 
+type FSLabel = String
+
 instance Hashable FileSystemSpec
 instance Binary FileSystemSpec
 instance NFData FileSystemSpec
+
+-- | The file systems that b9 can use and convert. TODO move to FileSystems
+data FileSystem
+    = NoFileSystem
+    | Ext4
+    | ISO9660
+    | VFAT
+    deriving (Eq,Show,Read,Typeable,Data,Generic)
+
+instance Hashable FileSystem
+instance Binary FileSystem
+instance NFData FileSystem
+instance CoArbitrary FileSystem
 
 -- | How to resize a file system.
 data FileSystemResize
@@ -43,72 +52,6 @@ instance Hashable FileSystemResize
 instance Binary FileSystemResize
 instance NFData FileSystemResize
 
--- | Resize an image, including the file system inside the image.
-resizeFS :: FileSystemResize -> FilePath -> FileSystem -> B9 ()
-resizeFS (FileSystemResize newSize u) img Ext4 = do
-    let sizeOpt = toExt4SizeOptVal (ImageSize newSize u)
-    cmdRaw "e2fsck" ["-p", img]
-    cmdRaw "resize2fs" ["-f", img, sizeOpt]
-resizeFS ShrinkFileSystem img Ext4 = do
-    cmdRaw "e2fsck" ["-p", img]
-    cmdRaw "resize2fs" ["-f", "-M", img]
-resizeFS _ img fsT =
-    error
-        (printf
-             "Invalid filesystem, cannot resize image: %s of type %s"
-             (show img)
-             (show fsT))
-
--- | Return the __size unit__ parameter string for @resize2fs@.
-toExt4SizeOptVal :: ImageSize -> String
-toExt4SizeOptVal (ImageSize amount u) =
-    show amount ++
-    case u of
-        GB -> "G"
-        MB -> "M"
-        KB -> "K"
-        B -> ""
-
--- | Create an empty file with a given size.
-createEmptyFile :: FilePath -> Int -> SizeUnit -> B9 ()
-createEmptyFile f s su = do
-    cmdRaw "truncate" ["--size", show s ++ formattedSizeUnit, f]
-  where
-    formattedSizeUnit =
-        case su of
-            GB -> "G"
-            MB -> "M"
-            KB -> "K"
-            B -> ""
-
--- | Create a file system inside a file with a given list of file contents.
-createFSWithFiles :: FilePath
-                  -> FileSystemSpec
-                  -> FilePath
-                  -> [FileSpec]
-                  -> B9 ()
-createFSWithFiles dst (FileSystemSpec ISO9660 l _s _su) srcDir _fs = do
-    cmdRaw "genisoimage" ["-output", dst, "-volid", l, "-rock", "-d", srcDir]
-createFSWithFiles dst (FileSystemSpec VFAT l s su) srcDir fs = do
-    createEmptyFile dst s su
-    cmdRaw "mkfs.vfat" ["-n", l, dst]
-    cmdRaw
-        "mcopy"
-        (("-oi" : dst : (((srcDir </>) . view fileSpecPath) <$> fs)) ++ ["::"])
-createFSWithFiles dst (FileSystemSpec Ext4 l s su) _ fs = do
-    when (not (null fs)) $
-        fail "Creating non-empty Ext4 file systems is not yet implemented"
-    createEmptyFile dst s su
-    cmdRaw "mkfs.ext4" ["-L", l, "-q", dst]
-createFSWithFiles dst c srcD fs =
-    fail $
-    printf
-        "Not implemented: createFSWithFiles '%s' '%s' '%s' %s"
-        dst
-        (show c)
-        srcD
-        (show fs)
-
 -- * 'Arbitrary' instances for quickcheck
 
 instance Arbitrary FileSystemSpec where
@@ -122,3 +65,6 @@ instance Arbitrary FileSystemResize where
         oneof
             [ FileSystemResize <$> smaller arbitrary <*> smaller arbitrary
             , pure ShrinkFileSystem]
+
+instance Arbitrary FileSystem where
+    arbitrary = elements [Ext4, ISO9660, VFAT]

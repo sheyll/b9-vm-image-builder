@@ -7,6 +7,7 @@
     -}
 module B9.ExecEnv where
 
+import B9.CommonTypes
 import B9.DiskImages
 import B9.QCUtil
 import Control.Lens
@@ -17,6 +18,7 @@ import Data.Default
 import Data.Hashable
 import Data.Monoid
 import GHC.Generics (Generic)
+import System.FilePath
 import Test.QuickCheck
 
 data ExecEnv = ExecEnv
@@ -31,12 +33,27 @@ instance Hashable ExecEnv
 instance Binary ExecEnv
 instance NFData ExecEnv
 
+-- | A mount point
+newtype MountPoint =
+    MountPoint FilePath
+    deriving (Show,Read,Typeable,Data,Eq,Hashable,Binary,NFData)
+
+-- | A type alias that indicates that something of type @a@ is mount at a
+-- 'MountPoint'
+type Mounted a = (a, MountPoint)
+
+-- | Format a mount point to a human readable string, containing no slashes.
+printMountPoint :: MountPoint -> String
+printMountPoint (MountPoint m) =
+    case m of
+        "/" -> "root"
+        _ -> takeFileName m
+
 data SharedDirectory
     = SharedDirectory FilePath
                       MountPoint
     | SharedDirectoryRO FilePath
                         MountPoint
-    | SharedSources MountPoint
     deriving (Read,Show,Typeable,Data,Eq,Generic)
 
 instance Hashable SharedDirectory
@@ -115,6 +132,9 @@ instance Default ExecEnvSpec where
   def = ExecEnvSpec "exec-env" LibVirtLXC def
 
 makeLenses ''ExecEnvSpec
+
+instance Arbitrary MountPoint where
+    arbitrary = pure (MountPoint "/mnt")
 
 instance Arbitrary ExecEnvSpec where
     arbitrary =

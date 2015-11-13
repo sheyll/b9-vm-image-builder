@@ -3,6 +3,9 @@ module B9.B9IOSpec (spec) where
 import B9.B9Config
 import B9.B9IO
 import B9.Content
+import B9.CommonTypes
+import B9.Repository
+import B9.PartitionTable
 import B9.DiskImages
 import B9.FileSystems
 import Data.Default

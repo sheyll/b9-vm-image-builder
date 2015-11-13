@@ -2,8 +2,10 @@
 module B9.QemuImg where
 
 import B9.B9Monad
+import B9.CommonTypes
 import B9.ConfigUtils
 import B9.DiskImages
+import B9.FileSystems
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Function
@@ -11,31 +13,12 @@ import System.Directory
 import Text.Printf (printf)
 
 -- | Resize a vm image.
-resizeImage_ :: ImageSize -> FilePath -> ImageType -> B9 ()
-resizeImage_ newSize img t
+resizeImage :: ImageSize -> FilePath -> ImageType -> B9 ()
+resizeImage newSize img t
   | t `elem` [QCow2, Vmdk, Raw] =
       let sizeOpt = toQemuSizeOptVal newSize
       in cmdRaw "qemu-img" ["resize", "-q", img, sizeOpt]
   | otherwise = fail $ printf "unsupported image type %s" (show t)
-
--- | Resize an image, including the file system inside the image.
-resizeImage :: ImageResize -> Image -> B9 ()
-resizeImage KeepSize _ = return ()
-resizeImage (Resize newSize) (Image img Raw Ext4) = do
-    let sizeOpt = toQemuSizeOptVal newSize
-    cmd (printf "e2fsck -p '%s'" img)
-    cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
-resizeImage (ResizeImage newSize) (Image img _ _) = do
-    let sizeOpt = toQemuSizeOptVal newSize
-    cmd (printf "qemu-img resize -q '%s' %s" img sizeOpt)
-resizeImage ShrinkToMinimum (Image img Raw Ext4) = do
-    cmd (printf "e2fsck -p '%s'" img)
-    cmd (printf "resize2fs -f -M '%s'" img)
-resizeImage _ img =
-    error
-        (printf
-             "Invalid image type or filesystem, cannot resize image: %s"
-             (show img))
 
 -- | Convert vm images using @qemu-img convert@
 convertImageType :: FilePath -> ImageType -> FilePath -> ImageType -> B9 ()

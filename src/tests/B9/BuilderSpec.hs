@@ -1,12 +1,14 @@
 module B9.BuilderSpec (spec) where
 
+import Test.Hspec
+#ifdef INTEGRATION_TESTS
 import B9
 import B9.DSL
 import B9.FileSystems
 import System.Directory
-import Test.Hspec
 import Test.QuickCheck
 import Text.Printf
+#endif
 
 spec :: Spec
 spec =
@@ -35,6 +37,11 @@ spec =
 #else
     return ()
 #endif
+
+
+#ifdef INTEGRATION_TESTS
+
+-- * DSL examples
 
 ciDir :: Program ()
 ciDir = do
@@ -71,12 +78,48 @@ copyEtcPasswdOntoSharedImage :: Program ()
 copyEtcPasswdOntoSharedImage = do
    root <- fromShared "prod-fc22-15.3.0"
    e <- lxc "juhu"
-   addFileFull e (Source NoConversion "/home/sven/Downloads/wdrhoerspielspeicher_2014-10-31_00-02.mp3") (fileSpec "/test.mp3")
+   addFileFull e (Source NoConversion "test.mp3") (fileSpec "/test.mp3")
    outImgRaw <- mount e root "/"
-{-
+
    rwFs <- convert outImgRaw SFileSystemImage ()
    vmImg <- convert rwFs  SVmImage ()
    vmQCow <- convert vmImg SVmImage (Left QCow2)
    vmQCow `sharedAs` "juhu-out"
--}
+
    outputFile e "/etc/passwd" "/home/sven/fc-passwd"
+
+dslExample1 :: Program ()
+dslExample1 = do
+    "x" $= "3"
+    c <- newCloudInit "blah-ci"
+    writeCloudInit c ISO9660 "test.iso"
+    writeCloudInitDir c "test"
+    writeCloudInit c VFAT "test.vfat"
+    addMetaData c (ASTString "test")
+    addUserData c (ASTString "test")
+    e <- lxc "container-id"
+    mountDirRW e "tmp" "/mnt/HOST_TMP"
+    addFileFull
+        e
+        (Source ExpandVariables "httpd.conf.in")
+        (fileSpec "/etc/httpd.conf")
+    sh e "ls -la"
+    addTemplate c "httpd.conf"
+    sh c "ls -la"
+    doc "From here there be dragons:"
+    rootImage "fedora" "testv1-root" e
+    dataImage "testv1-data" e
+    {-
+    img <- from "schlupfi"
+    mountDir e "/tmp" "/mnt/HOST_TMP"
+    sharedAs img "wupfi"
+    resize img 64 GB
+    resizeToMinimum img
+    -}
+
+dslExample2 :: Program ()
+dslExample2 = do
+    env <- lxc "c1"
+    sh env "ls -lR /"
+
+#endif

@@ -2,9 +2,8 @@ module B9.DSL.InterpreterSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
 import B9.DSL
-import B9.FileSystems
+import B9.DSL.Interpreter
 import B9.SpecExtra
-import Control.Lens hiding (from, use)
 import Test.Hspec
 import Test.QuickCheck (property)
 
@@ -790,39 +789,3 @@ containerExecutionSpec =
               moveFile tmpOut destOut
               moveFile mountedImg mountedImgCopy
               moveFile mountedImgCopy imgOut
-
--- * DSL examples
-
-dslExample1 :: Program ()
-dslExample1 = do
-    "x" $= "3"
-    c <- newCloudInit "blah-ci"
-    writeCloudInit c ISO9660 "test.iso"
-    writeCloudInitDir c "test"
-    writeCloudInit c VFAT "test.vfat"
-    addMetaData c (ASTString "test")
-    addUserData c (ASTString "test")
-    e <- lxc "container-id"
-    mountDirRW e "tmp" "/mnt/HOST_TMP"
-    addFileFull
-        e
-        (Source ExpandVariables "httpd.conf.in")
-        (fileSpec "/etc/httpd.conf")
-    sh e "ls -la"
-    addTemplate c "httpd.conf"
-    sh c "ls -la"
-    doc "From here there be dragons:"
-    rootImage "fedora" "testv1-root" e
-    dataImage "testv1-data" e
-    {-
-    img <- from "schlupfi"
-    mountDir e "/tmp" "/mnt/HOST_TMP"
-    sharedAs img "wupfi"
-    resize img 64 GB
-    resizeToMinimum img
-    -}
-
-dslExample2 :: Program ()
-dslExample2 = do
-    env <- lxc "c1"
-    sh env "ls -lR /"

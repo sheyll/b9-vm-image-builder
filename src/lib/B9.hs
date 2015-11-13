@@ -12,20 +12,24 @@
 -}
 
 module B9 (b9_version, module X) where
-import           Control.Monad as X
-import           Control.Monad.IO.Class as X
-import           Data.Monoid as X
-import           Data.List as X
-import           Data.Maybe as X
-import           Text.Show.Pretty as X (ppShow)
-import           System.Exit as X (exitWith, ExitCode(..))
-import           System.FilePath as X
+import Control.Monad as X
+import Control.Monad.IO.Class as X
+import Data.Monoid as X
+import Data.List as X
+import Data.Maybe as X
+import Text.Show.Pretty as X (ppShow)
+import System.Exit as X (exitWith, ExitCode(..))
+import System.FilePath as X
        (takeDirectory, takeFileName, replaceExtension, (</>), (<.>))
-import           Text.Printf as X (printf)
-import           Data.Version as X
-import           B9.Builder as X
-import           Paths_b9 (version)
-
+import Text.Printf as X (printf)
+import Data.Version as X
+import B9.Builder as X
+import Paths_b9 (version)
+import Control.Monad.Reader as X
+import Control.Monad.State as X
+import Data.Default as X
+import Data.Function as X (on)
+import Control.Lens as X hiding (argument, (#), from, use, (<.>), uncons)
 
 -- | Return the cabal package version of the B9 library.
 b9_version :: Version

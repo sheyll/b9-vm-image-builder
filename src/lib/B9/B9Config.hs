@@ -25,6 +25,7 @@ import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
 import System.Directory
 import Text.Printf
+import Data.ConfigFile as CF
 
 type BuildVariables = [(String, String)]
 

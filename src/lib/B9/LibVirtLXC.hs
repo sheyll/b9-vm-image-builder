@@ -1,22 +1,20 @@
 {-| Implementation of an execution environment that uses "libvirt-lxc". -}
 module B9.LibVirtLXC ( runInEnvironment
-                     , supportedImageTypes
                      , setDefaultConfig
                      ) where
 
+import B9.B9Monad
+import B9.CommonTypes
+import B9.ConfigUtils
+import B9.DiskImages
+import B9.ExecEnv
+import B9.ShellScript
 import Control.Monad.IO.Class ( liftIO )
+import Data.Char (toLower)
+import Data.ConfigFile as CF
 import System.Directory
 import System.FilePath
 import Text.Printf ( printf )
-import Data.Char (toLower)
-import B9.ShellScript
-import B9.B9Monad
-import B9.DiskImages
-import B9.ExecEnv
-import B9.ConfigUtils
-
-supportedImageTypes :: [ImageType]
-supportedImageTypes = [Raw]
 
 runInEnvironment :: ExecEnv -> Script -> B9 Bool
 runInEnvironment env scriptIn =
@@ -302,11 +300,9 @@ fsSharedDir (SharedDirectoryRO hostDir mnt) =
             hostDir ++
             "'/>" ++ "\n  " ++ mntXml ++ "\n  <readonly />\n</filesystem>"
         Nothing -> ""
-fsSharedDir (SharedSources _) = error "Unreachable code reached!"
 
 fsTarget :: MountPoint -> Maybe String
 fsTarget (MountPoint dir) = Just $ "<target dir='" ++ dir ++ "'/>"
-fsTarget _ = Nothing
 
 memoryUnit :: LibVirtLXCConfig -> ExecEnv -> String
 memoryUnit cfg = toUnit . maxMemory . envResources

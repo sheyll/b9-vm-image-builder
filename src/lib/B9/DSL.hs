@@ -1,19 +1,28 @@
-{-# LANGUAGE ConstraintKinds #-}
-module B9.DSL where
+module B9.DSL
+       (module X, BuildStep(..), Program, create, add, convert, export,
+        Artifact(..), SArtifact(..), Handle(..), CreateSpec, AddSpec,
+        ConvSpec, ExportSpec, ExportResult, singletonHandle, handle,
+        imageRepositoryH, documentation, doc, ( # ), externalFile, use,
+        fromFile, outputFile, variableBindings, ($=), addFile, addExe,
+        addFileP, addTemplate, addTemplateP, addTemplateExe, addFileFull,
+        addFileFromContent, createContent, appendContent, newDirectory,
+        exportDir, newCloudInit, addMetaData, addUserData,
+        writeCloudInitDir, writeCloudInitDir', writeCloudInit,
+        addCloudInitToArtifact, fromShared, sharedAs, boot, lxc, lxc32,
+        mountDir, mountDirRW, mount, runCommand, sh, rootImage, dataImage,
+        mountAndShareSharedImage, mountAndShareNewImage, interpret,
+        Interpreter(..))
+       where
 
-import B9.Content
-       (SourceFile(..), Content(..), FileSpec(..), AST(..),
-        YamlObject(..), FileSpec, fileSpec, fileSpecPermissions,
-        fileSpecPath, SourceFileConversion(..))
-import B9.DiskImages
-       (FileSystem(..), ImageSize(..), ImageType(..), SizeUnit(..),
-        MountPoint(..), PartitionSpec(..), SharedImageName(..))
-import B9.ExecEnv
-       (ExecEnvSpec(..), ExecEnvType(..), CPUArch(..), Resources(..),
-        RamSize(..), SharedDirectory(..))
-import B9.FileSystems (FileSystemSpec(..), FileSystemResize(..))
-import B9.ShellScript (Script(..))
-import Control.Lens hiding (from, use)
+import B9.Content as X
+import B9.DiskImages as X
+import B9.ExecEnv as X
+import B9.FileSystems as X
+import B9.CommonTypes as X
+import B9.Repository as X
+import B9.PartitionTable as X
+import B9.ShellScript as X (Script(..))
+import Control.Lens hiding ((#), from, use, (<.>), uncons)
 import Control.Monad.Free (Free(..), liftF, foldFree)
 import Data.Binary
 import Data.Data
@@ -21,10 +30,9 @@ import Data.Function (on)
 import Data.Functor (void)
 import GHC.Generics (Generic)
 import System.FilePath
-import Text.Printf
+import Text.Printf (printf)
 
 -- ---------------------------------------------------------
-
 
 data BuildStep next where
         Create :: -- Inject
@@ -523,8 +531,12 @@ mountAndShareNewImage
     -> FilePath
     -> Handle 'ExecutionEnvironment
     -> Program ()
-mountAndShareNewImage _fsLabel _sizeGB _nameExport _mountPoint _env = do
-  return ()
+mountAndShareNewImage label sizeGB nameTo mountPoint env = do
+  fs <- create SFileSystemBuilder (FileSystemSpec Ext4 label sizeGB GB)
+  fi <- convert fs SFileSystemImage ()
+  i <- convert fi SVmImage ()
+  i' <- mount env i mountPoint
+  i' `sharedAs` nameTo
 
 -- * DSL Interpreter
 

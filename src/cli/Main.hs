@@ -1,16 +1,14 @@
 module Main where
 
-import Control.Exception
-import Data.Function (on)
+import B9
 import B9.B9Monad
-import Data.Maybe
-import Data.Version
+import Control.Exception
+import Data.ConfigFile as CF
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
 import Paths_b9
 import System.Directory
 import System.IO.Error hiding (isDoesNotExistErrorType)
-import B9
 
 main :: IO ()
 main = do
@@ -24,7 +22,8 @@ parseCommandLine :: IO B9Options
 parseCommandLine =
     execParser
         (info
-             (helper <*> (B9Options <$> parseGlobalOpts <*> cmds <*> parseBuildVars))
+             (helper <*>
+              (B9Options <$> parseGlobalOpts <*> cmds <*> parseBuildVars))
              (fullDesc <>
               progDesc
                   "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'" <>
@@ -42,10 +41,10 @@ data B9Options =
 type BuildAction = Maybe SystemPath -> ConfigParser -> B9Config -> IO Bool
 
 runB9Command :: B9Options -> IO Bool
-runB9Command (B9Options globalOpts action vars) = do
+runB9Command (B9Options globalOpts action vs) = do
     let cfgWithArgs =
             cfgCli
-            { envVars = envVars cfgCli ++ vars
+            { envVars = envVars cfgCli ++ vs
             }
         cfgCli = cliB9Config globalOpts
         cfgFile = configFile globalOpts

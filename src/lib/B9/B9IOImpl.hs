@@ -7,15 +7,18 @@ import           B9.Content
 import           B9.DiskImages
 import           B9.ExecEnv
 import           B9.FileSystems
+import           B9.FileSystemsImpl
 import qualified B9.LibVirtLXC as LXC
-import           B9.MBR
+import           B9.PartitionTable
 import           B9.QemuImg
 import           B9.RepositoryIO
 import           B9.ShellScript
+import qualified Conduit as C
 import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import qualified Data.ByteString as B
+import qualified Data.Conduit.Binary as CB
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import           System.Directory
@@ -23,8 +26,6 @@ import           System.FilePath
 import           System.IO
 import           System.Random
 import           Text.Printf
-import qualified Conduit as C
-import qualified Data.Conduit.Binary as CB
 
 -- | Execute a 'B9IO' Program in the 'B9' monad.
 executeIoProg :: IoProgram a -> B9Monad.B9 a
@@ -93,10 +94,10 @@ executeIoProg = runB9IO go
         convertImageType s st d dt
         return n
     go (ResizeVmImage i s u t n) = do
-        resizeImage_ (ImageSize s u) i t
+        resizeImage (ImageSize s u) i t
         return n
-    go (ExtractPartition (MBRPartition partIndex) s d n) = do
-        (start,len) <- liftIO $ B9.MBR.getPartition partIndex s
+    go (ExtractPartition p@(MBRPartition partIndex) s d n) = do
+        (start,len) <- liftIO $ getPartition p s
         B9Monad.traceL
             (printf
                  "extracting MBR partition %d starting at %d with a length of %d (bytes) from %s to %s"

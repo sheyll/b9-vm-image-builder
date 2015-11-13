@@ -4,13 +4,13 @@
 module B9.ConfigUtils
        (allOn, lastOn, SystemPath(..), resolve, ensureDir, readIniFile,
         getOptionM, getOption, getOptionOr, IniFileException(..),
-        module Data.ConfigFile, UUID(..), randomUUID, tell, consult,
+        UUID(..), randomUUID, tell, consult,
         getDirectoryFiles, maybeConsult, maybeConsultSystemPath)
        where
 
 import Control.Exception
 import Control.Monad.IO.Class
-import Data.ConfigFile
+import Data.ConfigFile as CF
 import Data.Data
 import Data.Function ( on )
 import Data.Monoid
@@ -119,39 +119,55 @@ data IniFileException =
 
 instance Exception IniFileException
 
-readIniFile :: MonadIO m => SystemPath -> m ConfigParser
+readIniFile
+    :: MonadIO m
+    => SystemPath -> m ConfigParser
 readIniFile cfgFile' = do
-  cfgFile <- resolve cfgFile'
-  cp' <- liftIO $ readfile emptyCP cfgFile
-  case cp' of
-    Left e   -> liftIO $ throwIO (IniFileException cfgFile e)
-    Right cp -> return cp
+    cfgFile <- resolve cfgFile'
+    cp' <- liftIO $ readfile emptyCP cfgFile
+    case cp' of
+        Left e -> liftIO $ throwIO (IniFileException cfgFile e)
+        Right cp -> return cp
 
-getOption :: (Get_C a, Monoid a) => ConfigParser -> SectionSpec -> OptionSpec -> a
-getOption cp sec key = either (const mempty) id $ get cp sec key
+getOption
+    :: (Get_C a, Monoid a)
+    => ConfigParser -> SectionSpec -> OptionSpec -> a
+getOption cp sec key = either (const mempty) id $ CF.get cp sec key
 
-getOptionM :: (Get_C a, Read a) => ConfigParser -> SectionSpec -> OptionSpec -> Maybe a
-getOptionM cp sec key = either (const Nothing) id $ get cp sec key
+getOptionM
+    :: (Get_C a, Read a)
+    => ConfigParser -> SectionSpec -> OptionSpec -> Maybe a
+getOptionM cp sec key = either (const Nothing) id $ CF.get cp sec key
 
-getOptionOr :: (Get_C a, Read a) => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
-getOptionOr cp sec key dv = either (const dv) id $ get cp sec key
+getOptionOr
+    :: (Get_C a, Read a)
+    => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
+getOptionOr cp sec key dv = either (const dv) id $ CF.get cp sec key
 
-newtype UUID = UUID (Word32, Word16, Word16, Word16, Word32, Word16)
-             deriving (Read, Show, Eq, Ord)
+newtype UUID =
+    UUID (Word32, Word16, Word16, Word16, Word32, Word16)
+    deriving (Read,Show,Eq,Ord)
 
 instance PrintfArg UUID where
-  formatArg (UUID (a, b, c, d, e, f)) fmt
-    | fmtChar (vFmt 'U' fmt) == 'U' =
-        let str = (printf "%08x-%04x-%04x-%04x-%08x%04x" a b c d e f :: String)
-        in formatString str (fmt { fmtChar = 's', fmtPrecision = Nothing })
-    | otherwise = errorBadFormat $ fmtChar fmt
+    formatArg (UUID (a,b,c,d,e,f)) fmt
+      | fmtChar (vFmt 'U' fmt) == 'U' =
+          let str =
+                  (printf "%08x-%04x-%04x-%04x-%08x%04x" a b c d e f :: String)
+          in formatString
+                 str
+                 (fmt
+                  { fmtChar = 's'
+                  , fmtPrecision = Nothing
+                  })
+      | otherwise = errorBadFormat $ fmtChar fmt
 
 
-randomUUID :: MonadIO m => m UUID
-randomUUID = liftIO
-               (UUID <$> ((,,,,,) <$> randomIO
-                                  <*> randomIO
-                                  <*> randomIO
-                                  <*> randomIO
-                                  <*> randomIO
-                                  <*> randomIO))
+randomUUID
+    :: MonadIO m
+    => m UUID
+randomUUID =
+    liftIO
+        (UUID <$>
+         ((,,,,,) <$> randomIO <*> randomIO <*> randomIO <*> randomIO <*>
+          randomIO <*>
+          randomIO))

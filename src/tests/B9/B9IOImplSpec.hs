@@ -1,13 +1,11 @@
 module B9.B9IOImplSpec (spec) where
 
-import B9.B9Monad
-import B9.B9Config
+#ifdef INTEGRATION_TESTS
 import B9.B9IO
-import B9.B9IOImpl
 import B9.Builder
-import B9.FileSystems
 import System.Directory
 import System.FilePath
+#endif
 import Test.Hspec
 
 spec :: Spec
@@ -44,14 +42,14 @@ spec =
              convertVmImage "/tmp/convert-in.raw" Raw "/tmp/convert-out.qcow2" QCow2
            doesFileExist "/tmp/convert-out.qcow2" `shouldReturn` True
        it "always returns the same build id" $ do
-          (b1,b2) <- (runIoProgramNoConfig $ (,) <$> B9.B9IO.getBuildId <*> B9.B9IO.getBuildId)
+          (b1,b2) <- (runIoProgramNoConfig $ (,) <$> getBuildId <*> getBuildId)
           b1 `shouldBe` b2
        it "always returns the same build date" $ do
-          (b1,b2) <- (runIoProgramNoConfig $ (,) <$> B9.B9IO.getBuildDate <*> B9.B9IO.getBuildDate)
+          (b1,b2) <- (runIoProgramNoConfig $ (,) <$> getBuildDate <*> getBuildDate)
           b1 `shouldBe` b2
        it "can read a file size" $ do
          runIoProgramNoConfig (do renderContentToFile "/tmp/reaadFileSizeTest" (FromString "hello") (Environment [])
-                      readFileSize "/tmp/reaadFileSizeTest") `shouldReturn` 5
+                                  readFileSize "/tmp/reaadFileSizeTest") `shouldReturn` 5
 #else
     return ()
 #endif

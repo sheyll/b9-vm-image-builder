@@ -6,17 +6,8 @@
 module B9.DSL.Interpreter where -- TODO rename to Compiler
 
 import B9.B9IO
-import B9.Content
-       (Content(..), Environment(..), AST(..), YamlObject(..), astMerge,
-        FileSpec(..), fileSpecPath)
 import B9.DSL hiding (use)
-import B9.DiskImages
-       (Image(..), FileSystem(..), ImageSize(..), ImageType(..), Mounted,
-        MountPoint(..), SharedImageName(..), siImgType, printMountPoint,
-        PartitionSpec(..))
-import B9.ExecEnv
-import B9.FileSystems (FileSystemSpec(..))
-import B9.ShellScript (Script(..), toBashOneLiner)
+import B9.ShellScript (toBashOneLiner)
 import Control.Lens hiding (from, (<.>))
 import Control.Monad.Reader
 import Control.Monad.State

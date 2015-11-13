@@ -64,31 +64,32 @@ source-repository head
 library
   exposed-modules:   B9
                    , B9.B9Config
-                   , B9.B9Monad
                    , B9.B9IO
                    , B9.B9IOImpl
+                   , B9.B9Monad
                    , B9.Builder
+                   , B9.CommonTypes
                    , B9.ConfigUtils
-                   , B9.ExecEnv
-                   , B9.DiskImages
-                   , B9.DiskImageBuilder
-                   , B9.ShellScript
-                   , B9.PartitionTable
-                   , B9.MBR
-                   , B9.LibVirtLXC
-                   , B9.Repository
-                   , B9.RepositoryIO
                    , B9.Content
+                   , B9.Content.AST
                    , B9.Content.ErlTerms
                    , B9.Content.ErlangPropList
-                   , B9.Content.YamlObject
-                   , B9.Content.AST
                    , B9.Content.StringTemplate
-                   , B9.QCUtil
-                   , B9.QemuImg
+                   , B9.Content.YamlObject
                    , B9.DSL
                    , B9.DSL.Interpreter
+                   , B9.DiskImages
+                   , B9.ExecEnv
                    , B9.FileSystems
+                   , B9.FileSystemsImpl
+                   , B9.LibVirtLXC
+                   , B9.MBR
+                   , B9.PartitionTable
+                   , B9.QCUtil
+                   , B9.QemuImg
+                   , B9.Repository
+                   , B9.RepositoryIO
+                   , B9.ShellScript
   other-modules:   Paths_b9
   -- other-extensions:
   build-depends:     ConfigFile
@@ -149,9 +150,10 @@ library
 
 executable b9c
   main-is:           Main.hs
-  -- other-modules:
+  other-modules:     Paths_b9
   -- other-extensions:
   build-depends:     b9
+                   , ConfigFile
                    , base >= 4.8 && < 5
                    , bytestring
                    , directory
