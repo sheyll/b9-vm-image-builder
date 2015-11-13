@@ -100,31 +100,23 @@ runPull mName _cfgFile cp conf =
     maybePullImage = maybe (return True) pullLatestImage mName
 
 runRun :: SharedImageName -> [String] -> BuildAction
-runRun (SharedImageName name) cmdAndArgs _cfgFile cp conf = impl
+runRun (SharedImageName name) cmdAndArgs _cfgFile cp conf =
+    runProgram prog (Environment []) cp conf'
   where
     conf' =
         conf
         { keepTempDirs = False
         , interactive = True
         }
-    impl = buildArtifacts runCmdAndArgs cp conf'
-      where
-        runCmdAndArgs =
-            Artifact
-                (IID ("run-" ++ name))
-                (VmImages
-                     [ ImageTarget
-                           Transient
-                           (From name KeepSize)
-                           (MountPoint "/")]
-                     (VmScript
-                          X86_64
-                          [SharedDirectory "." (MountPoint "/mnt/CWD")]
-                          (Run (head cmdAndArgs') (tail cmdAndArgs'))))
-        cmdAndArgs' =
-            if null cmdAndArgs
-                then ["/usr/bin/zsh"]
-                else cmdAndArgs
+    prog = do
+        e <- lxc ("running-" ++ name)
+        img <- fromShared name
+        mount e img "/"
+        runCommand e cmd args
+    (cmd:args) =
+        if null cmdAndArgs
+            then ["/usr/bin/zsh"]
+            else cmdAndArgs
 
 
 runGcLocalRepoCache :: BuildAction

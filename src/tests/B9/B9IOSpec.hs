@@ -1,5 +1,6 @@
 module B9.B9IOSpec (spec) where
 
+import B9.B9Config
 import B9.B9IO
 import B9.Content
 import B9.DiskImages
@@ -25,9 +26,9 @@ actionSpec =
     do it "returns an empty list for an empty program" $
            let p = return ()
            in dumpToStrings p `shouldBe` []
-       it "handles LogTrace" $
-           let p = logTrace "test-trace"
-           in dumpToStrings p `shouldBe` ["logTrace"]
+       it "handles LogMessage" $
+           let p = logMessage LogTrace "test-trace"
+           in dumpToStrings p `shouldBe` ["logMessage LogTrace"]
        it "handles GetBuildDir" $
            let p = getBuildDir
            in runPureDump p `shouldBe` ("/BUILD", ["getBuildDir"])
@@ -61,10 +62,10 @@ actionSpec =
        it "handles MkDir" $
            let p = mkDir "test-dir"
            in dumpToStrings p `shouldBe` ["mkDir test-dir"]
-       it "handles GetRealPath" $
+       it "handles GetRealPath of relative path" $
            let p = getRealPath "from"
            in runPureDump p `shouldBe` ("/abs/path/from", ["getRealPath from"])
-       it "handles GetRealPath" $
+       it "handles GetRealPath of '.'" $
            let p = getRealPath "."
            in runPureDump p `shouldBe` ("/cwd", ["getRealPath ."])
        it "handles GetParentDir" $

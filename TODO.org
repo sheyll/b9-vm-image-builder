@@ -14,3 +14,5 @@
 * TODO add netowrk downloader
 * TODO add compression/decompression
 * TODO add archive targets
+* TODO logging and tracing
+* TODO merge B9Monad and B9IOImpl

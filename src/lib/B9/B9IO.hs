@@ -6,6 +6,7 @@
 module B9.B9IO where
 
 import B9.Content
+import B9.B9Config
 import B9.DiskImages
 import B9.ExecEnv
 import B9.FileSystems
@@ -24,16 +25,17 @@ import Text.Printf
 type IoProgram = Free Action
 
 -- | Execute an 'IoProgram' using a monadic interpretation function.
-run
+runB9IO
     :: Monad m
     => (forall a. Action a -> m a) -> IoProgram b -> m b
-run = foldFree
+runB9IO = foldFree
 
 -- | Pure commands for disk image creation and conversion, file
 -- IO and libvirt lxc interaction.
 data Action next
-    = LogTrace String
-               next
+    = LogMessage LogLevel
+                 String
+                 next
     | GetBuildDir (FilePath -> next)
     | GetBuildId (String -> next)
     | GetBuildDate (String -> next)
@@ -105,7 +107,7 @@ data Action next
     deriving (Functor)
 
 instance Show (Action a) where
-    show (LogTrace _m _) = "logTrace"
+    show (LogMessage l _m _) = printf "logMessage %s" (show l)
     show (GetBuildId _) = "getBuildId"
     show (GetBuildDate _) = "getBuildDate"
     show (GetBuildDir _) = "getBuildDir"
@@ -141,7 +143,11 @@ instance Show (Action a) where
 -- | Log a string, but only when trace logging is enabled, e.g. when
 -- debugging
 logTrace :: String -> IoProgram ()
-logTrace str = liftF $ LogTrace str ()
+logTrace = logMessage LogTrace
+
+-- | Log a message with a given log-level
+logMessage :: LogLevel -> String -> IoProgram ()
+logMessage l str = liftF $ LogMessage l str ()
 
 -- | Get the (temporary) directory of the current b9 execution
 getBuildDir :: IoProgram FilePath
@@ -290,12 +296,12 @@ executeInEnv e s d i = liftF $ ExecuteInEnv e s d i ()
 -- * Program transformation
 
 -- | Wrap a interpreter for a 'IoProgram' such that all invokations except for
--- 'LogTrace' are logged via 'LogTrace'.
+-- 'LogMessage' are logged via 'LogMessage'.
 traceEveryAction :: IoProgram a -> IoProgram a
-traceEveryAction = run traceAction
+traceEveryAction = runB9IO traceAction
   where
-    traceAction (LogTrace s n) = do
-        logTrace s
+    traceAction (LogMessage l s n) = do
+        logMessage l s
         return n
     traceAction a@(GetBuildDir k) = do
         logTrace $ show a
@@ -419,10 +425,10 @@ dumpToResult = fst . runPureDump
 --   monad where the output is a list of strings each representing an action of
 --   the program and its paraters.  This is useful for testing and inspection.
 runPureDump :: IoProgram a -> (a, [String])
-runPureDump p = runWriter $ run dump p
+runPureDump p = runWriter $ runB9IO dump p
   where
     dump :: Action a -> Writer [String] a
-    dump a@(LogTrace _s n) = do
+    dump a@(LogMessage _l _s n) = do
         tell [show a]
         return n
     dump a@(GetBuildDir k) = do
@@ -512,7 +518,8 @@ arbitraryIoProgram = arbitraryFree
 instance Arbitrary a => Arbitrary (Action a) where
     arbitrary =
         oneof
-            [ LogTrace <$> smaller arbitraryNiceString <*> smaller arbitrary
+            [ LogMessage LogTrace <$> smaller arbitraryNiceString <*>
+              smaller arbitrary
             , GetBuildId <$> arbitrary
             , GetBuildDir <$> arbitrary
             , GetBuildDate <$> arbitrary

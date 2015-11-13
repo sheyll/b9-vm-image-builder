@@ -78,10 +78,6 @@ library
                    , B9.LibVirtLXC
                    , B9.Repository
                    , B9.RepositoryIO
-                   , B9.ArtifactGenerator
-                   , B9.ArtifactGeneratorImpl
-                   , B9.Vm
-                   , B9.VmBuilder
                    , B9.Content
                    , B9.Content.ErlTerms
                    , B9.Content.ErlangPropList
@@ -186,7 +182,6 @@ test-suite spec
   other-modules:     B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
-                   , B9.ArtifactGeneratorImplSpec
                    , B9.DiskImagesSpec
                    , B9.DSL.InterpreterSpec
                    , B9.SpecExtra

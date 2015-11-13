@@ -5,7 +5,7 @@ current build id, the current build directory and the artifact to build.
 
 This module is used by the _effectful_ functions in this library.
 -}
-module B9.B9Monad ( B9 , run , traceL , dbgL , infoL , errorL , getConfigParser
+module B9.B9Monad ( B9 , runB9Monad , b9Log, traceL , dbgL , infoL , errorL , getConfigParser
 , getConfig , getBuildId , getBuildDate , getBuildDir , getExecEnvType ,
 getSelectedRemoteRepo , getRemoteRepos , getRepoCache , cmd, cmdRaw ) where
 
@@ -54,8 +54,8 @@ data ProfilingEntry = IoActionDuration NominalDiffTime
                     | LogEvent LogLevel String
                       deriving (Eq, Show)
 
-run :: ConfigParser -> B9Config -> B9 a -> IO a
-run cfgParser cfg action = do
+runB9Monad :: ConfigParser -> B9Config -> B9 a -> IO a
+runB9Monad cfgParser cfg action = do
   buildId <- generateBuildId
   now <- getCurrentTime
   withBuildDir buildId (withLogFile . run' buildId now)

@@ -29,11 +29,11 @@ import qualified Data.Conduit.Binary as CB
 
 -- | Execute a 'B9IO' Program in the 'B9' monad.
 executeIoProg :: IoProgram a -> B9Monad.B9 a
-executeIoProg = run go
+executeIoProg = runB9IO go
   where
     go :: Action a -> B9Monad.B9 a
-    go (LogTrace s n) = do
-        B9Monad.traceL s
+    go (LogMessage l s n) = do
+        B9Monad.b9Log l s
         return n
     go (GetBuildDir k) = do
         b <- B9Monad.getBuildDir
