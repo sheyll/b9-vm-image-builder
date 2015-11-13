@@ -473,7 +473,7 @@ instance Interpreter IoCompiler where
             [(Image mnt Raw Ext4, mp)]
         hnd --> mntH
         runConvert mntH SVmImage Raw
-    runConvert hnd@(Handle SExecutionEnvironment title) SFreeFile src = do
+    runConvert hnd@(Handle SExecutionEnvironment _) SFreeFile src = do
         Just ec <- use (execEnvs . at hnd)
         (fh,f) <-
             createFreeFileIn

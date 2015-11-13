@@ -1,3 +1,4 @@
+* TODO remove file I/O from Content
 * TODO consistency checks for input files
 * TODO consistency checks for template variables
 * TODO seperate DSL into DSLCore and DSLLib

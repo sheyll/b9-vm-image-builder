@@ -2,6 +2,7 @@ module Main where
 
 import Control.Exception
 import Data.Function (on)
+import B9.B9Monad
 import Data.Maybe
 import Data.Version
 import Options.Applicative hiding (action)
@@ -14,7 +15,7 @@ import B9
 main :: IO ()
 main = do
   b9Opts <- parseCommandLine
-  result <- runB9 b9Opts
+  result <- runB9Command b9Opts
   exit result
   where
     exit success = when (not success) (exitWith (ExitFailure 128))
@@ -40,8 +41,8 @@ data B9Options =
 
 type BuildAction = Maybe SystemPath -> ConfigParser -> B9Config -> IO Bool
 
-runB9 :: B9Options -> IO Bool
-runB9 (B9Options globalOpts action vars) = do
+runB9Command :: B9Options -> IO Bool
+runB9Command (B9Options globalOpts action vars) = do
     let cfgWithArgs =
             cfgCli
             { envVars = envVars cfgCli ++ vars
@@ -56,19 +57,6 @@ runShowVersion _cfgFile _cp _conf = do
     putStrLn b9Version
     return True
 
-runBuildArtifacts :: [FilePath] ->  BuildAction
-runBuildArtifacts buildFiles _cfgFile cp conf = do
-    generators <- mapM consult buildFiles
-    buildArtifacts (mconcat generators) cp conf
-
-runFormatBuildFiles :: [FilePath] ->  BuildAction
-runFormatBuildFiles buildFiles _cfgFile _cp _conf = do
-    generators <- mapM consult buildFiles
-    let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
-    putStrLn `mapM_` (generatorsFormatted)
-    (uncurry writeFile) `mapM_` (buildFiles `zip` generatorsFormatted)
-    return True
-
 runPush :: SharedImageName -> BuildAction
 runPush name _cfgFile cp conf = impl
   where
@@ -77,7 +65,7 @@ runPush name _cfgFile cp conf = impl
         { keepTempDirs = False
         }
     impl =
-        run
+        runB9Monad
             cp
             conf'
             (if not (isJust (repository conf'))
@@ -91,7 +79,7 @@ runPush name _cfgFile cp conf = impl
 
 runPull :: Maybe SharedImageName -> BuildAction
 runPull mName _cfgFile cp conf =
-    run cp conf' (pullRemoteRepos >> maybePullImage)
+    runB9Monad cp conf' (pullRemoteRepos >> maybePullImage)
   where
     conf' =
         conf
@@ -111,9 +99,10 @@ runRun (SharedImageName name) cmdAndArgs _cfgFile cp conf =
     prog = do
         e <- lxc ("running-" ++ name)
         img <- fromShared name
-        mount e img "/"
-        runCommand e cmd args
-    (cmd:args) =
+        void $ mount e img "/"
+        runCommand e (Run c as)
+        return True
+    (c:as) =
         if null cmdAndArgs
             then ["/usr/bin/zsh"]
             else cmdAndArgs
@@ -127,7 +116,7 @@ runGcLocalRepoCache _cfgFile cp conf = impl
         { keepTempDirs = False
         }
     impl =
-        run cp conf' $
+        runB9Monad cp conf' $
         do toDelete <-
                (obsoleteSharedmages . map snd) <$>
                lookupSharedImages (== Cache) (const True)
@@ -163,7 +152,7 @@ runGcRemoteRepoCache _cfgFile cp conf = impl
         { keepTempDirs = False
         }
     impl =
-        run cp conf' $
+        runB9Monad cp conf' $
         do repos <- getSelectedRepos
            cache <- getRepoCache
            mapM_ (cleanRemoteRepo cache) repos
@@ -177,7 +166,7 @@ runListSharedImages _cfgFile cp conf = impl
         { keepTempDirs = False
         }
     impl =
-        run cp conf' $
+        runB9Monad cp conf' $
         do remoteRepo <- getSelectedRemoteRepo
            let repoPred =
                    maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
@@ -228,11 +217,6 @@ cmds =
                   (pure runShowVersion)
                   (progDesc "Show program version and exit.")) <>
          command
-             "build"
-             (info
-                  (runBuildArtifacts <$> buildFileParser)
-                  (progDesc "Merge all build file and generate all artifacts.")) <>
-         command
              "run"
              (info
                   (runRun <$> sharedImageNameParser <*> many (strArgument idm))
@@ -269,12 +253,7 @@ cmds =
              "add-repo"
              (info
                   (runAddRepo <$> remoteRepoParser)
-                  (progDesc "Add a remote repo.")) <>
-         command
-             "reformat"
-             (info
-                  (runFormatBuildFiles <$> buildFileParser)
-                  (progDesc "Re-Format all build files.")))
+                  (progDesc "Add a remote repo.")))
 
 buildFileParser :: Parser [FilePath]
 buildFileParser =

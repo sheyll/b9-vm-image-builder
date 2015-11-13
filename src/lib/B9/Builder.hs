@@ -3,8 +3,8 @@
 Highest-level build functions and and B9-re-exports.
 -}
 module B9.Builder
-       (runProgram, runProgramWithConfigAndCliArgs,
-        runIoProgram, defaultMain, configure, module X)
+       (runProgram, runProgramWithConfigAndCliArgs, runIoProgram,
+        runIoProgramNoConfig, defaultMain, configure, module X)
        where
 import B9.B9Config as X
 import qualified B9.B9Monad as B9M
@@ -30,18 +30,18 @@ import B9.B9IOImpl as X
 import qualified B9.LibVirtLXC as LibVirtLXC
 
 -- | Use this in your 'B9' script to run a 'Program'.
-defaultMain :: Program () -> IO ()
+defaultMain :: Program a -> IO ()
 defaultMain = void . runProgramWithConfigAndCliArgs
 
 -- | Execute a 'Program' using all b9 command line options
 -- and settings from the b9 configuration file.
-runProgramWithConfigAndCliArgs :: Program () -> IO Bool
+runProgramWithConfigAndCliArgs :: Program a -> IO Bool
 runProgramWithConfigAndCliArgs p = do
-    (opts,vars) <- getGlobalOptsFromCLI
+    (opts,vs) <- getGlobalOptsFromCLI
     let cfgCli = cliB9Config opts
         cfgFile = configFile opts
     cp <- configure cfgFile cfgCli
-    runProgram (p >> return True) vars cp cfgCli
+    runProgram (p >> return True) vs cp cfgCli
 
 -- | Merge 'existingConfig' with the configuration from the b9 config
 -- file. If the file does not exists, a new config file with the given
@@ -64,12 +64,22 @@ runProgram :: Program Bool
            -> ConfigParser
            -> B9Config
            -> IO Bool
-runProgram dsl (Environment vars) cfgParser cliCfg =
+runProgram dsl (Environment vs) cfgParser cliCfg =
     runIoProgram (traceEveryAction (compile dsl')) cfgParser cliCfg
   where
     dsl' = do
-        mapM_ (uncurry ($=)) vars
+        mapM_ (uncurry ($=)) vs
         dsl
+
+runIoProgramNoConfig :: IoProgram a -> IO a
+runIoProgramNoConfig p =  do
+    cp <- configure Nothing mempty
+    B9M.runB9Monad
+        cp
+        (mempty
+         { verbosity = Just X.LogTrace
+         })
+        (executeIoProg p)
 
 runIoProgram :: IoProgram Bool -> ConfigParser -> B9Config -> IO Bool
 runIoProgram prog cfgParser cliCfg =

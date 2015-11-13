@@ -16,7 +16,6 @@ import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import           System.Directory
