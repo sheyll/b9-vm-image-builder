@@ -116,16 +116,6 @@ instance Default ExecEnvSpec where
 
 makeLenses ''ExecEnvSpec
 
--- | Instruct an environment to mount a host directory
-data HostDirMnt
-    = AddMountHostDirRW FilePath
-    | AddMountHostDirRO FilePath
-    deriving (Read,Show,Eq,Generic,Data,Typeable)
-
-instance Hashable HostDirMnt
-instance Binary HostDirMnt
-instance NFData HostDirMnt
-
 instance Arbitrary ExecEnvSpec where
     arbitrary =
         ExecEnvSpec <$> smaller arbitraryNiceString <*> pure LibVirtLXC <*>

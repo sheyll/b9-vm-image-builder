@@ -106,6 +106,7 @@ library
                    , bytestring
                    , conduit
                    , conduit-extra
+                   , conduit-combinators
                    , containers
                    , data-default
                    , directory

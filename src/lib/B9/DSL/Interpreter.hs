@@ -24,6 +24,7 @@ import Data.Default
 import Data.Function
 import Data.Graph as Graph
 import Data.Map as Map hiding (null)
+import Data.Monoid
 import Data.Tree as Tree
 import System.FilePath
 import Text.Printf (printf)
@@ -125,11 +126,14 @@ data ExecEnvCtx = ExecEnvCtx
     , _execScript :: Script
     , _execIncFiles :: [(FilePath, FileSpec)]
     , _execIncDir :: FilePath
+    , _execOutMnt :: FilePath
+    , _execOutDir :: FilePath
+    , _execOutFiles :: [(FilePath,FilePath)]
     , _execEnvSpec :: ExecEnvSpec
     } deriving (Show)
 
 instance Default ExecEnvCtx where
-    def = ExecEnvCtx def def def def def def
+    def = ExecEnvCtx def def def def def def def def def
 
 makeLenses ''Ctx
 makeLenses ''CiCtx
@@ -145,21 +149,21 @@ compile :: Program a -> IoProgram a
 compile p = evalStateT compileSt def
   where
     compileSt = do
-        lift $
-            do b <- getBuildId
-               logTrace $
-                   printf
-                       "==[B9-PREPARE]=======================================================[%s]"
-                       b
+        lift
+            (do b <- getBuildId
+                logTrace
+                    (printf
+                         "==[B9-PREPARE]=======================================================[%s]"
+                         b))
         createPredefinedHandles
         result <- interpret p
         runAllActions
-        lift $
-            do b <- getBuildId
-               logTrace $
-                   printf
-                       "==[B9-FINISHED]======================================================[%s]"
-                       b
+        lift
+            (do b <- getBuildId
+                logTrace
+                    (printf
+                         "==[B9-FINISHED]======================================================[%s]"
+                         b))
         return result
 
 -- | Compile a 'Program' but run no actions, instead just print out information
@@ -169,14 +173,14 @@ inspect p = evalStateT compileSt def
   where
     compileSt = do
         createPredefinedHandles
-        res <- interpret $ p
+        res <- interpret p
         mG <- dependencyGraph
         case mG of
             Just g -> do
                 handles <- use vToH
-                return $ printDependencyGraph g handles
+                return (printDependencyGraph g handles)
             Nothing -> do
-                return $ "No artifacts." ++ show res
+                return ("No artifacts." ++ show res)
 
 -- | Setup the predefined global handles, e.g. 'imageRepositoryH'
 createPredefinedHandles :: IoCompiler ()
@@ -184,29 +188,29 @@ createPredefinedHandles = allocPredefinedHandle imageRepositoryH
   where
     allocPredefinedHandle h = do
         v <- addVertex
-        void $ storeHandle h v
+        void (storeHandle h v)
         actions . at v ?= []
 
 -- | Run all actions in correct order according to the dependency graph.
 runAllActions :: IoCompiler ()
 runAllActions = do
-    lift $
+    lift (
         do b <- getBuildId
-           logTrace $
-               printf
-                   "==[B9-EXECUTE]=======================================================[%s]"
-                   b
+           logTrace
+               (printf
+                    "==[B9-EXECUTE]=======================================================[%s]"
+                    b))
     mG <- dependencyGraph
     case mG of
         Just g -> do
             forM_ (topSort g) runActionForVertex
         Nothing -> do
-            lift $ logTrace "No artifacts."
+            lift (logTrace "No artifacts.")
             return ()
   where
     runActionForVertex vertex = do
-        Just actionsForVertex <- use $ actions . at vertex
-        runIoProgBuilder $ sequence_ actionsForVertex
+        Just actionsForVertex <- use (actions . at vertex)
+        runIoProgBuilder (sequence_ actionsForVertex)
 
 -- | Generate a graph from the artifact dependencies in the compiler context.
 dependencyGraph :: IoCompiler (Maybe Graph)
@@ -215,28 +219,32 @@ dependencyGraph = do
     if (maxVertex > 0)
         then do
             deps <- use dependencies
-            return $ Just $ buildG (0, maxVertex - 1) deps
+            return (Just (buildG (0, maxVertex - 1) deps))
         else return Nothing
 
 -- | Show the dependency graph from the compiler context.
 printDependencyGraph :: Graph -> Map Vertex SomeHandle -> String
 printDependencyGraph g handles =
-    unlines $
-    "digraph artifactDependencyGraph {" :
-    (fmap (printEdge handles) (edges g)) ++
-    "}" :
-    "Dependency forest:" :
-    Tree.drawForest (fmap (printVertex handles) <$> dff g) :
-    "Build order:" : (printVertex handles <$> topSort g)
+    unlines
+        ("digraph artifactDependencyGraph {" :
+         (fmap (printEdge handles) (edges g)) ++
+         "}" :
+         "Dependency forest:" :
+         Tree.drawForest (fmap (printVertex handles) <$> dff g) :
+         "Build order:" : (printVertex handles <$> topSort g))
 
 -- | Convert an edge to a formatted string
 printEdge :: Map Vertex SomeHandle -> Edge -> String
-printEdge handles (u,v) = printf "  %s   ->    %s" (show (printVertex handles u)) (show (printVertex handles v))
+printEdge handles (u,v) =
+    printf
+        "  %s   ->    %s"
+        (show (printVertex handles u))
+        (show (printVertex handles v))
 
 -- | Convert a vertex to a formatted string
 printVertex :: Map Vertex SomeHandle -> Vertex -> String
 printVertex handles v =
-    printf "%s(%d)" (printSomeHandle $ Map.lookup v handles) v
+    printf "%s(%d)" (printSomeHandle (Map.lookup v handles)) v
 
 -- | Convert maybe a handle to a string
 printSomeHandle :: Maybe SomeHandle -> String
@@ -246,7 +254,7 @@ printSomeHandle Nothing = "??error??"
 instance Interpreter IoCompiler where
     -- Create
     runCreate SCloudInit iidPrefix = do
-        buildId <- lift $ getBuildId
+        buildId <- lift getBuildId
         (hnd@(Handle _ iid),_) <-
             allocHandle
                 SCloudInit
@@ -256,41 +264,51 @@ instance Interpreter IoCompiler where
                 SGeneratedContent
                 ( Concat
                       [ FromString "#cloud-config\n"
-                      , RenderYaml $ ASTObj [("instance-id", ASTString iid)]]
+                      , RenderYaml (ASTObj [("instance-id", ASTString iid)])]
                 , iidPrefix ++ "-meta-data")
         hnd --> mH
         uH <-
             runCreate
                 SGeneratedContent
-                ( Concat [FromString "#cloud-config\n", RenderYaml $ ASTObj []]
+                ( Concat [FromString "#cloud-config\n", RenderYaml (ASTObj [])]
                 , iidPrefix ++ "-user-data")
         hnd --> uH
         ci . at hnd ?= CiCtx mH uH
         return hnd
     runCreate SExecutionEnvironment e = do
         (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
-        incDir <- lift $ mkTempDir "included-files"
-        buildId <- lift $ B9.B9IO.getBuildId
+        incDir <- lift (mkTempDir "included-files")
+        outDir <- lift (mkTempDir "output-files")
+        buildId <- lift B9.B9IO.getBuildId
+        let outMnt = outputFileContainerPath buildId
+            incMnt = includedFileContainerPath buildId
         execEnvs . at hnd ?=
             (def &~
              do execEnvSpec .= e
                 execIncDir .= incDir
+                execOutDir .= outDir
+                execOutMnt .= outMnt
                 execBindMounts .=
-                    [ SharedDirectoryRO
-                          incDir
-                          (MountPoint $ includedFileContainerPath buildId)])
-        addAction hnd $
-            do Just es <- view (execEnvs . at hnd)
-               lift $
-                   executeInEnv
-                       (es ^. execEnvSpec)
-                       (es ^. execScript)
-                       (es ^. execBindMounts)
-                       (es ^. execImages)
+                    [ SharedDirectoryRO incDir (MountPoint incMnt)
+                    , SharedDirectory outDir (MountPoint outMnt)])
+        addAction
+            hnd
+            (do Just es <- view (execEnvs . at hnd)
+                let copyOutFileScript = foldMap cp (es ^. execOutFiles)
+                      where
+                        cp (guestFrom,hostOut) =
+                            Run "cp" [guestFrom, toMntPath hostOut]
+                        toMntPath = (es ^. execOutMnt </>) . takeFileName
+                lift
+                    (executeInEnv
+                         (es ^. execEnvSpec)
+                         (es ^. execScript <> copyOutFileScript)
+                         (es ^. execBindMounts)
+                         (es ^. execImages)))
         return hnd
     runCreate SExternalFile fn = do
-        (hnd,_) <- allocHandle SExternalFile $ takeFileName fn
-        fn' <- lift $ getRealPath fn
+        (hnd,_) <- allocHandle SExternalFile (takeFileName fn)
+        fn' <- lift (getRealPath fn)
         externalFiles . at hnd ?= fn'
         return hnd
     runCreate SFileSystemBuilder fsSpec@(FileSystemSpec t fsLabel _ _) = do
@@ -300,207 +318,207 @@ instance Interpreter IoCompiler where
                      then "image"
                      else fsLabel)
         (hnd,_) <- allocHandle SFileSystemBuilder fsLabel
-        tmpFileH <- runCreate SFreeFile $ Just title
+        (tmpFileH,tmpFile) <- createFreeFile title
         hnd --> tmpFileH
-        Just (FileCtx tmpFile _) <- use $ localFiles . at tmpFileH
         fH <- createFsImage tmpFileH t
-        tmpDir <- lift $ mkTempDir (title <.> "d")
+        tmpDir <- lift (mkTempDir (title <.> "d"))
         fsBuilder . at hnd ?= FsBuilderCtx [] tmpDir fH
-        addAction hnd $
-            do Just fileSys <- view $ fsBuilder . at hnd
-               lift $
-                   createFileSystem tmpFile fsSpec tmpDir (fileSys ^. fsFiles)
+        addAction
+            hnd
+            (do Just fileSys <- view (fsBuilder . at hnd)
+                lift
+                    (createFileSystem
+                         tmpFile
+                         fsSpec
+                         tmpDir
+                         (fileSys ^. fsFiles)))
         return hnd
     runCreate SFreeFile mTempName = do
         -- TODO escape tempName, allow only a-zA-Z0-9.-_:+=
         let tempName = maybe "tmp-file" takeFileName mTempName
-        tempFile <- lift $ mkTempCreateParents tempName
-        (hnd,_) <- allocHandle SFreeFile tempName
-        localFiles . at hnd ?= FileCtx tempFile []
-        addAction hnd $
-            do Just (FileCtx _ destinations) <- view (localFiles . at hnd)
-               lift $
-                   do case reverse destinations of
-                          (lastCopy:firstCopies) -> do
-                              mapM_ (copy tempFile) (reverse firstCopies)
-                              moveFile tempFile lastCopy
-                          [] ->
-                              logTrace $
-                              printf "No copies of %s required" tempFile
+        (hnd,_) <- createFreeFile tempName
         return hnd
     runCreate SGeneratedContent (c,title) = do
         (hnd,_) <- allocHandle SGeneratedContent title
         generatedContent . at hnd ?= c
         return hnd
     runCreate SLocalDirectory () = do
-        tmp <- lift $ mkTempDir "local-dir"
+        tmp <- lift (mkTempDir "local-dir")
         (hnd,_) <- allocHandle SLocalDirectory tmp
         localDirs . at hnd ?= DirCtx tmp []
-        addAction hnd $
-            do Just (DirCtx src dests) <- view $ localDirs . at hnd
-               case reverse dests of
-                   [] ->
-                       lift $ logTrace $
-                       printf "Warning: '%s' not exported." (show hnd)
-                   (lastDest:firstDests) ->
-                       lift $
-                       do mapM_ (copyDir src) (reverse firstDests)
-                          moveDir src lastDest
+        addAction
+            hnd
+            (do Just (DirCtx src dests) <- view (localDirs . at hnd)
+                case reverse dests of
+                    [] ->
+                        lift
+                            (logTrace
+                                 (printf
+                                      "Warning: '%s' not exported."
+                                      (show hnd)))
+                    (lastDest:firstDests) ->
+                        lift
+                            (do mapM_ (copyDir src) (reverse firstDests)
+                                moveDir src lastDest))
         return hnd
     runCreate sa _src =
-        fail $ printf "Create %s: Not Yet Implemented" (show sa)
-    -- Update
-    runUpdate hnd@(Handle SGeneratedContent _) c = do
-        generatedContent . at hnd . traverse %=
-            \cOld ->
-                 Concat [cOld, c]
-        return ()
-    runUpdate hnd _src =
-        fail $ printf "Update %s: Not Yet Implemented" (show hnd)
+        fail (printf "Create %s: Not Yet Implemented" (show sa))
     -- Add
     runAdd hnd@(Handle SCloudInit _) SCloudInitMetaData ast = do
-        Just (CiCtx mH _) <- use $ ci . at hnd
+        Just (CiCtx mH _) <- use (ci . at hnd)
         generatedContent . at mH . traverse %=
             \(Concat [hdr,RenderYaml ast']) ->
-                 Concat [hdr, RenderYaml $ ast' `astMerge` ast]
+                 Concat [hdr, RenderYaml (ast' `astMerge` ast)]
     runAdd hnd@(Handle SCloudInit _) SCloudInitUserData ast = do
-        Just (CiCtx _ uH) <- use $ ci . at hnd
+        Just (CiCtx _ uH) <- use (ci . at hnd)
         generatedContent . at uH . traverse %=
             \(Concat [hdr,RenderYaml ast']) ->
-                 Concat [hdr, RenderYaml $ ast' `astMerge` ast]
+                 Concat [hdr, RenderYaml (ast' `astMerge` ast)]
     runAdd hnd@(Handle SCloudInit _) SExecutableScript scr =
         runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
     runAdd hnd@(Handle SCloudInit _) SFreeFile (fspec,fH) = do
         fH --> hnd
-        fName <- freeFileTempCopy fH (takeFileName $ fspec ^. fileSpecPath)
+        fName <- freeFileTempCopy fH (takeFileName (fspec ^. fileSpecPath))
         runAdd
             hnd
             SCloudInitUserData
             (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
-    runAdd (Handle SDocumentation _) SDocumentation str = lift $ logTrace str
+    runAdd (Handle SDocumentation _) SDocumentation str = lift (logTrace str)
     runAdd hnd@(Handle SExecutionEnvironment _) SExecutableScript cmds =
         (execEnvs . at hnd . traverse . execScript) <>= cmds
     runAdd hnd@(Handle SExecutionEnvironment _) SFreeFile (destSpec,srcH) = do
         srcH --> hnd
-        Just eCxt <- use $ execEnvs . at hnd
-        incFile <- lift $ mkTempInCreateParents (eCxt ^. execIncDir) "added-file"
+        Just eCxt <- use (execEnvs . at hnd)
+        incFile <-
+            lift (mkTempInCreateParents (eCxt ^. execIncDir) "added-file")
         copyFreeFile srcH incFile
-        (execEnvs . at hnd . traverse . execIncFiles) <>=
-            [(incFile, destSpec)]
-        bId <- lift $ B9.B9IO.getBuildId
-        (execEnvs . at hnd . traverse . execScript) <>=
+        execEnvs . at hnd . traverse . execIncFiles <>= [(incFile, destSpec)]
+        bId <- lift B9.B9IO.getBuildId
+        execEnvs . at hnd . traverse . execScript <>=
             incFileScript bId incFile destSpec
-    runAdd _hnd@(Handle SExecutionEnvironment _) SLocalDirectory _mnts = do
-        return ()
+    runAdd hnd@(Handle SExecutionEnvironment _) SLocalDirectory sharedDir =
+        execEnvs . at hnd . traverse . execBindMounts <>= [sharedDir]
     runAdd fsH@(Handle SFileSystemBuilder _) SFreeFile (fSpec,fH) = do
         fsBuilder . at fsH . traverse . fsFiles <>= [fSpec]
-        Just fileSys <- use $ fsBuilder . at fsH
+        Just fileSys <- use (fsBuilder . at fsH)
         let tmpDir = fileSys ^. fsTempDir
         fH --> fsH
         copyFreeFile' fH tmpDir fSpec
     runAdd (Handle SImageRepository _) SVmImage (sn,vmI) = do
-        Just (VmImgCtx imgFileH srcType) <- use $ vmImages . at vmI
+        Just (VmImgCtx imgFileH srcType) <- use (vmImages . at vmI)
         let SharedImageName snStr = sn
         imgFile <- freeFileTempCopy imgFileH snStr
         vmI --> imageRepositoryH
-        addAction imageRepositoryH $ lift $ imageRepoPublish imgFile srcType sn
+        addAction imageRepositoryH (lift (imageRepoPublish imgFile srcType sn))
     runAdd dirH@(Handle SLocalDirectory _) SFreeFile (fSpec,fH) = do
-        Just localDir <- use $ localDirs . at dirH
+        Just localDir <- use (localDirs . at dirH)
         copyFreeFile' fH (localDir ^. dirTempDir) fSpec
         fH --> dirH
     runAdd hnd@(Handle SUpdateServerRoot _) SVmImage (sn,vmI) = do
-        Just destDirH <- use $ updateServerRoots . at hnd
-        Just tmpDirCtx <- use $ localDirs . at destDirH
+        Just destDirH <- use (updateServerRoots . at hnd)
+        Just tmpDirCtx <- use (localDirs . at destDirH)
         let destDir = tmpDirCtx ^. dirTempDir
             vmDestDir = destDir </> "machines" </> snStr </> "disks" </> "raw"
             SharedImageName snStr = sn
-        Just (VmImgCtx srcFileH srcType) <- use $ vmImages . at vmI
+        Just (VmImgCtx srcFileH srcType) <- use (vmImages . at vmI)
         srcFile <- freeFileTempCopy srcFileH snStr
         vmI --> hnd
-        addAction hnd $ lift $
-            do let imgFile = vmDestDir </> "0.raw"
-                   sizeFile = vmDestDir </> "0.size"
-                   versionFile = vmDestDir </> "VERSION"
-               mkDir vmDestDir
-               if srcType /= Raw
-                   then convertVmImage srcFile srcType imgFile Raw
-                   else moveFile srcFile imgFile
-               imgSize <- B9.B9IO.readFileSize imgFile
-               renderContentToFile
-                   sizeFile
-                   (FromString (show imgSize))
-                   (Environment [])
-               bId <- B9.B9IO.getBuildId
-               bT <- B9.B9IO.getBuildDate
-               renderContentToFile
-                   versionFile
-                   (FromString (printf "%s-%s" bId bT))
-                   (Environment [])
+        addAction
+            hnd
+            (lift
+                 (do let imgFile = vmDestDir </> "0.raw"
+                         sizeFile = vmDestDir </> "0.size"
+                         versionFile = vmDestDir </> "VERSION"
+                     mkDir vmDestDir
+                     if srcType /= Raw
+                         then convertVmImage srcFile srcType imgFile Raw
+                         else moveFile srcFile imgFile
+                     imgSize <- B9.B9IO.readFileSize imgFile
+                     renderContentToFile
+                         sizeFile
+                         (FromString (show imgSize))
+                         (Environment [])
+                     bId <- B9.B9IO.getBuildId
+                     bT <- B9.B9IO.getBuildDate
+                     renderContentToFile
+                         versionFile
+                         (FromString (printf "%s-%s" bId bT))
+                         (Environment [])))
     runAdd (Handle SVariableBindings _) STemplateVariable (k,v) =
         vars . at k ?= v
     runAdd hnde sa _src =
-        fail $ printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde)
+        fail (printf "Add %s -> %s: Not Yet Implemented" (show sa) (show hnde))
     -- Conversion
     runConvert hnd@(Handle SCloudInit _) SCloudInitMetaData () = do
-        Just (CiCtx (Handle SGeneratedContent h) _) <- use $ ci . at hnd
+        Just (CiCtx (Handle SGeneratedContent h) _) <- use (ci . at hnd)
         return (Handle SCloudInitMetaData h)
     runConvert hnd@(Handle SCloudInit _) SCloudInitUserData () = do
-        Just (CiCtx _ (Handle SGeneratedContent h)) <- use $ ci . at hnd
+        Just (CiCtx _ (Handle SGeneratedContent h)) <- use (ci . at hnd)
         return (Handle SCloudInitUserData h)
     runConvert (Handle SCloudInitMetaData h) SGeneratedContent () =
         return (Handle SGeneratedContent h)
     runConvert (Handle SCloudInitUserData h) SGeneratedContent () =
         return (Handle SGeneratedContent h)
     runConvert hnd@(Handle SExecutionEnvironment _) SVmImage (imgH,mp) = do
-        rawImgH <- runConvert imgH SVmImage (Left Raw)
-        rawImgH --> hnd
-        rawImgFH <- runConvert rawImgH SFreeFile ()
-        mountedImgFileH <-
+        rawH <- runConvert imgH SVmImage (Left Raw)
+        rawH --> hnd
+        rawFH <- runConvert rawH SFreeFile ()
+        mntH <-
             runConvert
-                rawImgFH
+                rawFH
                 SFreeFile
                 (printf "mounted-at-%s" (printMountPoint mp))
-        Just (FileCtx mountedImgFile _) <-
-            use $ localFiles . at mountedImgFileH
+        Just (FileCtx mnt _) <- use (localFiles . at mntH)
         (execEnvs . at hnd . traverse . execImages) <>=
-            [(Image mountedImgFile Raw Ext4, mp)]
-        hnd --> mountedImgFileH
-        runConvert mountedImgFileH SVmImage Raw
+            [(Image mnt Raw Ext4, mp)]
+        hnd --> mntH
+        runConvert mntH SVmImage Raw
+    runConvert hnd@(Handle SExecutionEnvironment title) SFreeFile src = do
+        Just ec <- use (execEnvs . at hnd)
+        (fh,f) <-
+            createFreeFileIn
+                (ec ^. execOutDir)
+                (printf
+                     "%s-%s"
+                     (ec ^. execEnvSpec . execEnvTitle)
+                     (takeFileName src))
+        execEnvs . at hnd . traverse . execOutFiles <>= [(src, f)]
+        hnd --> fh
+        return fh
     runConvert hnd@(Handle SExternalFile hndT) SFreeFile () = do
-        Just externalFileName <- use $ externalFiles . at hnd
-        tmpFileH <- runCreate SFreeFile $ Just $ hndT ++ "-copy"
-        Just (FileCtx tmpFile _) <- use $ localFiles . at tmpFileH
+        Just externalFileName <- use (externalFiles . at hnd)
+        (tmpFileH,tmpFile) <- createFreeFile (hndT ++ "-copy")
         hnd --> tmpFileH
-        addAction hnd $ void $ lift $ copy externalFileName tmpFile
+        addAction hnd (lift (copy externalFileName tmpFile))
         return tmpFileH
     runConvert hnd@(Handle SFileSystemBuilder _) SFileSystemImage () = do
-        Just fileSys <- use $ fsBuilder . at hnd
+        Just fileSys <- use (fsBuilder . at hnd)
         return (fileSys ^. fsImgH)
     runConvert hnd@(Handle SFileSystemBuilder _) SFreeFile () = do
-        Just fileSys <- use $ fsBuilder . at hnd
+        Just fileSys <- use (fsBuilder . at hnd)
         runConvert (fileSys ^. fsImgH) SFreeFile ()
     runConvert hnd@(Handle SFileSystemBuilder _) SVmImage () = do
-        Just fileSys <- use $ fsBuilder . at hnd
+        Just fileSys <- use (fsBuilder . at hnd)
         runConvert (fileSys ^. fsImgH) SVmImage ()
     runConvert hnd@(Handle SFileSystemImage _) SFileSystemImage destSize = do
-        Just (FsCtx inFileH fS) <- use $ fsImages . at hnd
+        Just (FsCtx inFileH fS) <- use (fsImages . at hnd)
         outFileH <- runConvert inFileH SFreeFile "resized"
-        Just (FileCtx outFile _) <- use $ localFiles . at outFileH
+        Just (FileCtx outFile _) <- use (localFiles . at outFileH)
         inFileH --> hnd
         hnd --> outFileH
-        addAction hnd $ lift $ resizeFileSystem outFile destSize fS
+        addAction hnd (lift (resizeFileSystem outFile destSize fS))
         createFsImage outFileH fS
     runConvert hnd@(Handle SFileSystemImage _) SFreeFile () = do
-        Just (FsCtx fH _fS) <- use $ fsImages . at hnd
+        Just (FsCtx fH _fS) <- use (fsImages . at hnd)
         return fH
     runConvert hnd@(Handle SFileSystemImage _) SVmImage () = do
-        Just (FsCtx fH _) <- use $ fsImages . at hnd
-        fH' <- runConvert fH SFreeFile $ printf "Raw-image"
+        Just (FsCtx fH _) <- use (fsImages . at hnd)
+        fH' <- runConvert fH SFreeFile "Raw-image"
         outH <- createVmImage fH' Raw
         hnd --> outH
         return outH
     runConvert hnd@(Handle SFreeFile _) SExternalFile dest = do
-        dest' <- lift $ ensureParentDir dest
+        dest' <- lift (ensureParentDir dest)
         newFileH <- runCreate SExternalFile dest'
         hnd --> newFileH
         copyFreeFile hnd dest'
@@ -511,15 +529,14 @@ instance Interpreter IoCompiler where
         copyH --> fsImg
         return fsImg
     runConvert hnd@(Handle SFreeFile hndT) SFreeFile dest = do
-        newFileH <- runCreate SFreeFile (Just $ hndT ++ "-" ++ dest)
-        Just (FileCtx newFile _) <- use $ localFiles . at newFileH
+        (newFileH,newFile) <- createFreeFile (hndT ++ "-" ++ dest)
         copyFreeFile hnd newFile
         hnd --> newFileH
         return newFileH
     runConvert hnd@(Handle SFreeFile hndT) SPartitionedVmImage () = do
         let partVmImgHndT = hndT ++ "-partitioned-vm-image"
         (partVmImgHnd,_) <- allocHandle SPartitionedVmImage partVmImgHndT
-        file <- runConvert hnd SFreeFile $ "partitioned-vm-image"
+        file <- runConvert hnd SFreeFile "partitioned-vm-image"
         partitionedImgs . at partVmImgHnd ?= file
         hnd --> partVmImgHnd
         return partVmImgHnd
@@ -527,16 +544,16 @@ instance Interpreter IoCompiler where
         newHnd <- runConvert hnd SFreeFile (printf "vm-image-%s" (show imgT))
         createVmImage newHnd imgT
     runConvert hnd@(Handle SGeneratedContent dest) SFreeFile () = do
-        destH <- runCreate SFreeFile $ Just dest
+        (destH,destFile) <- createFreeFile dest
         hnd --> destH
-        addAction hnd $
-            do Just content <- view $ generatedContent . at hnd
-               Just (FileCtx destFile _) <- view $ localFiles . at destH
-               env <- view $ vars . to Map.toList . to Environment
-               lift $ renderContentToFile destFile content env
+        addAction
+            hnd
+            (do Just content <- view (generatedContent . at hnd)
+                env <- view (vars . to Map.toList . to Environment)
+                lift (renderContentToFile destFile content env))
         return destH
     runConvert (Handle SImageRepository _) SVmImage sharedImgName = do
-        (sharedImgInfo,cachedImage) <- lift $ imageRepoLookup sharedImgName
+        (sharedImgInfo,cachedImage) <- lift (imageRepoLookup sharedImgName)
         imgH <- runCreate SExternalFile cachedImage
         imgCopyH <- runConvert imgH SFreeFile ()
         createVmImage imgCopyH (siImgType sharedImgInfo)
@@ -547,58 +564,91 @@ instance Interpreter IoCompiler where
         return hnd
     runConvert hnd@(Handle SPartitionedVmImage hndT) SFreeFile partSpec@(MBRPartition pIndex) = do
         let dest = hndT ++ "-partition-" ++ show pIndex
-        Just srcFileH <- use $ partitionedImgs . at hnd
-        Just (FileCtx srcFileName _) <- use $ localFiles . at srcFileH
-        destH <- runCreate SFreeFile $ Just $ dest
-        Just (FileCtx destFile _) <- use $ localFiles . at destH
+        Just srcFileH <- use (partitionedImgs . at hnd)
+        Just (FileCtx srcFileName _) <- use (localFiles . at srcFileH)
+        (destH,destFile) <- createFreeFile dest
         hnd --> destH
-        addAction hnd $ lift $ extractPartition partSpec srcFileName destFile
+        addAction hnd (lift (extractPartition partSpec srcFileName destFile))
         return destH
     runConvert hnd@(Handle SVmImage _) SFileSystemImage () = do
         hnd' <- runConvert hnd SVmImage (Left Raw)
-        Just (VmImgCtx srcFileH Raw) <- use $ vmImages . at hnd'
+        Just (VmImgCtx srcFileH Raw) <- use (vmImages . at hnd')
         runConvert srcFileH SFileSystemImage Ext4
     runConvert hnd@(Handle SVmImage _) SFreeFile () = do
-        Just (VmImgCtx srcFileH _srcType) <- use $ vmImages . at hnd
+        Just (VmImgCtx srcFileH _srcType) <- use (vmImages . at hnd)
         return srcFileH
     runConvert hnd@(Handle SVmImage _) SVmImage (Right (ImageSize destSize destSizeU)) = do
-        Just (VmImgCtx srcImgFileH srcType) <- use $ vmImages . at hnd
+        Just (VmImgCtx srcImgFileH srcType) <- use (vmImages . at hnd)
         destImgFileH <-
-            runConvert srcImgFileH SFreeFile $
-            printf "resized-%d-%s" destSize (show destSizeU)
-        Just (FileCtx destImgFile _) <- use $ localFiles . at destImgFileH
-        addAction hnd $ lift $
-            resizeVmImage destImgFile destSize destSizeU srcType
+            runConvert
+                srcImgFileH
+                SFreeFile
+                (printf "resized-%d-%s" destSize (show destSizeU))
+        Just (FileCtx destImgFile _) <- use (localFiles . at destImgFileH)
+        addAction
+            hnd
+            (lift (resizeVmImage destImgFile destSize destSizeU srcType))
         hnd --> destImgFileH
         createVmImage destImgFileH srcType
     runConvert hnd@(Handle SVmImage hndT) SVmImage (Left destType) = do
-        Just (VmImgCtx srcImgFileH srcType) <- use $ vmImages . at hnd
-        srcFileCopy <- freeFileTempCopy srcImgFileH $ "conversion-src"
-        destImgFileH <-
-            runCreate SFreeFile $ Just $ hndT ++ "-converted-to-" ++
-            show destType
-        Just (FileCtx destImgFile _) <- use $ localFiles . at destImgFileH
-        addAction hnd $ lift $
-            convertVmImage srcFileCopy srcType destImgFile destType
+        Just (VmImgCtx srcImgFileH srcType) <- use (vmImages . at hnd)
+        srcFileCopy <- freeFileTempCopy srcImgFileH "conversion-src"
+        (destImgFileH,destImgFile) <-
+            createFreeFile (hndT ++ "-converted-to-" ++ show destType)
+        addAction
+            hnd
+            (lift (convertVmImage srcFileCopy srcType destImgFile destType))
         hnd --> destImgFileH
         createVmImage destImgFileH destType
     runConvert hA sB _src =
-        fail $
-        printf "Convert %s -> %s: Not Yet Implemented" (show hA) (show sB)
+        fail
+            (printf "Convert %s -> %s: Not Yet Implemented" (show hA) (show sB))
     -- Export
     runExport hnd@(Handle SFileSystemImage _) destFile = do
-        Just fileSys <- use $ fsImages . at hnd
+        Just fileSys <- use (fsImages . at hnd)
         runExport (fileSys ^. fsFileH) destFile
     runExport hnd@(Handle SFreeFile _) destFile =
-        (lift $ ensureParentDir destFile) >>= copyFreeFile hnd
+        lift (ensureParentDir destFile) >>= copyFreeFile hnd
     runExport hnd@(Handle SLocalDirectory _) destDir = do
-        destDir' <- lift $ ensureParentDir destDir
+        destDir' <- lift (ensureParentDir destDir)
         localDirs . at hnd . traverse . dirExports <>= [destDir']
     runExport hnd@(Handle SVmImage _) destFile = do
-        Just (VmImgCtx fH _) <- use $ vmImages . at hnd
+        Just (VmImgCtx fH _) <- use (vmImages . at hnd)
         runExport fH destFile
     runExport hnd _dest =
-        fail $ printf "Export %s: Not Yet Implemented" (show hnd)
+        fail (printf "Export %s: Not Yet Implemented" (show hnd))
+
+-- | Create and allocate a new 'FreeFile' and return the handle as well as the
+-- path to the temporary file.
+createFreeFile :: String -> IoCompiler (Handle 'FreeFile, FilePath)
+createFreeFile title = do
+    src <- lift (mkTempCreateParents title)
+    hnd <- asFreeFile src title
+    return (hnd, src)
+
+-- | Create and allocate a new 'FreeFile' inside a given directory and
+-- return the handle as well as the path to the temporary file.
+createFreeFileIn :: FilePath -> String -> IoCompiler (Handle 'FreeFile, FilePath)
+createFreeFileIn parent title = do
+    src <- lift (mkTempIn parent title)
+    hnd <- asFreeFile src title
+    return (hnd, src)
+
+-- | Allocate a 'FreeFile' artifact for a given file with a given title.
+asFreeFile :: FilePath -> String -> IoCompiler (Handle 'FreeFile)
+asFreeFile src title = do
+    (hnd,_) <- allocHandle SFreeFile title
+    localFiles . at hnd ?= FileCtx src []
+    addAction
+        hnd
+        (do Just (FileCtx _ destinations) <- view (localFiles . at hnd)
+            lift
+                (do case reverse destinations of
+                        (lastCopy:firstCopies) -> do
+                            mapM_ (copy src) (reverse firstCopies)
+                            moveFile src lastCopy
+                        [] -> logTrace (printf "No copies of %s required" src)))
+    return hnd
 
 -- | Add a new copy to a 'FreeFile' at the specified destination
 copyFreeFile :: Handle 'FreeFile -> FilePath -> IoCompiler ()
@@ -608,14 +658,14 @@ copyFreeFile src dest = localFiles . at src . traverse . fCopies <>= [dest]
 -- a given string for better debugging, and return the path to the copy.
 freeFileTempCopy :: Handle 'FreeFile -> String -> IoCompiler FilePath
 freeFileTempCopy src name = do
-    Just fileCtx <- use $ localFiles . at src
+    Just fileCtx <- use (localFiles . at src)
     dest <-
-        lift $
-        mkTempCreateParents $
-        printf
-            "%s-%s"
-            (takeFileName (fileCtx ^. fFileName))
-            (takeFileName name)
+        lift
+            (mkTempCreateParents
+                 (printf
+                      "%s-%s"
+                      (takeFileName (fileCtx ^. fFileName))
+                      (takeFileName name)))
     copyFreeFile src dest
     return dest
 
@@ -629,7 +679,7 @@ copyFreeFile' src dstDir dstSpec =
 -- | Create a 'FsCtx' from an existing file and the file system type.
 createFsImage :: Handle 'FreeFile -> FileSystem -> IoCompiler (Handle 'FileSystemImage)
 createFsImage fH fs = do
-    (hnd,_) <- allocHandle SFileSystemImage $ "fs-img-" ++ show fs
+    (hnd,_) <- allocHandle SFileSystemImage ( "fs-img-" ++ show fs)
     fsImages . at hnd ?= FsCtx fH fs
     return hnd
 
@@ -668,8 +718,12 @@ allocHandle sa str = do
     let h = formatHandle v sa str
     h' <- storeHandle h v
     actions . at v ?=
-        [ lift $ logTrace $
-          printf "==[B9-EXEC-ARTIFACT]==============[%s//%s]" (show sa) str]
+        [ lift
+              (logTrace
+                   (printf
+                        "==[B9-EXEC-ARTIFACT]==============[%s//%s]"
+                        (show sa)
+                        str))]
     return (h, h')
 
 -- | Add a handle to the vertex <-> handle maps in the state and return the
@@ -677,25 +731,26 @@ allocHandle sa str = do
 -- a'.
 storeHandle :: Handle a -> Vertex -> IoCompiler SomeHandle
 storeHandle h v = do
-  let h' = SomeHandle h
-  hToV . at h' ?= v
-  vToH . at v ?= h'
-  return h'
+    let h' = SomeHandle h
+    hToV . at h' ?= v
+    vToH . at v ?= h'
+    return h'
 
 -- | Return a new and unique vertex (i.e. artifact id)
 addVertex :: IoCompiler Vertex
 addVertex = do
-  v <- use nextVertex
-  nextVertex += 1
-  return v
+    v <- use nextVertex
+    nextVertex += 1
+    return v
 
 -- | Generate a handle with formatted title
 formatHandle :: Vertex -> SArtifact a -> String -> Handle a
 formatHandle v sa str =
-    handle sa $
-    if str == ""
-        then (show v)
-        else (str ++ "-" ++ show v)
+    handle
+        sa
+        (if str == ""
+             then (show v)
+             else (str ++ "-" ++ show v))
 
 -- | Add a dependency of one resource to another
 (-->) :: Handle a -> Handle b -> IoCompiler ()
@@ -706,7 +761,7 @@ h --> h' = do
 
 -- | Return the vertex of a handle.
 lookupVertex :: Handle a -> IoCompiler (Maybe Vertex)
-lookupVertex h = use $ hToV . at (SomeHandle h)
+lookupVertex h = use (hToV . at (SomeHandle h))
 
 -- | Generate a 'Script' that copies an included file in a
 -- container from the mounted directory to the actual destination.
@@ -727,6 +782,12 @@ includedFileContainerPath :: String -> FilePath
 includedFileContainerPath buildId =
     "/" ++ buildId <.> "mnt" </> "included-files"
 
+-- | Return the mount point for files that are copied after the build from the container
+--   to the host.
+outputFileContainerPath :: String -> FilePath
+outputFileContainerPath buildId =
+    "/" ++ buildId <.> "mnt" </> "output-files"
+
 -- * Support for 'IoProgBuilder's
 
 -- | Add a build action to a handle
@@ -738,5 +799,5 @@ addAction h a = do
 -- | Run an 'IoProgBuilder' action.
 runIoProgBuilder :: IoProgBuilder a -> IoCompiler a
 runIoProgBuilder a = do
-  ctx <- get
-  lift $ runReaderT a ctx
+    ctx <- get
+    lift (runReaderT a ctx)

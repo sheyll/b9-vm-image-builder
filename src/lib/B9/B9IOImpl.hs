@@ -24,6 +24,8 @@ import           System.FilePath
 import           System.IO
 import           System.Random
 import           Text.Printf
+import qualified Conduit as C
+import qualified Data.Conduit.Binary as CB
 
 -- | Execute a 'B9IO' Program in the 'B9' monad.
 executeIoProg :: IoProgram a -> B9Monad.B9 a
@@ -96,20 +98,21 @@ executeIoProg = run go
         return n
     go (ExtractPartition (MBRPartition partIndex) s d n) = do
         (start,len) <- liftIO $ B9.MBR.getPartition partIndex s
-        B9Monad.traceL $
-            printf
-                "extracting MBR partition %d starting at %d with a length of %d (bytes) from %s to %s"
-                partIndex
-                start
-                len
-                s
-                d
-        liftIO $
-            do part <-
-                   (BL.copy .
-                    BL.take (fromIntegral len) . BL.drop (fromIntegral start)) <$>
-                   BL.readFile s
-               BL.writeFile d part
+        B9Monad.traceL
+            (printf
+                 "extracting MBR partition %d starting at %d with a length of %d (bytes) from %s to %s"
+                 partIndex
+                 start
+                 len
+                 s
+                 d)
+        liftIO
+            (C.runResourceT
+                 ((CB.sourceFileRange
+                       s
+                       (Just (fromIntegral start))
+                       (Just (fromIntegral len))) C.$$
+                  (CB.sinkFile d)))
         return n
     go (ImageRepoLookup s k) = do
         si <- getLatestSharedImageByNameFromCache s

@@ -704,13 +704,6 @@ updateServerImageSpec =
 
 -- * Containerized Build Specs
 
-fromFile
-    :: Show (ConvSpec 'FreeFile b)
-    => FilePath -> SArtifact b -> ConvSpec 'FreeFile b -> Program (Handle b)
-fromFile f a conversionArg = do
-    h <- use f
-    convert h a conversionArg
-
 containerExecutionSpec :: Spec
 containerExecutionSpec =
     describe "lxc environment" $
@@ -722,38 +715,47 @@ containerExecutionSpec =
            issueSpec = (FileSpec "/build/issue" (0, 7, 7, 7) "root" "users")
            testProg = do
                e <- boot envSpec
+               mountDir e "/hostRO" "/guestRO"
+               mountDirRW e "/hostRW" "/guestRW"
                sh e "touch /test1"
                addFileFull e (Source NoConversion "/etc/issue") issueSpec
                sh e "touch /test2"
                addFileFull e (Source NoConversion "/etc/passwd") passwdSpec
+               outputFile e "/etc/httpd/httpd.conf" "out-httpd.conf"
                rootImg <- fromFile "test-in.qcow2" SVmImage QCow2
                rootOutImg <- mount e rootImg "/"
                void $ export rootOutImg "img-out.raw"
-       it "creates the output image AFTER script execution" $
-           shouldDoIoNoBS testProg $
-           do buildId <- B9.B9IO.getBuildId
+       it
+           "start a container, with all images and host directories mounted in it, copies input files onto a converted image, then executes custom commands in the container, copies output file from the container to the host and writes the modified image" $
+           shouldDoIo testProg $
+           do
+              -- copy "a" "b"
+              buildId <- B9.B9IO.getBuildId
               incDir <- mkTempDir "included-files"
+              outDir <- mkTempDir "output-files"
               issueIn <- getRealPath "/etc/issue"
               issue <- mkTempCreateParents "issue-2-copy"
               issueInc <- mkTempInCreateParents incDir "added-file"
               passwdIn <- getRealPath "/etc/passwd"
               passwd <- mkTempCreateParents "passwd-4-copy"
               passwdInc <- mkTempInCreateParents incDir "added-file"
+              tmpOut <- mkTempIn outDir "test-env-httpd.conf"
+              destOut <- ensureParentDir "out-httpd.conf"
               imgIn <- getRealPath "test-in.qcow2"
-              img <- mkTempCreateParents "test-in.qcow2-6-copy"
+              img <- mkTempCreateParents "test-in.qcow2-7-copy"
               imgCopy <-
-                  mkTempCreateParents "test-in.qcow2-6-copy-7-vm-image-QCow2"
+                  mkTempCreateParents "test-in.qcow2-7-copy-8-vm-image-QCow2"
               imgConvSrc <-
                   mkTempCreateParents
-                      "test-in.qcow2-6-copy-7-vm-image-QCow2-XXXX-conversion-src"
+                      "test-in.qcow2-7-copy-8-vm-image-QCow2-XXXX-conversion-src"
               rawImg <-
-                  mkTempCreateParents "vm-image-QCow2-9-converted-to-Raw"
+                  mkTempCreateParents "vm-image-QCow2-10-converted-to-Raw"
               mountedImg <-
                   mkTempCreateParents
-                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root"
+                      "vm-image-QCow2-10-converted-to-Raw-11-mounted-at-root"
               mountedImgCopy <-
                   mkTempCreateParents
-                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root-12-vm-image-Raw"
+                      "vm-image-QCow2-10-converted-to-Raw-11-mounted-at-root-13-vm-image-Raw"
               imgOut <- ensureParentDir "img-out.raw"
               copy imgIn img
               moveFile img imgCopy
@@ -768,14 +770,25 @@ containerExecutionSpec =
                       (Run "touch /test1" []) <>
                       incFileScript buildId issueInc issueSpec <>
                       (Run "touch /test2" []) <>
-                      incFileScript buildId passwdInc passwdSpec
+                      incFileScript buildId passwdInc passwdSpec <>
+                      (Run
+                           "cp"
+                           [ "/etc/httpd/httpd.conf"
+                           , outputFileContainerPath buildId </>
+                             takeFileName tmpOut])
               executeInEnv
                   envSpec
                   incScript
                   [ SharedDirectoryRO
                         incDir
-                        (MountPoint $ includedFileContainerPath buildId)]
+                        (MountPoint (includedFileContainerPath buildId))
+                  , SharedDirectory
+                        outDir
+                        (MountPoint (outputFileContainerPath buildId))
+                  , SharedDirectoryRO "/hostRO" (MountPoint "/guestRO")
+                  , SharedDirectory "/hostRW" (MountPoint "/guestRW")]
                   [(Image mountedImg Raw Ext4, MountPoint "/")]
+              moveFile tmpOut destOut
               moveFile mountedImg mountedImgCopy
               moveFile mountedImgCopy imgOut
 

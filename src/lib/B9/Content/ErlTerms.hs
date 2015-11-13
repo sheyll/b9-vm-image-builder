@@ -252,47 +252,46 @@ erlStringParser = do
 
 erlCharEscaped :: Parser Char
 erlCharEscaped =
-  char '\\'
-  >> ((char '^' >> choice (zipWith escapedChar ccodes creplacements))
-      <|>
-      do _ <- char 'x'
-         do ds <- between (char '{') (char '}') (fmap hexVal <$> many1 hexDigit)
-            let val = foldl (\acc v -> acc * 16 + v) 0 ds
-            return (toEnum val)
-         <|>
-         do x1 <- hexVal <$> hexDigit
-            x2 <- hexVal <$> hexDigit;
-            return (toEnum ((x1*16)+x2))
-
-      <|>
-      do o1 <- octVal <$> octDigit
-         do o2 <- octVal <$> octDigit
-            do o3 <- octVal <$> octDigit
-               return (toEnum ((((o1*8)+o2)*8)+o3))
-              <|> return (toEnum ((o1*8)+o2))
-          <|> return (toEnum o1)
-
-      <|>
-      choice (zipWith escapedChar codes replacements))
+    char '\\' >>
+    ((char '^' >> choice (zipWith escapedChar ccodes creplacements)) <|>
+     (char 'x' >>
+      ((do ds <- between (char '{') (char '}') (fmap hexVal <$> many1 hexDigit)
+           let val =
+                   foldl
+                       (\acc v ->
+                             acc * 16 + v)
+                       0
+                       ds
+           return (toEnum val)) <|>
+       (do x1 <- hexVal <$> hexDigit
+           x2 <- hexVal <$> hexDigit
+           return (toEnum ((x1 * 16) + x2))))) <|>
+     (do o1 <- octVal <$> octDigit
+         (do o2 <- octVal <$> octDigit
+             (do o3 <- octVal <$> octDigit
+                 return (toEnum ((((o1 * 8) + o2) * 8) + o3))) <|>
+                 return (toEnum ((o1 * 8) + o2))) <|>
+             return (toEnum o1)) <|>
+     choice (zipWith escapedChar codes replacements))
   where
     escapedChar code replacement = char code >> return replacement
-    codes =
-      "0bdefnrstv\\\"'"
-    replacements =
-      "\NUL\b\DEL\ESC\f\n\r \t\v\\\"'"
-    ccodes =
-      ['a' .. 'z'] ++ ['A' .. 'Z']
-    creplacements =
-      cycle ['\^A' .. '\^Z']
-    hexVal v | v `elem` ['a' .. 'z'] = 0xA + (fromEnum v - fromEnum 'a')
-             | v `elem` ['A' .. 'Z'] = 0xA + (fromEnum v - fromEnum 'A')
-             | otherwise = fromEnum v - fromEnum '0'
+    codes = "0bdefnrstv\\\"'"
+    replacements = "\NUL\b\DEL\ESC\f\n\r \t\v\\\"'"
+    ccodes = ['a' .. 'z'] ++ ['A' .. 'Z']
+    creplacements = cycle ['\^A' .. '\^Z']
+    hexVal v
+      | v `elem` ['a' .. 'z'] = 10 + (fromEnum v - fromEnum 'a')
+      | v `elem` ['A' .. 'Z'] = 10 + (fromEnum v - fromEnum 'A')
+      | otherwise = fromEnum v - fromEnum '0'
     octVal = hexVal
 
 erlBinaryParser :: Parser SimpleErlangTerm
 erlBinaryParser =
-  ErlBinary <$>
-  string "<<" *> spaces *> option (ErlString "") erlStringParser <* string ">>" <* spaces
+    (\(ErlString s) ->
+          ErlBinary s) <$>
+    (string "<<" *> spaces *> option (ErlString "") erlStringParser <*
+     string ">>" <*
+     spaces)
 
 erlListParser :: Parser SimpleErlangTerm
 erlListParser = ErlList <$> erlNestedParser (char '[') (char ']')

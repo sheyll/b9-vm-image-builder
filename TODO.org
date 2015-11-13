@@ -1,94 +1,16 @@
-* Refactor from Prototype to Product:
-** DONE Write License Header
-** DONE Rename project to b9 (benign)
-** DONE Rename Common to B9Monad
-** DONE Rename BeqemuCfg to B9Config
-** DONE Move every module to sub namespace Development.B9
-** DONE Add .cabal file
-*** DONE Use stackage
-** DONE Create git repo
-** DONE Create B9-Library
-*** DONE Split Main.hs -> (Main.hs, B9.hs)
-*** DONE Reexport everything in B9 for easy scripting
-** DONE Cleanup/Refactor Project and B9Config
-** DONE Add LibVirtLXCConfig with:
-*** DONE virsh command path
-*** DONE default network
-*** DONE sudo flag
-*** DONE connection URI
-*** DONE Read LibVirtLXC Config from .b9/libvirt_lxc.config
-** DONE Add B9Config reader:
-*** DONE Add merging of B9Configs/Resources
-*** DONE Use Data.ConfigFile http://hackage.haskell.org/package/ConfigFile-1.1.3/docs/Data-ConfigFile.html
-** DONE Add a project file reader
-** DONE Add command line handling
-*** DONE [#B] Allow setting alternative B9Config path
-*** DONE [#B] Allow overwriting B9Config items
-*** DONE Allow setting of alternative Project path
-*** DONE Pass parameters for the project script
-*** DONE Allow passing several 'Project's that are then merged
-**** DONE Make Project's composable (a Monoid)
-*** DONE Use string templates for 'Project' to cli Args and Environment Vars
-** DONE Add Example Projects
-** TODO Write a nice documentation
-** TODO Publish
-*** Create github repo
-*** Create git01 repo
-* DONE Add a check mode that tells what would happen if a project file executed
-* Add a 'beq_run' pendant
-** Add --shell param
-** Add to Project projectPersistentEnvInit (Maybe Script)
-** Do not remove the build directory
-** Do not export any images
-* TODO Add support for sharing 'Image's
-** DONE Define ImageInfo currently only a name, later: version, type author, ...
-** DONE Add importing share images from cache
-** DONE Add importing share images from external repo
-** DONE Move/Rename B9.BaseImageBuilder
-** DONE Add share images export
-** DONE Define Repository for shared-images'
-** DONE Add to B9Config items for shared image repositories
-** DONE Add to B9Config 'baseImageCacheDir'
-** DONE Use optparse commands
-** TODO Add 'ClearCache' action
-** TODO Add 'show repos' action
-** DONE Add 'list repo contents' action
-** DONE Add 'refresh repos action
-** Add 'add remote repo' with sshkey generation
-* Add 'system-setup' helper action
-** Check for nbd
-** Check that libvirt is running
-** Check that all important tools are installed
-* Add support for the beqemu repo directory layout
-** Introduce 'ExportToLiveRepo'
-*** Add Root directory parameter
-*** Use projectName as machine name
-*** Use buildId for versions?
-*** Restrict to raw images with no partitions
-*** What a 'disk' means:
-**** CloudConfig directory
-***** Generate instance id from hash of files
-**** Disk with:
-***** disk size
-***** disk index
-***** kexec infos
-***** disk version?
-***** Maybe SshLogin
-* Improve Commands
-** Use Shell-Escaping: http://hackage.haskell.org/package/shell-escape-0.1.2
-** Split/Move 'ShellScripting' dependency into the exec env, thereby making the project independent of 'Bash'- scripting
-** Add 'list-artifacts' command
-** Allow building of only a single artifact
-* More Backends
-** Add VM based backend: VirtualBox
-* Improve test coverage
-** Add test coverage profiling tool
-* Make B9 a real library
-** Restrict exposed modules
-** Add pure library functions for munging Artifacts
-** Move SharedImage functions from DiskImageBuilder to a better place
-** Refactor the B9Monad.run function to not need a ConfigParser
-** Move 'Repository' from B9.RepositoryIO to B9.Repository
-* Add building of RPMs and ARCHLINUX packages
-* Use unique ids for vm image builds
-* TODO Fix repo-cache configfile ignoration
+* TODO consistency checks for input files
+* TODO consistency checks for template variables
+* TODO seperate DSL into DSLCore and DSLLib
+* TODO make file system and vm image handling more type save (i.e. use more singleton types)
+* TODO add XFS support
+* TODO detect file systems and vm image types
+* TODO support vmdk-flat
+* TODO add docker ExecutionEnvironment
+* TODO add kvm ExecutionEnvironment
+* TODO add docker DeploymentTarget
+* TODO add libvirt-lxc DeploymentTarget
+* TODO add libvirt-kvm DeploymentTarget
+* TODO add libvirt-esx DeploymentTarget
+* TODO add netowrk downloader
+* TODO add compression/decompression
+* TODO add archive targets

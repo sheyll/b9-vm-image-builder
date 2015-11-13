@@ -10,7 +10,7 @@ import B9.DiskImages
         MountPoint(..), PartitionSpec(..), SharedImageName(..))
 import B9.ExecEnv
        (ExecEnvSpec(..), ExecEnvType(..), CPUArch(..), Resources(..),
-        RamSize(..), HostDirMnt(..))
+        RamSize(..), SharedDirectory(..))
 import B9.FileSystems (FileSystemSpec(..), FileSystemResize(..))
 import B9.ShellScript (Script(..))
 import Control.Lens hiding (from, use)
@@ -26,28 +26,24 @@ import Text.Printf
 -- ---------------------------------------------------------
 
 data BuildStep next where
-        Create ::
+        Create :: -- Inject
             (Show (CreateSpec a)) =>
             SArtifact a -> CreateSpec a -> (Handle a -> next) -> BuildStep next
-        Update ::
-            (Show (UpdateSpec a)) =>
-            Handle a -> UpdateSpec a -> next -> BuildStep next
-        Add ::
+        Add :: -- Compose w/o result
             (Show (AddSpec env a)) =>
             Handle env ->
               SArtifact a -> AddSpec env a -> next -> BuildStep next
-        Convert ::
+        Convert :: -- Compose
             (Show (ConvSpec a b)) =>
             Handle a ->
               SArtifact b -> ConvSpec a b -> (Handle b -> next) -> BuildStep next
-        Export ::
+        Export :: -- Project
             (Show (ExportSpec a), Show (ExportResult a)) =>
             Handle a ->
               ExportSpec a -> (ExportResult a -> next) -> BuildStep next
 
 instance Functor BuildStep where
     fmap f (Create sa src k)            = Create sa src (f . k)
-    fmap f (Update hnd upd next)        = Update hnd upd (f next)
     fmap f (Add hndEnv sa addSpec next) = Add hndEnv sa addSpec (f next)
     fmap f (Convert hA sB conv k)       = Convert hA sB conv (f . k)
     fmap f (Export hnd out k)           = Export hnd out (f . k)
@@ -56,17 +52,11 @@ type Program a = Free BuildStep a
 
 -- ---------------------------------------------------------
 
--- | Create an artifact.
+-- | Declare an artifact.
 create
  :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
 create sa src = liftF $ Create sa src id
-
--- | Update an artifact according to an update specification.
-update
- :: (Show (UpdateSpec a))
-    => Handle a -> UpdateSpec a -> Program ()
-update hnd upd = liftF $ Update hnd upd ()
 
 -- | Add an artifact to another artifact.
 add
@@ -186,11 +176,6 @@ type family CreateSpec (a :: Artifact) :: * where
     CreateSpec 'GeneratedContent     = (Content, String)
     CreateSpec 'LocalDirectory       = ()
 
--- * Update type families
-
-type family UpdateSpec (a :: Artifact) :: * where
-    UpdateSpec 'GeneratedContent = Content
-
 -- * Add type families
 
 type family AddSpec (env :: Artifact) (a :: Artifact) :: * where
@@ -201,8 +186,9 @@ type family AddSpec (env :: Artifact) (a :: Artifact) :: * where
     AddSpec 'Documentation 'Documentation           = String
     AddSpec 'ExecutionEnvironment 'ExecutableScript = Script
     AddSpec 'ExecutionEnvironment 'FreeFile         = (FileSpec, Handle 'FreeFile)
-    AddSpec 'ExecutionEnvironment 'LocalDirectory   = (HostDirMnt, MountPoint)
+    AddSpec 'ExecutionEnvironment 'LocalDirectory   = SharedDirectory
     AddSpec 'FileSystemBuilder 'FreeFile            = (FileSpec, Handle 'FreeFile)
+    AddSpec 'GeneratedContent 'GeneratedContent     = Content
     AddSpec 'ImageRepository 'VmImage               = (SharedImageName, Handle 'VmImage)
     AddSpec 'LocalDirectory 'FreeFile               = (FileSpec, Handle 'FreeFile)
     AddSpec 'UpdateServerRoot 'VmImage              = (SharedImageName, Handle 'VmImage)
@@ -216,6 +202,7 @@ type family ConvSpec (a :: Artifact) (b :: Artifact) :: * where
     ConvSpec 'CloudInitMetaData 'GeneratedContent = ()
     ConvSpec 'CloudInitUserData 'GeneratedContent = ()
     ConvSpec 'ExecutionEnvironment 'VmImage       = (Handle 'VmImage, MountPoint)
+    ConvSpec 'ExecutionEnvironment 'FreeFile      = FilePath
     ConvSpec 'ExternalFile 'FreeFile              = ()
     ConvSpec 'FileSystemBuilder 'FileSystemImage  = ()
     ConvSpec 'FileSystemBuilder 'FreeFile         = ()
@@ -279,6 +266,24 @@ use :: FilePath -> Program (Handle 'FreeFile)
 use f = do
   extH <- externalFile f
   convert extH SFreeFile ()
+
+-- | 'use' an external file to introduce an artifact with the help of a
+--  artifact dependent extra arguement and return the artifacts handle.
+fromFile
+    :: Show (ConvSpec 'FreeFile b)
+    => FilePath -> SArtifact b -> ConvSpec 'FreeFile b -> Program (Handle b)
+fromFile f a conversionArg = do
+    h <- use f
+    convert h a conversionArg
+
+-- | Given an artifact that support extraction or conversion to a file
+-- create/write a file to a given output path.
+outputFile
+    :: Show (ConvSpec a 'FreeFile)
+    => Handle a -> ConvSpec a 'FreeFile -> FilePath -> Program ()
+outputFile e src dst = do
+    outF <- convert e SFreeFile src
+    export outF dst
 
 -- * Template support
 
@@ -384,7 +389,7 @@ createContent c title = create SGeneratedContent (c, title)
 -- | Accumulate/Append more 'Content' to the 'GeneratedContent'
 --   handle obtained by e.g. 'createContent'
 appendContent :: Handle 'GeneratedContent -> Content -> Program ()
-appendContent hnd c = update hnd c
+appendContent hnd c = add hnd SGeneratedContent c
 
 -- * directories
 
@@ -465,16 +470,17 @@ lxc32 name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 I3
 
 mountDir :: Handle 'ExecutionEnvironment -> FilePath -> FilePath -> Program ()
 mountDir e hostDir dest =
-    add e SLocalDirectory (AddMountHostDirRO hostDir, MountPoint dest)
+    add e SLocalDirectory (SharedDirectoryRO hostDir (MountPoint dest))
 
 mountDirRW :: Handle 'ExecutionEnvironment -> FilePath -> FilePath -> Program ()
 mountDirRW e hostDir dest =
-    add e SLocalDirectory (AddMountHostDirRW hostDir, MountPoint dest)
+    add e SLocalDirectory (SharedDirectory hostDir (MountPoint dest))
 
-mount :: Handle 'ExecutionEnvironment
-      -> Handle 'VmImage
-      -> FilePath
-      -> Program (Handle 'VmImage)
+mount
+    :: Handle 'ExecutionEnvironment
+    -> Handle 'VmImage
+    -> FilePath
+    -> Program (Handle 'VmImage)
 mount e imgHnd dest = convert e SVmImage (imgHnd, MountPoint dest)
 
 -- * Script Execution (inside a container)
@@ -530,9 +536,6 @@ interpret = foldFree runInterpreter
     runInterpreter (Create sa src k) = do
         hnd <- runCreate sa src
         return (k hnd)
-    runInterpreter (Update hnd src next) = do
-        runUpdate hnd src
-        return next
     runInterpreter (Add hnde sa addSpec next) = do
         runAdd hnde sa addSpec
         return next
@@ -548,9 +551,6 @@ class (Monad f) => Interpreter f  where
     runCreate
         :: (Show (CreateSpec a))
         => SArtifact a -> CreateSpec a -> f (Handle a)
-    runUpdate
-        :: (Show (UpdateSpec a))
-        => Handle a -> UpdateSpec a -> f ()
     runAdd
         :: (Show (AddSpec a b))
         => Handle a -> SArtifact b -> AddSpec a b -> f ()

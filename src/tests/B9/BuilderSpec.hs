@@ -28,7 +28,7 @@ spec =
               removeFile "/tmp/instance-123.vfat"
        it "extracts a partition from a qcow2 image" $
            do (runProgramWithConfigAndCliArgs $
-                 extractPartitionOfQCow2 "/tmp/test-parted.raw" "/tmp/test.qcow2")
+                 extractPartitionOfQCow2 1 "/tmp/test-parted.raw" "/tmp/test.qcow2")
                  `shouldReturn` True
               doesFileExist "/tmp/test.qcow2" `shouldReturn` True
               removeFile "/tmp/test.qcow2"
@@ -57,25 +57,26 @@ ciVfat = do
     c <- newCloudInit "instance-123"
     writeCloudInit c ISO9660 "/tmp/instance-123.vfat"
 
-extractPartitionOfQCow2 :: FilePath -> FilePath -> Program ()
-extractPartitionOfQCow2 srcFile dstFile = do
+extractPartitionOfQCow2 :: Int -> FilePath -> FilePath -> Program ()
+extractPartitionOfQCow2 p srcFile dstFile = do
     doc
         "It's expected that there is a raw image laying around here some where with a partition 1 inside it"
-    p <- create SReadOnlyFile srcFile
-    partImg <- create SPartitionedVmImage p
-    p1 <- export partImg (Nothing, MBRPartition 1)
-    destI <- create SVmImage (p1, Raw)
-    void $ export destI (Just dstFile, Just QCow2, Nothing)
+    inQCow <- fromFile srcFile SVmImage QCow2
+    inRaw <- convert inQCow SVmImage (Left Raw)
+    partedRawF <- convert inRaw SFreeFile ()
+    partedRaw <- convert partedRawF SPartitionedVmImage ()
+    outputFile partedRaw (MBRPartition p) (dstFile <.> "RAW" <.> show p)
 
--- copyEtcPasswdOntoSharedImage :: Program ()
--- copyEtcPasswdOntoSharedImage = do
---   root <- fromShared "prod-el7.centos-15.3.0"
---   e <- lxc "juhu"
---   addFileFull e (Source NoConversion "/home/sven/Downloads/wdrhoerspielspeicher_2014-10-31_00-02.mp3") (fileSpec "/test.mp3")
---   outImgRaw <- mount e root "/"
---
---   rwFs <- convert outImgRaw SFileSystemImageRO ()
---   vmImg <- convert rwFs  SVmImage (Just ShrinkFileSystem)
---   vmQCow <- convert vmImg SVmImage (Just QCow2, Nothing)
---   vmQCow `sharedAs` "juhu-out"
--- TODO
+copyEtcPasswdOntoSharedImage :: Program ()
+copyEtcPasswdOntoSharedImage = do
+   root <- fromShared "prod-fc22-15.3.0"
+   e <- lxc "juhu"
+   addFileFull e (Source NoConversion "/home/sven/Downloads/wdrhoerspielspeicher_2014-10-31_00-02.mp3") (fileSpec "/test.mp3")
+   outImgRaw <- mount e root "/"
+{-
+   rwFs <- convert outImgRaw SFileSystemImage ()
+   vmImg <- convert rwFs  SVmImage ()
+   vmQCow <- convert vmImg SVmImage (Left QCow2)
+   vmQCow `sharedAs` "juhu-out"
+-}
+   outputFile e "/etc/passwd" "/home/sven/fc-passwd"
