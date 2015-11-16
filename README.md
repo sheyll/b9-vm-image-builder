@@ -1,53 +1,65 @@
-# B9 - A Benign VM-Build Tool
-
 [![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=master)](https://travis-ci.org/sheyll/b9-vm-image-builder)
 [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
 [![b9 on Stackage LTS 2](http://stackage.org/package/b9/badge/lts-2)](http://stackage.org/lts-2/package/b9)
 [![b9 on Stackage LTS 3](http://stackage.org/package/b9/badge/lts-3)](http://stackage.org/lts-3/package/b9)
 [![b9 on Stackage Nightly](http://stackage.org/package/b9/badge/nightly)](http://stackage.org/nightly/package/b9)
 
-## What does it do?
+# B9 - A Benign VM-Build Tool
 
-It is foremost __code__ and not config. Hence it is testable and reusable and can
-be structured using abstraction.
+It *builds* and *deploys* virtual machines.
 
 It contains an API for hosts, services, inter-service dependencies and
 deployment targets, ranging from the individual host to a distributed system.
 
-Use it to:
-
-* Build VM-images and Linux containers
-* Deploy VMs and containers
-* Distribute and Share VM-Images in a network repository
+__B9 IS IN THE PROCESS OF BEING REWRITTEN__
 
 ## Usage Examples:
-
-__B9 IS IN THE PROCESS OF BEING REWRITTEN__
 
     Examples soon!
 
 ## Why care?
 
-It offers a _programmable_ VM-build and deployment tool.
-To repeat, it's an API that allows you to:
+Describing VM-build and VM-deployment using __code__ leads to testable and
+reusable results, simply because of the super-power of abstraction.
 
-* write installation,
-* configuration and
-* deployment code for
-   * VM-images,
-   * Linux containers and
-   * cloud-init configurations.
+B9 offers a simple toy language that can be both interpreted and generated
+easily with pure code, and is to some extend type safe.
 
-## A bit deeper down the rabbit hole
+You get to party really fancy without a hangover!
 
-Use B9 to compile your software into a deployable set of Linux-VM- or
-configuration images, from a set of scripts and input files and templates.
+This offering comes in the disguise of a layered-library.
 
-B9 is a library for *creation* and *deployment* of virtual machines or Linux
-containers, and for storing, retrieving, identifying, versioning and sharing
-QCow2, Vmdk, etc disk images across the network using SCP/SSH.
+The first layer of the library abstracts away all real I/O and is extremely
+intuitive and simple.
 
-You can:
+The second layer is already front facing API, although actually a little more
+complex than the first, it is still appropriate to call it a toy-language.
+
+It has exactly *four* primitives similar to CRUD. It describes how to `Create`,
+`Add`, `Convert` and `Export` things that - for no good reason - are called
+`Artifacts`.
+
+Heck, you could even invent your own artifact types, just implement an instance
+of the data-family `Artifact` and specify inhabitants of the type families
+accompanying the the methods of the the toy language, i.e.: `CreateSpec`,
+`AddSpec`, `ConvertSpec`, `ExportSpec` and `ExportResult`. (Oh, don't forget to
+stack your own `Interpreter` type-class implementation on top of the existing
+interpreter, otherwise your shiny new toys will merely yield some _Not Yet
+Implemented_ utterances.
+
+This offers all the hooks needed, for fancy tricks like, algorithmic
+distribution of services across available domains, such that costs are
+minimized, availability and/or consistency is at a specified level and
+constraints regarding all aspects of distributed computing, ranging from network
+infrastructure availability to software version and license requirements are
+satisfied.
+
+Some of these tricks might be suitable for all of human kind, some others could
+be well guarded secrets to make you and your organization stand out.
+
+## Some cherry-picked features
+
+Right now you are empowered to:
 
 * Compile/Assemble Cloud-Init artifacts
 * Create and convert Ext4 file systems
@@ -67,6 +79,12 @@ Planned features:
 
 Anyway, I hope for the quick widespread adoption of the uni-kernel approach,
 rendering this code - as well as docker - useless.
+
+## What does it cost?
+
+It is free as in free beer, it costs *nothing* and will stay as expensive as
+that *for ever*.
+
 
 ### Difference to docker?
 

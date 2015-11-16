@@ -14,7 +14,7 @@ spec = do
                (doc "test") `shouldDoIo` (logTrace "test")
     fileInclusionSpec
     fsImgSpec
-    candySpec
+    addFileSpec
     localDirSpec
     cloudInitIsoImageSpec
     cloudInitMultiVfatImageSpec
@@ -257,8 +257,8 @@ fsImgSpec = do
                        moveFile r2 dest2)
 
 -- * Spec for /candy/ functions.
-candySpec :: Spec
-candySpec = do
+addFileSpec :: Spec
+addFileSpec = do
     describe "addFile" $
         it "strips the directory and  does not replace templates" $
         do let actual = do

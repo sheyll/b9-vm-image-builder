@@ -1,19 +1,21 @@
+* TODO remove documentation artifact
+* TODO logging and tracing
 * TODO remove file I/O from Content
 * TODO consistency checks for input files
 * TODO consistency checks for template variables
+* TODO split ExecutionEnvironment and DeploymentTarget
+* TODO rename ExecutionEnvironment to Domain
 * TODO seperate DSL into DSLCore and DSLLib
 * TODO make file system and vm image handling more type save (i.e. use more singleton types)
 * TODO add XFS support
+* TODO add GUID partition table support
 * TODO detect file systems and vm image types
 * TODO support vmdk-flat
-* TODO add docker ExecutionEnvironment
-* TODO add kvm ExecutionEnvironment
-* TODO add docker DeploymentTarget
-* TODO add libvirt-lxc DeploymentTarget
 * TODO add libvirt-kvm DeploymentTarget
+* TODO add libvirt-lxc DeploymentTarget
 * TODO add libvirt-esx DeploymentTarget
+* TODO add docker DeploymentTarget
 * TODO add netowrk downloader
 * TODO add compression/decompression
 * TODO add archive targets
-* TODO logging and tracing
 * TODO merge B9Monad and B9IOImpl
