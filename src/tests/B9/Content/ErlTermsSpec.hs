@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module B9.Content.ErlTermsSpec (spec) where
 
-import Control.Applicative
 import Data.List
 import Test.Hspec
 import Test.QuickCheck

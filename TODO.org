@@ -1,8 +1,10 @@
 * TODO remove documentation artifact
+  CLOCK: [2015-11-17 Di 00:01]--[2015-11-17 Di 00:09] =>  0:08
 * TODO logging and tracing
 * TODO remove file I/O from Content
 * TODO consistency checks for input files
 * TODO consistency checks for template variables
+* TODO rename BuildStep to Primitive
 * TODO split ExecutionEnvironment and DeploymentTarget
 * TODO rename ExecutionEnvironment to Domain
 * TODO seperate DSL into DSLCore and DSLLib

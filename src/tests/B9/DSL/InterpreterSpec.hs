@@ -9,9 +9,6 @@ import Test.QuickCheck (property)
 
 spec :: Spec
 spec = do
-    describe "compile (General)" $
-        do it "traces documentation" $
-               (doc "test") `shouldDoIo` (logTrace "test")
     fileInclusionSpec
     fsImgSpec
     addFileSpec

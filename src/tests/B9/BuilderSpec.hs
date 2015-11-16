@@ -45,7 +45,6 @@ spec =
 
 ciDir :: Program ()
 ciDir = do
-    doc "test"
     c <- newCloudInit "instance-xyz"
     writeCloudInitDir c "/tmp/instance-xyz"
     addTemplate c "src/tests/B9/BuilderSpec.test.template"
@@ -54,20 +53,16 @@ ciDir = do
 
 ciIso :: Program ()
 ciIso = do
-    doc "test"
     c <- newCloudInit "instance-abc"
     writeCloudInit c ISO9660 "/tmp/instance-abc.iso"
 
 ciVfat :: Program ()
 ciVfat = do
-    doc "test"
     c <- newCloudInit "instance-123"
     writeCloudInit c ISO9660 "/tmp/instance-123.vfat"
 
 extractPartitionOfQCow2 :: Int -> FilePath -> FilePath -> Program ()
 extractPartitionOfQCow2 p srcFile dstFile = do
-    doc
-        "It's expected that there is a raw image laying around here some where with a partition 1 inside it"
     inQCow <- fromFile srcFile SVmImage QCow2
     inRaw <- convert inQCow SVmImage (Left Raw)
     partedRawF <- convert inRaw SFreeFile ()
@@ -76,8 +71,8 @@ extractPartitionOfQCow2 p srcFile dstFile = do
 
 copyEtcPasswdOntoSharedImage :: Program ()
 copyEtcPasswdOntoSharedImage = do
-    root <- fromShared "prod-fc22-15.3.0" # "test"
-    e <- lxc "juhu" # "sdfsfaf"
+    root <- fromShared "prod-fc22-15.3.0"
+    e <- lxc "juhu"
     addFileFull e (Source NoConversion "test.mp3") (fileSpec "/test.mp3")
     outImgRaw <- mount e root "/"
     rwFs <- convert outImgRaw SFileSystemImage ()
@@ -104,7 +99,6 @@ dslExample1 = do
     sh e "ls -la"
     addTemplate c "httpd.conf"
     sh c "ls -la"
-    doc "From here there be dragons:"
     rootImage "fedora" "testv1-root" e
     dataImage "testv1-data" e
     {-

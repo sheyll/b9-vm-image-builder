@@ -3,14 +3,14 @@ module B9.DSL
        (module X, BuildStep(..), Program, create, add, convert, export,
         Artifact(..), SArtifact(..), Handle(..), CreateSpec, AddSpec,
         ConvSpec, ExportSpec, ExportResult, singletonHandle, handle,
-        imageRepositoryH, documentation, doc, ( # ), externalFile, use,
-        fromFile, outputFile, variableBindings, ($=), addFile, addExe,
-        addFileP, addTemplate, addTemplateP, addTemplateExe, addFileFull,
-        addFileFromContent, createContent, appendContent, newDirectory,
-        exportDir, newCloudInit, addMetaData, addUserData,
-        writeCloudInitDir, writeCloudInitDir', writeCloudInit,
-        addCloudInitToArtifact, fromShared, sharedAs, boot, lxc, lxc32,
-        mountDir, mountDirRW, mount, runCommand, sh, rootImage, dataImage,
+        imageRepositoryH, externalFile, use, fromFile, outputFile,
+        variableBindings, ($=), addFile, addExe, addFileP, addTemplate,
+        addTemplateP, addTemplateExe, addFileFull, addFileFromContent,
+        createContent, appendContent, newDirectory, exportDir,
+        newCloudInit, addMetaData, addUserData, writeCloudInitDir,
+        writeCloudInitDir', writeCloudInit, addCloudInitToArtifact,
+        fromShared, sharedAs, boot, lxc, lxc32, mountDir, mountDirRW,
+        mount, runCommand, sh, rootImage, dataImage,
         mountAndShareSharedImage, mountAndShareNewImage, interpret,
         Interpreter(..))
        where
@@ -98,7 +98,6 @@ data Artifact
     | CloudInit
     | CloudInitMetaData
     | CloudInitUserData
-    | Documentation
     | ExecutionEnvironment
     | TemplateVariable
     | ExecutableScript
@@ -119,7 +118,6 @@ data SArtifact k where
     SCloudInit            :: SArtifact 'CloudInit
     SCloudInitMetaData    :: SArtifact 'CloudInitMetaData
     SCloudInitUserData    :: SArtifact 'CloudInitUserData
-    SDocumentation        :: SArtifact 'Documentation
     SExecutionEnvironment :: SArtifact 'ExecutionEnvironment
     STemplateVariable     :: SArtifact 'TemplateVariable
     SExecutableScript     :: SArtifact 'ExecutableScript
@@ -139,7 +137,6 @@ instance Show (SArtifact k) where
     show SCloudInit            = "CloudInit"
     show SCloudInitUserData    = "CloudInitUserData"
     show SCloudInitMetaData    = "CloudInitMetaData"
-    show SDocumentation        = "Documentation"
     show SExecutionEnvironment = "ExecutionEnvironment"
     show STemplateVariable     = "TemplateVariable"
     show SExecutableScript     = "ExecutableScript"
@@ -193,7 +190,6 @@ type family AddSpec (env :: Artifact) (a :: Artifact) :: * where
     AddSpec 'CloudInit 'CloudInitUserData           = AST Content YamlObject
     AddSpec 'CloudInit 'ExecutableScript            = Script
     AddSpec 'CloudInit 'FreeFile                    = (FileSpec, Handle 'FreeFile)
-    AddSpec 'Documentation 'Documentation           = String
     AddSpec 'ExecutionEnvironment 'ExecutableScript = Script
     AddSpec 'ExecutionEnvironment 'FreeFile         = (FileSpec, Handle 'FreeFile)
     AddSpec 'ExecutionEnvironment 'LocalDirectory   = SharedDirectory
@@ -249,20 +245,6 @@ type family ExportResult (a :: Artifact) :: * where
 -- | A Global handle repesenting the (local) share image repository.
 imageRepositoryH :: Handle 'ImageRepository
 imageRepositoryH = singletonHandle SImageRepository
-
--- * Inline documentation/comment support
-
--- | A handle representing the documentation gathered throughout a 'Program'
-documentation :: Handle 'Documentation
-documentation = singletonHandle SDocumentation
-
-doc :: String -> Program ()
-doc str = add documentation SDocumentation str
-
-(#) :: Program a -> String -> Program a
-m # str = do
-    doc str
-    m
 
 -- * Incorporating external files
 

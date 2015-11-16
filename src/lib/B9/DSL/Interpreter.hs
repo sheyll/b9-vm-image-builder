@@ -374,7 +374,6 @@ instance Interpreter IoCompiler where
             hnd
             SCloudInitUserData
             (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
-    runAdd (Handle SDocumentation _) SDocumentation str = lift (logTrace str)
     runAdd hnd@(Handle SExecutionEnvironment _) SExecutableScript cmds =
         (execEnvs . at hnd . traverse . execScript) <>= cmds
     runAdd hnd@(Handle SExecutionEnvironment _) SFreeFile (destSpec,srcH) = do
