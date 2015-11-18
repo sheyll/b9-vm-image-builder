@@ -1,13 +1,13 @@
 module B9.B9IOSpec (spec) where
 
-import B9.B9Config
 import B9.B9IO
-import B9.Content
 import B9.CommonTypes
-import B9.Repository
-import B9.PartitionTable
+import B9.Content
 import B9.DiskImages
 import B9.FileSystems
+import B9.Logging
+import B9.PartitionTable
+import B9.Repository
 import Data.Default
 import Data.List
 import System.FilePath
@@ -30,8 +30,8 @@ actionSpec =
            let p = return ()
            in dumpToStrings p `shouldBe` []
        it "handles LogMessage" $
-           let p = logMessage LogTrace "test-trace"
-           in dumpToStrings p `shouldBe` ["logMessage LogTrace"]
+           let p = logMsg LogTrace "test-trace"
+           in dumpToStrings p `shouldBe` ["logMessage TRACE \"test-trace\""]
        it "handles GetBuildDir" $
            let p = getBuildDir
            in runPureDump p `shouldBe` ("/BUILD", ["getBuildDir"])
@@ -186,9 +186,9 @@ ensusreParentDirSpec =
 traceEveryActionWrapsAllActionsSpec :: Spec
 traceEveryActionWrapsAllActionsSpec =
     describe "traceEveryAction" $
-    do it "ignores 'logTrace'" $
-           (runPureDump (logTrace "test")) `shouldBe`
-           (runPureDump (traceEveryAction (logTrace "test")))
+    do it "ignores 'logMsg'" $
+           (runPureDump (traceL "test")) `shouldBe`
+           (runPureDump (traceEveryAction (traceL "test")))
        it "handles any program" $
            property $
            do prog <- arbitraryIoProgram

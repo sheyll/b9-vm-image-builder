@@ -2,6 +2,7 @@
     images. Currently only MBR partitions are supported. See 'B9.MBR' -}
 module B9.PartitionTable where
 
+import           B9.Logging
 import qualified B9.MBR as MBR
 import           Control.Parallel.Strategies
 import           Data.Binary
@@ -24,6 +25,7 @@ data PartitionSpec =
 instance Hashable PartitionSpec
 instance Binary PartitionSpec
 instance NFData PartitionSpec
+instance LogArg PartitionSpec
 
 -- * QuickCheck instances
 

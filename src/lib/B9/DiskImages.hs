@@ -2,8 +2,9 @@
 images.-}
 module B9.DiskImages where
 
-import B9.FileSystems
 import B9.CommonTypes
+import B9.FileSystems
+import B9.Logging
 import B9.QCUtil
 import Control.Parallel.Strategies
 import Data.Binary
@@ -27,6 +28,7 @@ data Image =
 instance Hashable Image
 instance Binary Image
 instance NFData Image
+instance LogArg Image
 
 -- | An image type defines the actual /file format/ of a file containing file
 -- systems. These are like /virtual harddrives/
@@ -40,6 +42,7 @@ instance Hashable ImageType
 instance Binary ImageType
 instance NFData ImageType
 instance CoArbitrary ImageType
+instance LogArg ImageType
 
 -- | A data type for image file or file system size; instead of passing 'Int's
 -- around this also captures a size unit so that the 'Int' can be kept small
@@ -51,6 +54,7 @@ data ImageSize =
 instance Hashable ImageSize
 instance Binary ImageSize
 instance NFData ImageSize
+instance LogArg ImageSize
 
 -- * Constroctor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'

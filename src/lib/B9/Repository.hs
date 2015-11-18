@@ -4,10 +4,10 @@ the whole thing is supposed to be build-server-safe, that means no two builds
 shall interfere with each other. This is accomplished by refraining from
 automatic cache updates from/to remote repositories.-}
 module B9.Repository where
-
 import           B9.ConfigUtils
 import           B9.DiskImages
 import           B9.FileSystems
+import           B9.Logging
 import           B9.QCUtil
 import           Control.Monad
 import           Control.Monad.IO.Class
@@ -43,6 +43,7 @@ instance Hashable SharedImage
 instance Binary SharedImage
 instance NFData SharedImage
 instance CoArbitrary SharedImage
+instance LogArg SharedImage
 
 -- | The name of the image is the de-facto identifier for push, pull, 'From' and
 --   'Share'.  B9 always selects the newest version the shared image identified
@@ -50,14 +51,14 @@ instance CoArbitrary SharedImage
 --   wrapper around a string that identifies a 'SharedImage'
 newtype SharedImageName =
     SharedImageName String
-    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary)
+    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary,LogArg)
 
 -- | The exact time that build job __started__.
 --   This is a wrapper around a string contains the build date of a
 --   'SharedImage'; this is purely additional convenience and typesafety
 newtype SharedImageDate =
     SharedImageDate String
-    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary)
+    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary,LogArg)
 
 -- | Every B9 build running in a 'B9Monad'
 --   contains a random unique id that is generated once per build (no matter how
@@ -67,7 +68,7 @@ newtype SharedImageDate =
 --   additional convenience and typesafety
 newtype SharedImageBuildId =
     SharedImageBuildId String
-    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary)
+    deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData,CoArbitrary,LogArg)
 
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
@@ -159,7 +160,7 @@ sharedImageDefaultImageType = QCow2
 
 newtype RepoCache =
     RepoCache FilePath
-    deriving (Read,Show,Typeable,Data)
+    deriving (Read,Show,Typeable,Data,LogArg)
 
 data RemoteRepo =
     RemoteRepo String
@@ -169,20 +170,22 @@ data RemoteRepo =
                SshRemoteUser
     deriving (Read,Show,Typeable,Data)
 
+instance LogArg RemoteRepo
+
 remoteRepoRepoId :: RemoteRepo -> String
 remoteRepoRepoId (RemoteRepo repoId _ _ _ _) = repoId
 
 newtype SshPrivKey =
     SshPrivKey FilePath
-    deriving (Read,Show,Typeable,Data)
+    deriving (Read,Show,Typeable,Data,LogArg)
 
 newtype SshRemoteHost =
     SshRemoteHost (String, Int)
-    deriving (Read,Show,Typeable,Data)
+    deriving (Read,Show,Typeable,Data,LogArg)
 
 newtype SshRemoteUser =
     SshRemoteUser String
-    deriving (Read,Show,Typeable,Data)
+    deriving (Read,Show,Typeable,Data,LogArg)
 
 -- | Initialize the local repository cache directory.
 initRepoCache

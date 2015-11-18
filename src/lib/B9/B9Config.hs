@@ -5,27 +5,26 @@ The properties are independent of specific build targets.
 module B9.B9Config
        (B9Config(..), defaultB9ConfigFile, defaultRepositoryCache,
         defaultB9Config, getB9ConfigFile, writeB9Config,
-        writeInitialB9Config, readB9Config, parseB9Config, LogLevel(..),
-        BuildVariables, GlobalOpts(..), parseGlobalOpts,
-        parseBuildVars, getGlobalOptsFromCLI)
+        writeInitialB9Config, readB9Config, parseB9Config, BuildVariables,
+        GlobalOpts(..), parseGlobalOpts, parseBuildVars,
+        getGlobalOptsFromCLI)
        where
 
 import B9.ConfigUtils
 import B9.Content
 import B9.ExecEnv
+import B9.Logging
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Data
+import Data.ConfigFile as CF
 import Data.Function (on)
 import Data.Maybe (fromMaybe)
 import Data.Monoid
-import GHC.Generics (Generic)
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
 import System.Directory
 import Text.Printf
-import Data.ConfigFile as CF
 
 type BuildVariables = [(String, String)]
 
@@ -130,14 +129,6 @@ parseGlobalOpts =
            { configFile = (Path <$> cfg) <|> pure defaultB9ConfigFile
            , cliB9Config = b9cfg'
            }
-
-data LogLevel
-    = LogTrace
-    | LogDebug
-    | LogInfo
-    | LogError
-    | LogNothing
-    deriving (Eq,Show,Ord,Read,Generic,Data,Typeable)
 
 data B9Config = B9Config
     { verbosity :: Maybe LogLevel

@@ -2,7 +2,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
-
 module B9.DSL.Interpreter where -- TODO rename to Compiler
 
 import B9.B9IO
@@ -142,19 +141,19 @@ compile p = evalStateT compileSt def
     compileSt = do
         lift
             (do b <- getBuildId
-                logTrace
-                    (printf
-                         "==[B9-PREPARE]=======================================================[%s]"
-                         b))
+                dbgL
+                    "==[B9-PREPARE]=======================================================["
+                    b
+                    "]")
         createPredefinedHandles
         result <- interpret p
         runAllActions
         lift
             (do b <- getBuildId
-                logTrace
-                    (printf
-                         "==[B9-FINISHED]======================================================[%s]"
-                         b))
+                dbgL
+                    "==[B9-FINISHED]======================================================["
+                    b
+                    "]")
         return result
 
 -- | Compile a 'Program' but run no actions, instead just print out information
@@ -185,18 +184,18 @@ createPredefinedHandles = allocPredefinedHandle imageRepositoryH
 -- | Run all actions in correct order according to the dependency graph.
 runAllActions :: IoCompiler ()
 runAllActions = do
-    lift (
-        do b <- getBuildId
-           logTrace
-               (printf
-                    "==[B9-EXECUTE]=======================================================[%s]"
-                    b))
+    lift
+        (do b <- getBuildId
+            traceL
+                "==[B9-EXECUTE]=======================================================["
+                b
+                "]")
     mG <- dependencyGraph
     case mG of
         Just g -> do
             forM_ (topSort g) runActionForVertex
         Nothing -> do
-            lift (logTrace "No artifacts.")
+            lift (traceL "No artifacts.")
             return ()
   where
     runActionForVertex vertex = do
@@ -341,12 +340,7 @@ instance Interpreter IoCompiler where
             hnd
             (do Just (DirCtx src dests) <- view (localDirs . at hnd)
                 case reverse dests of
-                    [] ->
-                        lift
-                            (logTrace
-                                 (printf
-                                      "Warning: '%s' not exported."
-                                      (show hnd)))
+                    [] -> lift (errorL hnd "not exported!")
                     (lastDest:firstDests) ->
                         lift
                             (do mapM_ (copyDir src) (reverse firstDests)
@@ -404,6 +398,8 @@ instance Interpreter IoCompiler where
         Just localDir <- use (localDirs . at dirH)
         copyFreeFile' fH (localDir ^. dirTempDir) fSpec
         fH --> dirH
+    runAdd (Handle SLoggingOuput _) SLogEvent (lvl,msg) =
+        lift $ logMsg lvl msg
     runAdd hnd@(Handle SUpdateServerRoot _) SVmImage (sn,vmI) = do
         Just destDirH <- use (updateServerRoots . at hnd)
         Just tmpDirCtx <- use (localDirs . at destDirH)
@@ -637,7 +633,7 @@ asFreeFile src title = do
                         (lastCopy:firstCopies) -> do
                             mapM_ (copy src) (reverse firstCopies)
                             moveFile src lastCopy
-                        [] -> logTrace (printf "No copies of %s required" src)))
+                        [] -> dbgL "No copies of" src "required"))
     return hnd
 
 -- | Add a new copy to a 'FreeFile' at the specified destination
@@ -708,12 +704,7 @@ allocHandle sa str = do
     let h = formatHandle v sa str
     h' <- storeHandle h v
     actions . at v ?=
-        [ lift
-              (logTrace
-                   (printf
-                        "==[B9-EXEC-ARTIFACT]==============[%s//%s]"
-                        (show sa)
-                        str))]
+        [lift (traceL "==[B9-EXEC-ARTIFACT]==============[" h "]")]
     return (h, h')
 
 -- | Add a handle to the vertex <-> handle maps in the state and return the

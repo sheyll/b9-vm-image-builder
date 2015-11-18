@@ -2,6 +2,7 @@
 module B9.FileSystems where
 
 import B9.CommonTypes
+import B9.Logging
 import B9.QCUtil
 import Control.Parallel.Strategies
 import Data.Binary
@@ -23,6 +24,7 @@ type FSLabel = String
 instance Hashable FileSystemSpec
 instance Binary FileSystemSpec
 instance NFData FileSystemSpec
+instance LogArg FileSystemSpec
 
 -- | The file systems that b9 can use and convert. TODO move to FileSystems
 data FileSystem
@@ -36,6 +38,7 @@ instance Hashable FileSystem
 instance Binary FileSystem
 instance NFData FileSystem
 instance CoArbitrary FileSystem
+instance LogArg FileSystem
 
 -- | How to resize a file system.
 data FileSystemResize
@@ -51,6 +54,7 @@ data FileSystemResize
 instance Hashable FileSystemResize
 instance Binary FileSystemResize
 instance NFData FileSystemResize
+instance LogArg FileSystemResize
 
 -- * 'Arbitrary' instances for quickcheck
 

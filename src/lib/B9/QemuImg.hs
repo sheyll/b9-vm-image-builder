@@ -6,6 +6,7 @@ import B9.CommonTypes
 import B9.ConfigUtils
 import B9.DiskImages
 import B9.FileSystems
+import B9.Logging
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Function
@@ -54,7 +55,7 @@ toQemuSizeOptVal (ImageSize amount u) =
 
 createCOWImage :: Image -> Image -> B9 ()
 createCOWImage (Image backingFile _ _) (Image imgOut imgFmt imgFS) = do
-  dbgL (printf "Creating COW image '%s' backed by '%s'" imgOut backingFile)
+  dbgL "Creating COW image" imgOut "backed by" backingFile
   cmd
     (printf
        "qemu-img create -f %s -o backing_file='%s' '%s'"
@@ -106,20 +107,19 @@ convert doMove ii@(Image imgIn fmtIn fsIn) io@(Image imgOut fmtOut fsOut)
                (show io))
   | imgIn == imgOut = do
       ensureDir imgOut
-      dbgL (printf "No need to convert: '%s'" imgIn)
+      dbgL "No need to convert" imgIn
   | doMove && fmtIn == fmtOut = do
       ensureDir imgOut
-      dbgL (printf "Moving '%s' to '%s'" imgIn imgOut)
+      dbgL "Moving" imgIn "to" imgOut
       liftIO (renameFile imgIn imgOut)
   | otherwise = do
       ensureDir imgOut
       dbgL
-          (printf
-               "Converting %s to %s: '%s' to '%s'"
-               (imageFileExtension fmtIn fsIn)
-               (imageFileExtension fmtOut fsOut)
-               imgIn
-               imgOut)
+          "Converting"
+          (imageFileExtension fmtIn fsIn)
+          "to"
+          (imageFileExtension fmtOut fsOut)
+      traceL "Converting" imgIn "to" imgOut
       cmd
           (printf
                "qemu-img convert -q -f %s -O %s '%s' '%s'"
@@ -128,5 +128,5 @@ convert doMove ii@(Image imgIn fmtIn fsIn) io@(Image imgOut fmtOut fsOut)
                imgIn
                imgOut)
       when doMove $
-          do dbgL (printf "Removing '%s'" imgIn)
+          do dbgL "Removing" imgIn
              liftIO (removeFile imgIn)

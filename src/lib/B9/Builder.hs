@@ -80,10 +80,9 @@ runIoProgram prog cfgParser cliCfg =
     withB9Config cfgParser cliCfg $
     \cfg ->
          B9M.runB9Monad cfgParser cfg $
-         do B9M.traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
-            B9M.infoL "BUILDING ARTIFACTS"
-            B9M.getConfig >>=
-                B9M.traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
+         do traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
+            infoL "Building artifacts"
+            B9M.getConfig >>= traceL "Using build configuration:" . ppShow
             executeIoProg prog
 
 withB9Config :: ConfigParser -> B9Config -> (B9Config -> IO Bool) -> IO Bool

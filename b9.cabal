@@ -83,6 +83,7 @@ library
                    , B9.FileSystems
                    , B9.FileSystemsImpl
                    , B9.LibVirtLXC
+                   , B9.Logging
                    , B9.MBR
                    , B9.PartitionTable
                    , B9.QCUtil
@@ -189,6 +190,7 @@ test-suite spec
                    , B9.B9IOSpec
                    , B9.BuilderSpec
                    , B9.B9IOImplSpec
+                   , B9.LoggingSpec
   if flag(IntegrationTests)
     CC-Options: "-DINTEGRATION_TESTS"
     CPP-Options: -DINTEGRATION_TESTS

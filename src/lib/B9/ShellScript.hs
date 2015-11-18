@@ -6,6 +6,7 @@ module B9.ShellScript
         CmdVerbosity(..), Cwd(..), User(..), Script(..))
        where
 
+import B9.Logging
 import B9.QCUtil
 import Control.Monad.Reader
 import Control.Parallel.Strategies
@@ -38,6 +39,7 @@ data Script
 instance Hashable Script
 instance Binary Script
 instance NFData Script
+instance LogArg Script
 
 instance Monoid Script where
     mempty = NoOP
@@ -63,6 +65,7 @@ data Cmd =
 instance Hashable Cmd
 instance Binary Cmd
 instance NFData Cmd
+instance LogArg Cmd
 
 data CmdVerbosity
     = Debug
@@ -74,6 +77,7 @@ data CmdVerbosity
 instance Hashable CmdVerbosity
 instance Binary CmdVerbosity
 instance NFData CmdVerbosity
+instance LogArg CmdVerbosity
 
 data Cwd
     = Cwd FilePath
@@ -83,6 +87,7 @@ data Cwd
 instance Hashable Cwd
 instance Binary Cwd
 instance NFData Cwd
+instance LogArg Cwd
 
 data User
     = User String
@@ -92,6 +97,7 @@ data User
 instance Hashable User
 instance Binary User
 instance NFData User
+instance LogArg User
 
 data Ctx = Ctx
     { ctxCwd :: Cwd
@@ -103,6 +109,7 @@ data Ctx = Ctx
 instance Hashable Ctx
 instance Binary Ctx
 instance NFData Ctx
+instance LogArg Ctx
 
 -- | Convert 'script' to bash-shell-script written to 'file' and make 'file'
 -- executable.

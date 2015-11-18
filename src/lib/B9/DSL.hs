@@ -3,25 +3,26 @@ module B9.DSL
        (module X, BuildStep(..), Program, create, add, convert, export,
         Artifact(..), SArtifact(..), Handle(..), CreateSpec, AddSpec,
         ConvSpec, ExportSpec, ExportResult, singletonHandle, handle,
-        imageRepositoryH, externalFile, use, fromFile, outputFile,
-        variableBindings, ($=), addFile, addExe, addFileP, addTemplate,
-        addTemplateP, addTemplateExe, addFileFull, addFileFromContent,
-        createContent, appendContent, newDirectory, exportDir,
-        newCloudInit, addMetaData, addUserData, writeCloudInitDir,
-        writeCloudInitDir', writeCloudInit, addCloudInitToArtifact,
-        fromShared, sharedAs, boot, lxc, lxc32, mountDir, mountDirRW,
-        mount, runCommand, sh, rootImage, dataImage,
+        imageRepositoryH, loggingH, externalFile, use, fromFile,
+        outputFile, variableBindings, ($=), addFile, addExe, addFileP,
+        addTemplate, addTemplateP, addTemplateExe, addFileFull,
+        addFileFromContent, createContent, appendContent, newDirectory,
+        exportDir, newCloudInit, addMetaData, addUserData,
+        writeCloudInitDir, writeCloudInitDir', writeCloudInit,
+        addCloudInitToArtifact, fromShared, sharedAs, boot, lxc, lxc32,
+        mountDir, mountDirRW, mount, runCommand, sh, rootImage, dataImage,
         mountAndShareSharedImage, mountAndShareNewImage, interpret,
         Interpreter(..))
        where
 
+import B9.CommonTypes as X
 import B9.Content as X
 import B9.DiskImages as X
 import B9.ExecEnv as X
 import B9.FileSystems as X
-import B9.CommonTypes as X
-import B9.Repository as X
+import B9.Logging as X
 import B9.PartitionTable as X
+import B9.Repository as X
 import B9.ShellScript as X (Script(..))
 import Control.Lens hiding ((#), from, use, (<.>), uncons)
 import Control.Monad.Free (Free(..), liftF, foldFree)
@@ -109,6 +110,8 @@ data Artifact
     | FileSystemBuilder
     | FileSystemImage
     | ImageRepository
+    | LoggingOuput
+    | LogEvent
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
 data SArtifact k where
@@ -129,6 +132,8 @@ data SArtifact k where
     SFileSystemBuilder    :: SArtifact 'FileSystemBuilder
     SFileSystemImage      :: SArtifact 'FileSystemImage
     SImageRepository      :: SArtifact 'ImageRepository
+    SLoggingOuput         :: SArtifact 'LoggingOuput
+    SLogEvent             :: SArtifact 'LogEvent
 
 instance Show (SArtifact k) where
     show SVmImage              = "VmImage"
@@ -148,6 +153,8 @@ instance Show (SArtifact k) where
     show SFileSystemBuilder    = "FileSystemBuilder"
     show SFileSystemImage      = "FileSystemImage"
     show SImageRepository      = "ImageRepository"
+    show SLoggingOuput         = "LoggingOuput"
+    show SLogEvent             = "LogEvent"
 
 instance Eq (SArtifact k) where
     x == y = show x == show y
@@ -155,13 +162,18 @@ instance Eq (SArtifact k) where
 instance Ord (SArtifact k) where
     compare = compare `on` show
 
+instance LogArg (SArtifact k)
+
 -- ---------------------------------------------------------
 
 -- | This type identifies everything that can be created or added in a 'Program'
 data Handle (a :: Artifact) =
     Handle (SArtifact a)
            String
-    deriving (Show,Eq,Ord)
+    deriving (Eq,Ord)
+instance Show (Handle a) where
+  show (Handle sa t) = show sa ++ "//" ++ show t
+instance LogArg (Handle a)
 
 -- | Create a 'Handle' that contains the string representation of the singleton
 -- type as tag value.
@@ -197,6 +209,7 @@ type family AddSpec (env :: Artifact) (a :: Artifact) :: * where
     AddSpec 'GeneratedContent 'GeneratedContent     = Content
     AddSpec 'ImageRepository 'VmImage               = (SharedImageName, Handle 'VmImage)
     AddSpec 'LocalDirectory 'FreeFile               = (FileSpec, Handle 'FreeFile)
+    AddSpec 'LoggingOuput 'LogEvent                 = (LogLevel, String)
     AddSpec 'UpdateServerRoot 'VmImage              = (SharedImageName, Handle 'VmImage)
     AddSpec 'VariableBindings 'TemplateVariable     = (String, String)
 
@@ -245,6 +258,17 @@ type family ExportResult (a :: Artifact) :: * where
 -- | A Global handle repesenting the (local) share image repository.
 imageRepositoryH :: Handle 'ImageRepository
 imageRepositoryH = singletonHandle SImageRepository
+
+-- | A Global handle repesenting the (symbolic) logging output. Currently, the
+-- logging output is determined by b9 conifiguration rather than explicit code.
+loggingH :: Handle 'LoggingOuput
+loggingH = singletonHandle SLoggingOuput
+
+-- * Logging
+
+-- | Log messages using the logging API defined in 'B9.Logging'
+instance (a ~ ()) => CanLog (Program a) where
+    logMsg l msg = add loggingH SLogEvent (l, msg)
 
 -- * Incorporating external files
 

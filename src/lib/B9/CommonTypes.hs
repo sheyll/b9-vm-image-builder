@@ -1,5 +1,6 @@
 module B9.CommonTypes where
 
+import B9.Logging
 import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
@@ -20,6 +21,7 @@ data SizeUnit
 instance Hashable SizeUnit
 instance Binary SizeUnit
 instance NFData SizeUnit
+instance LogArg SizeUnit
 
 -- * QuickCheck instances
 

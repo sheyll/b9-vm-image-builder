@@ -9,6 +9,7 @@ module B9.ExecEnv where
 
 import B9.CommonTypes
 import B9.DiskImages
+import B9.Logging
 import B9.QCUtil
 import Control.Lens
 import Control.Parallel.Strategies
@@ -32,11 +33,12 @@ data ExecEnv = ExecEnv
 instance Hashable ExecEnv
 instance Binary ExecEnv
 instance NFData ExecEnv
+instance LogArg ExecEnv
 
 -- | A mount point
 newtype MountPoint =
     MountPoint FilePath
-    deriving (Show,Read,Typeable,Data,Eq,Hashable,Binary,NFData)
+    deriving (Show,Read,Typeable,Data,Eq,Hashable,Binary,NFData,LogArg)
 
 -- | A type alias that indicates that something of type @a@ is mount at a
 -- 'MountPoint'
@@ -59,6 +61,7 @@ data SharedDirectory
 instance Hashable SharedDirectory
 instance Binary SharedDirectory
 instance NFData SharedDirectory
+instance LogArg SharedDirectory
 
 data Resources = Resources
     { maxMemory :: RamSize
@@ -69,6 +72,7 @@ data Resources = Resources
 instance Hashable Resources
 instance Binary Resources
 instance NFData Resources
+instance LogArg Resources
 
 instance Default Resources where
   def = Resources AutomaticRamSize 2 X86_64
@@ -89,6 +93,7 @@ data CPUArch
 instance Hashable CPUArch
 instance Binary CPUArch
 instance NFData CPUArch
+instance LogArg CPUArch
 
 instance Monoid CPUArch where
     mempty = I386
@@ -104,6 +109,7 @@ data RamSize
 instance Hashable RamSize
 instance Binary RamSize
 instance NFData RamSize
+instance LogArg RamSize
 
 instance Monoid RamSize where
     mempty = AutomaticRamSize
@@ -117,6 +123,7 @@ data ExecEnvType =
 instance Hashable ExecEnvType
 instance Binary ExecEnvType
 instance NFData ExecEnvType
+instance LogArg ExecEnvType
 
 -- | Decribe how a linux container is supposed to be started.
 data ExecEnvSpec = ExecEnvSpec
@@ -128,6 +135,7 @@ data ExecEnvSpec = ExecEnvSpec
 instance Hashable ExecEnvSpec
 instance Binary ExecEnvSpec
 instance NFData ExecEnvSpec
+instance LogArg ExecEnvSpec
 instance Default ExecEnvSpec where
   def = ExecEnvSpec "exec-env" LibVirtLXC def
 

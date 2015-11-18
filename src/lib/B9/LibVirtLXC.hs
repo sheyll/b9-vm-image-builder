@@ -4,6 +4,7 @@ module B9.LibVirtLXC ( runInEnvironment
                      ) where
 
 import B9.B9Monad
+import B9.Logging
 import B9.CommonTypes
 import B9.ConfigUtils
 import B9.DiskImages
@@ -157,7 +158,7 @@ guestRamSizeK = "guest_ram_size"
 configureLibVirtLXC :: B9 LibVirtLXCConfig
 configureLibVirtLXC = do
     c <- readLibVirtConfig
-    traceL $ printf "USING LibVirtLXCConfig: %s" (show c)
+    traceL "USING LibVirtLXCConfig: " (show c)
     return c
 
 setDefaultConfig :: ConfigParser

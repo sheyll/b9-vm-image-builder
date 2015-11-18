@@ -3,9 +3,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
 module B9.B9IO where
 
-import B9.B9Config
 import B9.Content
 import B9.DSL hiding (use)
 import B9.QCUtil
@@ -104,7 +104,7 @@ data Action next
     deriving (Functor)
 
 instance Show (Action a) where
-    show (LogMessage l _m _) = printf "logMessage %s" (show l)
+    show (LogMessage l m _) = printf "logMessage %s %s" (show l) (show m)
     show (GetBuildId _) = "getBuildId"
     show (GetBuildDate _) = "getBuildDate"
     show (GetBuildDir _) = "getBuildDir"
@@ -137,14 +137,11 @@ instance Show (Action a) where
     show (ExecuteInEnv e s d i _) =
         printf "executeInEnv %s %s %s %s" (show e) (show s) (show d) (show i)
 
--- | Log a string, but only when trace logging is enabled, e.g. when
--- debugging
-logTrace :: String -> IoProgram ()
-logTrace = logMessage LogTrace
+instance LogArg (Action a)
 
--- | Log a message with a given log-level
-logMessage :: LogLevel -> String -> IoProgram ()
-logMessage l str = liftF $ LogMessage l str ()
+-- | High-level logging API
+instance (a ~ ()) => CanLog (IoProgram a) where
+    logMsg l str = liftF $ LogMessage l str ()
 
 -- | Get the (temporary) directory of the current b9 execution
 getBuildDir :: IoProgram FilePath
@@ -298,108 +295,108 @@ traceEveryAction :: IoProgram a -> IoProgram a
 traceEveryAction = runB9IO traceAction
   where
     traceAction (LogMessage l s n) = do
-        logMessage l s
+        logMsg l s
         return n
     traceAction a@(GetBuildDir k) = do
-        logTrace $ show a
+        traceL a
         b <- getBuildDir
-        logTrace $ " -> " ++ b
+        traceL "->" b
         return $ k b
     traceAction a@(GetBuildId k) = do
-        logTrace $ show a
+        traceL a
         b <- getBuildId
-        logTrace $ " -> " ++ b
+        traceL "->" b
         return $ k b
     traceAction a@(GetBuildDate k) = do
-        logTrace $ show a
+        traceL a
         b <- getBuildDate
-        logTrace $ " -> " ++ b
+        traceL "->" b
         return $ k b
     traceAction a@(MkTemp prefix k) = do
-        logTrace $ show a
+        dbgL a
         t <- mkTemp prefix
-        logTrace $ printf " -> %s" t
+        traceL "->" t
         return $ k t
     traceAction a@(MkTempIn parent prefix k) = do
-        logTrace $ show a
+        dbgL a
         t <- mkTempIn parent prefix
-        logTrace $ printf " -> %s" t
+        traceL "->" t
         return $ k t
     traceAction a@(MkDir d n) = do
-        logTrace $ show a
+        dbgL a
         mkDir d
         return n
     traceAction a@(Copy s d n) = do
-        logTrace $ show a
+        dbgL a
         copy s d
         return n
     traceAction a@(CopyDir s d n) = do
-        logTrace $ show a
+        dbgL a
         copyDir s d
         return n
     traceAction a@(MoveFile s d n) = do
-        logTrace $ show a
+        dbgL a
         moveFile s d
         return n
     traceAction a@(MoveDir s d n) = do
-        logTrace $ show a
+        dbgL a
         moveDir s d
         return n
     traceAction a@(ReadFileSize f k) = do
-        logTrace $ show a
+        traceL a
         s <- readFileSize f
-        logTrace $ printf " -> %i" s
+        traceL "->" s
         return $ k s
     traceAction a@(GetParentDir f k) = do
-        logTrace $ show a
+        traceL a
         p <- getParentDir f
-        logTrace $ printf " -> %s" p
+        traceL "->" p
         return $ k p
     traceAction a@(GetRealPath f k) = do
-        logTrace $ show a
+        traceL a
         p <- getRealPath f
-        logTrace $ printf " -> %s" p
+        traceL "->" p
         return $ k p
     traceAction a@(GetFileName f k) = do
-        logTrace $ show a
+        traceL a
         p <- getFileName f
-        logTrace $ printf " -> %s" p
+        traceL "->" p
         return $ k p
     traceAction a@(RenderContentToFile f c e n) = do
-        logTrace $ show a
+        traceL a
         renderContentToFile f c e
         return n
     traceAction a@(CreateFileSystem dst fs srcDir files n) = do
-        logTrace $ show a
+        dbgL a
         createFileSystem dst fs srcDir files
         return n
     traceAction a@(ResizeFileSystem f r t n) = do
-        logTrace $ show a
+        dbgL a
         resizeFileSystem f r t
         return n
     traceAction a@(ConvertVmImage srcF srcT dstF dstT n) = do
-        logTrace $ show a
+        dbgL a
         convertVmImage srcF srcT dstF dstT
         return n
     traceAction a@(ResizeVmImage i s u t n) = do
-        logTrace $ show a
+        dbgL a
         resizeVmImage i s u t
         return n
     traceAction a@(ExtractPartition p s d n) = do
-        logTrace $ show a
+        dbgL a
         extractPartition p s d
         return n
     traceAction a@(ImageRepoLookup s k) = do
-        logTrace $ show a
+        dbgL a
         r <- imageRepoLookup s
-        logTrace $ printf " -> %s" (show r)
+        traceL "->" r
         return $ k r
     traceAction a@(ImageRepoPublish f t sn n) = do
-        logTrace $ show a
+        dbgL a
         imageRepoPublish f t sn
         return n
     traceAction a@(ExecuteInEnv e s d i n) = do
-        logTrace $ show a
+        dbgL a
         executeInEnv e s d i
         return n
 

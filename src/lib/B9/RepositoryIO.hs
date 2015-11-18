@@ -11,6 +11,7 @@ module B9.RepositoryIO
        where
 
 import B9.B9Monad
+import B9.Logging
 import B9.QemuImg
 import B9.ConfigUtils
 import B9.DiskImages
@@ -32,7 +33,7 @@ import Text.Show.Pretty (ppShow)
 shareImage :: Image -> SharedImageName -> B9 SharedImage
 shareImage buildImg sname@(SharedImageName name) = do
     sharedImage <- createSharedImageInCache buildImg sname
-    infoL (printf "SHARED '%s'" name)
+    infoL "shared" name
     pushToSelectedRepo sharedImage
     return sharedImage
 
@@ -53,12 +54,12 @@ getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
 -- | Convert the disk image and serialize the base image data structure.
 createSharedImageInCache :: Image -> SharedImageName -> B9 SharedImage
 createSharedImageInCache img sname@(SharedImageName name) = do
-    dbgL (printf "CREATING SHARED IMAGE: '%s' '%s'" (ppShow img) name)
+    dbgL "creating shared image" img name
     sharedImg <- getSharedImageFromImageInfo sname img
     dir <- getSharedImagesCacheDir
     convertImage img (changeImageDirectory dir (sharedImageImage sharedImg))
     tell (dir </> sharedImageFileName sharedImg) sharedImg
-    dbgL (printf "CREATED SHARED IMAGE IN CAHCE '%s'" (ppShow sharedImg))
+    dbgL "stored shared image into the cache" sharedImg
     return sharedImg
 
 
@@ -67,9 +68,9 @@ createSharedImageInCache img sname@(SharedImageName name) = do
 pushSharedImageLatestVersion :: SharedImageName -> B9 ()
 pushSharedImageLatestVersion name@(SharedImageName imgName) = do
     sharedImage <- getLatestSharedImageByNameFromCache name
-    dbgL (printf "PUSHING '%s'" (ppShow sharedImage))
+    dbgL "pushing" sharedImage
     pushToSelectedRepo sharedImage
-    infoL (printf "PUSHED '%s'" imgName)
+    infoL "pushed" imgName
 
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo :: SharedImage -> B9 ()
@@ -111,13 +112,13 @@ pullLatestImage name@(SharedImageName dbgName) = do
     if null candidates
         then do
             errorL
-                (printf
-                     "No shared image named '%s' on these remote repositories: '%s'"
-                     dbgName
-                     (ppShow repoIds))
+                "No shared image named"
+                dbgName
+                "on these remote repositories:"
+                (ppShow repoIds)
             return False
         else do
-            dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
+            dbgL "pulling shared image" (ppShow image)
             cacheDir <- getSharedImagesCacheDir
             let (Image imgFile' _imgType _fs) = sharedImageImage image
                 cachedImgFile = cacheDir </> imgFile'
@@ -128,7 +129,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
                 repo = fromJust (lookupRemoteRepo repos repoId)
             pullFromRepo repo repoImgFile cachedImgFile
             pullFromRepo repo repoInfoFile cachedInfoFile
-            infoL (printf "PULLED '%s' FROM '%s'" dbgName repoId)
+            infoL "pulled" dbgName "from" repoId
             return True
 
 
@@ -139,7 +140,7 @@ getLatestImageByName name = do
     sharedImage <- getLatestSharedImageByNameFromCache name
     cacheDir <- getSharedImagesCacheDir
     let image = changeImageDirectory cacheDir (sharedImageImage sharedImage)
-    dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show image))
+    dbgL "using shared source image" (ppShow image)
     return image
 
 -- | Return the path the to shared image in the local cache
@@ -169,16 +170,17 @@ getSharedImages = do
               ((repo, ) . catMaybes) <$> mapM consult' files)
         reposAndFiles
   where
+    consult' :: (Read r) => FilePath -> B9 (Maybe r)
     consult' f = do
         r <- liftIO (try (consult f))
         case r of
             Left (e :: SomeException) -> do
                 dbgL
-                    (printf
-                         "Failed to load shared image meta-data from '%s': '%s'"
-                         (takeFileName f)
-                         (show e))
-                dbgL (printf "Removing bad meta-data file '%s'" f)
+                    "Failed to load shared image meta-data from"
+                    (takeFileName f)
+                    "reason:"
+                    (show e)
+                dbgL "Removing bad meta-data file" f
                 liftIO (removeFile f)
                 return Nothing
             Right c -> return (Just c)
@@ -246,7 +248,7 @@ repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
 
         findGlob :: FilePath -> B9 [FilePath]
         findGlob dir = do
-          traceL (printf "reading contents of directory '%s'" dir)
+          traceL "reading contents of directory" dir
           ensureDir (dir ++ "/")
           files <- liftIO (getDirectoryContents dir)
           return ((dir </>) <$> filter (matchGlob glob) files)
@@ -254,30 +256,28 @@ repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
 -- | Push a file from the cache to a remote repository
 pushToRepo :: RemoteRepo -> FilePath -> FilePath -> B9 ()
 pushToRepo repo@(RemoteRepo repoId _ _ _ _) src dest = do
-  dbgL (printf "PUSHING '%s' TO REPO '%s'" (takeFileName src) repoId)
-  cmd (repoEnsureDirCmd repo dest)
-  cmd (pushCmd repo src dest)
+    dbgL "pushing" (takeFileName src) "to repo" repoId
+    cmd (repoEnsureDirCmd repo dest)
+    cmd (pushCmd repo src dest)
 
 -- | Pull a file from a remote repository to cache
 pullFromRepo :: RemoteRepo -> FilePath -> FilePath -> B9 ()
-pullFromRepo repo@(RemoteRepo repoId
-                              rootDir
-                              _key
-                              (SshRemoteHost (host, _port))
-                              (SshRemoteUser user)) src dest = do
-  dbgL (printf "PULLING '%s' FROM REPO '%s'" (takeFileName src) repoId)
-  cmd (printf "rsync -rtv -e 'ssh %s' '%s@%s:%s' '%s'"
-              (sshOpts repo)
-              user
-              host
-              (rootDir </> src)
-              dest)
+pullFromRepo repo@(RemoteRepo repoId rootDir _key (SshRemoteHost (host,_port)) (SshRemoteUser user)) src dest = do
+    dbgL "pulling" (takeFileName src) "from repo" repoId
+    cmd
+        (printf
+             "rsync -rtv -e 'ssh %s' '%s@%s:%s' '%s'"
+             (sshOpts repo)
+             user
+             host
+             (rootDir </> src)
+             dest)
 
 -- | Push a file from the cache to a remote repository
 pullGlob :: FilePath -> FilePathGlob -> RemoteRepo -> B9 ()
 pullGlob subDir glob repo@(RemoteRepo repoId rootDir _key (SshRemoteHost (host,_port)) (SshRemoteUser user)) = do
     cache <- getRepoCache
-    infoL (printf "SYNCING REPO METADATA '%s'" repoId)
+    infoL "syncing repo metadata" repoId
     let c =
             printf
                 "rsync -rtv --include '%s' --exclude '*.*' -e 'ssh %s' '%s@%s:%s/' '%s/'"

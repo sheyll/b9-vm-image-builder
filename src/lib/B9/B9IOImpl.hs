@@ -9,6 +9,7 @@ import           B9.ExecEnv
 import           B9.FileSystems
 import           B9.FileSystemsImpl
 import qualified B9.LibVirtLXC as LXC
+import           B9.Logging
 import           B9.PartitionTable
 import           B9.QemuImg
 import           B9.RepositoryIO
@@ -33,7 +34,7 @@ executeIoProg = runB9IO go
   where
     go :: Action a -> B9Monad.B9 a
     go (LogMessage l s n) = do
-        B9Monad.b9Log l s
+        logMsg l s
         return n
     go (GetBuildDir k) = do
         b <- B9Monad.getBuildDir
@@ -80,8 +81,7 @@ executeIoProg = runB9IO go
     go (GetFileName f k) = return $ k (takeFileName f)
     go (RenderContentToFile f c e n) = do
         result <- runReaderT (render c) e
-        B9Monad.traceL $
-            printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result))
+        traceL "rendered:" (T.unpack (E.decodeUtf8 result))
         liftIO $ B.writeFile f result
         return n
     go (CreateFileSystem dst fs srcDir files n) = do
@@ -98,14 +98,17 @@ executeIoProg = runB9IO go
         return n
     go (ExtractPartition p@(MBRPartition partIndex) s d n) = do
         (start,len) <- liftIO $ getPartition p s
-        B9Monad.traceL
-            (printf
-                 "extracting MBR partition %d starting at %d with a length of %d (bytes) from %s to %s"
-                 partIndex
-                 start
-                 len
-                 s
-                 d)
+        traceL
+            "extracting MBR partition"
+            partIndex
+            "starting at"
+            start
+            "with a length of"
+            len
+            "(bytes) from"
+            s
+            "to"
+            d
         liftIO
             (C.runResourceT
                  ((CB.sourceFileRange

@@ -1,3 +1,6 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module B9.DSL.InterpreterSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
@@ -22,6 +25,7 @@ spec = do
     sharedImageSpec
     updateServerImageSpec
     containerExecutionSpec
+    loggingSpec
 
 -- * Examples for 'ReadOnlyFile' artifacts
 
@@ -786,3 +790,18 @@ containerExecutionSpec =
               moveFile tmpOut destOut
               moveFile mountedImg mountedImgCopy
               moveFile mountedImgCopy imgOut
+
+loggingSpec :: Spec
+loggingSpec = do
+    describe "LogEvents" $
+        it "are generated from the 'CanLog (Program a)' instance" $
+        (do traceL "trace log"
+            dbgL "debug" "log"
+            infoL "info log"
+            errorL "error log"
+            return ()) `shouldDoIo`
+        (do logMsg LogTrace "trace log"
+            logMsg LogDebug "debug log"
+            logMsg LogInfo "info log"
+            logMsg LogError "error log"
+            return ())
