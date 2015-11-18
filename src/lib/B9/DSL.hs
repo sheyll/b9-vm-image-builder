@@ -1,3 +1,4 @@
+-- | The central part of the API offered by B9, the 'Program' (free-) monad.
 {-# LANGUAGE FlexibleInstances #-}
 module B9.DSL
        (module X, BuildStep(..), Program, create, add, convert, export,
@@ -36,34 +37,39 @@ import Text.Printf (printf)
 
 -- ---------------------------------------------------------
 
+-- | A program is a free monad of 'BuildStep's that describe abstract, CRUD-like
+--  VM-build and deployment operations.
+type Program a = Free BuildStep a
+
+-- | Create ALG for the 'Program' (free) monad.
 data BuildStep next where
-    Create :: -- Inject
+    Create ::
         (Show (CreateSpec a)) =>
         SArtifact a -> CreateSpec a -> (Handle a -> next) -> BuildStep next
-    Add :: -- Compose w/o result
+    Add ::
         (Show (AddSpec env a)) =>
         Handle env ->
           SArtifact a -> AddSpec env a -> next -> BuildStep next
-    Convert :: -- Compose
+    Convert ::
         (Show (ConvSpec a b)) =>
         Handle a ->
           SArtifact b -> ConvSpec a b -> (Handle b -> next) -> BuildStep next
-    Export :: -- Project
+    Export ::
         (Show (ExportSpec a), Show (ExportResult a)) =>
         Handle a ->
           ExportSpec a -> (ExportResult a -> next) -> BuildStep next
 
+-- | The requirement to create a free monad of a type is a functor instance.
 instance Functor BuildStep where
     fmap f (Create sa src k)            = Create sa src (f . k)
     fmap f (Add hndEnv sa addSpec next) = Add hndEnv sa addSpec (f next)
     fmap f (Convert hA sB conv k)       = Convert hA sB conv (f . k)
     fmap f (Export hnd out k)           = Export hnd out (f . k)
 
-type Program a = Free BuildStep a
-
 -- ---------------------------------------------------------
 
--- | Declare an artifact.
+-- | Declare or define an artifact in terms of artifact specific
+-- parameters contained in a respectve 'CreateSpec' indexed by the 'Artifact'.
 create
     :: (Show (CreateSpec a))
     => SArtifact a -> CreateSpec a -> Program (Handle a)
@@ -92,6 +98,8 @@ export hnd out = liftF $ Export hnd out id
 
 -- ---------------------------------------------------------
 
+-- | The /objects/ manipulated by the 'BuildStep's and referenced to by
+-- 'Handle's.
 data Artifact
     = VmImage
     | UpdateServerRoot
@@ -114,6 +122,7 @@ data Artifact
     | LogEvent
     deriving (Read,Show,Generic,Eq,Ord,Data,Typeable)
 
+-- | Singleton type for 'Artifact's.
 data SArtifact k where
     SVmImage              :: SArtifact 'VmImage
     SUpdateServerRoot     :: SArtifact 'UpdateServerRoot
@@ -186,6 +195,7 @@ handle = Handle
 
 -- * Creation type families
 
+-- | Artifact specific parameters for 'create'
 type family CreateSpec (a :: Artifact) :: * where
     CreateSpec 'CloudInit            = String
     CreateSpec 'ExecutionEnvironment = ExecEnvSpec
@@ -197,6 +207,7 @@ type family CreateSpec (a :: Artifact) :: * where
 
 -- * Add type families
 
+-- | Parameters for 'add'. They may depend on both artifact types.
 type family AddSpec (env :: Artifact) (a :: Artifact) :: * where
     AddSpec 'CloudInit 'CloudInitMetaData           = AST Content YamlObject
     AddSpec 'CloudInit 'CloudInitUserData           = AST Content YamlObject
@@ -215,6 +226,7 @@ type family AddSpec (env :: Artifact) (a :: Artifact) :: * where
 
 -- * Conversion type families
 
+-- | Parameters for 'convert'. They may depend on both artifact types.
 type family ConvSpec (a :: Artifact) (b :: Artifact) :: * where
     ConvSpec 'CloudInit 'CloudInitMetaData        = ()
     ConvSpec 'CloudInit 'CloudInitUserData        = ()
@@ -244,12 +256,14 @@ type family ConvSpec (a :: Artifact) (b :: Artifact) :: * where
 
 -- * Export type families
 
+-- | Artifact export parameters.
 type family ExportSpec (a :: Artifact) :: * where
     ExportSpec 'FileSystemImage = FilePath
     ExportSpec 'FreeFile        = FilePath
     ExportSpec 'LocalDirectory  = FilePath
     ExportSpec 'VmImage         = FilePath
 
+-- | Artifact export result type.
 type family ExportResult (a :: Artifact) :: * where
     ExportResult a = ()
 
@@ -308,6 +322,8 @@ outputFile e src dst = do
 variableBindings :: Handle 'VariableBindings
 variableBindings = singletonHandle SVariableBindings
 
+-- | Create a template variable binding. The bindings play a role in generated
+-- 'Content' and in the 'addTemplate' (and similar) functions.
 ($=) :: String -> String -> Program ()
 var $= val = add variableBindings STemplateVariable (var, val)
 
@@ -580,5 +596,3 @@ class (Monad f) => Interpreter f  where
     runExport
         :: (Show (ExportSpec a), Show (ExportResult a))
         => Handle a -> ExportSpec a -> f (ExportResult a)
-
--- * QuickCheck instances
