@@ -72,6 +72,7 @@ instance Semigroup YamlObject where
         Array (a1 ++ singleton t2)
       combine t1 (Array a2) =
         Array (singleton t1 ++ a2)
+      combine (String s1) (String s2) = String (s1 <> s2)
       combine t1 t2 =
         array [t1,t2]
 

@@ -72,6 +72,12 @@ spec =
                             ,"owner" .=
                              toJSON ("root:root"::String)]]])
       in ud1 <> ud2 `shouldBe` ud
+    it "combines strings by appending them" $
+       let o1 = YamlObject (object ["k" .= toJSON ("Hello"::String)])
+           o2 = YamlObject (object ["k" .= toJSON ("World"::String)])
+           combined =
+             YamlObject (object ["k" .= toJSON ("HelloWorld"::String)])
+       in (o1 <> o2) `shouldBe` combined
 
 
 --    describe "fromAST YamlObject" $ do
