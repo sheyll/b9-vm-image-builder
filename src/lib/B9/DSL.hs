@@ -1,3 +1,4 @@
+{-# LANGUAGE PolyKinds #-}
 -- | The central part of the API offered by B9, the 'Program' (free-) monad.
 {-# LANGUAGE FlexibleInstances #-}
 module B9.DSL
@@ -58,6 +59,9 @@ data BuildStep next where
         (Show (ExportSpec a), Show (ExportResult a)) =>
         Handle a ->
           ExportSpec a -> (ExportResult a -> next) -> BuildStep next
+    CreateX ::
+        (Show (CreateSpecX a)) =>
+        ArtifactX a -> CreateSpecX a -> (HandleX a -> next) -> BuildStep next
 
 -- | The requirement to create a free monad of a type is a functor instance.
 instance Functor BuildStep where
@@ -95,6 +99,28 @@ export
     => Handle a -> ExportSpec a -> Program (ExportResult a)
 export hnd out = liftF $ Export hnd out id
 
+
+-- ---------------------------------------------------------
+
+data family ArtifactX (a :: k)
+
+data instance ArtifactX ( n :: ImageType ) where
+  SRaw :: ArtifactX 'Raw
+  SQCow2 :: ArtifactX 'QCow2
+  SVmdk :: ArtifactX 'Vmdk
+
+type SImageType (n :: ImageType) = ArtifactX n
+
+type family CreateSpecX ( a :: k)
+
+type instance CreateSpecX (a :: ImageType) = FilePath
+
+data HandleX (a :: k) = HandleX (ArtifactX a) String
+
+createX
+    :: Show (CreateSpecX a)
+    => ArtifactX a -> CreateSpecX a -> Program (HandleX a)
+createX sa src = liftF $ CreateX sa src id
 
 -- ---------------------------------------------------------
 
@@ -572,6 +598,9 @@ interpret = foldFree runInterpreter
     runInterpreter (Create sa src k) = do
         hnd <- runCreate sa src
         return (k hnd)
+    runInterpreter (CreateX sa src k) = do
+        hnd <- runCreateX sa src
+        return (k hnd)
     runInterpreter (Add hnde sa addSpec next) = do
         runAdd hnde sa addSpec
         return next
@@ -587,6 +616,9 @@ class (Monad f) => Interpreter f  where
     runCreate
         :: (Show (CreateSpec a))
         => SArtifact a -> CreateSpec a -> f (Handle a)
+    runCreateX
+        :: (Show (CreateSpecX a))
+        => ArtifactX a -> CreateSpecX a -> f (HandleX a)
     runAdd
         :: (Show (AddSpec a b))
         => Handle a -> SArtifact b -> AddSpec a b -> f ()
