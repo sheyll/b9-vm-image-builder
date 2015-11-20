@@ -41,7 +41,7 @@ It has exactly *four* primitives similar to CRUD. It describes how to `Create`,
 
 Heck, you could even invent your own artifact types, just implement an instance
 of the data-family `Artifact` and specify inhabitants of the type families
-accompanying the the methods of the the toy language, i.e.: `CreateSpec`,
+accompanying the methods of the toy language, i.e.: `CreateSpec`,
 `AddSpec`, `ConvertSpec`, `ExportSpec` and `ExportResult`. (Oh, don't forget to
 stack your own `Interpreter` type-class implementation on top of the existing
 interpreter, otherwise your shiny new toys will merely yield some _Not Yet
