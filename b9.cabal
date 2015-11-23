@@ -1,6 +1,5 @@
 name:                b9
 version:             0.6.0
-
 synopsis:            A tool and library for building virtual machine images.
 
 description:         Build virtual machine images for vm-deployments; resize,

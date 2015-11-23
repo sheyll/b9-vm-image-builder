@@ -5,19 +5,19 @@ module B9.Content.YamlObject ( YamlObject (..)
 
 import           Control.Applicative
 import           Control.Parallel.Strategies
-import           Data.Binary (Binary(..))
+import           Data.Binary                 (Binary (..))
 import           Data.Data
 import           Data.Function
-import           Data.HashMap.Strict hiding (singleton)
 import           Data.Hashable
+import           Data.HashMap.Strict         hiding (singleton)
 import           Data.Maybe
 import           Data.Semigroup
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as E
-import           Data.Vector ((++), singleton)
+import qualified Data.Text                   as T
+import qualified Data.Text.Encoding          as E
+import           Data.Vector                 (singleton, (++))
 import           Data.Yaml
-import           GHC.Generics (Generic)
-import           Prelude hiding ((++))
+import           GHC.Generics                (Generic)
+import           Prelude                     hiding ((++))
 import           Text.Printf
 
 import           B9.Content.AST
@@ -59,14 +59,22 @@ instance Show YamlObject where
     "YamlObject " <> show (T.unpack $ E.decodeUtf8 $ encode o)
 
 instance Semigroup YamlObject where
-    (YamlObject v1) <> (YamlObject v2) = YamlObject (combine v1 v2)
-      where
-        combine :: Data.Yaml.Value -> Data.Yaml.Value -> Data.Yaml.Value
-        combine (Object o1) (Object o2) = Object (unionWith combine o1 o2)
-        combine (Array a1) (Array a2) = Array (a1 ++ a2)
-        combine (Array a1) t2 = Array (a1 ++ singleton t2)
-        combine t1 (Array a2) = Array (singleton t1 ++ a2)
-        combine t1 t2 = array [t1, t2]
+  (YamlObject v1) <> (YamlObject v2) = YamlObject (combine v1 v2)
+    where
+      combine :: Data.Yaml.Value
+              -> Data.Yaml.Value
+              -> Data.Yaml.Value
+      combine (Object o1) (Object o2) =
+        Object (unionWith combine o1 o2)
+      combine (Array a1) (Array a2) =
+        Array (a1 ++ a2)
+      combine (Array a1) t2 =
+        Array (a1 ++ singleton t2)
+      combine t1 (Array a2) =
+        Array (singleton t1 ++ a2)
+      combine (String s1) (String s2) = String (s1 <> s2)
+      combine t1 t2 =
+        array [t1,t2]
 
 instance ConcatableSyntax YamlObject where
     decodeSyntax src str =
