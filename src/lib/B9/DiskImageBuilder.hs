@@ -252,7 +252,7 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
           (Raw,Ext4) -> do
               let fsCmd = "mkfs.ext4"
               dbgL (printf "Creating file system %s" (show imgFs))
-              cmd (printf "%s -L '%s' -q '%s'" fsCmd fsLabel imgFile)
+              cmd (printf "%s -F -L '%s' -q '%s'" fsCmd fsLabel imgFile)
           (it,fs) ->
               error
                   (printf
