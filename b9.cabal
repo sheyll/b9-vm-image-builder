@@ -81,6 +81,7 @@ library
                    , B9.ExecEnv
                    , B9.FileSystems
                    , B9.FileSystemsImpl
+                   , B9.GPT
                    , B9.LibVirtLXC
                    , B9.Logging
                    , B9.MBR
@@ -101,6 +102,7 @@ library
                    , binary
                    , boxes
                    , bytestring
+                   , cereal
                    , conduit
                    , conduit-extra
                    , conduit-combinators
@@ -128,6 +130,7 @@ library
                    , transformers
                    , unordered-containers
                    , vector
+                   , vector-binary-instances
                    , yaml
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
@@ -184,6 +187,7 @@ test-suite spec
   other-modules:     B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
+                   , B9.DSLSpec
                    , B9.DSL.InterpreterSpec
                    , B9.SpecExtra
                    , B9.B9IOSpec
