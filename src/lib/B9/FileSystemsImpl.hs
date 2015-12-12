@@ -1,14 +1,14 @@
 module B9.FileSystemsImpl where
 
-import B9.B9Monad
-import B9.CommonTypes
-import B9.Content
-import B9.FileSystems
-import B9.DiskImages
-import Control.Lens hiding ((<.>), elements)
-import Control.Monad
-import System.FilePath
-import Text.Printf
+import           B9.B9Monad
+import           B9.CommonTypes
+import           B9.Content
+import           B9.DiskImages
+import           B9.FileSystems
+import           Control.Lens    hiding (elements, (<.>))
+import           Control.Monad
+import           System.FilePath
+import           Text.Printf
 
 -- | Resize an image, including the file system inside the image.
 resizeFS :: FileSystemResize -> FilePath -> FileSystem -> B9 ()
@@ -66,7 +66,7 @@ createFSWithFiles dst (FileSystemSpec Ext4 l s su) _ fs = do
     when (not (null fs)) $
         fail "Creating non-empty Ext4 file systems is not yet implemented"
     createEmptyFile dst s su
-    cmdRaw "mkfs.ext4" ["-L", l, "-q", dst]
+    cmdRaw "mkfs.ext4" ["-F", "-L", l, "-q", dst]
 createFSWithFiles dst c srcD fs =
     fail $
     printf
