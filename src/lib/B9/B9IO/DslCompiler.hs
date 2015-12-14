@@ -34,14 +34,15 @@ type Program a = ProgramT IoCompiler a
 -- be executed).
 type IoProgBuilder = ReaderT Ctx IoProgram
 
+-- | State for artifacts required to generate the output program is
+--   held in a single 'Map' containing the existential key/value types
+--  'SomeHandle' -> 'SomeState'. This way the IoCompiler remains extensible.
+type ArtifactStates = Map SomeHandle SomeState
+
 -- | A existential type for holding state for artifacts
-data ArtifactState where
-        ArtifactState ::
-            Typeable (ArtifactCtx a)
-            => Map (Handle a) (ArtifactCtx a) -> ArtifactState
-
-data family ArtifactCtx (a :: k) :: *
-
+data SomeState where
+        SomeState :: Typeable a => a -> SomeState
+    deriving Typeable
 
 -- | The internal state of the 'IoCompiler' monad
 data Ctx = Ctx
@@ -49,7 +50,6 @@ data Ctx = Ctx
     , _vars :: Map String String
     , _ci :: Map (Handle 'CloudInit) CiCtx
     , _generatedContent :: Map (Handle 'GeneratedContent) Content
-    , _localDirs :: Map (Handle 'LocalDirectory) DirCtx
     , _fsBuilder :: Map (Handle 'FileSystemBuilder) FsBuilderCtx
     , _fsImages :: Map (Handle 'FileSystemImage) FsCtx
     , _externalFiles :: Map (Handle 'ExternalFile) FilePath
@@ -62,17 +62,17 @@ data Ctx = Ctx
     , _hToV :: Map SomeHandle Vertex
     , _vToH :: Map Vertex SomeHandle
     , _dependencies :: [Edge]
-    , _artifactStates :: Map String ArtifactState
+    , _artifactStates :: ArtifactStates
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def def def def def def def def def [] def
+    def = Ctx 0 def def def def def def def def def def def def def def [] def
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
     { _metaDataH :: Handle 'GeneratedContent
     , _userDataH :: Handle 'GeneratedContent
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 instance Default CiCtx where
     def =
@@ -84,32 +84,32 @@ instance Default CiCtx where
 data DirCtx = DirCtx
     { _dirTempDir :: FilePath
     , _dirExports :: [FilePath]
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 -- | Context of a 'SFileSystemBuilder'
 data FsBuilderCtx = FsBuilderCtx
     { _fsFiles :: [FileSpec]
     , _fsTempDir :: FilePath
     , _fsImgH :: Handle 'FileSystemImage
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 -- | Context of a 'SFileSystemImage'
 data FsCtx = FsCtx
     { _fsFileH :: Handle 'FreeFile
     , _fsType :: FileSystem
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 -- | Context of a 'SFreeFile'
 data FileCtx = FileCtx
     { _fFileName :: FilePath
     , _fCopies :: [FilePath]
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 -- | Context of a 'SVmImage'
 data VmImgCtx = VmImgCtx
     { _vmiFile :: Handle 'FreeFile
     , _vmiType :: ImageType
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 -- | Context of a 'ExecutionEnvironment'
 data ExecEnvCtx = ExecEnvCtx
@@ -122,7 +122,7 @@ data ExecEnvCtx = ExecEnvCtx
     , _execOutDir :: FilePath
     , _execOutFiles :: [(FilePath,FilePath)]
     , _execEnvSpec :: ExecEnvSpec
-    } deriving (Show)
+    } deriving (Show, Typeable)
 
 instance Default ExecEnvCtx where
     def = ExecEnvCtx def def def def def def def def def
@@ -136,12 +136,33 @@ makeLenses ''FileCtx
 makeLenses ''VmImgCtx
 makeLenses ''ExecEnvCtx
 
+-- | * Artifact state accessors
+
+useArtifactState
+    :: (Typeable b)
+    => Handle a -> IoCompiler (Maybe b)
+useArtifactState hnd = do
+    Just someSt <- use (artifactStates . at (SomeHandle hnd))
+    return (cast someSt)
+
 putArtifactState
-    :: Typeable (ArtifactCtx a)
-    => Handle a -> ArtifactCtx a -> IoCompiler ()
-putArtifactState hnd@(Handle s _) actx = do
-    artifactStates . at (show (fromSing s)) ?= Map.empty
-    artifactStates . at (show (fromSing s)) . at hnd ?= actx
+    :: (Typeable b)
+    => Handle a -> b -> IoCompiler ()
+putArtifactState hnd st =
+    artifactStates . at (SomeHandle hnd) ?= SomeState st
+
+modifyArtifactState
+    :: (Typeable b)
+    => Handle a -> (Maybe b -> Maybe b) -> IoCompiler ()
+modifyArtifactState hnd f =
+    artifactStates . at (SomeHandle hnd) %= fmap SomeState . f . cast
+
+getArtifactState
+    :: (Typeable b)
+    => Handle a -> IoProgBuilder (Maybe b)
+getArtifactState hnd = do
+    mSomeSt <- view (artifactStates . at (SomeHandle hnd))
+    return (maybe Nothing cast mSomeSt)
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
@@ -354,10 +375,10 @@ instance CanCreate IoCompiler 'LocalDirectory where
     runCreate _ () = do
         tmp <- lift (mkTempDir "local-dir")
         (hnd,_) <- allocHandle SLocalDirectory tmp
-        localDirs . at hnd ?= DirCtx tmp []
+        putArtifactState hnd (DirCtx tmp [])
         addAction
             hnd
-            (do Just (DirCtx src dests) <- view (localDirs . at hnd)
+            (do Just (DirCtx src dests) <- getArtifactState hnd
                 case reverse dests of
                     [] -> lift (errorL hnd "not exported!")
                     (lastDest:firstDests) ->
@@ -431,7 +452,7 @@ instance CanAdd IoCompiler 'ImageRepository 'VmImage where
 
 instance CanAdd IoCompiler 'LocalDirectory 'FreeFile where
     runAdd dirH _ (fSpec,fH) = do
-        Just localDir <- use (localDirs . at dirH)
+        Just localDir <- useArtifactState dirH
         copyFreeFile' fH (localDir ^. dirTempDir) fSpec
         fH --> dirH
 
@@ -441,7 +462,7 @@ instance CanAdd IoCompiler 'LoggingOutput 'LogEvent where
 instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
     runAdd hnd _ (sn,vmI) = do
         Just destDirH <- use (updateServerRoots . at hnd)
-        Just tmpDirCtx <- use (localDirs . at destDirH)
+        Just tmpDirCtx <- useArtifactState destDirH
         let destDir = tmpDirCtx ^. dirTempDir
             vmDestDir = destDir </> "machines" </> snStr </> "disks" </> "raw"
             SharedImageName snStr = sn
@@ -663,7 +684,7 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
             (lift (resizeVmImage destImgFile destSize destSizeU srcType))
         hnd --> destImgFileH
         createVmImage destImgFileH srcType
-    runConvert hnd@(Handle SVmImage hndT) _ (Left destType) = do
+    runConvert hnd@(Handle _ hndT) _ (Left destType) = do
         Just (VmImgCtx srcImgFileH srcType) <- use (vmImages . at hnd)
         srcFileCopy <- freeFileTempCopy srcImgFileH "conversion-src"
         (destImgFileH,destImgFile) <-
@@ -675,18 +696,18 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
         createVmImage destImgFileH destType
 
 instance CanExport IoCompiler 'FileSystemImage where
-    runExport hnd@(Handle SFileSystemImage _) destFile = do
+    runExport hnd destFile = do
         Just fileSys <- use (fsImages . at hnd)
         runExport (fileSys ^. fsFileH) destFile
 
 instance CanExport IoCompiler 'FreeFile where
-    runExport hnd@(Handle SFreeFile _) destFile =
+    runExport hnd destFile =
         lift (ensureParentDir destFile) >>= copyFreeFile hnd
 
 instance CanExport IoCompiler 'LocalDirectory where
-    runExport hnd@(Handle SLocalDirectory _) destDir = do
+    runExport hnd destDir = do
         destDir' <- lift (ensureParentDir destDir)
-        localDirs . at hnd . traverse . dirExports <>= [destDir']
+        modifyArtifactState hnd (traverse . dirExports %~ (destDir':))
 
 instance CanExport IoCompiler 'VmImage where
     runExport hnd@(Handle SVmImage _) destFile = do
