@@ -13,6 +13,7 @@ import Control.Lens         hiding (from, (<.>))
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Default
+import Data.Data
 import Data.Graph           as Graph
 import Data.Map             as Map hiding (null)
 import Data.Monoid
@@ -33,6 +34,15 @@ type Program a = ProgramT IoCompiler a
 -- be executed).
 type IoProgBuilder = ReaderT Ctx IoProgram
 
+-- | A existential type for holding state for artifacts
+data ArtifactState where
+        ArtifactState ::
+            Typeable (ArtifactCtx a)
+            => Map (Handle a) (ArtifactCtx a) -> ArtifactState
+
+data family ArtifactCtx (a :: k) :: *
+
+
 -- | The internal state of the 'IoCompiler' monad
 data Ctx = Ctx
     { _nextVertex :: Vertex
@@ -52,10 +62,11 @@ data Ctx = Ctx
     , _hToV :: Map SomeHandle Vertex
     , _vToH :: Map Vertex SomeHandle
     , _dependencies :: [Edge]
+    , _artifactStates :: Map String ArtifactState
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def def def def def def def def def []
+    def = Ctx 0 def def def def def def def def def def def def def def def [] def
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -124,6 +135,13 @@ makeLenses ''FsCtx
 makeLenses ''FileCtx
 makeLenses ''VmImgCtx
 makeLenses ''ExecEnvCtx
+
+putArtifactState
+    :: Typeable (ArtifactCtx a)
+    => Handle a -> ArtifactCtx a -> IoCompiler ()
+putArtifactState hnd@(Handle s _) actx = do
+    artifactStates . at (show (fromSing s)) ?= Map.empty
+    artifactStates . at (show (fromSing s)) . at hnd ?= actx
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
