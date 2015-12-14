@@ -1,10 +1,10 @@
-{-# LANGUAGE PolyKinds #-}
 -- | Compile a 'ProgramT' to 'IoProgram' that can be executed in the real-world.
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-module B9.B9IO.DslCompiler where -- TODO rename to Compiler
+module B9.B9IO.DslCompiler where
 
 import B9.B9IO
 import B9.DSL               hiding (use)

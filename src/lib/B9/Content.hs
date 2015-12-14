@@ -6,21 +6,21 @@ module B9.Content
         fileSpecPermissions, fileSpecOwner, fileSpecGroup, UnixUser(..))
        where
 
-import           B9.Content.AST as X
-import           B9.Content.ErlTerms as X
-import           B9.Content.ErlangPropList as X
-import           B9.Content.StringTemplate as X
-import           B9.Content.YamlObject as X
+import           B9.Content.AST              as X
+import           B9.Content.ErlTerms         as X
+import           B9.Content.ErlangPropList   as X
+import           B9.Content.StringTemplate   as X
+import           B9.Content.YamlObject       as X
 import           B9.QCUtil
 import           Control.Lens.TH
 import           Control.Monad.IO.Class
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Bits
-import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Char8       as B
 import           Data.Data
 import           Data.Hashable
-import           GHC.Generics (Generic)
+import           GHC.Generics                (Generic)
 import           Test.QuickCheck
 import           Text.Printf
 
