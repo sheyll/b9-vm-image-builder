@@ -9,18 +9,18 @@ import           Control.Monad.IO.Class
 import           Control.Monad
 import           Data.Monoid
 import           System.Directory
-import           Text.Printf ( printf )
-import           Text.Show.Pretty (ppShow)
-import           B9.DSL as X
-import           B9.DSL.Interpreter
-import           B9.B9IO
+import           Text.Printf            (printf)
+import           Text.Show.Pretty       (ppShow)
+import           B9.DSL                 as X
+import           B9.B9IO                as X
+import           B9.B9IO.DslCompiler    as X
 import           B9.B9IOImpl
-import qualified B9.B9Monad as B9M
-import           B9.ConfigUtils as X
-import           B9.B9Config as X
-import           B9.RepositoryIO as X
-import qualified B9.LibVirtLXC as LibVirtLXC
-import           Data.ConfigFile as CF
+import qualified B9.B9Monad             as B9M
+import           B9.ConfigUtils         as X
+import           B9.B9Config            as X
+import           B9.RepositoryIO        as X
+import qualified B9.LibVirtLXC          as LibVirtLXC
+import           Data.ConfigFile        as CF
 
 
 -- | Use this in your 'B9' script to run a 'Program'.

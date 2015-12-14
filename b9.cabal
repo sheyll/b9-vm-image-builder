@@ -64,6 +64,7 @@ library
   exposed-modules:   B9
                    , B9.B9Config
                    , B9.B9IO
+                   , B9.B9IO.DslCompiler
                    , B9.B9IOImpl
                    , B9.B9Monad
                    , B9.Builder
@@ -76,7 +77,7 @@ library
                    , B9.Content.StringTemplate
                    , B9.Content.YamlObject
                    , B9.DSL
-                   , B9.DSL.Interpreter
+                   , B9.DslCore
                    , B9.DiskImages
                    , B9.ExecEnv
                    , B9.FileSystems
@@ -122,6 +123,7 @@ library
                    , process
                    , random
                    , semigroups
+                   , singletons
                    , syb
                    , tagged
                    , template
@@ -187,10 +189,10 @@ test-suite spec
   other-modules:     B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
-                   , B9.DSLSpec
-                   , B9.DSL.InterpreterSpec
+                   , B9.DslCoreSpec
                    , B9.SpecExtra
                    , B9.B9IOSpec
+                   , B9.B9IO.DslCompilerSpec
                    , B9.BuilderSpec
                    , B9.B9IOImplSpec
                    , B9.LoggingSpec

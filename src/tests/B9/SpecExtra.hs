@@ -5,8 +5,8 @@ module B9.SpecExtra
        where
 
 import B9.B9IO
+import B9.B9IO.DslCompiler
 import B9.DSL
-import B9.DSL.Interpreter
 import Control.Monad
 import Data.Function
 import Data.List

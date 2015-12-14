@@ -1,11 +1,12 @@
+
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module B9.DSL.InterpreterSpec (spec) where
+module B9.B9IO.DslCompilerSpec (spec) where
 import B9 hiding (CloudInit)
+import B9.B9IO.DslCompiler
 import B9.B9IO
 import B9.DSL
-import B9.DSL.Interpreter
 import B9.SpecExtra
 import Test.Hspec
 import Test.QuickCheck (property)
