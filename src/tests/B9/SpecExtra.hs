@@ -1,16 +1,17 @@
 {- | Extra utilities for HSpec based unit tests -}
 module B9.SpecExtra
        (should've, toList, toListIo, shouldDo, does, shouldDoIo,
-        shouldDoIoNoBS, noBS)
+        shouldDoIoNoBS, noBS, shouldResultIn)
        where
 
 import B9.B9IO
 import B9.B9IO.DslCompiler
-import B9.DSL
 import Control.Monad
+import Control.Monad.State
 import Data.Function
 import Data.List
 import Test.Hspec
+import Data.Default
 
 -- | Expect that @actual@ contains all the elements of @expected@ and in that
 -- order.
@@ -22,6 +23,11 @@ should've actual expected = actual' `shouldContain` expected'
       | a == e = red arest erest arest
       | otherwise = red arest (e : erest) xxx
     red _ erest xxx = (xxx, erest) -- if at least one of the parameters is empty
+
+-- | Assertion on the result of a 'IoCompiler'
+shouldResultIn :: (Eq a, Show a) => IoCompiler a -> a -> Expectation
+shouldResultIn prog =
+    shouldBe (dumpToResult (evalStateT prog def))
 
 -- | Compile and dump a 'Program' to a string list.
 toList :: Program a -> [String]

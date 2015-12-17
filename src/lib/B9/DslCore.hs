@@ -23,7 +23,7 @@ import Data.Singletons.TH
 -- | A program is a free monad of 'BuildStep's over a type constructor @m@.
 type ProgramT m a = Free (BuildStep m) a
 
--- | The abstract _CRUD_-like GADT undelying all 'ProgramT's.
+-- | The abstract _CRUD_-like GADT underlying all 'ProgramT's.
 data BuildStep m next where
     Create ::
         (Show (CreateSpec a), CanCreate m a) =>

@@ -4,7 +4,6 @@
 
 module B9.B9IO.DslCompilerSpec (spec) where
 import B9 hiding (CloudInit)
-import B9.B9IO.DslCompiler
 import B9.B9IO
 import B9.DSL
 import B9.SpecExtra
@@ -13,6 +12,7 @@ import Test.QuickCheck (property)
 
 spec :: Spec
 spec = do
+    someStateSpec
     fileInclusionSpec
     fsImgSpec
     addFileSpec
@@ -27,6 +27,45 @@ spec = do
     updateServerImageSpec
     containerExecutionSpec
     loggingSpec
+
+-- * Examples for the extensible state
+someStateSpec :: Spec
+someStateSpec = do
+    let hnd11 = Handle SCloudInit "test1"
+        hnd12 = Handle SCloudInit "test2"
+        hnd21 = Handle SGeneratedContent "test1"
+    describe "putArtifactState" $ do
+      do it "stores a value such that it can be read" $
+            shouldResultIn (do putArtifactState hnd11 "test"
+                               useArtifactState hnd11)
+                           (Just "test")
+         it "does not overwrite values of other handles in the same artifact type" $
+            shouldResultIn (do putArtifactState hnd11 "test"
+                               putArtifactState hnd12 "XXX"
+                               useArtifactState hnd11)
+                           (Just "test")
+         it "does not overwrite values of other handles with the same title and different artifact types" $
+            shouldResultIn (do putArtifactState hnd11 "test"
+                               putArtifactState hnd21 "XXX"
+                               useArtifactState hnd11)
+                           (Just "test")
+         it "can be called multiple times with different keys to store independent value" $
+            shouldResultIn (do putArtifactState hnd11 "test1"
+                               putArtifactState hnd12 "test2"
+                               putArtifactState hnd21 "test3"
+                               (,,) <$> useArtifactState hnd11 <*> useArtifactState hnd12 <*> useArtifactState hnd21)
+                           (Just "test1",Just "test2",Just "test3")
+    describe "modifyArtifactState" $ do
+        it "adds a new entry" $
+           shouldResultIn (do modifyArtifactState hnd11 (const (Just "test"))
+                              useArtifactState hnd11)
+                          (Just "test")
+        it "modify an new entry" $
+           shouldResultIn (do modifyArtifactState hnd11 (const (Just "tset"))
+                              modifyArtifactState hnd11 (fmap (reverse :: String -> String))
+                              useArtifactState hnd11)
+                          (Just "test")
+
 
 -- * Examples for 'ReadOnlyFile' artifacts
 

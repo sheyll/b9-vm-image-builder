@@ -138,12 +138,17 @@ makeLenses ''ExecEnvCtx
 
 -- | * Artifact state accessors
 
+unpackCast :: (Typeable b) => Maybe SomeState -> Maybe b
+unpackCast x =
+  case x of
+    Nothing -> Nothing
+    Just (SomeState s) -> cast s
+
 useArtifactState
     :: (Typeable b)
     => Handle a -> IoCompiler (Maybe b)
-useArtifactState hnd = do
-    Just someSt <- use (artifactStates . at (SomeHandle hnd))
-    return (cast someSt)
+useArtifactState hnd =
+    unpackCast <$> use (artifactStates . at (SomeHandle hnd))
 
 putArtifactState
     :: (Typeable b)
@@ -155,14 +160,18 @@ modifyArtifactState
     :: (Typeable b)
     => Handle a -> (Maybe b -> Maybe b) -> IoCompiler ()
 modifyArtifactState hnd f =
-    artifactStates . at (SomeHandle hnd) %= fmap SomeState . f . cast
+    artifactStates . at (SomeHandle hnd) %= mstate . f . mcast
+    where
+      mcast (Just (SomeState b')) = cast b'
+      mcast Nothing = Nothing
+      mstate = fmap SomeState
 
 getArtifactState
     :: (Typeable b)
     => Handle a -> IoProgBuilder (Maybe b)
-getArtifactState hnd = do
-    mSomeSt <- view (artifactStates . at (SomeHandle hnd))
-    return (maybe Nothing cast mSomeSt)
+getArtifactState hnd =
+    unpackCast <$> view (artifactStates . at (SomeHandle hnd))
+
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile :: Program a -> IoProgram a
