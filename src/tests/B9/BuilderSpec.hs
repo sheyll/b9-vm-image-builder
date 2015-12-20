@@ -3,11 +3,7 @@ module B9.BuilderSpec (spec) where
 import Test.Hspec
 #ifdef INTEGRATION_TESTS
 import B9
-import B9.DSL
-import B9.FileSystems
 import System.Directory
-import Test.QuickCheck
-import Text.Printf
 #endif
 
 spec :: Spec
@@ -30,8 +26,8 @@ spec =
               removeFile "/tmp/instance-123.vfat"
        it "extracts a partition from a qcow2 image" $
            do (runProgramWithConfigAndCliArgs $
-                 extractPartitionOfQCow2 1 "/tmp/test-parted.raw" "/tmp/test.qcow2")
-                 `shouldReturn` True
+               extractPartitionOfQCow2 1 "src/tests/B9/test-parted.qcow2" "/tmp/test.qcow2") `shouldReturn`
+                  True
               doesFileExist "/tmp/test.qcow2" `shouldReturn` True
               removeFile "/tmp/test.qcow2"
 #else
@@ -67,10 +63,10 @@ extractPartitionOfQCow2 p srcFile dstFile = do
     inRaw <- convert inQCow SVmImage (Left Raw)
     partedRawF <- convert inRaw SFreeFile ()
     partedRaw <- convert partedRawF SPartitionedVmImage ()
-    outputFile partedRaw (MBRPartition p) (dstFile <.> "RAW" <.> show p)
+    outputFile partedRaw (MBRPartition p) dstFile
 
-copyEtcPasswdOntoSharedImage :: Program ()
-copyEtcPasswdOntoSharedImage = do
+_copyEtcPasswdOntoSharedImage :: Program ()
+_copyEtcPasswdOntoSharedImage = do
     root <- fromShared "prod-fc22-15.3.0"
     e <- lxc "juhu"
     addFileFull e (Source NoConversion "test.mp3") (fileSpec "/test.mp3")
@@ -81,8 +77,8 @@ copyEtcPasswdOntoSharedImage = do
     vmQCow `sharedAs` "juhu-out"
     outputFile e "/etc/passwd" "/home/sven/fc-passwd"
 
-dslExample1 :: Program ()
-dslExample1 = do
+_dslExample1 :: Program ()
+_dslExample1 = do
     "x" $= "3"
     c <- newCloudInit "blah-ci"
     writeCloudInit c ISO9660 "test.iso"
@@ -109,8 +105,8 @@ dslExample1 = do
     resizeToMinimum img
     -}
 
-dslExample2 :: Program ()
-dslExample2 = do
+_dslExample2 :: Program ()
+_dslExample2 = do
     env <- lxc "c1"
     sh env "ls -lR /"
 
