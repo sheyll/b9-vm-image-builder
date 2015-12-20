@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Compile a 'ProgramT' to 'IoProgram' that can be executed in the real-world.
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -48,16 +49,6 @@ data SomeState where
 data Ctx = Ctx
     { _nextVertex :: Vertex
     , _vars :: Map String String
-    , _ci :: Map (Handle 'CloudInit) CiCtx
-    , _generatedContent :: Map (Handle 'GeneratedContent) Content
-    , _fsBuilder :: Map (Handle 'FileSystemBuilder) FsBuilderCtx
-    , _fsImages :: Map (Handle 'FileSystemImage) FsCtx
-    , _externalFiles :: Map (Handle 'ExternalFile) FilePath
-    , _localFiles :: Map (Handle 'FreeFile) FileCtx
-    , _vmImages :: Map (Handle 'VmImage) VmImgCtx
-    , _partitionedImgs :: Map (Handle 'PartitionedVmImage) (Handle 'FreeFile)
-    , _updateServerRoots :: Map (Handle 'UpdateServerRoot) (Handle 'LocalDirectory)
-    , _execEnvs :: Map (Handle 'ExecutionEnvironment) ExecEnvCtx
     , _actions :: Map Vertex [IoProgBuilder ()]
     , _hToV :: Map SomeHandle Vertex
     , _vToH :: Map Vertex SomeHandle
@@ -66,7 +57,7 @@ data Ctx = Ctx
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def def def def def def def def def def def def [] def
+    def = Ctx 0 def def def def [] def
 
 -- | Context of a single cloud-init image, i.e. meta/user data content
 data CiCtx = CiCtx
@@ -300,7 +291,7 @@ instance CanCreate IoCompiler 'CloudInit where
                 ( Concat [FromString "#cloud-config\n", RenderYaml (ASTObj [])]
                 , iidPrefix ++ "-user-data")
         hnd --> uH
-        ci . at hnd ?= CiCtx mH uH
+        putArtifactState hnd $ CiCtx mH uH
         return hnd
 
 instance CanCreate IoCompiler 'ExecutionEnvironment where
@@ -311,7 +302,8 @@ instance CanCreate IoCompiler 'ExecutionEnvironment where
         buildId <- lift B9.B9IO.getBuildId
         let outMnt = outputFileContainerPath buildId
             incMnt = includedFileContainerPath buildId
-        execEnvs . at hnd ?=
+        putArtifactState
+            hnd
             (def &~
              do execEnvSpec .= e
                 execIncDir .= incDir
@@ -322,7 +314,7 @@ instance CanCreate IoCompiler 'ExecutionEnvironment where
                     , SharedDirectory outDir (MountPoint outMnt)])
         addAction
             hnd
-            (do Just es <- view (execEnvs . at hnd)
+            (do Just es <- getArtifactState hnd
                 let copyOutFileScript = foldMap cp (es ^. execOutFiles)
                       where
                         cp (guestFrom,hostOut) =
@@ -340,7 +332,7 @@ instance CanCreate IoCompiler 'ExternalFile where
      runCreate _ fn = do
          (hnd,_) <- allocHandle SExternalFile (takeFileName fn)
          fn' <- lift (getRealPath fn)
-         externalFiles . at hnd ?= fn'
+         putArtifactState hnd fn'
          return hnd
 
 instance CanCreate IoCompiler 'FileSystemBuilder where
@@ -355,10 +347,10 @@ instance CanCreate IoCompiler 'FileSystemBuilder where
          hnd --> tmpFileH
          fH <- createFsImage tmpFileH t
          tmpDir <- lift (mkTempDir (title <.> "d"))
-         fsBuilder . at hnd ?= FsBuilderCtx [] tmpDir fH
+         putArtifactState hnd $ FsBuilderCtx [] tmpDir fH
          addAction
              hnd
-             (do Just fileSys <- view (fsBuilder . at hnd)
+             (do Just fileSys <- getArtifactState hnd
                  lift
                      (createFileSystem
                           tmpFile
@@ -377,7 +369,7 @@ instance CanCreate IoCompiler 'FreeFile where
 instance CanCreate IoCompiler 'GeneratedContent where
     runCreate _ (c,title) = do
          (hnd,_) <- allocHandle SGeneratedContent title
-         generatedContent . at hnd ?= c
+         putArtifactState hnd c
          return hnd
 
 instance CanCreate IoCompiler 'LocalDirectory where
@@ -398,15 +390,15 @@ instance CanCreate IoCompiler 'LocalDirectory where
 
 instance CanAdd IoCompiler 'CloudInit 'CloudInitMetaData where
     runAdd hnd _ ast = do
-        Just (CiCtx mH _) <- use (ci . at hnd)
-        generatedContent . at mH . traverse %=
+        Just (CiCtx mH _) <- useArtifactState hnd
+        modifyArtifactState mH $ fmap $
             \(Concat [hdr,RenderYaml ast']) ->
                  Concat [hdr, RenderYaml (ast' `astMerge` ast)]
 
 instance CanAdd IoCompiler 'CloudInit 'CloudInitUserData where
     runAdd hnd _ ast = do
-        Just (CiCtx _ uH) <- use (ci . at hnd)
-        generatedContent . at uH . traverse %=
+        Just (CiCtx _ uH) <- useArtifactState hnd
+        modifyArtifactState uH $ fmap $
             \(Concat [hdr,RenderYaml ast']) ->
                  Concat [hdr, RenderYaml (ast' `astMerge` ast)]
 
@@ -425,35 +417,36 @@ instance CanAdd IoCompiler 'CloudInit 'FreeFile where
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'ExecutableScript where
     runAdd hnd _ cmds =
-        (execEnvs . at hnd . traverse . execScript) <>= cmds
+        modifyArtifactState hnd $ traverse . execScript <>~ cmds
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
     runAdd hnd _ (destSpec,srcH) = do
         srcH --> hnd
-        Just eCxt <- use (execEnvs . at hnd)
+        Just eCxt <- useArtifactState hnd
         incFile <-
             lift (mkTempInCreateParents (eCxt ^. execIncDir) "added-file")
         copyFreeFile srcH incFile
-        execEnvs . at hnd . traverse . execIncFiles <>= [(incFile, destSpec)]
+        modifyArtifactState hnd $ traverse . execIncFiles <>~
+            [(incFile, destSpec)]
         bId <- lift B9.B9IO.getBuildId
-        execEnvs . at hnd . traverse . execScript <>=
+        modifyArtifactState hnd $ traverse . execScript <>~
             incFileScript bId incFile destSpec
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'LocalDirectory where
     runAdd hnd _ sharedDir =
-        execEnvs . at hnd . traverse . execBindMounts <>= [sharedDir]
+        modifyArtifactState hnd $ traverse . execBindMounts <>~ [sharedDir]
 
 instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
     runAdd fsH _ (fSpec,fH) = do
-        fsBuilder . at fsH . traverse . fsFiles <>= [fSpec]
-        Just fileSys <- use (fsBuilder . at fsH)
+        modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
+        Just fileSys <- useArtifactState fsH
         let tmpDir = fileSys ^. fsTempDir
         fH --> fsH
         copyFreeFile' fH tmpDir fSpec
 
 instance CanAdd IoCompiler 'ImageRepository 'VmImage where
     runAdd _ _ (sn,vmI) = do
-        Just (VmImgCtx imgFileH srcType) <- use (vmImages . at vmI)
+        Just (VmImgCtx imgFileH srcType) <- useArtifactState vmI
         let SharedImageName snStr = sn
         imgFile <- freeFileTempCopy imgFileH snStr
         vmI --> imageRepositoryH
@@ -470,12 +463,12 @@ instance CanAdd IoCompiler 'LoggingOutput 'LogEvent where
 
 instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
     runAdd hnd _ (sn,vmI) = do
-        Just destDirH <- use (updateServerRoots . at hnd)
+        Just (destDirH :: Handle 'LocalDirectory) <- useArtifactState hnd
         Just tmpDirCtx <- useArtifactState destDirH
         let destDir = tmpDirCtx ^. dirTempDir
             vmDestDir = destDir </> "machines" </> snStr </> "disks" </> "raw"
             SharedImageName snStr = sn
-        Just (VmImgCtx srcFileH srcType) <- use (vmImages . at vmI)
+        Just (VmImgCtx srcFileH srcType) <- useArtifactState vmI
         srcFile <- freeFileTempCopy srcFileH snStr
         vmI --> hnd
         addAction
@@ -505,12 +498,12 @@ instance CanAdd IoCompiler 'VariableBindings 'TemplateVariable where
 
 instance CanConvert IoCompiler 'CloudInit 'CloudInitMetaData where
     runConvert hnd _ () = do
-        Just (CiCtx (Handle SGeneratedContent h) _) <- use (ci . at hnd)
+        Just (CiCtx (Handle SGeneratedContent h) _) <- useArtifactState hnd
         return (Handle SCloudInitMetaData h)
 
 instance CanConvert IoCompiler 'CloudInit 'CloudInitUserData where
     runConvert hnd _ () = do
-        Just (CiCtx _ (Handle SGeneratedContent h)) <- use (ci . at hnd)
+        Just (CiCtx _ (Handle SGeneratedContent h)) <- useArtifactState hnd
         return (Handle SCloudInitUserData h)
 
 instance CanConvert IoCompiler 'CloudInitMetaData 'GeneratedContent where
@@ -531,15 +524,15 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'VmImage where
                 rawFH
                 SFreeFile
                 (printf "mounted-at-%s" (printMountPoint mp))
-        Just (FileCtx mnt _) <- use (localFiles . at mntH)
-        (execEnvs . at hnd . traverse . execImages) <>=
+        Just (FileCtx mnt _) <- useArtifactState mntH
+        modifyArtifactState hnd $ traverse . execImages <>~
             [(Image mnt Raw Ext4, mp)]
         hnd --> mntH
         runConvert mntH SVmImage Raw
 
 instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
     runConvert hnd _ src = do
-        Just ec <- use (execEnvs . at hnd)
+        Just ec <- useArtifactState hnd
         (fh,f) <-
             createFreeFileIn
                 (ec ^. execOutDir)
@@ -547,13 +540,13 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
                      "%s-%s"
                      (ec ^. execEnvSpec . execEnvTitle)
                      (takeFileName src))
-        execEnvs . at hnd . traverse . execOutFiles <>= [(src, f)]
+        modifyArtifactState hnd $ traverse . execOutFiles <>~ [(src, f)]
         hnd --> fh
         return fh
 
 instance CanConvert IoCompiler 'ExternalFile 'FreeFile where
     runConvert hnd@(Handle _ hndT) _ () = do
-        Just externalFileName <- use (externalFiles . at hnd)
+        Just externalFileName <- useArtifactState hnd
         (tmpFileH,tmpFile) <- createFreeFile (hndT ++ "-copy")
         hnd --> tmpFileH
         addAction hnd (lift (copy externalFileName tmpFile))
@@ -561,24 +554,24 @@ instance CanConvert IoCompiler 'ExternalFile 'FreeFile where
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'FileSystemImage where
     runConvert hnd _ () = do
-        Just fileSys <- use (fsBuilder . at hnd)
+        Just fileSys <- useArtifactState hnd
         return (fileSys ^. fsImgH)
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'FreeFile where
     runConvert hnd _ () = do
-        Just fileSys <- use (fsBuilder . at hnd)
+        Just fileSys <- useArtifactState hnd
         runConvert (fileSys ^. fsImgH) SFreeFile ()
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'VmImage where
     runConvert hnd _ () = do
-        Just fileSys <- use (fsBuilder . at hnd)
+        Just fileSys <- useArtifactState hnd
         runConvert (fileSys ^. fsImgH) SVmImage ()
 
 instance CanConvert IoCompiler 'FileSystemImage 'FileSystemImage where
     runConvert hnd _ destSize = do
-        Just (FsCtx inFileH fS) <- use (fsImages . at hnd)
+        Just (FsCtx inFileH fS) <- useArtifactState hnd
         outFileH <- runConvert inFileH SFreeFile "resized"
-        Just (FileCtx outFile _) <- use (localFiles . at outFileH)
+        Just (FileCtx outFile _) <- useArtifactState outFileH
         inFileH --> hnd
         hnd --> outFileH
         addAction hnd (lift (resizeFileSystem outFile destSize fS))
@@ -586,12 +579,12 @@ instance CanConvert IoCompiler 'FileSystemImage 'FileSystemImage where
 
 instance CanConvert IoCompiler 'FileSystemImage 'FreeFile where
     runConvert hnd _ () = do
-        Just (FsCtx fH _fS) <- use (fsImages . at hnd)
+        Just (FsCtx fH _fS) <- useArtifactState hnd
         return fH
 
 instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
     runConvert hnd _ () = do
-        Just (FsCtx fH _) <- use (fsImages . at hnd)
+        Just (FsCtx fH _) <- useArtifactState hnd
         fH' <- runConvert fH SFreeFile "Raw-image"
         outH <- createVmImage fH' Raw
         hnd --> outH
@@ -624,7 +617,7 @@ instance CanConvert IoCompiler 'FreeFile 'PartitionedVmImage where
         let partVmImgHndT = hndT ++ "-partitioned-vm-image"
         (partVmImgHnd,_) <- allocHandle SPartitionedVmImage partVmImgHndT
         file <- runConvert hnd SFreeFile "partitioned-vm-image"
-        partitionedImgs . at partVmImgHnd ?= file
+        putArtifactState partVmImgHnd $ file
         hnd --> partVmImgHnd
         return partVmImgHnd
 
@@ -639,7 +632,7 @@ instance CanConvert IoCompiler 'GeneratedContent 'FreeFile where
         hnd --> destH
         addAction
             hnd
-            (do Just content <- view (generatedContent . at hnd)
+            (do Just content <- getArtifactState hnd
                 env <- view (vars . to Map.toList . to Environment)
                 lift (renderContentToFile destFile content env))
         return destH
@@ -655,14 +648,14 @@ instance CanConvert IoCompiler 'LocalDirectory 'UpdateServerRoot where
     runConvert destDirH _ () = do
         (hnd,_) <- allocHandle SUpdateServerRoot "update-server-root"
         hnd --> destDirH
-        updateServerRoots . at hnd ?= destDirH
+        putArtifactState hnd destDirH
         return hnd
 
 instance CanConvert IoCompiler 'PartitionedVmImage 'FreeFile where
     runConvert hnd@(Handle _ hndT) _ partSpec@(MBRPartition pIndex) = do
         let dest = hndT ++ "-partition-" ++ show pIndex
-        Just srcFileH <- use (partitionedImgs . at hnd)
-        Just (FileCtx srcFileName _) <- use (localFiles . at srcFileH)
+        Just (srcFileH :: Handle 'FreeFile) <- useArtifactState hnd
+        Just (FileCtx srcFileName _) <- useArtifactState srcFileH
         (destH,destFile) <- createFreeFile dest
         hnd --> destH
         addAction hnd (lift (extractPartition partSpec srcFileName destFile))
@@ -671,30 +664,30 @@ instance CanConvert IoCompiler 'PartitionedVmImage 'FreeFile where
 instance CanConvert IoCompiler 'VmImage 'FileSystemImage where
     runConvert hnd _ () = do
         hnd' <- runConvert hnd SVmImage (Left Raw)
-        Just (VmImgCtx srcFileH Raw) <- use (vmImages . at hnd')
+        Just (VmImgCtx srcFileH Raw) <- useArtifactState hnd'
         runConvert srcFileH SFileSystemImage Ext4
 
 instance CanConvert IoCompiler 'VmImage 'FreeFile where
     runConvert hnd _ () = do
-        Just (VmImgCtx srcFileH _srcType) <- use (vmImages . at hnd)
+        Just (VmImgCtx srcFileH _srcType) <- useArtifactState hnd
         return srcFileH
 
 instance CanConvert IoCompiler 'VmImage 'VmImage where
     runConvert hnd _ (Right (ImageSize destSize destSizeU)) = do
-        Just (VmImgCtx srcImgFileH srcType) <- use (vmImages . at hnd)
+        Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
         destImgFileH <-
             runConvert
                 srcImgFileH
                 SFreeFile
                 (printf "resized-%d-%s" destSize (show destSizeU))
-        Just (FileCtx destImgFile _) <- use (localFiles . at destImgFileH)
+        Just (FileCtx destImgFile _) <- useArtifactState destImgFileH
         addAction
             hnd
             (lift (resizeVmImage destImgFile destSize destSizeU srcType))
         hnd --> destImgFileH
         createVmImage destImgFileH srcType
     runConvert hnd@(Handle _ hndT) _ (Left destType) = do
-        Just (VmImgCtx srcImgFileH srcType) <- use (vmImages . at hnd)
+        Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
         srcFileCopy <- freeFileTempCopy srcImgFileH "conversion-src"
         (destImgFileH,destImgFile) <-
             createFreeFile (hndT ++ "-converted-to-" ++ show destType)
@@ -706,7 +699,7 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
 
 instance CanExport IoCompiler 'FileSystemImage where
     runExport hnd destFile = do
-        Just fileSys <- use (fsImages . at hnd)
+        Just fileSys <- useArtifactState hnd
         runExport (fileSys ^. fsFileH) destFile
 
 instance CanExport IoCompiler 'FreeFile where
@@ -720,7 +713,7 @@ instance CanExport IoCompiler 'LocalDirectory where
 
 instance CanExport IoCompiler 'VmImage where
     runExport hnd@(Handle SVmImage _) destFile = do
-        Just (VmImgCtx fH _) <- use (vmImages . at hnd)
+        Just (VmImgCtx fH _) <- useArtifactState hnd
         runExport fH destFile
 
 -- | Create and allocate a new 'FreeFile' and return the handle as well as the
@@ -743,31 +736,27 @@ createFreeFileIn parent title = do
 asFreeFile :: FilePath -> String -> IoCompiler (Handle 'FreeFile)
 asFreeFile src title = do
     (hnd,_) <- allocHandle SFreeFile title
-    localFiles . at hnd ?=
-        FileCtx src []
+    putArtifactState hnd $ FileCtx src []
     addAction
         hnd
-        (do Just (FileCtx _ destinations) <-
-                view (localFiles . at hnd)
+        (do Just (FileCtx _ destinations) <- getArtifactState hnd
             lift
                 (case reverse destinations of
                      (lastCopy:firstCopies) -> do
-                         mapM_
-                             (copy src)
-                             (reverse firstCopies)
+                         mapM_ (copy src) (reverse firstCopies)
                          moveFile src lastCopy
                      [] -> dbgL "No copies of" src "required"))
     return hnd
 
 -- | Add a new copy to a 'FreeFile' at the specified destination
 copyFreeFile :: Handle 'FreeFile -> FilePath -> IoCompiler ()
-copyFreeFile src dest = localFiles . at src . traverse . fCopies <>= [dest]
+copyFreeFile src dest = modifyArtifactState src $ traverse . fCopies <>~ [dest]
 
 -- | Add a new copy to a 'FreeFile' using a unique temp file containg
 -- a given string for better debugging, and return the path to the copy.
 freeFileTempCopy :: Handle 'FreeFile -> String -> IoCompiler FilePath
 freeFileTempCopy src name = do
-    Just fileCtx <- use (localFiles . at src)
+    Just fileCtx <- useArtifactState src
     dest <-
         lift
             (mkTempCreateParents
@@ -789,14 +778,14 @@ copyFreeFile' src dstDir dstSpec =
 createFsImage :: Handle 'FreeFile -> FileSystem -> IoCompiler (Handle 'FileSystemImage)
 createFsImage fH fs = do
     (hnd,_) <- allocHandle SFileSystemImage ( "fs-img-" ++ show fs)
-    fsImages . at hnd ?= FsCtx fH fs
+    putArtifactState hnd $ FsCtx fH fs
     return hnd
 
 -- | Create a vm image entry in the context.
 createVmImage :: Handle 'FreeFile -> ImageType -> IoCompiler (Handle 'VmImage)
 createVmImage srcFileH vmt = do
     (hnd,_) <- allocHandle SVmImage ("vm-image-" ++ show vmt)
-    vmImages . at hnd ?= VmImgCtx srcFileH vmt
+    putArtifactState hnd $ VmImgCtx srcFileH vmt
     srcFileH --> hnd
     return hnd
 
