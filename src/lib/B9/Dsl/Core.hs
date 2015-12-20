@@ -11,7 +11,7 @@
 -- well as a type class for each constructor with associated types for
 -- parameters and/or return values. In that way the library can be extended by
 -- adding new instances of the typeclasses.
-module B9.DslCore where
+module B9.Dsl.Core where
 
 import B9.Logging
 import Control.Monad.Free (Free(..), liftF, foldFree)

@@ -1,4 +1,3 @@
-
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -406,10 +405,10 @@ localDirSpec =
                    dest2 <- ensureParentDir "/tmp/test2.d"
                    dest3 <- ensureParentDir "/tmp/test3.d"
                    dest4 <- ensureParentDir "/tmp/test4.d"
-                   copyDir src dest1
-                   copyDir src dest2
+                   copyDir src dest4
                    copyDir src dest3
-                   moveDir src dest4)
+                   copyDir src dest2
+                   moveDir src dest1)
        it "creates the exported copies" $
            shouldDoIo
                (do d <- newDirectory

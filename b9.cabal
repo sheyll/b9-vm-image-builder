@@ -77,7 +77,7 @@ library
                    , B9.Content.StringTemplate
                    , B9.Content.YamlObject
                    , B9.DSL
-                   , B9.DslCore
+                   , B9.Dsl.Core
                    , B9.DiskImages
                    , B9.ExecEnv
                    , B9.FileSystems
@@ -189,7 +189,7 @@ test-suite spec
   other-modules:     B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
-                   , B9.DslCoreSpec
+                   , B9.Dsl.CoreSpec
                    , B9.SpecExtra
                    , B9.B9IOSpec
                    , B9.B9IO.DslCompilerSpec

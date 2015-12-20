@@ -7,6 +7,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 module B9.Logging where
 
+import Control.Arrow
 import Data.Data
 import Data.Int
 import Data.Singletons
@@ -50,7 +51,20 @@ data LogLevel
     | LogInfo
     | LogError
     | LogNothing
-    deriving (Eq,Ord,Read,Generic,Data,Typeable)
+    deriving (Eq,Ord,Generic,Data,Typeable)
+
+instance Read LogLevel where
+    readsPrec _ = lex >>> fmap (first  toLogLevel)
+      where
+        toLogLevel "TRACE" = LogTrace
+        toLogLevel "LogTrace" = LogTrace
+        toLogLevel "DEBUG" = LogDebug
+        toLogLevel "LogDebug" = LogDebug
+        toLogLevel "INFO" = LogInfo
+        toLogLevel "LogInfo" = LogInfo
+        toLogLevel "ERROR" = LogError
+        toLogLevel "LogError" = LogError
+        toLogLevel _ = LogNothing
 
 instance Show LogLevel where
     show LogTrace   = "TRACE"

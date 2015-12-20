@@ -16,7 +16,7 @@ module B9.DSL
 
 import B9.CommonTypes     as X
 import B9.Content         as X
-import B9.DslCore         as X
+import B9.Dsl.Core        as X
 import B9.DiskImages      as X
 import B9.ExecEnv         as X
 import B9.FileSystems     as X
