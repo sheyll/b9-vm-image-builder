@@ -65,7 +65,7 @@ library
                    , B9.B9Config
                    , B9.B9IO
                    , B9.B9IO.DslCompiler
-                   , B9.B9IOImpl
+                   , B9.B9IO.Impl
                    , B9.B9Monad
                    , B9.Builder
                    , B9.CommonTypes
@@ -193,8 +193,8 @@ test-suite spec
                    , B9.SpecExtra
                    , B9.B9IOSpec
                    , B9.B9IO.DslCompilerSpec
+                   , B9.B9IO.ImplSpec
                    , B9.BuilderSpec
-                   , B9.B9IOImplSpec
                    , B9.LoggingSpec
   if flag(IntegrationTests)
     CC-Options: "-DINTEGRATION_TESTS"

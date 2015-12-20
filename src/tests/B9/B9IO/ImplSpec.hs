@@ -1,4 +1,4 @@
-module B9.B9IOImplSpec (spec) where
+module B9.B9IO.ImplSpec (spec) where
 
 #ifdef INTEGRATION_TESTS
 import B9.B9IO

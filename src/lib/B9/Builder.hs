@@ -14,7 +14,7 @@ import           Text.Show.Pretty       (ppShow)
 import           B9.DSL                 as X
 import           B9.B9IO                as X
 import           B9.B9IO.DslCompiler    as X
-import           B9.B9IOImpl
+import           B9.B9IO.Impl
 import qualified B9.B9Monad             as B9M
 import           B9.ConfigUtils         as X
 import           B9.B9Config            as X

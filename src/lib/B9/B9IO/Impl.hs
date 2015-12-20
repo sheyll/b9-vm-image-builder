@@ -1,5 +1,5 @@
 -- | Implement 'B9IO' to do the real-thing(tm).
-module B9.B9IOImpl where
+module B9.B9IO.Impl where
 
 import           B9.B9IO
 import qualified B9.B9Monad as B9Monad

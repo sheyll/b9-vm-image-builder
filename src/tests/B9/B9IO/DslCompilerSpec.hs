@@ -1,6 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-
 module B9.B9IO.DslCompilerSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
