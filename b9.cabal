@@ -66,6 +66,7 @@ library
                    , B9.B9IO
                    , B9.B9IO.DslCompiler
                    , B9.B9IO.Impl
+                   , B9.B9IO.IoCompiler
                    , B9.B9Monad
                    , B9.Builder
                    , B9.CommonTypes
@@ -77,7 +78,11 @@ library
                    , B9.Content.StringTemplate
                    , B9.Content.YamlObject
                    , B9.DSL
+                   , B9.Dsl.CloudInit
+                   , B9.Dsl.Content
                    , B9.Dsl.Core
+                   , B9.Dsl.Files
+                   , B9.Dsl.ShellScript
                    , B9.DiskImages
                    , B9.ExecEnv
                    , B9.FileSystems
@@ -140,7 +145,10 @@ library
                     , DeriveGeneric
                     , RankNTypes
                     , FlexibleContexts
+                    , FlexibleInstances
+                    , MultiParamTypeClasses
                     , GADTs
+                    , PolyKinds
                     , DataKinds
                     , KindSignatures
                     , TypeFamilies
@@ -148,6 +156,7 @@ library
                     , TemplateHaskell
                     , StandaloneDeriving
                     , CPP
+                    , TypeSynonymInstances
   hs-source-dirs:    src/lib
   default-language:  Haskell2010
   ghc-options:       -with-rtsopts=-N -Wall

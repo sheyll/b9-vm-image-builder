@@ -8,6 +8,8 @@
 module B9.B9IO.DslCompiler where
 
 import B9.B9IO
+import B9.Dsl.Files
+import B9.Dsl.Content
 import B9.DSL               hiding (use)
 import B9.ShellScript       (toBashOneLiner)
 import Control.Lens         hiding (from, (<.>))
@@ -48,7 +50,6 @@ data SomeState where
 -- | The internal state of the 'IoCompiler' monad
 data Ctx = Ctx
     { _nextVertex :: Vertex
-    , _vars :: Map String String
     , _actions :: Map Vertex [IoProgBuilder ()]
     , _hToV :: Map SomeHandle Vertex
     , _vToH :: Map Vertex SomeHandle
@@ -58,43 +59,6 @@ data Ctx = Ctx
 
 instance Default Ctx where
     def = Ctx 0 def def def def [] def
-
--- | Context of a single cloud-init image, i.e. meta/user data content
-data CiCtx = CiCtx
-    { _metaDataH :: Handle 'GeneratedContent
-    , _userDataH :: Handle 'GeneratedContent
-    } deriving (Show, Typeable)
-
-instance Default CiCtx where
-    def =
-        CiCtx
-            (globalHandle SGeneratedContent)
-            (globalHandle SGeneratedContent)
-
--- | Context of a 'SLocalDirectory'
-data DirCtx = DirCtx
-    { _dirTempDir :: FilePath
-    , _dirExports :: [FilePath]
-    } deriving (Show, Typeable)
-
--- | Context of a 'SFileSystemBuilder'
-data FsBuilderCtx = FsBuilderCtx
-    { _fsFiles :: [FileSpec]
-    , _fsTempDir :: FilePath
-    , _fsImgH :: Handle 'FileSystemImage
-    } deriving (Show, Typeable)
-
--- | Context of a 'SFileSystemImage'
-data FsCtx = FsCtx
-    { _fsFileH :: Handle 'FreeFile
-    , _fsType :: FileSystem
-    } deriving (Show, Typeable)
-
--- | Context of a 'SFreeFile'
-data FileCtx = FileCtx
-    { _fFileName :: FilePath
-    , _fCopies :: [FilePath]
-    } deriving (Show, Typeable)
 
 -- | Context of a 'SVmImage'
 data VmImgCtx = VmImgCtx
@@ -119,11 +83,6 @@ instance Default ExecEnvCtx where
     def = ExecEnvCtx def def def def def def def def def
 
 makeLenses ''Ctx
-makeLenses ''CiCtx
-makeLenses ''DirCtx
-makeLenses ''FsBuilderCtx
-makeLenses ''FsCtx
-makeLenses ''FileCtx
 makeLenses ''VmImgCtx
 makeLenses ''ExecEnvCtx
 
@@ -205,11 +164,15 @@ inspect p = evalStateT compileSt def
 -- | Setup the predefined global handles, e.g. 'imageRepositoryH'
 createPredefinedHandles :: IoCompiler ()
 createPredefinedHandles = allocPredefinedHandle imageRepositoryH
-  where
-    allocPredefinedHandle h = do
-        v <- addVertex
-        void (storeHandle h v)
-        actions . at v ?= []
+
+-- | Setup a predefined global handle
+allocPredefinedHandle
+    :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))
+    => Handle a -> IoCompiler ()
+allocPredefinedHandle h = do
+    v <- addVertex
+    void (storeHandle h v)
+    actions . at v ?= []
 
 -- | Run all actions in correct order according to the dependency graph.
 runAllActions :: IoCompiler ()
@@ -270,30 +233,6 @@ printSomeHandle :: Maybe SomeHandle -> String
 printSomeHandle (Just (SomeHandle h)) = show h
 printSomeHandle Nothing = "??error??"
 
-instance CanCreate IoCompiler 'CloudInit where
-    runCreate _ iidPrefix = do
-        buildId <- lift getBuildId
-        (hnd@(Handle _ iid),_) <-
-            allocHandle
-                SCloudInit
-                ("cloudinit-" ++ iidPrefix ++ "-" ++ buildId)
-        mH <-
-            runCreate
-                SGeneratedContent
-                ( Concat
-                      [ FromString "#cloud-config\n"
-                      , RenderYaml (ASTObj [("instance-id", ASTString iid)])]
-                , iidPrefix ++ "-meta-data")
-        hnd --> mH
-        uH <-
-            runCreate
-                SGeneratedContent
-                ( Concat [FromString "#cloud-config\n", RenderYaml (ASTObj [])]
-                , iidPrefix ++ "-user-data")
-        hnd --> uH
-        putArtifactState hnd $ CiCtx mH uH
-        return hnd
-
 instance CanCreate IoCompiler 'ExecutionEnvironment where
     runCreate _ e = do
         (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
@@ -328,13 +267,6 @@ instance CanCreate IoCompiler 'ExecutionEnvironment where
                          (es ^. execImages)))
         return hnd
 
-instance CanCreate IoCompiler 'ExternalFile where
-     runCreate _ fn = do
-         (hnd,_) <- allocHandle SExternalFile (takeFileName fn)
-         fn' <- lift (getRealPath fn)
-         putArtifactState hnd fn'
-         return hnd
-
 instance CanCreate IoCompiler 'FileSystemBuilder where
      runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
          let title =
@@ -358,62 +290,6 @@ instance CanCreate IoCompiler 'FileSystemBuilder where
                           tmpDir
                           (fileSys ^. fsFiles)))
          return hnd
-
-instance CanCreate IoCompiler 'FreeFile where
-    runCreate _ mTempName = do
-        -- TODO escape tempName, allow only a-zA-Z0-9.-_:+=
-        let tempName = maybe "tmp-file" takeFileName mTempName
-        (hnd,_) <- createFreeFile tempName
-        return hnd
-
-instance CanCreate IoCompiler 'GeneratedContent where
-    runCreate _ (c,title) = do
-         (hnd,_) <- allocHandle SGeneratedContent title
-         putArtifactState hnd c
-         return hnd
-
-instance CanCreate IoCompiler 'LocalDirectory where
-    runCreate _ () = do
-        tmp <- lift (mkTempDir "local-dir")
-        (hnd,_) <- allocHandle SLocalDirectory tmp
-        putArtifactState hnd (DirCtx tmp [])
-        addAction
-            hnd
-            (do Just (DirCtx src dests) <- getArtifactState hnd
-                case reverse dests of
-                    [] -> lift (errorL hnd "not exported!")
-                    (lastDest:firstDests) ->
-                        lift
-                            (do mapM_ (copyDir src) (reverse firstDests)
-                                moveDir src lastDest))
-        return hnd
-
-instance CanAdd IoCompiler 'CloudInit 'CloudInitMetaData where
-    runAdd hnd _ ast = do
-        Just (CiCtx mH _) <- useArtifactState hnd
-        modifyArtifactState mH $ fmap $
-            \(Concat [hdr,RenderYaml ast']) ->
-                 Concat [hdr, RenderYaml (ast' `astMerge` ast)]
-
-instance CanAdd IoCompiler 'CloudInit 'CloudInitUserData where
-    runAdd hnd _ ast = do
-        Just (CiCtx _ uH) <- useArtifactState hnd
-        modifyArtifactState uH $ fmap $
-            \(Concat [hdr,RenderYaml ast']) ->
-                 Concat [hdr, RenderYaml (ast' `astMerge` ast)]
-
-instance CanAdd IoCompiler 'CloudInit 'ExecutableScript where
-    runAdd hnd _ scr =
-        runAdd hnd SCloudInitUserData (toUserDataRunCmdAST scr)
-
-instance CanAdd IoCompiler 'CloudInit 'FreeFile where
-    runAdd hnd _ (fspec,fH) = do
-        fH --> hnd
-        fName <- freeFileTempCopy fH (takeFileName (fspec ^. fileSpecPath))
-        runAdd
-            hnd
-            SCloudInitUserData
-            (toUserDataWriteFilesAST fspec (FromBinaryFile fName))
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'ExecutableScript where
     runAdd hnd _ cmds =
@@ -452,12 +328,6 @@ instance CanAdd IoCompiler 'ImageRepository 'VmImage where
         vmI --> imageRepositoryH
         addAction imageRepositoryH (lift (imageRepoPublish imgFile srcType sn))
 
-instance CanAdd IoCompiler 'LocalDirectory 'FreeFile where
-    runAdd dirH _ (fSpec,fH) = do
-        Just localDir <- useArtifactState dirH
-        copyFreeFile' fH (localDir ^. dirTempDir) fSpec
-        fH --> dirH
-
 instance CanAdd IoCompiler 'LoggingOutput 'LogEvent where
     runAdd _ _ (lvl,msg) = lift $ logMsg lvl msg
 
@@ -493,27 +363,6 @@ instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
                          (FromString (printf "%s-%s" bId bT))
                          (Environment [])))
 
-instance CanAdd IoCompiler 'VariableBindings 'TemplateVariable where
-    runAdd _ _ (k,v) = vars . at k ?= v
-
-instance CanConvert IoCompiler 'CloudInit 'CloudInitMetaData where
-    runConvert hnd _ () = do
-        Just (CiCtx (Handle SGeneratedContent h) _) <- useArtifactState hnd
-        return (Handle SCloudInitMetaData h)
-
-instance CanConvert IoCompiler 'CloudInit 'CloudInitUserData where
-    runConvert hnd _ () = do
-        Just (CiCtx _ (Handle SGeneratedContent h)) <- useArtifactState hnd
-        return (Handle SCloudInitUserData h)
-
-instance CanConvert IoCompiler 'CloudInitMetaData 'GeneratedContent where
-    runConvert (Handle _ h) _ () =
-        return (Handle SGeneratedContent h)
-
-instance CanConvert IoCompiler 'CloudInitUserData 'GeneratedContent where
-    runConvert (Handle _ h) _ () =
-        return (Handle SGeneratedContent h)
-
 instance CanConvert IoCompiler 'ExecutionEnvironment 'VmImage where
     runConvert hnd _ (imgH,mp) = do
         rawH <- runConvert imgH SVmImage (Left Raw)
@@ -543,14 +392,6 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
         modifyArtifactState hnd $ traverse . execOutFiles <>~ [(src, f)]
         hnd --> fh
         return fh
-
-instance CanConvert IoCompiler 'ExternalFile 'FreeFile where
-    runConvert hnd@(Handle _ hndT) _ () = do
-        Just externalFileName <- useArtifactState hnd
-        (tmpFileH,tmpFile) <- createFreeFile (hndT ++ "-copy")
-        hnd --> tmpFileH
-        addAction hnd (lift (copy externalFileName tmpFile))
-        return tmpFileH
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'FileSystemImage where
     runConvert hnd _ () = do
@@ -590,27 +431,12 @@ instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
         hnd --> outH
         return outH
 
-instance CanConvert IoCompiler 'FreeFile 'ExternalFile where
-    runConvert hnd _ dest = do
-        dest' <- lift (ensureParentDir dest)
-        newFileH <- runCreate SExternalFile dest'
-        hnd --> newFileH
-        copyFreeFile hnd dest'
-        return newFileH
-
 instance CanConvert IoCompiler 'FreeFile 'FileSystemImage where
     runConvert hnd _ fs = do
         copyH <- runConvert hnd SFreeFile (show fs)
         fsImg <- createFsImage copyH fs
         copyH --> fsImg
         return fsImg
-
-instance CanConvert IoCompiler 'FreeFile 'FreeFile where
-    runConvert hnd@(Handle _ hndT) _ dest = do
-        (newFileH,newFile) <- createFreeFile (hndT ++ "-" ++ dest)
-        copyFreeFile hnd newFile
-        hnd --> newFileH
-        return newFileH
 
 instance CanConvert IoCompiler 'FreeFile 'PartitionedVmImage where
     runConvert hnd@(Handle _ hndT) _ () = do
@@ -625,17 +451,6 @@ instance CanConvert IoCompiler 'FreeFile 'VmImage where
     runConvert hnd _ imgT = do
         newHnd <- runConvert hnd SFreeFile (printf "vm-image-%s" (show imgT))
         createVmImage newHnd imgT
-
-instance CanConvert IoCompiler 'GeneratedContent 'FreeFile where
-    runConvert hnd@(Handle _ dest) _ () = do
-        (destH,destFile) <- createFreeFile dest
-        hnd --> destH
-        addAction
-            hnd
-            (do Just content <- getArtifactState hnd
-                env <- view (vars . to Map.toList . to Environment)
-                lift (renderContentToFile destFile content env))
-        return destH
 
 instance CanConvert IoCompiler 'ImageRepository 'VmImage where
     runConvert _ _ sharedImgName = do
@@ -702,77 +517,10 @@ instance CanExport IoCompiler 'FileSystemImage where
         Just fileSys <- useArtifactState hnd
         runExport (fileSys ^. fsFileH) destFile
 
-instance CanExport IoCompiler 'FreeFile where
-    runExport hnd destFile =
-        lift (ensureParentDir destFile) >>= copyFreeFile hnd
-
-instance CanExport IoCompiler 'LocalDirectory where
-    runExport hnd destDir = do
-        destDir' <- lift (ensureParentDir destDir)
-        modifyArtifactState hnd (traverse . dirExports %~ (destDir':))
-
 instance CanExport IoCompiler 'VmImage where
     runExport hnd@(Handle SVmImage _) destFile = do
         Just (VmImgCtx fH _) <- useArtifactState hnd
         runExport fH destFile
-
--- | Create and allocate a new 'FreeFile' and return the handle as well as the
--- path to the temporary file.
-createFreeFile :: String -> IoCompiler (Handle 'FreeFile, FilePath)
-createFreeFile title = do
-    src <- lift (mkTempCreateParents title)
-    hnd <- asFreeFile src title
-    return (hnd, src)
-
--- | Create and allocate a new 'FreeFile' inside a given directory and
--- return the handle as well as the path to the temporary file.
-createFreeFileIn :: FilePath -> String -> IoCompiler (Handle 'FreeFile, FilePath)
-createFreeFileIn parent title = do
-    src <- lift (mkTempIn parent title)
-    hnd <- asFreeFile src title
-    return (hnd, src)
-
--- | Allocate a 'FreeFile' artifact for a given file with a given title.
-asFreeFile :: FilePath -> String -> IoCompiler (Handle 'FreeFile)
-asFreeFile src title = do
-    (hnd,_) <- allocHandle SFreeFile title
-    putArtifactState hnd $ FileCtx src []
-    addAction
-        hnd
-        (do Just (FileCtx _ destinations) <- getArtifactState hnd
-            lift
-                (case reverse destinations of
-                     (lastCopy:firstCopies) -> do
-                         mapM_ (copy src) (reverse firstCopies)
-                         moveFile src lastCopy
-                     [] -> dbgL "No copies of" src "required"))
-    return hnd
-
--- | Add a new copy to a 'FreeFile' at the specified destination
-copyFreeFile :: Handle 'FreeFile -> FilePath -> IoCompiler ()
-copyFreeFile src dest = modifyArtifactState src $ traverse . fCopies <>~ [dest]
-
--- | Add a new copy to a 'FreeFile' using a unique temp file containg
--- a given string for better debugging, and return the path to the copy.
-freeFileTempCopy :: Handle 'FreeFile -> String -> IoCompiler FilePath
-freeFileTempCopy src name = do
-    Just fileCtx <- useArtifactState src
-    dest <-
-        lift
-            (mkTempCreateParents
-                 (printf
-                      "%s-%s"
-                      (takeFileName (fileCtx ^. fFileName))
-                      (takeFileName name)))
-    copyFreeFile src dest
-    return dest
-
--- | Add a new copy to a 'FreeFile' at the
---   specified destination which is conveniently derived from path component of
---   a 'FileSpec' and a directory.
-copyFreeFile' :: Handle 'FreeFile -> FilePath -> FileSpec -> IoCompiler ()
-copyFreeFile' src dstDir dstSpec =
-    copyFreeFile src (dstDir </> (dstSpec ^. fileSpecPath))
 
 -- | Create a 'FsCtx' from an existing file and the file system type.
 createFsImage :: Handle 'FreeFile -> FileSystem -> IoCompiler (Handle 'FileSystemImage)
@@ -788,24 +536,6 @@ createVmImage srcFileH vmt = do
     putArtifactState hnd $ VmImgCtx srcFileH vmt
     srcFileH --> hnd
     return hnd
-
--- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.
-toUserDataWriteFilesAST :: FileSpec -> Content -> AST Content YamlObject
-toUserDataWriteFilesAST (FileSpec fileName (s,u,g,o) userName groupName) content =
-    ASTObj
-        [ ( "write_files"
-          , ASTArr
-                [ ASTObj
-                      [ ("path", ASTString fileName)
-                      , ("owner", ASTString (userName ++ ":" ++ groupName))
-                      , ("permissions", ASTString (printf "%i%i%i%i" s u g o))
-                      , ("content", ASTEmbed content)]])]
-
--- | Create a @cloud-config@ compatibe @runcmd@ 'AST' object.
-toUserDataRunCmdAST :: Script -> AST Content YamlObject
-toUserDataRunCmdAST scr = ASTObj [("runcmd", ASTArr [ASTString cmd])]
-  where
-    cmd = toBashOneLiner scr
 
 -- * Utilities
 
