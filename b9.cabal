@@ -64,7 +64,6 @@ library
   exposed-modules:   B9
                    , B9.B9Config
                    , B9.B9IO
-                   , B9.B9IO.DslCompiler
                    , B9.B9IO.Impl
                    , B9.B9IO.IoCompiler
                    , B9.B9Monad
@@ -81,7 +80,8 @@ library
                    , B9.Dsl.CloudInit
                    , B9.Dsl.Content
                    , B9.Dsl.Core
-                   , B9.Dsl.Files
+                   , B9.Dsl.File
+                   , B9.Dsl.FileSystem
                    , B9.Dsl.ShellScript
                    , B9.DiskImages
                    , B9.ExecEnv

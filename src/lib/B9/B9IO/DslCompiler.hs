@@ -66,25 +66,8 @@ data VmImgCtx = VmImgCtx
     , _vmiType :: ImageType
     } deriving (Show, Typeable)
 
--- | Context of a 'ExecutionEnvironment'
-data ExecEnvCtx = ExecEnvCtx
-    { _execImages :: [Mounted Image]
-    , _execBindMounts :: [SharedDirectory]
-    , _execScript :: Script
-    , _execIncFiles :: [(FilePath, FileSpec)]
-    , _execIncDir :: FilePath
-    , _execOutMnt :: FilePath
-    , _execOutDir :: FilePath
-    , _execOutFiles :: [(FilePath,FilePath)]
-    , _execEnvSpec :: ExecEnvSpec
-    } deriving (Show, Typeable)
-
-instance Default ExecEnvCtx where
-    def = ExecEnvCtx def def def def def def def def def
-
 makeLenses ''Ctx
 makeLenses ''VmImgCtx
-makeLenses ''ExecEnvCtx
 
 -- | * Artifact state accessors
 
@@ -233,92 +216,6 @@ printSomeHandle :: Maybe SomeHandle -> String
 printSomeHandle (Just (SomeHandle h)) = show h
 printSomeHandle Nothing = "??error??"
 
-instance CanCreate IoCompiler 'ExecutionEnvironment where
-    runCreate _ e = do
-        (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
-        incDir <- lift (mkTempDir "included-files")
-        outDir <- lift (mkTempDir "output-files")
-        buildId <- lift B9.B9IO.getBuildId
-        let outMnt = outputFileContainerPath buildId
-            incMnt = includedFileContainerPath buildId
-        putArtifactState
-            hnd
-            (def &~
-             do execEnvSpec .= e
-                execIncDir .= incDir
-                execOutDir .= outDir
-                execOutMnt .= outMnt
-                execBindMounts .=
-                    [ SharedDirectoryRO incDir (MountPoint incMnt)
-                    , SharedDirectory outDir (MountPoint outMnt)])
-        addAction
-            hnd
-            (do Just es <- getArtifactState hnd
-                let copyOutFileScript = foldMap cp (es ^. execOutFiles)
-                      where
-                        cp (guestFrom,hostOut) =
-                            Run "cp" [guestFrom, toMntPath hostOut]
-                        toMntPath = (es ^. execOutMnt </>) . takeFileName
-                lift
-                    (executeInEnv
-                         (es ^. execEnvSpec)
-                         (es ^. execScript <> copyOutFileScript)
-                         (es ^. execBindMounts)
-                         (es ^. execImages)))
-        return hnd
-
-instance CanCreate IoCompiler 'FileSystemBuilder where
-     runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
-         let title =
-                 show t ++ "-" ++
-                 (if null fsLabel
-                      then "image"
-                      else fsLabel)
-         (hnd,_) <- allocHandle SFileSystemBuilder fsLabel
-         (tmpFileH,tmpFile) <- createFreeFile title
-         hnd --> tmpFileH
-         fH <- createFsImage tmpFileH t
-         tmpDir <- lift (mkTempDir (title <.> "d"))
-         putArtifactState hnd $ FsBuilderCtx [] tmpDir fH
-         addAction
-             hnd
-             (do Just fileSys <- getArtifactState hnd
-                 lift
-                     (createFileSystem
-                          tmpFile
-                          fsSpec
-                          tmpDir
-                          (fileSys ^. fsFiles)))
-         return hnd
-
-instance CanAdd IoCompiler 'ExecutionEnvironment 'ExecutableScript where
-    runAdd hnd _ cmds =
-        modifyArtifactState hnd $ traverse . execScript <>~ cmds
-
-instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
-    runAdd hnd _ (destSpec,srcH) = do
-        srcH --> hnd
-        Just eCxt <- useArtifactState hnd
-        incFile <-
-            lift (mkTempInCreateParents (eCxt ^. execIncDir) "added-file")
-        copyFreeFile srcH incFile
-        modifyArtifactState hnd $ traverse . execIncFiles <>~
-            [(incFile, destSpec)]
-        bId <- lift B9.B9IO.getBuildId
-        modifyArtifactState hnd $ traverse . execScript <>~
-            incFileScript bId incFile destSpec
-
-instance CanAdd IoCompiler 'ExecutionEnvironment 'LocalDirectory where
-    runAdd hnd _ sharedDir =
-        modifyArtifactState hnd $ traverse . execBindMounts <>~ [sharedDir]
-
-instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
-    runAdd fsH _ (fSpec,fH) = do
-        modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
-        Just fileSys <- useArtifactState fsH
-        let tmpDir = fileSys ^. fsTempDir
-        fH --> fsH
-        copyFreeFile' fH tmpDir fSpec
 
 instance CanAdd IoCompiler 'ImageRepository 'VmImage where
     runAdd _ _ (sn,vmI) = do
@@ -379,49 +276,11 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'VmImage where
         hnd --> mntH
         runConvert mntH SVmImage Raw
 
-instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
-    runConvert hnd _ src = do
-        Just ec <- useArtifactState hnd
-        (fh,f) <-
-            createFreeFileIn
-                (ec ^. execOutDir)
-                (printf
-                     "%s-%s"
-                     (ec ^. execEnvSpec . execEnvTitle)
-                     (takeFileName src))
-        modifyArtifactState hnd $ traverse . execOutFiles <>~ [(src, f)]
-        hnd --> fh
-        return fh
-
-instance CanConvert IoCompiler 'FileSystemBuilder 'FileSystemImage where
-    runConvert hnd _ () = do
-        Just fileSys <- useArtifactState hnd
-        return (fileSys ^. fsImgH)
-
-instance CanConvert IoCompiler 'FileSystemBuilder 'FreeFile where
-    runConvert hnd _ () = do
-        Just fileSys <- useArtifactState hnd
-        runConvert (fileSys ^. fsImgH) SFreeFile ()
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'VmImage where
     runConvert hnd _ () = do
         Just fileSys <- useArtifactState hnd
         runConvert (fileSys ^. fsImgH) SVmImage ()
-
-instance CanConvert IoCompiler 'FileSystemImage 'FileSystemImage where
-    runConvert hnd _ destSize = do
-        Just (FsCtx inFileH fS) <- useArtifactState hnd
-        outFileH <- runConvert inFileH SFreeFile "resized"
-        Just (FileCtx outFile _) <- useArtifactState outFileH
-        inFileH --> hnd
-        hnd --> outFileH
-        addAction hnd (lift (resizeFileSystem outFile destSize fS))
-        createFsImage outFileH fS
-
-instance CanConvert IoCompiler 'FileSystemImage 'FreeFile where
-    runConvert hnd _ () = do
-        Just (FsCtx fH _fS) <- useArtifactState hnd
-        return fH
 
 instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
     runConvert hnd _ () = do
@@ -430,13 +289,6 @@ instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
         outH <- createVmImage fH' Raw
         hnd --> outH
         return outH
-
-instance CanConvert IoCompiler 'FreeFile 'FileSystemImage where
-    runConvert hnd _ fs = do
-        copyH <- runConvert hnd SFreeFile (show fs)
-        fsImg <- createFsImage copyH fs
-        copyH --> fsImg
-        return fsImg
 
 instance CanConvert IoCompiler 'FreeFile 'PartitionedVmImage where
     runConvert hnd@(Handle _ hndT) _ () = do
@@ -512,22 +364,10 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
         hnd --> destImgFileH
         createVmImage destImgFileH destType
 
-instance CanExport IoCompiler 'FileSystemImage where
-    runExport hnd destFile = do
-        Just fileSys <- useArtifactState hnd
-        runExport (fileSys ^. fsFileH) destFile
-
 instance CanExport IoCompiler 'VmImage where
     runExport hnd@(Handle SVmImage _) destFile = do
         Just (VmImgCtx fH _) <- useArtifactState hnd
         runExport fH destFile
-
--- | Create a 'FsCtx' from an existing file and the file system type.
-createFsImage :: Handle 'FreeFile -> FileSystem -> IoCompiler (Handle 'FileSystemImage)
-createFsImage fH fs = do
-    (hnd,_) <- allocHandle SFileSystemImage ( "fs-img-" ++ show fs)
-    putArtifactState hnd $ FsCtx fH fs
-    return hnd
 
 -- | Create a vm image entry in the context.
 createVmImage :: Handle 'FreeFile -> ImageType -> IoCompiler (Handle 'VmImage)
@@ -604,18 +444,6 @@ incFileScript buildId tmpIncFile fSpec =
     (FileSpec destPath (s,u,g,o) userName groupName) = fSpec
     srcPath = includedFileContainerPath buildId </> incFile
     incFile = takeFileName tmpIncFile
-
--- | Return the mount point for files from the build host to be
--- included in the container.
-includedFileContainerPath :: String -> FilePath
-includedFileContainerPath buildId =
-    "/" ++ buildId <.> "mnt" </> "included-files"
-
--- | Return the mount point for files that are copied after the build from the container
---   to the host.
-outputFileContainerPath :: String -> FilePath
-outputFileContainerPath buildId =
-    "/" ++ buildId <.> "mnt" </> "output-files"
 
 -- * Support for 'IoProgBuilder's
 

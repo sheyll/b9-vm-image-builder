@@ -12,7 +12,8 @@ import B9.CommonTypes     as X
 import B9.Content         as X
 import B9.Dsl.Core        as X
 import B9.Dsl.Content     as X
-import B9.Dsl.Files       as X
+import B9.Dsl.File        as X
+import B9.Dsl.FileSystem  as X
 import B9.Dsl.ShellScript as X
 import B9.DiskImages      as X
 import B9.ExecEnv         as X
@@ -37,8 +38,6 @@ $(singletons
      | CloudInitMetaData
      | CloudInitUserData
      | ExecutionEnvironment
-     | FileSystemBuilder
-     | FileSystemImage
      | ImageRepository
      deriving (Show)
    |])
