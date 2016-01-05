@@ -3,10 +3,12 @@
 module B9.B9IO.DslCompilerSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
-import B9.DSL
+import B9.Dsl
 import B9.SpecExtra
 import Test.Hspec
 import Test.QuickCheck (property)
+
+-- TODO split
 
 spec :: Spec
 spec = do
@@ -691,7 +693,7 @@ updateServerImageSpec :: Spec
 updateServerImageSpec =
     describe "exportForUpdateServer" $
     do let actual = do
-               -- TODO extract this to DSL.h:
+               -- TODO extract this to Dsl.hs:
                srcF <- use srcFile
                srcImg <- convert srcF SVmImage QCow2
                outDirH <- create SLocalDirectory ()

@@ -4,24 +4,21 @@ import B9.B9IO
 import B9.B9IO.IoCompiler
 import B9.Content
 import B9.DiskImages
-import B9.Dsl.Content
 import B9.Dsl.Core
+import B9.Dsl.File
+import B9.Dsl.ShellScript
+import B9.Dsl.VmImage
 import B9.ExecEnv
-import B9.ShellScript
-import B9.ShellScript       (toBashOneLiner)
-import Control.Lens         hiding (from, (<.>))
-import Control.Monad.Reader
-import Control.Monad.State
+import B9.FileSystems
+import B9.ShellScript      (Script(..))
+import Control.Lens        hiding ((<.>))
+import Control.Monad.Trans
 import Data.Data
 import Data.Default
-import Data.Graph           as Graph
-import Data.Map             as Map hiding (null)
 import Data.Monoid
-import Data.Singletons
 import Data.Singletons.TH
-import Data.Tree            as Tree
 import System.FilePath
-import Text.Printf          (printf)
+import Text.Printf
 
 -- | Singletons for the execuition environment library.
 $(singletons
@@ -48,6 +45,17 @@ instance Default ExecEnvCtx where
     def = ExecEnvCtx def def def def def def def def def
 
 makeLenses ''ExecEnvCtx
+
+type instance CreateSpec 'ExecutionEnvironment = ExecEnvSpec
+type instance AddSpec 'ExecutionEnvironment 'ExecutableScript =
+     Script
+type instance AddSpec 'ExecutionEnvironment 'FreeFile =
+     (FileSpec, Handle 'FreeFile)
+type instance AddSpec 'ExecutionEnvironment 'LocalDirectory =
+     SharedDirectory
+type instance ConvSpec 'ExecutionEnvironment 'VmImage =
+     (Handle 'VmImage, MountPoint)
+type instance ConvSpec 'ExecutionEnvironment 'FreeFile = FilePath
 
 instance CanCreate IoCompiler 'ExecutionEnvironment where
     runCreate _ e = do
@@ -117,6 +125,35 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
         modifyArtifactState hnd $ traverse . execOutFiles <>~ [(src, f)]
         hnd --> fh
         return fh
+
+instance CanConvert IoCompiler 'ExecutionEnvironment 'VmImage where
+    runConvert hnd _ (imgH,mp) = do
+        rawH <- runConvert imgH SVmImage (Left Raw)
+        rawH --> hnd
+        rawFH <- runConvert rawH SFreeFile ()
+        mntH <-
+            runConvert
+                rawFH
+                SFreeFile
+                (printf "mounted-at-%s" (printMountPoint mp))
+        Just (FileCtx mnt _) <- useArtifactState mntH
+        modifyArtifactState hnd $ traverse . execImages <>~
+            [(Image mnt Raw Ext4, mp)]
+        hnd --> mntH
+        runConvert mntH SVmImage Raw
+
+-- | Generate a 'Script' that copies an included file in a
+-- container from the mounted directory to the actual destination.
+incFileScript :: String -> FilePath -> FileSpec -> Script
+incFileScript buildId tmpIncFile fSpec =
+    Begin
+        [ Run "cp" [srcPath, destPath]
+        , Run "chmod" [printf "%d%d%d%d" s u g o, destPath]
+        , Run "chown" [printf "%s:%s" userName groupName, destPath]]
+  where
+    (FileSpec destPath (s,u,g,o) userName groupName) = fSpec
+    srcPath = includedFileContainerPath buildId </> incFile
+    incFile = takeFileName tmpIncFile
 
 -- | Return the mount point for files from the build host to be
 -- included in the container.

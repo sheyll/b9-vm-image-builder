@@ -11,7 +11,7 @@ import           Data.Monoid
 import           System.Directory
 import           Text.Printf            (printf)
 import           Text.Show.Pretty       (ppShow)
-import           B9.DSL                 as X
+import           B9.Dsl                 as X
 import           B9.B9IO                as X
 import           B9.B9IO.DslCompiler    as X
 import           B9.B9IO.Impl

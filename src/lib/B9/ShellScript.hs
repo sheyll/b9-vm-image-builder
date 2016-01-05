@@ -167,7 +167,7 @@ toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
         return [Cmd cmd args u c i v]
 
 toBash :: [Cmd] -> String
-toBash cmds = intercalate "\n\n" $ bashHeader ++ (concatMap cmdToBash cmds)
+toBash cmds = intercalate "\n\n" (bashHeader ++ concatMap cmdToBash cmds)
 
 bashHeader :: [String]
 bashHeader = ["#!/bin/bash", "set -e"]
@@ -188,7 +188,7 @@ cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
     pushd (Cwd cwdPath) = [unwords (["pushd", cwdPath] ++ redirectOutput)]
     popd NoCwd = []
     popd (Cwd _) =
-        [unwords (["popd"] ++ redirectOutput)]
+        [unwords ("popd":redirectOutput)]
     disableErrorChecking = ["set +e" | ignoreErrors]
     reenableErrorChecking = ["set -e" | ignoreErrors]
     cwdQ =

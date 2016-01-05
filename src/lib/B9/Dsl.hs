@@ -1,99 +1,39 @@
-{-# LANGUAGE PolyKinds #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 -- | Install and deploy VM-images using a simple DSL.
-module B9.DSL
-       (module X, BuiltInArtifact(..), SBuiltInArtifact, Sing(..),
-        imageRepositoryH, fromShared, sharedAs, boot, lxc, lxc32,
-        mountDir, mountDirRW, mount, runCommand, sh, rootImage, dataImage,
-        mountAndShareSharedImage, mountAndShareNewImage)
+module B9.Dsl
+       (module X, runCommand, sh, boot, lxc, lxc32, mount, mountDir,
+        mountDirRW)
        where
 
-import B9.CommonTypes     as X
-import B9.Content         as X
-import B9.Dsl.Core        as X
-import B9.Dsl.Content     as X
-import B9.Dsl.File        as X
-import B9.Dsl.FileSystem  as X
-import B9.Dsl.ShellScript as X
-import B9.DiskImages      as X
-import B9.ExecEnv         as X
-import B9.FileSystems     as X
-import B9.Logging         as X
-import B9.PartitionTable  as X
-import B9.Repository      as X
-import B9.ShellScript     as X (Script(..))
-import Data.Functor       (void)
-import Data.Singletons.TH
-
--- * Pre-defined, artifacts
-
--- | Singletons for the artifacts provided by B9 and used througout this DSL.
-$(singletons
-  [d|
-    data BuiltInArtifact
-     = VmImage
-     | UpdateServerRoot
-     | PartitionedVmImage
-     | CloudInit
-     | CloudInitMetaData
-     | CloudInitUserData
-     | ExecutionEnvironment
-     | ImageRepository
-     deriving (Show)
-   |])
-
--- * Creation type families
-
--- | Artifact specific parameters for 'create'
-type instance CreateSpec 'ExecutionEnvironment = ExecEnvSpec
-
--- | Parameters for 'add'. They may depend on both artifact types.
-type instance AddSpec 'ExecutionEnvironment 'ExecutableScript = Script
-type instance AddSpec 'ExecutionEnvironment 'FreeFile         = (FileSpec, Handle 'FreeFile)
-type instance AddSpec 'ExecutionEnvironment 'LocalDirectory   = SharedDirectory
-type instance AddSpec 'ImageRepository 'VmImage               = (SharedImageName, Handle 'VmImage)
-type instance AddSpec 'UpdateServerRoot 'VmImage              = (SharedImageName, Handle 'VmImage)
-type instance AddSpec 'VariableBindings 'TemplateVariable     = (String, String)
-
--- | Parameters for 'convert'. They may depend on both artifact types.
-type instance ConvSpec 'ExecutionEnvironment 'VmImage       = (Handle 'VmImage, MountPoint)
-type instance ConvSpec 'ExecutionEnvironment 'FreeFile      = FilePath
-type instance ConvSpec 'FileSystemBuilder 'VmImage          = ()
-type instance ConvSpec 'FileSystemImage 'VmImage            = ()
-type instance ConvSpec 'FreeFile 'PartitionedVmImage        = ()
-type instance ConvSpec 'FreeFile 'VmImage                   = ImageType
-type instance ConvSpec 'ImageRepository 'VmImage            = SharedImageName
-type instance ConvSpec 'LocalDirectory 'UpdateServerRoot    = ()
-type instance ConvSpec 'PartitionedVmImage 'FreeFile        = PartitionSpec
-type instance ConvSpec 'VmImage 'FileSystemImage            = ()
-type instance ConvSpec 'VmImage 'FreeFile                   = ()
-type instance ConvSpec 'VmImage 'VmImage                    = Either ImageType ImageSize
-
--- | Artifact export parameters.
-type instance ExportSpec 'VmImage         = FilePath
-
--- * Image import
-
--- | A Global handle repesenting the (local) share image repository.
-imageRepositoryH :: Handle 'ImageRepository
-imageRepositoryH = globalHandle SImageRepository
-
-fromShared :: (CanConvert m 'ImageRepository 'VmImage)
-              => String -> ProgramT m (Handle 'VmImage)
-fromShared sharedImgName = convert
-        imageRepositoryH
-        SVmImage
-        (SharedImageName sharedImgName)
-
--- * Image export
-
--- | Store an image in the local cache with a name as key for lookups, e.g. from
--- 'fromShared'
-sharedAs :: (CanAdd m 'ImageRepository 'VmImage)
-            => Handle 'VmImage -> String -> ProgramT m ()
-sharedAs hnd name = add imageRepositoryH SVmImage (SharedImageName name, hnd)
+import B9.CommonTypes              as X
+import B9.Content                  as X
+import B9.DiskImages               as X
+import B9.Dsl.Content              as X
+import B9.Dsl.Core                 as X
+import B9.Dsl.ExecutionEnvironment as X
+import B9.Dsl.File                 as X
+import B9.Dsl.FileSystem           as X
+import B9.ExecEnv                  as X
+import B9.FileSystems              as X
+import B9.Logging                  as X
+import B9.PartitionTable           as X
+import B9.Repository               as X
+import B9.ShellScript              as X (Script(..))
+import Data.Functor                (void)
 
 -- * Execution environment
+
+-- | Run a command in an environment.
+runCommand
+    :: (Show (AddSpec a 'ExecutableScript), CanAdd m a 'ExecutableScript)
+    => Handle a -> AddSpec a 'ExecutableScript -> ProgramT m ()
+runCommand hnd = add hnd SExecutableScript
+
+-- | Execute a string in a shell inside an environment.
+sh
+    :: (AddSpec a 'ExecutableScript ~ Script, CanAdd m a 'ExecutableScript)
+    => Handle a -> String -> ProgramT m ()
+sh e s = runCommand e (Run s [])
 
 boot :: (CanCreate m 'ExecutionEnvironment)
         => ExecEnvSpec -> ProgramT m (Handle 'ExecutionEnvironment)

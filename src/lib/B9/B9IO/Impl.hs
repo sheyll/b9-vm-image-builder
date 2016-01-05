@@ -128,8 +128,8 @@ executeIoProg = runB9IO go
     go (ExecuteInEnv e s d i n) = do
         let env = ExecEnv (e ^. execEnvTitle) i d (e ^. execEnvLimits)
         res <- LXC.runInEnvironment env s
-        when
-            (not res)
+        unless
+            res
             (fail $
              printf
                  "CONTAINER EXECUTION ERROR!\n== Failed to execute this script: == \n================================================================================\nIn that environment: %s\n"

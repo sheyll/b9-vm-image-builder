@@ -1,21 +1,18 @@
 module B9.Dsl.FileSystem where
 
 import B9.B9IO
-import B9.Dsl.Content
+import B9.B9IO.IoCompiler
+import B9.Content
+import B9.DiskImages
+import B9.Dsl.Core
 import B9.Dsl.File
-import B9.ShellScript       (toBashOneLiner)
-import Control.Lens         hiding (from, (<.>))
-import Control.Monad.Reader
-import Control.Monad.State
+import B9.Dsl.VmImage
+import B9.FileSystems
+import Control.Lens        hiding ((<.>))
+import Control.Monad.Trans
 import Data.Data
-import Data.Default
-import Data.Graph           as Graph
-import Data.Map             as Map hiding (null)
-import Data.Monoid
-import Data.Singletons
-import Data.Tree            as Tree
+import Data.Singletons.TH
 import System.FilePath
-import Text.Printf          (printf)
 
 -- * File System API
 
@@ -31,6 +28,22 @@ $(singletons
                           deriving Show
   |])
 
+-- | Context of a 'SFileSystemBuilder'
+data FsBuilderCtx = FsBuilderCtx
+    { _fsFiles :: [FileSpec]
+    , _fsTempDir :: FilePath
+    , _fsImgH :: Handle 'FileSystemImage
+    } deriving (Show, Typeable)
+
+-- | Context of a 'SFileSystemImage'
+data FsCtx = FsCtx
+    { _fsFileH :: Handle 'FreeFile
+    , _fsType :: FileSystem
+    } deriving (Show, Typeable)
+
+makeLenses ''FsCtx
+makeLenses ''FsBuilderCtx
+
 type instance CreateSpec 'FileSystemBuilder = FileSystemSpec
 type instance AddSpec 'FileSystemBuilder 'FreeFile =
      (FileSpec, Handle 'FreeFile)
@@ -40,6 +53,9 @@ type instance ConvSpec 'FileSystemImage 'FileSystemImage =
      FileSystemResize
 type instance ConvSpec 'FileSystemImage 'FreeFile = ()
 type instance ConvSpec 'FreeFile 'FileSystemImage = FileSystem
+type instance ConvSpec 'FileSystemBuilder 'VmImage = ()
+type instance ConvSpec 'FileSystemImage 'VmImage = ()
+type instance ConvSpec 'VmImage 'FileSystemImage = ()
 type instance ExportSpec 'FileSystemImage = FilePath
 
 instance CanCreate IoCompiler 'FileSystemBuilder where
@@ -75,9 +91,11 @@ instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
         copyFreeFile' fH tmpDir fSpec
 
 -- | Create a 'FsCtx' from an existing file and the file system type.
-createFsImage :: Handle 'FreeFile -> FileSystem -> IoCompiler (Handle 'FileSystemImage)
+createFsImage :: Handle 'FreeFile
+              -> FileSystem
+              -> IoCompiler (Handle 'FileSystemImage)
 createFsImage fH fs = do
-    (hnd,_) <- allocHandle SFileSystemImage ( "fs-img-" ++ show fs)
+    (hnd,_) <- allocHandle SFileSystemImage ("fs-img-" ++ show fs)
     putArtifactState hnd $ FsCtx fH fs
     return hnd
 
@@ -108,14 +126,26 @@ instance CanConvert IoCompiler 'FreeFile 'FileSystemImage where
         copyH --> fsImg
         return fsImg
 
-instance CanConvert IoCompiler 'FreeFile 'FileSystemImage where
-    runConvert hnd _ fs = do
-        copyH <- runConvert hnd SFreeFile (show fs)
-        fsImg <- createFsImage copyH fs
-        copyH --> fsImg
-        return fsImg
-
 instance CanExport IoCompiler 'FileSystemImage where
      runExport hnd destFile = do
          Just fileSys <- useArtifactState hnd
          runExport (fileSys ^. fsFileH) destFile
+
+instance CanConvert IoCompiler 'FileSystemBuilder 'VmImage where
+    runConvert hnd _ () = do
+        Just fileSys <- useArtifactState hnd
+        runConvert (fileSys ^. fsImgH) SVmImage ()
+
+instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
+    runConvert hnd _ () = do
+        Just (FsCtx fH _) <- useArtifactState hnd
+        fH' <- runConvert fH SFreeFile "Raw-image"
+        outH <- createVmImage fH' Raw
+        hnd --> outH
+        return outH
+
+instance CanConvert IoCompiler 'VmImage 'FileSystemImage where
+    runConvert hnd _ () = do
+        hnd' <- runConvert hnd SVmImage (Left Raw)
+        Just (VmImgCtx srcFileH Raw) <- useArtifactState hnd'
+        runConvert srcFileH SFileSystemImage Ext4
