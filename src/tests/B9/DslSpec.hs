@@ -83,7 +83,7 @@ fileInclusionSpec =
                       export fH "/tmp/test.file.copy"
                   expected = do
                       src <- getRealPath "/tmp/test.file"
-                      tmp <- mkTempCreateParents "test.file-0-copy"
+                      tmp <- mkTemp "test.file-0-copy"
                       dst' <- ensureParentDir "/tmp/test.file.copy"
                       copy src tmp
                       moveFile tmp dst'
@@ -97,7 +97,7 @@ fileInclusionSpec =
                       export fH "/tmp/test.file.copy4"
                   expected = do
                       src <- getRealPath "/tmp/test.file"
-                      tmp <- mkTempCreateParents "test.file-0-copy"
+                      tmp <- mkTemp "test.file-0-copy"
                       dst1 <- ensureParentDir "/tmp/test.file.copy1"
                       dst2 <- ensureParentDir "/tmp/test.file.copy2"
                       dst3 <- ensureParentDir "/tmp/test.file.copy3"
@@ -115,7 +115,7 @@ fileInclusionSpec =
                       add dirH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       ext <- getRealPath "/tmp/test.file"
-                      src <- mkTempCreateParents "test.file-0-copy"
+                      src <- mkTemp "test.file-0-copy"
                       tmpDir <- mkTempDir "local-dir"
                       let dst = tmpDir </> "test.file"
                       copy ext src
@@ -131,8 +131,8 @@ fileInclusionSpec =
                       add fsH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       ext <- getRealPath "/tmp/test.file"
-                      src <- mkTempCreateParents "test.file-0-copy"
-                      img <- mkTempCreateParents "ISO9660-cidata"
+                      src <- mkTemp "test.file-0-copy"
+                      img <- mkTemp "ISO9660-cidata"
                       tmpDir <-
                           mkTempDir "ISO9660-cidata.d"
                       copy ext src
@@ -163,11 +163,11 @@ fileInclusionSpec =
                   expected = do
                       -- Allocate all /automatic/ file names:
                       ext <- getRealPath "/tmp/test.file"
-                      src1 <- mkTempCreateParents "test.file-0-copy"
-                      img1 <- mkTempCreateParents "ISO9660-cidata"
+                      src1 <- mkTemp "test.file-0-copy"
+                      img1 <- mkTemp "ISO9660-cidata"
                       tmpDir1 <-
                           mkTempDir "ISO9660-cidata.d"
-                      img2 <- mkTempCreateParents "VFAT-blub"
+                      img2 <- mkTemp "VFAT-blub"
                       tmpDir2 <- mkTempDir "VFAT-blub.d"
                       -- Copy the input file to the directory from which the ISO
                       -- is created:
@@ -230,7 +230,7 @@ fsImgSpec = do
                                (FileSystemSpec Ext4 "test-label" 10 MB)
                        fsImg <- convert fs SFileSystemImage ()
                        export fsImg "out-img.raw")
-                   (do fs <- mkTempCreateParents "Ext4-test-label"
+                   (do fs <- mkTemp "Ext4-test-label"
                        c <- mkTempDir "Ext4-test-label.d"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
@@ -249,9 +249,9 @@ fsImgSpec = do
                        fsImgShrunk <-
                            convert fsImg SFileSystemImage ShrinkFileSystem
                        export fsImgShrunk "out-img.raw")
-                   (do fs <- mkTempCreateParents "Ext4-test-label"
+                   (do fs <- mkTemp "Ext4-test-label"
                        c <- mkTempDir "Ext4-test-label.d"
-                       r <- mkTempCreateParents "Ext4-test-label-2-resized"
+                       r <- mkTemp "Ext4-test-label-2-resized"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
                            fs
@@ -277,12 +277,12 @@ fsImgSpec = do
                            convert fsImg SFileSystemImage ShrinkFileSystem
                        export fsImg10MB "out1.raw"
                        export fsImgShrunk "out2.raw")
-                   (do fs <- mkTempCreateParents "Ext4-test-label"
+                   (do fs <- mkTemp "Ext4-test-label"
                        c <- mkTempDir "Ext4-test-label.d"
                        r1 <-
-                           mkTempCreateParents "Ext4-test-label-2-resized"
+                           mkTemp "Ext4-test-label-2-resized"
                        r2 <-
-                           mkTempCreateParents "Ext4-test-label-2-resized"
+                           mkTemp "Ext4-test-label-2-resized"
                        dest1 <- ensureParentDir "out1.raw"
                        dest2 <- ensureParentDir "out2.raw"
                        createFileSystem
@@ -446,13 +446,13 @@ cloudInitIsoImageSpec =
                    runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   tmpIso <- mkTempCreateParents "ISO9660-cidata"
+                   tmpIso <- mkTemp "ISO9660-cidata"
                    isoDir <- mkTempDir "ISO9660-cidata.d"
                    isoDst <- ensureParentDir "test.iso"
                    metaDataFile <-
-                       mkTempCreateParents "iid-123-meta-data-2"
+                       mkTemp "iid-123-meta-data-2"
                    userDataFile <-
-                       mkTempCreateParents "iid-123-user-data-3"
+                       mkTemp "iid-123-user-data-3"
                    renderContentToFile
                        metaDataFile
                        (minimalMetaData iid)
@@ -509,8 +509,8 @@ cloudInitDirSpec =
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
-                      do m <- mkTempCreateParents "iid-123-meta-data-2"
-                         u <- mkTempCreateParents "iid-123-user-data-3"
+                      do m <- mkTemp "iid-123-meta-data-2"
+                         u <- mkTemp "iid-123-user-data-3"
                          renderContentToFile
                              m
                              (minimalMetaData iid)
@@ -590,13 +590,13 @@ vmImageCreationSpec =
            "converts an image from Raw to temporary QCow2 image, resizes it and moves it to the output path" $
            let expected = do
                    convSrc <-
-                       mkTempCreateParents
-                           "Ext4-image-2-Raw-image-XXXX-conversion-src"
+                       mkTemp
+                           "Ext4-image-1-Raw-image-XXXX-conversion-src"
                    convDst <-
-                       mkTempCreateParents "vm-image-Raw-5-converted-to-QCow2"
+                       mkTemp "vm-image-Raw-4-converted-to-QCow2"
                    resized <-
-                       mkTempCreateParents
-                           "vm-image-Raw-5-converted-to-QCow2-6-resized-3-MB"
+                       mkTemp
+                           "vm-image-Raw-4-converted-to-QCow2-5-resized-3-MB"
                    dest <- ensureParentDir "/tmp/test.qcow2"
                    convertVmImage convSrc Raw convDst QCow2
                    resizeVmImage resized 3 MB QCow2
@@ -616,14 +616,14 @@ vmImageCreationSpec =
        it "it converts an image from Raw to Vmdk" $
            let expected = do
                    origFile <- getRealPath "in.raw"
-                   srcFile <- mkTempCreateParents "in.raw-1-copy"
+                   srcFile <- mkTemp "in.raw-0-copy"
                    srcImg <-
-                       mkTempCreateParents "in.raw-1-copy-2-vm-image-QCow2"
+                       mkTemp "in.raw-0-copy-1-vm-image-QCow2"
                    convSrc <-
-                       mkTempCreateParents
-                           "in.raw-1-copy-2-vm-image-QCow2-XXXX-conversion-src"
+                       mkTemp
+                           "in.raw-0-copy-1-vm-image-QCow2-XXXX-conversion-src"
                    convDest <-
-                       mkTempCreateParents "vm-image-QCow2-4-converted-to-Vmdk"
+                       mkTemp "vm-image-QCow2-3-converted-to-Vmdk"
                    dest <- ensureParentDir "/tmp/test.vmdk"
                    copy origFile srcFile
                    moveFile srcFile srcImg
@@ -652,13 +652,13 @@ partitionedDiskSpec =
                    export rawPart2File "/tmp/part2.raw"
                expected = do
                    src <- getRealPath "/tmp/in.raw"
-                   raw <- mkTempCreateParents "in.raw-1-copy"
+                   raw <- mkTemp "in.raw-0-copy"
                    img <-
-                       mkTempCreateParents
-                           "in.raw-1-copy-2-partitioned-vm-image"
+                       mkTemp
+                           "in.raw-0-copy-1-partitioned-vm-image"
                    extracted <-
-                       mkTempCreateParents
-                           "in.raw-1-copy-2-partitioned-vm-image-3-partition-2"
+                       mkTemp
+                           "in.raw-0-copy-1-partitioned-vm-image-2-partition-2"
                    dst <- ensureParentDir "/tmp/part2.raw"
                    copy src raw
                    moveFile raw img
@@ -679,9 +679,9 @@ sharedImageSpec =
              (do (_,cachedImg) <-
                      imageRepoLookup (SharedImageName "source-image")
                  cachedImg' <- getRealPath cachedImg
-                 srcTmp <- mkTempCreateParents "xxx.qcow2-1-copy"
+                 srcTmp <- mkTemp "xxx.qcow2-0-copy"
                  outTmp <-
-                     mkTempCreateParents "xxx.qcow2-1-copy-XXXX-out-shared"
+                     mkTemp "xxx.qcow2-0-copy-XXXX-out-shared"
                  copy cachedImg' srcTmp
                  moveFile srcTmp outTmp
                  imageRepoPublish outTmp QCow2 (SharedImageName "out-shared")))
@@ -706,13 +706,13 @@ updateServerImageSpec =
            shouldDoIo
                actual
                (do src <- getRealPath srcFile
-                   srcCopy <- mkTempCreateParents "source.qcow2-0-copy"
+                   srcCopy <- mkTemp "source.qcow2-0-copy"
                    srcImg <-
-                       mkTempCreateParents
+                       mkTemp
                            "source.qcow2-0-copy-1-vm-image-QCow2"
                    tmpDir <- mkTempDir "local-dir"
                    srcImgCopy <-
-                       mkTempCreateParents
+                       mkTemp
                            "source.qcow2-0-copy-1-vm-image-QCow2-XXXX-webserver"
                    dst <- ensureParentDir outDir
                    copy src srcCopy
@@ -771,27 +771,27 @@ containerExecutionSpec =
               incDir <- mkTempDir "included-files"
               outDir <- mkTempDir "output-files"
               issueIn <- getRealPath "/etc/issue"
-              issue <- mkTempCreateParents "issue-1-copy"
-              issueInc <- mkTempInCreateParents incDir "added-file"
+              issue <- mkTemp "issue-1-copy"
+              issueInc <- mkTempIn incDir "added-file"
               passwdIn <- getRealPath "/etc/passwd"
-              passwd <- mkTempCreateParents "passwd-3-copy"
-              passwdInc <- mkTempInCreateParents incDir "added-file"
+              passwd <- mkTemp "passwd-3-copy"
+              passwdInc <- mkTempIn incDir "added-file"
               tmpOut <- mkTempIn outDir "test-env-httpd.conf"
               destOut <- ensureParentDir "out-httpd.conf"
               imgIn <- getRealPath "test-in.qcow2"
-              img <- mkTempCreateParents "test-in.qcow2-6-copy"
+              img <- mkTemp "test-in.qcow2-6-copy"
               imgCopy <-
-                  mkTempCreateParents "test-in.qcow2-6-copy-7-vm-image-QCow2"
+                  mkTemp "test-in.qcow2-6-copy-7-vm-image-QCow2"
               imgConvSrc <-
-                  mkTempCreateParents
+                  mkTemp
                       "test-in.qcow2-6-copy-7-vm-image-QCow2-XXXX-conversion-src"
               rawImg <-
-                  mkTempCreateParents "vm-image-QCow2-9-converted-to-Raw"
+                  mkTemp "vm-image-QCow2-9-converted-to-Raw"
               mountedImg <-
-                  mkTempCreateParents
+                  mkTemp
                       "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root"
               mountedImgCopy <-
-                  mkTempCreateParents
+                  mkTemp
                       "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root-12-vm-image-Raw"
               imgOut <- ensureParentDir "img-out.raw"
               copy imgIn img

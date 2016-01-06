@@ -15,7 +15,7 @@ import           B9.QemuImg
 import           B9.RepositoryIO
 import           B9.ShellScript
 import qualified Conduit                as C
-import           Control.Lens
+import           Control.Lens           hiding ((<.>))
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import qualified Data.ByteString        as B
@@ -47,14 +47,33 @@ executeIoProg = runB9IO go
         return (k d)
     go (MkTemp prefix k) = do
         b <- B9Monad.getBuildDir
+        liftIO $ createDirectoryIfMissing True b
         go (MkTempIn b prefix k)
     go (MkTempIn parent prefix k) = do
         let prefix' = takeFileName prefix
         suffix <- liftIO $ replicateM 10 (randomRIO ('A', 'Z'))
-        return (k (parent </> prefix' ++ "-" ++ suffix))
+        liftIO $ createDirectoryIfMissing True parent
+        parentAbs <- liftIO $ makeAbsolute parent
+        return (k (parentAbs </> prefix' ++ "-" ++ suffix))
     go (MkDir d n) = do
         liftIO $ createDirectoryIfMissing True d
         return n
+    go (EnsureParentDir p k) = do
+        let d = takeDirectory p
+            f = takeFileName p
+        liftIO $ createDirectoryIfMissing True d
+        dAbs <- liftIO $ makeAbsolute d
+        return (k (dAbs </> f))
+    go (MkTempDir prefix k) = do
+        b <- B9Monad.getBuildDir
+        go (MkTempDirIn b prefix k)
+    go (MkTempDirIn parent prefix k) = do
+        suffix <- liftIO $ replicateM 10 (randomRIO ('A', 'Z'))
+        let prefix' = takeFileName prefix
+            dirName = parent </> prefix' ++ "-" ++ suffix <.> "d"
+        liftIO $ createDirectoryIfMissing True dirName
+        dirNameAbs <- liftIO $ makeAbsolute dirName
+        return (k dirNameAbs)
     go (Copy s d n) = do
         liftIO $ copyFile s d
         return n

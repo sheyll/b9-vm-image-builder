@@ -7,9 +7,8 @@
 module B9.B9IO
        (IoProgram, MonadIoProgram(..), runB9IO, Action(..), getBuildDir,
         getBuildId, getBuildDate, copy, copyDir, moveFile, moveDir, mkDir,
-        readFileSize, mkTemp, mkTempCreateParents, mkTempIn,
-        mkTempInCreateParents, mkTempDir, getRealPath, getParentDir,
-        getFileName, ensureParentDir, renderContentToFile,
+        readFileSize, mkTemp, mkTempIn, mkTempDir, getRealPath,
+        getParentDir, getFileName, ensureParentDir, renderContentToFile,
         createFileSystem, resizeFileSystem, convertVmImage, resizeVmImage,
         extractPartition, imageRepoLookup, imageRepoPublish, executeInEnv,
         traceEveryAction, dumpToStrings, dumpToResult, runPureDump,
@@ -75,11 +74,18 @@ data Action next
                    (Integer -> next)
     | MkDir FilePath
             next
+    | EnsureParentDir FilePath
+                      (FilePath -> next)
     | MkTemp FilePath
              (FilePath -> next)
     | MkTempIn FilePath
                FilePath
                (FilePath -> next)
+    | MkTempDir FilePath
+                (FilePath -> next)
+    | MkTempDirIn FilePath
+                  FilePath
+                  (FilePath -> next)
     | GetRealPath FilePath
                   (FilePath -> next)
     | GetParentDir FilePath
@@ -137,8 +143,11 @@ instance Show (Action a) where
     show (MoveDir s d _) = printf "moveDir %s %s" s d
     show (ReadFileSize f _) = printf "readFileSize %s" f
     show (MkDir d _) = printf "mkDir %s" d
+    show (EnsureParentDir d _) = printf "ensureParentDir %s" d
     show (MkTempIn d p _) = printf "mkTempIn %s %s" d p
     show (MkTemp p _) = printf "mkTemp %s" p
+    show (MkTempDirIn d p _) = printf "mkTempDirIn %s %s" d p
+    show (MkTempDir p _) = printf "mkTempDir %s" p
     show (GetRealPath p _) = printf "getRealPath %s" p
     show (GetParentDir p _) = printf "getParentDir %s" p
     show (GetFileName p _) = printf "getFileName %s" p
@@ -206,32 +215,26 @@ readFileSize :: FilePath -> IoProgram Integer
 readFileSize f = liftF $ ReadFileSize f id
 
 -- | Create a unique file path inside the build directory starting with a given
--- prefix and ending with a unique random token.
+-- prefix and ending with a unique random token. The parent directory is
+-- guaranteed to be created, if it does not exist.
 mkTemp :: FilePath -> IoProgram FilePath
 mkTemp prefix = liftF $ MkTemp prefix id
 
--- | Like 'mkTemp' but also create the parent directory of the tempfile and
--- return an absolute path.
-mkTempCreateParents :: FilePath -> IoProgram FilePath
-mkTempCreateParents prefix = mkTemp prefix >>= ensureParentDir
-
 -- | Create a unique file path inside a given directory starting with a given
--- prefix and ending with a unique random token.
+-- prefix and ending with a unique random token. The parent directory is
+-- guaranteed to be created, if it does not exist.
 mkTempIn :: FilePath -> FilePath -> IoProgram FilePath
 mkTempIn parent prefix = liftF $ MkTempIn parent prefix id
 
--- | Like 'mkTempIn' but also create the parent directory of the tempfile and
--- return an absolute path.
-mkTempInCreateParents :: FilePath -> FilePath -> IoProgram FilePath
-mkTempInCreateParents parent prefix =
-    mkTempIn parent prefix >>= ensureParentDir
-
--- | Combination of 'mkTemp' and 'mkDir'
+-- | Create a temporary directory inside the build directory, create missing
+-- parent directories and return an absolute path to the new directory.
 mkTempDir :: FilePath -> IoProgram FilePath
-mkTempDir prefix = do
-    tmp <- mkTemp prefix
-    mkDir tmp
-    getRealPath tmp
+mkTempDir prefix = liftF $ MkTempDir prefix id
+
+-- | Create a temporary directory inside any given directory, create missing
+-- parent directories and return an absolute path to the new directory.
+mkTempDirIn :: FilePath -> FilePath -> IoProgram FilePath
+mkTempDirIn parent prefix = liftF $ MkTempDirIn parent prefix id
 
 -- | Return the canonical path of a relative path. NOTE: The file should exist!
 getRealPath :: FilePath -> IoProgram FilePath
@@ -248,12 +251,7 @@ getFileName f = liftF $ GetFileName f id
 -- | Extract the parent directory from a path, create it if it does not exist
 -- and return the canonical path
 ensureParentDir :: FilePath -> IoProgram FilePath
-ensureParentDir path = do
-    parentDir <- getParentDir path
-    mkDir parentDir
-    parentDirAbs <- getRealPath parentDir
-    file <- getFileName path
-    return (parentDirAbs </> file)
+ensureParentDir path = liftF $ EnsureParentDir path id
 
 -- | Render a given content to a file. Implementations should overwrite the file
 -- if it exists.
@@ -345,10 +343,25 @@ traceEveryAction = runB9IO traceAction
         t <- mkTempIn parent prefix
         traceL "->" t
         return $ k t
+    traceAction a@(MkTempDir prefix k) = do
+        dbgL a
+        t <- mkTempDir prefix
+        traceL "->" t
+        return $ k t
+    traceAction a@(MkTempDirIn parent prefix k) = do
+        dbgL a
+        t <- mkTempDirIn parent prefix
+        traceL "->" t
+        return $ k t
     traceAction a@(MkDir d n) = do
         dbgL a
         mkDir d
         return n
+    traceAction a@(EnsureParentDir p k) = do
+        dbgL a
+        res <- ensureParentDir p
+        traceL "->" res
+        return $ k res
     traceAction a@(Copy s d n) = do
         dbgL a
         copy s d
@@ -463,9 +476,18 @@ runPureDump p = runWriter $ runB9IO dump p
     dump a@(MkTempIn parent prefix n) = do
         tell [show a]
         return (n (parent </> prefix ++ "-XXXX"))
+    dump a@(MkTempDir prefix n) = do
+        tell [show a]
+        return (n ("/BUILD" </> prefix ++ "-XXXX.d"))
+    dump a@(MkTempDirIn parent prefix n) = do
+        tell [show a]
+        return (n (parent </> prefix ++ "-XXXX.d"))
     dump a@(MkDir _d n) = do
         tell [show a]
         return n
+    dump a@(EnsureParentDir f k) = do
+        tell [show a]
+        return (k ("/abs/path" </> f))
     dump a@(Copy _s _d n) = do
         tell [show a]
         return n
@@ -489,7 +511,7 @@ runPureDump p = runWriter $ runB9IO dump p
         return (k "/cwd")
     dump a@(GetRealPath f k) = do
         tell [show a]
-        return (k ("/abs/path/" ++ f))
+        return (k ("/abs/path" </> f))
     dump a@(GetFileName f k) = do
         tell [show a]
         return (k (takeFileName f))
@@ -555,6 +577,12 @@ instance Arbitrary a => Arbitrary (Action a) where
             , MkDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkTemp <$> smaller arbitraryFilePath <*> smaller arbitrary
             , MkTempIn <$> smaller arbitraryFilePath <*>
+              smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , EnsureParentDir <$> smaller arbitraryFilePath <*>
+              smaller arbitrary
+            , MkTempDir <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , MkTempDirIn <$> smaller arbitraryFilePath <*>
               smaller arbitraryFilePath <*>
               smaller arbitrary
             , GetRealPath <$> smaller arbitraryFilePath <*> smaller arbitrary

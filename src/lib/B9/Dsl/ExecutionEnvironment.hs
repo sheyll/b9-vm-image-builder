@@ -100,7 +100,7 @@ instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
         Just eCxt <- useArtifactState hnd
         incFile <-
             liftIoProgram
-                (mkTempInCreateParents (eCxt ^. execIncDir) "added-file")
+                (mkTempIn (eCxt ^. execIncDir) "added-file")
         copyFreeFile srcH incFile
         modifyArtifactState hnd $ traverse . execIncFiles <>~
             [(incFile, destSpec)]

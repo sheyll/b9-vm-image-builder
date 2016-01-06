@@ -117,7 +117,7 @@ instance CanExport IoCompiler 'LocalDirectory where
 -- path to the temporary file.
 createFreeFile :: String -> IoCompiler (Handle 'FreeFile, FilePath)
 createFreeFile title = do
-    src <- liftIoProgram (mkTempCreateParents title)
+    src <- liftIoProgram (mkTemp title)
     hnd <- asFreeFile src title
     return (hnd, src)
 
@@ -156,7 +156,7 @@ freeFileTempCopy src name = do
     Just fileCtx <- useArtifactState src
     dest <-
         liftIoProgram
-            (mkTempCreateParents
+            (mkTemp
                  (printf
                       "%s-%s"
                       (takeFileName (fileCtx ^. fFileName))
