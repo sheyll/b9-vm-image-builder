@@ -10,7 +10,6 @@ import B9.Dsl.File
 import B9.Dsl.VmImage
 import B9.Repository
 import Control.Lens
-import Control.Monad.Trans
 import Data.Singletons.TH
 import System.FilePath
 import Text.Printf
@@ -39,7 +38,7 @@ instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
         vmI --> hnd
         addAction
             hnd
-            (lift
+            (liftIoProgram
                  (do let imgFile = vmDestDir </> "0.raw"
                          sizeFile = vmDestDir </> "0.size"
                          versionFile = vmDestDir </> "VERSION"

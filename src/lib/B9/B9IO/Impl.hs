@@ -2,26 +2,26 @@
 module B9.B9IO.Impl where
 
 import           B9.B9IO
-import qualified B9.B9Monad as B9Monad
+import qualified B9.B9Monad             as B9Monad
 import           B9.Content
 import           B9.DiskImages
 import           B9.ExecEnv
 import           B9.FileSystems
 import           B9.FileSystemsImpl
-import qualified B9.LibVirtLXC as LXC
+import qualified B9.LibVirtLXC          as LXC
 import           B9.Logging
 import           B9.PartitionTable
 import           B9.QemuImg
 import           B9.RepositoryIO
 import           B9.ShellScript
-import qualified Conduit as C
+import qualified Conduit                as C
 import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import qualified Data.ByteString as B
-import qualified Data.Conduit.Binary as CB
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as E
+import qualified Data.ByteString        as B
+import qualified Data.Conduit.Binary    as CB
+import qualified Data.Text              as T
+import qualified Data.Text.Encoding     as E
 import           System.Directory
 import           System.FilePath
 import           System.IO

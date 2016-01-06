@@ -13,7 +13,7 @@ import           Text.Printf            (printf)
 import           Text.Show.Pretty       (ppShow)
 import           B9.Dsl                 as X
 import           B9.B9IO                as X
-import           B9.B9IO.DslCompiler    as X
+import           B9.B9IO.IoCompiler     as X
 import           B9.B9IO.Impl
 import qualified B9.B9Monad             as B9M
 import           B9.ConfigUtils         as X

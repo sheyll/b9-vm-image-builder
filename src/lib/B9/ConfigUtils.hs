@@ -144,10 +144,12 @@ getOptionOr
     => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
 getOptionOr cp sec key dv = either (const dv) id $ CF.get cp sec key
 
+-- TODO refactor/move UUID to a better place?
 newtype UUID =
     UUID (Word32, Word16, Word16, Word16, Word32, Word16)
     deriving (Read,Show,Eq,Ord)
 
+-- TODO refactor/move UUID to a better place?
 instance PrintfArg UUID where
     formatArg (UUID (a,b,c,d,e,f)) fmt
       | fmtChar (vFmt 'U' fmt) == 'U' =
@@ -161,7 +163,7 @@ instance PrintfArg UUID where
                   })
       | otherwise = errorBadFormat $ fmtChar fmt
 
-
+-- TODO refactor/move randomUUID to a better place?
 randomUUID
     :: MonadIO m
     => m UUID

@@ -4,7 +4,17 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
-module B9.B9IO where
+module B9.B9IO
+       (IoProgram, MonadIoProgram(..), runB9IO, Action(..), getBuildDir,
+        getBuildId, getBuildDate, copy, copyDir, moveFile, moveDir, mkDir,
+        readFileSize, mkTemp, mkTempCreateParents, mkTempIn,
+        mkTempInCreateParents, mkTempDir, getRealPath, getParentDir,
+        getFileName, ensureParentDir, renderContentToFile,
+        createFileSystem, resizeFileSystem, convertVmImage, resizeVmImage,
+        extractPartition, imageRepoLookup, imageRepoPublish, executeInEnv,
+        traceEveryAction, dumpToStrings, dumpToResult, runPureDump,
+        arbitraryIoProgram)
+       where
 
 import B9.CommonTypes
 import B9.Content
@@ -26,13 +36,19 @@ import Text.Printf
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
 -- are combined to a free monad. This seperation from actually doing the IO and
 -- modelling the IO actions as pure data enables unit testing and debugging.
-type IoProgram = Free Action
+newtype IoProgram a = IoProgram
+    { runIoProgram :: Free Action a
+    } deriving (Functor,Applicative,Monad,MonadFree Action)
+
+-- | Class of monads that can contain 'IoProgram's.
+class MonadIoProgram m where
+    liftIoProgram :: IoProgram a -> m a
 
 -- | Execute an 'IoProgram' using a monadic interpretation function.
 runB9IO
     :: Monad m
     => (forall a. Action a -> m a) -> IoProgram b -> m b
-runB9IO = foldFree
+runB9IO a = foldFree a . runIoProgram
 
 -- | Pure commands for disk image creation and conversion, file
 -- IO and libvirt lxc interaction.
@@ -470,7 +486,7 @@ runPureDump p = runWriter $ runB9IO dump p
         return (k (takeDirectory f))
     dump a@(GetRealPath "." k) = do
         tell [show a]
-        return (k ("/cwd"))
+        return (k "/cwd")
     dump a@(GetRealPath f k) = do
         tell [show a]
         return (k ("/abs/path/" ++ f))
@@ -514,7 +530,7 @@ runPureDump p = runWriter $ runB9IO dump p
         return n
 
 arbitraryIoProgram :: Gen (IoProgram ())
-arbitraryIoProgram = arbitraryFree
+arbitraryIoProgram = IoProgram <$> arbitraryFree
 
 instance Arbitrary a => Arbitrary (Action a) where
     arbitrary =

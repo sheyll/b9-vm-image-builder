@@ -1,25 +1,306 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 -- | Install and deploy VM-images using a simple DSL.
 module B9.Dsl
-       (module X, runCommand, sh, boot, lxc, lxc32, mount, mountDir,
-        mountDirRW)
+       (module X, newCloudInit, addMetaData, addUserData,
+        writeCloudInitDir, writeCloudInit, addCloudInitToArtifact,
+        externalFile, externalFileTempCopy, fromFile, outputFile, addFile,
+        addExe, addFileP, newDirectory, exportDir, createContent,
+        appendContent, ($=), addTemplate, addTemplateP, addTemplateExe,
+        addFileFull, addFileFromContent, runCommand, sh, boot, lxc, lxc32,
+        mount, mountDir, mountDirRW, fromShared, sharedAs, rootImage,
+        dataImage, mountAndShareSharedImage, mountAndShareNewImage)
        where
 
 import B9.CommonTypes              as X
 import B9.Content                  as X
 import B9.DiskImages               as X
+import B9.Dsl.CloudInit            as X
 import B9.Dsl.Content              as X
 import B9.Dsl.Core                 as X
 import B9.Dsl.ExecutionEnvironment as X
 import B9.Dsl.File                 as X
 import B9.Dsl.FileSystem           as X
+import B9.Dsl.ImageRepository      as X
+import B9.Dsl.Logging              as X
+import B9.Dsl.PartitionedVmImage   as X
+import B9.Dsl.UpdateServerRoot     as X
+import B9.Dsl.VmImage              as X
 import B9.ExecEnv                  as X
 import B9.FileSystems              as X
 import B9.Logging                  as X
 import B9.PartitionTable           as X
 import B9.Repository               as X
 import B9.ShellScript              as X (Script(..))
+import Control.Lens
 import Data.Functor                (void)
+import Data.Singletons             (Sing)
+import Data.Word
+import System.FilePath
+import Text.Printf
+
+-- * Cloud-init
+
+-- | Create a new cloud init context
+newCloudInit :: (CanCreate m 'CloudInit)
+                => String -> ProgramT m (Handle 'CloudInit)
+newCloudInit = create SCloudInit
+
+-- | Add an abstract syntax tree of a document to the __meta data__ of a the cloud
+-- init context
+addMetaData :: (CanAdd m 'CloudInit 'CloudInitMetaData)
+               => Handle 'CloudInit -> AST Content YamlObject -> ProgramT m ()
+addMetaData hnd = add hnd SCloudInitMetaData
+
+-- | Add an abstract syntax tree of a document to the __user data__ of a the cloud
+-- init context
+addUserData :: (CanAdd m 'CloudInit 'CloudInitUserData)
+               => Handle 'CloudInit -> AST Content YamlObject -> ProgramT m ()
+addUserData hnd = add hnd SCloudInitUserData
+
+-- | Render the cloud-init contents to a directory.
+writeCloudInitDir :: (CanCreate m 'LocalDirectory
+                     ,CanExport m 'LocalDirectory
+                     ,CanAdd m 'LocalDirectory 'FreeFile
+                     ,CanConvert m 'CloudInit 'CloudInitMetaData
+                     ,CanConvert m 'CloudInit 'CloudInitUserData
+                     ,CanConvert m 'CloudInitMetaData 'GeneratedContent
+                     ,CanConvert m 'CloudInitUserData 'GeneratedContent
+                     ,CanConvert m 'GeneratedContent 'FreeFile)
+                     => Handle 'CloudInit -> FilePath -> ProgramT m ()
+writeCloudInitDir h dst = do
+    dirH <- newDirectory
+    addCloudInitToArtifact h dirH
+    export dirH dst
+
+-- | Render the cloud-init contents into an ISO or VFAT image.
+writeCloudInit :: (CanCreate m 'FileSystemBuilder
+                  ,CanConvert m 'FileSystemBuilder 'FileSystemImage
+                  ,CanExport m 'FileSystemImage
+                  ,CanAdd m 'LocalDirectory 'FreeFile
+                  ,CanAdd m 'FileSystemBuilder 'FreeFile
+                  ,CanConvert m 'CloudInit 'CloudInitMetaData
+                  ,CanConvert m 'CloudInit 'CloudInitUserData
+                  ,CanConvert m 'CloudInitMetaData 'GeneratedContent
+                  ,CanConvert m 'CloudInitUserData 'GeneratedContent
+                  ,CanConvert m 'GeneratedContent 'FreeFile)
+                  => Handle 'CloudInit
+                  -> FileSystem
+                  -> FilePath
+                  -> ProgramT m ()
+writeCloudInit h fs dst = do
+    fsBuilder <- create SFileSystemBuilder (FileSystemSpec fs "cidata" 2 MB)
+    fsImage <- convert fsBuilder SFileSystemImage ()
+    export fsImage dst
+    addCloudInitToArtifact h fsBuilder
+
+-- | Render the cloud-init contents into an artifact to which 'FreeFile's can be
+-- added.
+addCloudInitToArtifact
+    :: (AddSpec a 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanConvert m 'CloudInit 'CloudInitMetaData
+       ,CanConvert m 'CloudInit 'CloudInitUserData
+       ,CanConvert m 'CloudInitMetaData 'GeneratedContent
+       ,CanConvert m 'CloudInitUserData 'GeneratedContent
+       ,CanConvert m 'GeneratedContent 'FreeFile
+       ,CanAdd m a 'FreeFile)
+    => Handle 'CloudInit -> Handle a -> ProgramT m ()
+addCloudInitToArtifact chH destH = do
+    metaData <- convert chH SCloudInitMetaData ()
+    metaDataContent <- convert metaData SGeneratedContent ()
+    metaDataFile <- convert metaDataContent SFreeFile ()
+    add destH SFreeFile (fileSpec "meta-data", metaDataFile)
+    userData <- convert chH SCloudInitUserData ()
+    userDataContent <- convert userData SGeneratedContent ()
+    userDataFile <- convert userDataContent SFreeFile ()
+    add destH SFreeFile (fileSpec "user-data", userDataFile)
+
+
+-- * Adding Files to an Artifact
+
+-- | Reference an external file. An external file will never be modified.
+externalFile
+    :: CanCreate m 'ExternalFile
+    => FilePath -> ProgramT m (Handle 'ExternalFile)
+externalFile = create SExternalFile
+
+-- | Get a reference to a copy of an external file inside the build root that
+-- can be modified.
+externalFileTempCopy
+    :: (CanCreate m 'ExternalFile, CanConvert m 'ExternalFile 'FreeFile)
+    => FilePath -> ProgramT m (Handle 'FreeFile)
+externalFileTempCopy f = do
+    extH <- externalFile f
+    convert extH SFreeFile ()
+
+-- | 'use' an external file to introduce an artifact with the help of a
+--  artifact dependent extra arguement and return the artifacts handle.
+fromFile
+    :: (Show (ConvSpec 'FreeFile b), CanCreate m 'ExternalFile, CanConvert m 'FreeFile b, CanConvert m 'ExternalFile 'FreeFile)
+    => FilePath -> Sing b -> ConvSpec 'FreeFile b -> ProgramT m (Handle b)
+fromFile f a conversionArg = do
+    h <- externalFileTempCopy f
+    convert h a conversionArg
+
+-- | Given an artifact that support extraction or conversion to a file
+-- create/write a file to a given output path.
+outputFile
+    :: (Show (ConvSpec a 'FreeFile), CanConvert m a 'FreeFile, CanExport m 'FreeFile)
+    => Handle a -> ConvSpec a 'FreeFile -> FilePath -> ProgramT m ()
+outputFile e src dst = do
+    outF <- convert e SFreeFile src
+    export outF dst
+
+-- * File Inclusion, File-Templating and Script Rendering
+
+-- | Add an existing file to an artifact.
+-- Strip the directories from the path, e.g. @/etc/blub.conf@ will be
+-- @blob.conf@ in the artifact. The file will be world readable and not
+-- executable. The source file must not be a directory.
+addFile
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanAdd m e 'FreeFile)
+       => Handle e -> FilePath -> ProgramT m ()
+addFile d f = addFileP d f (0, 6, 4, 4)
+
+-- | Same as 'addFile' but set the destination file permissions to @0755@
+-- (executable for all).
+addExe
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanAdd m e 'FreeFile)
+       => Handle e -> FilePath -> ProgramT m ()
+addExe d f = addFileP d f (0, 7, 5, 5)
+
+-- | Same as 'addFile' but with an extra output file permission parameter.
+addFileP
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanAdd m e 'FreeFile)
+       => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> ProgramT m ()
+addFileP dstH f p = do
+    let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
+    origH <- create SExternalFile f
+    tmpH <- convert origH SFreeFile ()
+    add dstH SFreeFile (dstSpec, tmpH)
+
+-- * Directories
+
+-- | Create a temp directory
+newDirectory :: (CanCreate m 'LocalDirectory)
+                => ProgramT m (Handle 'LocalDirectory)
+newDirectory = create SLocalDirectory ()
+
+-- | Render the directory to the actual destination (which must not exist)
+exportDir :: (CanExport m 'LocalDirectory)
+             => Handle 'LocalDirectory -> FilePath -> ProgramT m ()
+exportDir = export
+
+-- * /Low-level/ 'Content' generation functions
+
+-- | Create a handle for accumulating 'Content' with an initial 'Content'.
+createContent :: (CanCreate m 'GeneratedContent)
+                 => Content -> String -> ProgramT m (Handle 'GeneratedContent)
+createContent c title = create SGeneratedContent (c, title)
+
+-- | Accumulate/Append more 'Content' to the 'GeneratedContent'
+--   handle obtained by e.g. 'createContent'
+appendContent :: (CanAdd m 'GeneratedContent 'GeneratedContent)
+                 => Handle 'GeneratedContent -> Content -> ProgramT m ()
+appendContent hnd = add hnd SGeneratedContent
+
+-- * Template variable definitions
+
+-- | Create a template variable binding. The bindings play a role in generated
+-- 'Content' and in the 'addTemplate' (and similar) functions.
+($=) :: CanAdd m 'VariableBindings 'TemplateVariable
+        => String -> String -> ProgramT m ()
+key $= value =
+    add globalVars STemplateVariable (key, value)
+
+-- * 'Content' to file rendering functions
+
+-- | Generate a file to an artifact from a local file template.
+-- All occurences of @${var}@ will be replaced by the contents of @var@, which
+-- is the last values assigned to @var@ using @"var" $= "123"@. The directory
+-- part is stripped from the output file name, e.g. @template/blah/foo.cfg@ will
+-- be @foo.cfg@ in the artifact. The file will be world readable and not
+-- executable. The source file must not be a directory.
+addTemplate
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanAdd m e 'FreeFile
+       ,CanCreate m 'GeneratedContent
+       ,CanConvert m 'GeneratedContent 'FreeFile)
+       => Handle e -> FilePath -> ProgramT m ()
+addTemplate d f = addTemplateP d f (0,6,4,4)
+
+-- | Same as 'addTemplate' but set the destination file permissions to @0755@
+-- (executable for all).
+addTemplateExe
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanAdd m e 'FreeFile
+       ,CanCreate m 'GeneratedContent
+       ,CanConvert m 'GeneratedContent 'FreeFile)
+       => Handle e -> FilePath -> ProgramT m ()
+addTemplateExe d f = addTemplateP d f (0, 6, 4, 4)
+
+-- | Same as 'addTemplate' but with an extra output file permission parameter.
+addTemplateP
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanAdd m e 'FreeFile
+       ,CanCreate m 'GeneratedContent
+       ,CanConvert m 'GeneratedContent 'FreeFile)
+       => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> ProgramT m ()
+addTemplateP dstH f p = do
+    let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
+        srcFile = Source ExpandVariables f
+    addFileFromContent dstH (FromTextFile srcFile) dstSpec
+
+-- | Add an existing file from the file system, optionally with template
+-- variable expansion to an artifact at a 'FileSpec'.
+addFileFull
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanCreate m 'ExternalFile
+       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanConvert m 'GeneratedContent 'FreeFile
+       ,CanAdd m e 'FreeFile
+       ,CanCreate m 'GeneratedContent)
+       => Handle e -> SourceFile -> FileSpec -> ProgramT m ()
+addFileFull dstH srcFile dstSpec =
+    case srcFile of
+        (Source ExpandVariables _) ->
+            addFileFromContent dstH (FromTextFile srcFile) dstSpec
+        (Source NoConversion f) -> do
+            origH <- create SExternalFile f
+            tmpH <- convert origH SFreeFile ()
+            add dstH SFreeFile (dstSpec, tmpH)
+
+-- | Generate a file with a content and add that file to an artifact at a
+-- 'FileSpec'.
+addFileFromContent
+    :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
+       ,CanConvert m 'GeneratedContent 'FreeFile
+       ,CanAdd m e 'FreeFile
+       ,CanCreate m 'GeneratedContent)
+       => Handle e -> Content -> FileSpec -> ProgramT m ()
+addFileFromContent dstH content dstSpec = do
+    cH <-
+        createContent
+            content
+            (printf
+                 "contents-of-%s"
+                 (dstSpec ^. fileSpecPath . to takeFileName))
+    tmpFileH <- convert cH SFreeFile ()
+    add dstH SFreeFile (dstSpec, tmpFileH)
 
 -- * Execution environment
 
@@ -74,6 +355,25 @@ mount
 mount e imgHnd dest = convert e SVmImage (imgHnd, MountPoint dest)
 
 -- * Some utility vm builder lego
+
+
+-- * Image import
+
+-- | Load the newest version of the shared image from the local cache.
+fromShared :: (CanConvert m 'ImageRepository 'VmImage)
+              => String -> ProgramT m (Handle 'VmImage)
+fromShared sharedImgName = convert
+        imageRepositoryH
+        SVmImage
+        (SharedImageName sharedImgName)
+
+-- * Image export
+
+-- | Store an image in the local cache with a name as key for lookups, e.g. from
+-- 'fromShared'
+sharedAs :: (CanAdd m 'ImageRepository 'VmImage)
+            => Handle 'VmImage -> String -> ProgramT m ()
+sharedAs hnd name = add imageRepositoryH SVmImage (SharedImageName name, hnd)
 
 rootImage :: (CanConvert m 'ImageRepository 'VmImage
              ,CanConvert m 'ExecutionEnvironment 'VmImage

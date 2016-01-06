@@ -84,6 +84,7 @@ library
                    , B9.Dsl.File
                    , B9.Dsl.FileSystem
                    , B9.Dsl.ImageRepository
+                   , B9.Dsl.Logging
                    , B9.Dsl.PartitionedVmImage
                    , B9.Dsl.UpdateServerRoot
                    , B9.Dsl.VmImage
@@ -205,8 +206,8 @@ test-suite spec
                    , B9.Dsl.CoreSpec
                    , B9.SpecExtra
                    , B9.B9IOSpec
-                   , B9.B9IO.DslCompilerSpec
                    , B9.B9IO.ImplSpec
+                   , B9.DslSpec
                    , B9.BuilderSpec
                    , B9.LoggingSpec
   if flag(IntegrationTests)

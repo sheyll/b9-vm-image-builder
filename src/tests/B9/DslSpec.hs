@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-module B9.B9IO.DslCompilerSpec (spec) where
+module B9.DslSpec (spec) where
 import B9 hiding (CloudInit)
 import B9.B9IO
 import B9.Dsl
@@ -79,25 +79,25 @@ fileInclusionSpec =
               actual `shouldDoIo` expected
        it "is moved if only a single copy exists" $
            do let actual = do
-                      fH <- use "/tmp/test.file"
+                      fH <- externalFileTempCopy "/tmp/test.file"
                       export fH "/tmp/test.file.copy"
                   expected = do
                       src <- getRealPath "/tmp/test.file"
-                      tmp <- mkTempCreateParents "test.file-1-copy"
+                      tmp <- mkTempCreateParents "test.file-0-copy"
                       dst' <- ensureParentDir "/tmp/test.file.copy"
                       copy src tmp
                       moveFile tmp dst'
               actual `shouldDoIo` expected
        it "is copied n-1 times and moved once for n copies" $
            do let actual = do
-                      fH <- use "/tmp/test.file"
+                      fH <- externalFileTempCopy "/tmp/test.file"
                       export fH "/tmp/test.file.copy1"
                       export fH "/tmp/test.file.copy2"
                       export fH "/tmp/test.file.copy3"
                       export fH "/tmp/test.file.copy4"
                   expected = do
                       src <- getRealPath "/tmp/test.file"
-                      tmp <- mkTempCreateParents "test.file-1-copy"
+                      tmp <- mkTempCreateParents "test.file-0-copy"
                       dst1 <- ensureParentDir "/tmp/test.file.copy1"
                       dst2 <- ensureParentDir "/tmp/test.file.copy2"
                       dst3 <- ensureParentDir "/tmp/test.file.copy3"
@@ -110,28 +110,28 @@ fileInclusionSpec =
               actual `shouldDoIo` expected
        it "can be added to LocalDirectory" $
            do let actual = do
-                      fH <- use "/tmp/test.file"
+                      fH <- externalFileTempCopy "/tmp/test.file"
                       dirH <- newDirectory
                       add dirH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       ext <- getRealPath "/tmp/test.file"
-                      src <- mkTempCreateParents "test.file-1-copy"
+                      src <- mkTempCreateParents "test.file-0-copy"
                       tmpDir <- mkTempDir "local-dir"
-                      copy ext src
                       let dst = tmpDir </> "test.file"
+                      copy ext src
                       moveFile src dst
               actual `shouldDoIo` expected
        it "can be added to FileSystemImage" $
            do let actual = do
-                      fH <- use "/tmp/test.file"
                       fsH <-
                           create
                               SFileSystemBuilder
                               (FileSystemSpec ISO9660 "cidata" 1 MB)
+                      fH <- externalFileTempCopy "/tmp/test.file"
                       add fsH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       ext <- getRealPath "/tmp/test.file"
-                      src <- mkTempCreateParents "test.file-1-copy"
+                      src <- mkTempCreateParents "test.file-0-copy"
                       img <- mkTempCreateParents "ISO9660-cidata"
                       tmpDir <-
                           mkTempDir "ISO9660-cidata.d"
@@ -147,7 +147,7 @@ fileInclusionSpec =
        it
            "can be added to FileSystemImage, which can be exported and added to another FileSystemImage" $
            do let actual = do
-                      fH <- use "/tmp/test.file"
+                      fH <- externalFileTempCopy "/tmp/test.file"
                       fsH <-
                           create
                               SFileSystemBuilder
@@ -163,7 +163,7 @@ fileInclusionSpec =
                   expected = do
                       -- Allocate all /automatic/ file names:
                       ext <- getRealPath "/tmp/test.file"
-                      src1 <- mkTempCreateParents "test.file-1-copy"
+                      src1 <- mkTempCreateParents "test.file-0-copy"
                       img1 <- mkTempCreateParents "ISO9660-cidata"
                       tmpDir1 <-
                           mkTempDir "ISO9660-cidata.d"
@@ -194,7 +194,7 @@ fileInclusionSpec =
               actual `shouldDoIo` expected
        it "can be added to CloudInit" $
            do let actual = do
-                      fH <- use "/tmp/test.file"
+                      fH <- externalFileTempCopy "/tmp/test.file"
                       c <- newCloudInit "iid-1"
                       add c SFreeFile (fileSpec "test.file", fH)
                       writeCloudInitDir c "/tmp/ci.d"
@@ -633,8 +633,7 @@ vmImageCreationSpec =
                    return ()
                actual = do
                    -- create a raw Ext4 image
-                   rawFile <- use "in.raw"
-                   rawImg <- convert rawFile SVmImage QCow2
+                   rawImg <- fromFile "in.raw" SVmImage QCow2
                    vmdkImg <- convert rawImg SVmImage (Left Vmdk)
                    export vmdkImg "/tmp/test.vmdk"
            in actual `shouldDoIo` expected
@@ -646,9 +645,8 @@ partitionedDiskSpec =
     describe "compile PartionedVmImage" $
     do it "extracts the selected partition" $
            let actual = do
-                   rawPartitionedFile <- use "/tmp/in.raw"
                    partitionedImg <-
-                       convert rawPartitionedFile SPartitionedVmImage ()
+                       fromFile "/tmp/in.raw" SPartitionedVmImage ()
                    rawPart2File <-
                        convert partitionedImg SFreeFile (MBRPartition 2)
                    export rawPart2File "/tmp/part2.raw"
@@ -656,7 +654,8 @@ partitionedDiskSpec =
                    src <- getRealPath "/tmp/in.raw"
                    raw <- mkTempCreateParents "in.raw-1-copy"
                    img <-
-                       mkTempCreateParents "in.raw-1-copy-2-partitioned-vm-image"
+                       mkTempCreateParents
+                           "in.raw-1-copy-2-partitioned-vm-image"
                    extracted <-
                        mkTempCreateParents
                            "in.raw-1-copy-2-partitioned-vm-image-3-partition-2"
@@ -694,8 +693,7 @@ updateServerImageSpec =
     describe "exportForUpdateServer" $
     do let actual = do
                -- TODO extract this to Dsl.hs:
-               srcF <- use srcFile
-               srcImg <- convert srcF SVmImage QCow2
+               srcImg <- fromFile srcFile SVmImage QCow2
                outDirH <- create SLocalDirectory ()
                usRoot <- convert outDirH SUpdateServerRoot ()
                add usRoot SVmImage (SharedImageName machine, srcImg)
@@ -708,14 +706,14 @@ updateServerImageSpec =
            shouldDoIo
                actual
                (do src <- getRealPath srcFile
-                   srcCopy <- mkTempCreateParents "source.qcow2-1-copy"
+                   srcCopy <- mkTempCreateParents "source.qcow2-0-copy"
                    srcImg <-
                        mkTempCreateParents
-                           "source.qcow2-1-copy-2-vm-image-QCow2"
+                           "source.qcow2-0-copy-1-vm-image-QCow2"
                    tmpDir <- mkTempDir "local-dir"
                    srcImgCopy <-
                        mkTempCreateParents
-                           "source.qcow2-1-copy-2-vm-image-QCow2-XXXX-webserver"
+                           "source.qcow2-0-copy-1-vm-image-QCow2-XXXX-webserver"
                    dst <- ensureParentDir outDir
                    copy src srcCopy
                    moveFile srcCopy srcImg
@@ -773,28 +771,28 @@ containerExecutionSpec =
               incDir <- mkTempDir "included-files"
               outDir <- mkTempDir "output-files"
               issueIn <- getRealPath "/etc/issue"
-              issue <- mkTempCreateParents "issue-2-copy"
+              issue <- mkTempCreateParents "issue-1-copy"
               issueInc <- mkTempInCreateParents incDir "added-file"
               passwdIn <- getRealPath "/etc/passwd"
-              passwd <- mkTempCreateParents "passwd-4-copy"
+              passwd <- mkTempCreateParents "passwd-3-copy"
               passwdInc <- mkTempInCreateParents incDir "added-file"
               tmpOut <- mkTempIn outDir "test-env-httpd.conf"
               destOut <- ensureParentDir "out-httpd.conf"
               imgIn <- getRealPath "test-in.qcow2"
-              img <- mkTempCreateParents "test-in.qcow2-7-copy"
+              img <- mkTempCreateParents "test-in.qcow2-6-copy"
               imgCopy <-
-                  mkTempCreateParents "test-in.qcow2-7-copy-8-vm-image-QCow2"
+                  mkTempCreateParents "test-in.qcow2-6-copy-7-vm-image-QCow2"
               imgConvSrc <-
                   mkTempCreateParents
-                      "test-in.qcow2-7-copy-8-vm-image-QCow2-XXXX-conversion-src"
+                      "test-in.qcow2-6-copy-7-vm-image-QCow2-XXXX-conversion-src"
               rawImg <-
-                  mkTempCreateParents "vm-image-QCow2-10-converted-to-Raw"
+                  mkTempCreateParents "vm-image-QCow2-9-converted-to-Raw"
               mountedImg <-
                   mkTempCreateParents
-                      "vm-image-QCow2-10-converted-to-Raw-11-mounted-at-root"
+                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root"
               mountedImgCopy <-
                   mkTempCreateParents
-                      "vm-image-QCow2-10-converted-to-Raw-11-mounted-at-root-13-vm-image-Raw"
+                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root-12-vm-image-Raw"
               imgOut <- ensureParentDir "img-out.raw"
               copy imgIn img
               moveFile img imgCopy

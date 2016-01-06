@@ -6,13 +6,11 @@ import B9.Content
 import B9.DiskImages
 import B9.Dsl.Core
 import B9.Dsl.File
-import B9.Dsl.ShellScript
 import B9.Dsl.VmImage
 import B9.ExecEnv
 import B9.FileSystems
 import B9.ShellScript      (Script(..))
 import Control.Lens        hiding ((<.>))
-import Control.Monad.Trans
 import Data.Data
 import Data.Default
 import Data.Monoid
@@ -25,6 +23,7 @@ $(singletons
   [d|
     data ExecutionEnvironment
      = ExecutionEnvironment
+     | ExecutableScript
       deriving (Show)
    |])
 
@@ -60,9 +59,9 @@ type instance ConvSpec 'ExecutionEnvironment 'FreeFile = FilePath
 instance CanCreate IoCompiler 'ExecutionEnvironment where
     runCreate _ e = do
         (hnd,_) <- allocHandle SExecutionEnvironment (e ^. execEnvTitle)
-        incDir <- lift (mkTempDir "included-files")
-        outDir <- lift (mkTempDir "output-files")
-        buildId <- lift B9.B9IO.getBuildId
+        incDir <- liftIoProgram (mkTempDir "included-files")
+        outDir <- liftIoProgram (mkTempDir "output-files")
+        buildId <- liftIoProgram B9.B9IO.getBuildId
         let outMnt = outputFileContainerPath buildId
             incMnt = includedFileContainerPath buildId
         putArtifactState
@@ -83,7 +82,7 @@ instance CanCreate IoCompiler 'ExecutionEnvironment where
                         cp (guestFrom,hostOut) =
                             Run "cp" [guestFrom, toMntPath hostOut]
                         toMntPath = (es ^. execOutMnt </>) . takeFileName
-                lift
+                liftIoProgram
                     (executeInEnv
                          (es ^. execEnvSpec)
                          (es ^. execScript <> copyOutFileScript)
@@ -100,11 +99,12 @@ instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
         srcH --> hnd
         Just eCxt <- useArtifactState hnd
         incFile <-
-            lift (mkTempInCreateParents (eCxt ^. execIncDir) "added-file")
+            liftIoProgram
+                (mkTempInCreateParents (eCxt ^. execIncDir) "added-file")
         copyFreeFile srcH incFile
         modifyArtifactState hnd $ traverse . execIncFiles <>~
             [(incFile, destSpec)]
-        bId <- lift B9.B9IO.getBuildId
+        bId <- liftIoProgram B9.B9IO.getBuildId
         modifyArtifactState hnd $ traverse . execScript <>~
             incFileScript bId incFile destSpec
 

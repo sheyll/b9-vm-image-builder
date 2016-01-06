@@ -6,7 +6,6 @@ import B9.DiskImages
 import B9.Dsl.Core
 import B9.Dsl.File
 import Control.Lens
-import Control.Monad.Trans
 import Data.Data
 import Data.Singletons.TH
 import Text.Printf
@@ -52,7 +51,8 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
         Just (FileCtx destImgFile _) <- useArtifactState destImgFileH
         addAction
             hnd
-            (lift (resizeVmImage destImgFile destSize destSizeU srcType))
+            (liftIoProgram
+                 (resizeVmImage destImgFile destSize destSizeU srcType))
         hnd --> destImgFileH
         createVmImage destImgFileH srcType
     runConvert hnd@(Handle _ hndT) _ (Left destType) = do
@@ -62,7 +62,8 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
             createFreeFile (hndT ++ "-converted-to-" ++ show destType)
         addAction
             hnd
-            (lift (convertVmImage srcFileCopy srcType destImgFile destType))
+            (liftIoProgram
+                 (convertVmImage srcFileCopy srcType destImgFile destType))
         hnd --> destImgFileH
         createVmImage destImgFileH destType
 

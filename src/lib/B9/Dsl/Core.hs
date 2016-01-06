@@ -165,25 +165,6 @@ export :: (Show (ExportSpec a),CanExport m a)
 export hnd out = liftF $
     Export hnd out ()
 
--- * Builtin-Logging
-
--- | The internal data type to represent the log output to the type checker.
-$(singletons [d|
-   data LoggingArtifact = LoggingOutput | LogEvent deriving Show
- |])
-
-type instance AddSpec 'LoggingOutput 'LogEvent = (LogLevel, String)
-
--- | A Global handle repesenting the (symbolic) logging output. Currently, the
--- logging output is determined by b9 conifiguration rather than explicit code.
-loggingH :: Handle 'LoggingOutput
-loggingH = globalHandle SLoggingOutput
-
--- | Log messages using the logging API defined in 'B9.Logging'
-instance (CanAdd m 'LoggingOutput 'LogEvent, a ~ ())
-         => CanLog (ProgramT m a) where
-    logMsg l msg = add loggingH SLogEvent (l, msg)
-
 -- * DSL Interpreter
 
 -- | Interpret a 'ProgramT' into a sequence of actions of a monad @m@.
@@ -203,3 +184,25 @@ interpret = foldFree go
     go (Export hnd exportSpec next) = do
         runExport hnd exportSpec
         return next
+
+-- * Logging
+
+-- | The internal data type to represent the log output to the type checker.
+$(singletons [d|
+   data LoggingArtifact = LoggingOutput | LogEvent deriving Show
+ |])
+
+type instance AddSpec 'LoggingOutput 'LogEvent = (LogLevel, String)
+
+-- | A Global handle repesenting the (symbolic) logging output. Currently, the
+-- logging output is determined by b9 conifiguration rather than explicit code.
+loggingH :: Handle 'LoggingOutput
+loggingH = globalHandle SLoggingOutput
+
+-- | Log messages using the logging API defined in 'B9.Logging'
+instance (CanAdd m 'LoggingOutput 'LogEvent, a ~ ())
+         => CanLog (ProgramT m a) where
+    logMsg l msg = add loggingH SLogEvent (l, msg)
+
+instance (CanLog (m ())) => CanAdd m 'LoggingOutput 'LogEvent where
+    runAdd _ _ (lvl,msg) = logMsg lvl msg

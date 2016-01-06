@@ -2,7 +2,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 module B9.B9IO.IoCompiler where
@@ -21,8 +20,16 @@ import Data.Singletons
 import Data.Tree            as Tree
 import Text.Printf          (printf)
 
--- | The monad used to compile a 'ProgramT' into an 'IoProgram'
-type IoCompiler = StateT Ctx IoProgram
+-- | The monad transformer used to compile a 'ProgramT'
+newtype IoCompiler a = IoCompiler
+    { runIoCompiler :: StateT Ctx IoProgram a
+    } deriving (Functor,Applicative,Monad,MonadState Ctx)
+
+instance (a ~ ()) => CanLog (IoCompiler a) where
+    logMsg l str = liftIoProgram (logMsg l str)
+
+instance MonadIoProgram IoCompiler where
+    liftIoProgram = IoCompiler . lift
 
 -- | An alias for 'ProgramT's over 'IoCompiler'
 type Program a = ProgramT IoCompiler a
@@ -31,7 +38,15 @@ type Program a = ProgramT IoCompiler a
 -- 'ReaderT'. This is mainly to prevent an action added with 'addAction' to be
 -- able to change the state, especially by adding more actions (which would not
 -- be executed).
-type IoProgBuilder = ReaderT Ctx IoProgram
+newtype IoProgBuilder a = IoProgBuilder
+    { runIoProgBuilder :: ReaderT Ctx IoProgram a
+    } deriving (Functor,Applicative,Monad,MonadReader Ctx)
+
+instance (a ~ ()) => CanLog (IoProgBuilder a) where
+    logMsg l str = liftIoProgram (logMsg l str)
+
+instance MonadIoProgram IoProgBuilder where
+    liftIoProgram = IoProgBuilder . lift
 
 -- | State for artifacts required to generate the output program is
 --   held in a single 'Map' containing the existential key/value types
@@ -96,11 +111,14 @@ getArtifactState hnd =
 
 
 -- | Compile a 'Program' to an 'IoProgram'
-compile :: Program a -> IoProgram a
-compile p = evalStateT compileSt def
+compile
+    :: forall a.
+       Program a -> IoProgram a
+compile p = evalStateT (runIoCompiler compileSt) def
   where
+    compileSt :: IoCompiler a
     compileSt = do
-        lift
+        liftIoProgram
             (do b <- getBuildId
                 dbgL
                     "==[B9-PREPARE]=======================================================["
@@ -108,7 +126,7 @@ compile p = evalStateT compileSt def
                     "]")
         result <- interpret p
         runAllActions
-        lift
+        liftIoProgram
             (do b <- getBuildId
                 dbgL
                     "==[B9-FINISHED]======================================================["
@@ -119,7 +137,7 @@ compile p = evalStateT compileSt def
 -- | Compile a 'Program' but run no actions, instead just print out information
 -- about the program using 'logTrace'
 inspect :: Show a => Program a -> IoProgram String
-inspect p = evalStateT compileSt def
+inspect p = evalStateT (runIoCompiler compileSt) def
   where
     compileSt = do
         res <- interpret p
@@ -134,22 +152,26 @@ inspect p = evalStateT compileSt def
 -- | Run all actions in correct order according to the dependency graph.
 runAllActions :: IoCompiler ()
 runAllActions = do
-    lift
-        (do b <- getBuildId
-            traceL
-                "==[B9-EXECUTE]=======================================================["
-                b
-                "]")
+    liftIoProgram
+             (do b <- getBuildId
+                 traceL
+                     "==[B9-EXECUTE]=======================================================["
+                     b
+                     "]")
     mG <- dependencyGraph
     case mG of
         Just g -> forM_ (topSort g) runActionForVertex
-        Nothing -> lift (traceL "No artifacts.")
+        Nothing -> liftIoProgram (traceL "No artifacts.")
   where
     runActionForVertex vertex = do
-        Just actionsForVertex <-
-            use (actions . at vertex)
-        runIoProgBuilder
-            (sequence_ actionsForVertex)
+        Just actionsForVertex <- use (actions . at vertex)
+        execIoProgBuilder (sequence_ actionsForVertex)
+
+-- | Run an 'IoProgBuilder' action.
+execIoProgBuilder :: IoProgBuilder a -> IoCompiler a
+execIoProgBuilder a = do
+    ctx <- get
+    IoCompiler (lift (runReaderT (runIoProgBuilder a) ctx))
 
 -- | Generate a graph from the artifact dependencies in the compiler context.
 dependencyGraph :: IoCompiler (Maybe Graph)
@@ -203,7 +225,7 @@ allocHandle sa str = do
     let h = formatHandle v sa str
     h' <- storeHandle h v
     actions . at v ?=
-        [lift (traceL "==[B9-EXEC-ARTIFACT]==============[" h "]")]
+        [liftIoProgram (traceL "==[B9-EXEC-ARTIFACT]==============[" h "]")]
     return (h, h')
 
 -- | Setup a predefined global handle
@@ -261,9 +283,3 @@ addAction :: Handle a -> IoProgBuilder () -> IoCompiler ()
 addAction h a = do
   Just v <- lookupVertex h
   actions . at v . traverse <>= [a]
-
--- | Run an 'IoProgBuilder' action.
-runIoProgBuilder :: IoProgBuilder a -> IoCompiler a
-runIoProgBuilder a = do
-    ctx <- get
-    lift (runReaderT a ctx)

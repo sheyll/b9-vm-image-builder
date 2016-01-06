@@ -6,7 +6,6 @@ import B9.B9IO.IoCompiler
 import B9.Dsl.Core
 import B9.Dsl.File
 import B9.PartitionTable
-import Control.Monad.Trans
 import Data.Singletons.TH
 
 $(singletons
@@ -15,7 +14,6 @@ $(singletons
   data PartitionedVmImage = PartitionedVmImage
                           deriving Show
   |])
-
 
 type instance ConvSpec 'FreeFile 'PartitionedVmImage = ()
 
@@ -38,5 +36,7 @@ instance CanConvert IoCompiler 'PartitionedVmImage 'FreeFile where
         Just (FileCtx srcFileName _) <- useArtifactState srcFileH
         (destH,destFile) <- createFreeFile dest
         hnd --> destH
-        addAction hnd (lift (extractPartition partSpec srcFileName destFile))
+        addAction
+            hnd
+            (liftIoProgram (extractPartition partSpec srcFileName destFile))
         return destH

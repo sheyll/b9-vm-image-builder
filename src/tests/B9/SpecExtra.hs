@@ -5,7 +5,7 @@ module B9.SpecExtra
        where
 
 import B9.B9IO
-import B9.B9IO.DslCompiler
+import B9.B9IO.IoCompiler
 import Control.Monad
 import Control.Monad.State
 import Data.Function
@@ -27,7 +27,7 @@ should've actual expected = actual' `shouldContain` expected'
 -- | Assertion on the result of a 'IoCompiler'
 shouldResultIn :: (Eq a, Show a) => IoCompiler a -> a -> Expectation
 shouldResultIn prog =
-    shouldBe (dumpToResult (evalStateT prog def))
+    shouldBe (dumpToResult (evalStateT (runIoCompiler prog) def))
 
 -- | Compile and dump a 'Program' to a string list.
 toList :: Program a -> [String]

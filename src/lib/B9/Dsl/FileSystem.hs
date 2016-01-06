@@ -9,15 +9,9 @@ import B9.Dsl.File
 import B9.Dsl.VmImage
 import B9.FileSystems
 import Control.Lens        hiding ((<.>))
-import Control.Monad.Trans
 import Data.Data
 import Data.Singletons.TH
 import System.FilePath
-
--- * File System API
-
--- | Create a file sytem image with a given type, label and size in giga
--- byte. Use the supplied action to add files to the fileSystemBuilder
 
 -- * File System API Implementation
 
@@ -59,36 +53,30 @@ type instance ConvSpec 'VmImage 'FileSystemImage = ()
 type instance ExportSpec 'FileSystemImage = FilePath
 
 instance CanCreate IoCompiler 'FileSystemBuilder where
-     runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
-         let title =
-                 show t ++ "-" ++
-                 (if null fsLabel
-                      then "image"
-                      else fsLabel)
-         (hnd,_) <- allocHandle SFileSystemBuilder fsLabel
-         (tmpFileH,tmpFile) <- createFreeFile title
-         hnd --> tmpFileH
-         fH <- createFsImage tmpFileH t
-         tmpDir <- lift (mkTempDir (title <.> "d"))
-         putArtifactState hnd $ FsBuilderCtx [] tmpDir fH
-         addAction
-             hnd
-             (do Just fileSys <- getArtifactState hnd
-                 lift
-                     (createFileSystem
-                          tmpFile
-                          fsSpec
-                          tmpDir
-                          (fileSys ^. fsFiles)))
-         return hnd
-
-instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
-    runAdd fsH _ (fSpec,fH) = do
-        modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
-        Just fileSys <- useArtifactState fsH
-        let tmpDir = fileSys ^. fsTempDir
-        fH --> fsH
-        copyFreeFile' fH tmpDir fSpec
+    runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
+        let title =
+                show t ++
+                "-" ++
+                (if null fsLabel
+                     then "image"
+                     else fsLabel)
+        (hnd,_) <- allocHandle SFileSystemBuilder fsLabel
+        (tmpFileH,tmpFile) <- createFreeFile title
+        hnd --> tmpFileH
+        fH <- createFsImage tmpFileH t
+        tmpFileH --> fH
+        tmpDir <- liftIoProgram (mkTempDir (title <.> "d"))
+        putArtifactState hnd $ FsBuilderCtx [] tmpDir fH
+        addAction
+            hnd
+            (do Just fileSys <- getArtifactState hnd
+                liftIoProgram
+                    (createFileSystem
+                         tmpFile
+                         fsSpec
+                         tmpDir
+                         (fileSys ^. fsFiles)))
+        return hnd
 
 -- | Create a 'FsCtx' from an existing file and the file system type.
 createFsImage :: Handle 'FreeFile
@@ -98,6 +86,21 @@ createFsImage fH fs = do
     (hnd,_) <- allocHandle SFileSystemImage ("fs-img-" ++ show fs)
     putArtifactState hnd $ FsCtx fH fs
     return hnd
+
+instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
+    runAdd fsH _ (fSpec,fH) = do
+        modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
+        Just fileSys <- useArtifactState fsH
+        let tmpDir = fileSys ^. fsTempDir
+        fH --> fsH
+        copyFreeFile' fH tmpDir fSpec
+
+instance CanConvert IoCompiler 'FileSystemBuilder 'FileSystemImage where
+    runConvert hnd _ () = do
+        Just fileSys <- useArtifactState hnd
+        Just (FsCtx fh fs) <- useArtifactState (fileSys ^. fsImgH)
+
+        runConvert fh SFileSystemImage fs
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'FreeFile where
     runConvert hnd _ () = do
@@ -111,7 +114,7 @@ instance CanConvert IoCompiler 'FileSystemImage 'FileSystemImage where
         Just (FileCtx outFile _) <- useArtifactState outFileH
         inFileH --> hnd
         hnd --> outFileH
-        addAction hnd (lift (resizeFileSystem outFile destSize fS))
+        addAction hnd (liftIoProgram (resizeFileSystem outFile destSize fS))
         createFsImage outFileH fS
 
 instance CanConvert IoCompiler 'FileSystemImage 'FreeFile where
