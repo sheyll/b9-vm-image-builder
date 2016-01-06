@@ -84,7 +84,7 @@ instance CanAdd IoCompiler 'LocalDirectory 'FreeFile where
 instance CanConvert IoCompiler 'ExternalFile 'FreeFile where
     runConvert hnd@(Handle _ hndT) _ () = do
         Just externalFileName <- useArtifactState hnd
-        (tmpFileH,tmpFile) <- createFreeFile (hndT ++ "-copy")
+        (tmpFileH,tmpFile) <- createFreeFile hndT
         hnd --> tmpFileH
         addAction hnd (liftIoProgram (copy externalFileName tmpFile))
         return tmpFileH
