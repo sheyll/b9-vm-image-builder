@@ -9,7 +9,6 @@ import B9.Logging
 import B9.PartitionTable
 import B9.Repository
 import Data.Default
-import Data.List
 import System.FilePath
 import Test.Hspec
 import Test.QuickCheck
@@ -20,7 +19,6 @@ spec = do
     actionSpec
     getParentDirSpec
     getFileNameSpec
-    ensusreParentDirSpec
     traceEveryActionWrapsAllActionsSpec
 
 actionSpec :: Spec
@@ -47,6 +45,12 @@ actionSpec =
        it "handles MkTempIn" $
            let p = mkTempIn "parent" "test-prefix"
            in dumpToStrings p `shouldBe` ["mkTempIn parent test-prefix"]
+       it "handles MkTempDir" $
+           let p = mkTempDir "test-prefix"
+           in dumpToStrings p `shouldBe` ["mkTempDir test-prefix"]
+       it "handles MkTempDir In" $
+           let p = mkTempDirIn "parent" "test-prefix"
+           in dumpToStrings p `shouldBe` ["mkTempDirIn parent test-prefix"]
        it "handles Copy" $
            let p = copy "from" "to"
            in dumpToStrings p `shouldBe` ["copy from to"]
@@ -65,6 +69,9 @@ actionSpec =
        it "handles MkDir" $
            let p = mkDir "test-dir"
            in dumpToStrings p `shouldBe` ["mkDir test-dir"]
+       it "handles EnsureParentDir" $
+           let p = ensureParentDir "test"
+           in runPureDump p `shouldBe` ("/abs/path/test", ["ensureParentDir test"])
        it "handles GetRealPath of relative path" $
            let p = getRealPath "from"
            in runPureDump p `shouldBe` ("/abs/path/from", ["getRealPath from"])
@@ -78,8 +85,7 @@ actionSpec =
            let p = renderContentToFile testFile testContent testEnv
                testFile = "test-file"
                testContent =
-                   (RenderYaml
-                        (ASTObj [("test-field", ASTString "test-value")]))
+                   RenderYaml (ASTObj [("test-field", ASTString "test-value")])
                testEnv = Environment []
            in dumpToStrings p `shouldBe`
               [ printf
@@ -96,7 +102,7 @@ actionSpec =
                     [fileSpec "test"]) `shouldBe`
            ( ()
            , [ "createFileSystem test FileSystemSpec Ext4 \"label\" 10 MB " ++
-               "test.d " ++ show [(fileSpec "test")]])
+               "test.d " ++ show [fileSpec "test"]])
        it "handles ResizeFileSystem" $
            dumpToStrings (resizeFileSystem "in" ShrinkFileSystem Ext4) `shouldBe`
            ["resizeFileSystem in ShrinkFileSystem Ext4"]
@@ -127,12 +133,12 @@ actionSpec =
 
 testSharedImage :: SharedImage
 testSharedImage =
-    (SharedImage
-         (SharedImageName "src")
-         (SharedImageDate "01-01-1970")
-         (SharedImageBuildId "00000000")
-         QCow2
-         Ext4)
+    SharedImage
+        (SharedImageName "src")
+        (SharedImageDate "01-01-1970")
+        (SharedImageBuildId "00000000")
+        QCow2
+        Ext4
 
 
 getParentDirSpec :: Spec
@@ -163,25 +169,6 @@ getFileNameSpec =
               let actual = dumpToResult $ getFileName filepath
                   expected = takeFileName filepath
               return $ actual == expected
-
-ensusreParentDirSpec :: Spec
-ensusreParentDirSpec =
-    describe "ensusreParentDir" $
-    do it "creates the parent directory" $
-           property $
-           do filepath <- listOf $ elements $ ['a' .. 'k'] ++ ['/', '.', '-']
-              let actual = dumpToStrings $ ensureParentDir filepath
-                  expected = dumpToStrings $ getParentDir filepath >>= mkDir
-              return $ expected `isInfixOf` actual
-       it "returns the filepath with the parent directory canonicalized" $
-           property $
-           do filepath <- listOf $ elements $ ['a' .. 'k'] ++ ['/', '.', '-']
-              let actual = dumpToResult $ ensureParentDir filepath
-                  expected =
-                      dumpToResult $
-                      (</>) <$> (getParentDir filepath >>= getRealPath) <*>
-                      getFileName filepath
-              return $ expected == actual
 
 traceEveryActionWrapsAllActionsSpec :: Spec
 traceEveryActionWrapsAllActionsSpec =

@@ -130,11 +130,11 @@ fileInclusionSpec =
                       fH <- externalFileTempCopy "/tmp/test.file"
                       add fsH SFreeFile (fileSpec "test.file", fH)
                   expected = do
-                      ext <- getRealPath "/tmp/test.file"
-                      src <- mkTemp "test.file-0-copy"
                       img <- mkTemp "ISO9660-cidata"
                       tmpDir <-
                           mkTempDir "ISO9660-cidata.d"
+                      ext <- getRealPath "/tmp/test.file"
+                      src <- mkTemp "test.file-3-copy"
                       copy ext src
                       let dst = tmpDir </> "test.file"
                       moveFile src dst
@@ -209,10 +209,10 @@ fileInclusionSpec =
                       fH <- convert fcH SFreeFile ()
                       void $ export fH "/tmp/rendered-content.file"
                   expected = do
-                      src <- mkTemp "test-c-1"
-                      src' <- ensureParentDir src
+                      src <- mkTemp "test-c-0"
+                      _dst <- ensureParentDir "/tmp/rendered-content.file"
                       renderContentToFile
-                          src'
+                          src
                           (FromString "test-content")
                           (Environment [])
               actual `shouldDoIo` expected
@@ -251,7 +251,7 @@ fsImgSpec = do
                        export fsImgShrunk "out-img.raw")
                    (do fs <- mkTemp "Ext4-test-label"
                        c <- mkTempDir "Ext4-test-label.d"
-                       r <- mkTemp "Ext4-test-label-2-resized"
+                       r <- mkTemp "Ext4-test-label-1-resized"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
                            fs
@@ -280,9 +280,9 @@ fsImgSpec = do
                    (do fs <- mkTemp "Ext4-test-label"
                        c <- mkTempDir "Ext4-test-label.d"
                        r1 <-
-                           mkTemp "Ext4-test-label-2-resized"
+                           mkTemp "Ext4-test-label-1-resized"
                        r2 <-
-                           mkTemp "Ext4-test-label-2-resized"
+                           mkTemp "Ext4-test-label-1-resized"
                        dest1 <- ensureParentDir "out1.raw"
                        dest2 <- ensureParentDir "out2.raw"
                        createFileSystem
@@ -450,9 +450,9 @@ cloudInitIsoImageSpec =
                    isoDir <- mkTempDir "ISO9660-cidata.d"
                    isoDst <- ensureParentDir "test.iso"
                    metaDataFile <-
-                       mkTemp "iid-123-meta-data-2"
+                       mkTemp "iid-123-meta-data-1"
                    userDataFile <-
-                       mkTemp "iid-123-user-data-3"
+                       mkTemp "iid-123-user-data-2"
                    renderContentToFile
                        metaDataFile
                        (minimalMetaData iid)
@@ -488,8 +488,8 @@ cloudInitMultiVfatImageSpec =
     expectedProg dstImg = do
         let files = [fileSpec "meta-data", fileSpec "user-data"]
             fsc = FileSystemSpec VFAT "cidata" 2 MB
-            tmpDir = "/abs/path//BUILD/VFAT-cidata.d-XXXX"
-            tmpImg = "/abs/path//BUILD/VFAT-cidata-XXXX"
+            tmpDir = "/BUILD/VFAT-cidata.d-XXXX.d"
+            tmpImg = "/BUILD/VFAT-cidata-XXXX" -- TODO add extension .vfat
         dstImg' <- ensureParentDir dstImg
         createFileSystem tmpImg fsc tmpDir files
         moveFile tmpImg dstImg'
@@ -509,8 +509,8 @@ cloudInitDirSpec =
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
-                      do m <- mkTemp "iid-123-meta-data-2"
-                         u <- mkTemp "iid-123-user-data-3"
+                      do m <- mkTemp "iid-123-meta-data-1"
+                         u <- mkTemp "iid-123-user-data-2"
                          renderContentToFile
                              m
                              (minimalMetaData iid)
@@ -544,8 +544,8 @@ cloudInitWithContentSpec =
            cmds `should've`
            (dumpToStrings (renderContentToFile udPath udContent templateVars))
   where
-    mdPath = "/abs/path//BUILD/iid-123-meta-data-2-XXXX"
-    udPath = "/abs/path//BUILD/iid-123-user-data-3-XXXX"
+    mdPath = "/BUILD/iid-123-meta-data-2-XXXX"
+    udPath = "/BUILD/iid-123-user-data-3-XXXX"
     templateVars = Environment [("x","3")]
     mdContent =
         Concat
@@ -568,7 +568,7 @@ cloudInitWithContentSpec =
                                   [ASTObj [("path", ASTString "file1.txt")
                                           ,("owner", ASTString "user1:group1")
                                           ,("permissions", ASTString "0642")
-                                          ,("content", ASTEmbed (FromBinaryFile "/abs/path//BUILD/contents-of-file1.txt-9-XXXX-file1.txt-XXXX"))]])]
+                                          ,("content", ASTEmbed (FromBinaryFile "/BUILD/contents-of-file1.txt-9-XXXX-file1.txt-XXXX"))]])]
                        , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
     (Handle _ iid, cmds) = runPureDump $ compile cloudInitWithContent
     cloudInitWithContent = do
@@ -592,8 +592,7 @@ vmImageCreationSpec =
                    convSrc <-
                        mkTemp
                            "Ext4-image-1-Raw-image-XXXX-conversion-src"
-                   convDst <-
-                       mkTemp "vm-image-Raw-4-converted-to-QCow2"
+                   convDst <- mkTemp "vm-image-Raw-4-converted-to-QCow2"
                    resized <-
                        mkTemp
                            "vm-image-Raw-4-converted-to-QCow2-5-resized-3-MB"
@@ -617,13 +616,11 @@ vmImageCreationSpec =
            let expected = do
                    origFile <- getRealPath "in.raw"
                    srcFile <- mkTemp "in.raw-0-copy"
-                   srcImg <-
-                       mkTemp "in.raw-0-copy-1-vm-image-QCow2"
+                   srcImg <- mkTemp "in.raw-0-copy-1-vm-image-QCow2"
                    convSrc <-
                        mkTemp
                            "in.raw-0-copy-1-vm-image-QCow2-XXXX-conversion-src"
-                   convDest <-
-                       mkTemp "vm-image-QCow2-3-converted-to-Vmdk"
+                   convDest <- mkTemp "vm-image-QCow2-3-converted-to-Vmdk"
                    dest <- ensureParentDir "/tmp/test.vmdk"
                    copy origFile srcFile
                    moveFile srcFile srcImg

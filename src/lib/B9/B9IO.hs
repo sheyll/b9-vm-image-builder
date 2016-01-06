@@ -7,12 +7,12 @@
 module B9.B9IO
        (IoProgram, MonadIoProgram(..), runB9IO, Action(..), getBuildDir,
         getBuildId, getBuildDate, copy, copyDir, moveFile, moveDir, mkDir,
-        readFileSize, mkTemp, mkTempIn, mkTempDir, getRealPath,
-        getParentDir, getFileName, ensureParentDir, renderContentToFile,
-        createFileSystem, resizeFileSystem, convertVmImage, resizeVmImage,
-        extractPartition, imageRepoLookup, imageRepoPublish, executeInEnv,
-        traceEveryAction, dumpToStrings, dumpToResult, runPureDump,
-        arbitraryIoProgram)
+        readFileSize, mkTemp, mkTempIn, mkTempDir, mkTempDirIn,
+        getRealPath, getParentDir, getFileName, ensureParentDir,
+        renderContentToFile, createFileSystem, resizeFileSystem,
+        convertVmImage, resizeVmImage, extractPartition, imageRepoLookup,
+        imageRepoPublish, executeInEnv, traceEveryAction, dumpToStrings,
+        dumpToResult, runPureDump, arbitraryIoProgram)
        where
 
 import B9.CommonTypes

@@ -90,22 +90,20 @@ createFsImage fH fs = do
 instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
     runAdd fsH _ (fSpec,fH) = do
         modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
-        Just fileSys <- useArtifactState fsH
-        let tmpDir = fileSys ^. fsTempDir
+        Just fsBuilder <- useArtifactState fsH
+        let tmpDir = fsBuilder ^. fsTempDir
         fH --> fsH
         copyFreeFile' fH tmpDir fSpec
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'FileSystemImage where
     runConvert hnd _ () = do
-        Just fileSys <- useArtifactState hnd
-        Just (FsCtx fh fs) <- useArtifactState (fileSys ^. fsImgH)
-
-        runConvert fh SFileSystemImage fs
+        Just fsBuilder <- useArtifactState hnd
+        return (fsBuilder ^. fsImgH)
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'FreeFile where
     runConvert hnd _ () = do
-        Just fileSys <- useArtifactState hnd
-        runConvert (fileSys ^. fsImgH) SFreeFile ()
+        Just fsBuilder <- useArtifactState hnd
+        runConvert (fsBuilder ^. fsImgH) SFreeFile ()
 
 instance CanConvert IoCompiler 'FileSystemImage 'FileSystemImage where
     runConvert hnd _ destSize = do
@@ -131,13 +129,13 @@ instance CanConvert IoCompiler 'FreeFile 'FileSystemImage where
 
 instance CanExport IoCompiler 'FileSystemImage where
      runExport hnd destFile = do
-         Just fileSys <- useArtifactState hnd
-         runExport (fileSys ^. fsFileH) destFile
+         Just fsImg <- useArtifactState hnd
+         runExport (fsImg ^. fsFileH) destFile
 
 instance CanConvert IoCompiler 'FileSystemBuilder 'VmImage where
     runConvert hnd _ () = do
-        Just fileSys <- useArtifactState hnd
-        runConvert (fileSys ^. fsImgH) SVmImage ()
+        Just fsImg <- useArtifactState hnd
+        runConvert (fsImg ^. fsImgH) SVmImage ()
 
 instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
     runConvert hnd _ () = do
