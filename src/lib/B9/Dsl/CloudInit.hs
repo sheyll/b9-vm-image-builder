@@ -99,7 +99,7 @@ instance CanAdd IoCompiler 'CloudInit 'FreeFile where
     runAdd hnd _ (fspec,fH) = do
         fH --> hnd
         fName <-
-            freeFileTempCopy fH (Just (takeFileName (fspec ^. fileSpecPath))) -- TODO
+            freeFileTempCopy fH (Just (takeFileName (fspec ^. fileSpecPath)))
         runAdd
             hnd
             SCloudInitUserData
