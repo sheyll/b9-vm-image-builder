@@ -25,7 +25,7 @@ type instance AddSpec 'LocalDirectory 'FreeFile =
 
 type instance ConvSpec 'ExternalFile 'FreeFile = ()
 type instance ConvSpec 'FreeFile 'ExternalFile = FilePath
-type instance ConvSpec 'FreeFile 'FreeFile = String
+type instance ConvSpec 'FreeFile 'FreeFile = Maybe String
 
 type instance ExportSpec 'FreeFile = FilePath
 type instance ExportSpec 'LocalDirectory = FilePath
@@ -98,8 +98,9 @@ instance CanConvert IoCompiler 'FreeFile 'ExternalFile where
         return newFileH
 
 instance CanConvert IoCompiler 'FreeFile 'FreeFile where
-    runConvert hnd@(Handle _ hndT) _ dest = do
-        (newFileH,newFile) <- createFreeFile (hndT ++ "-" ++ dest)
+    runConvert hnd@(Handle _ hndT) _ mdest = do
+        (newFileH,newFile) <-
+            createFreeFile (maybe hndT ((hndT ++ "-") ++) mdest)
         copyFreeFile hnd newFile
         hnd --> newFileH
         return newFileH

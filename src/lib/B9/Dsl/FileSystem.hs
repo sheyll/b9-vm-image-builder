@@ -55,11 +55,10 @@ type instance ExportSpec 'FileSystemImage = FilePath
 instance CanCreate IoCompiler 'FileSystemBuilder where
     runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
         let title =
-                show t ++
-                "-" ++
                 (if null fsLabel
                      then "image"
                      else fsLabel)
+                <.> show t
         (hnd,_) <- allocHandle SFileSystemBuilder fsLabel
         (tmpFileH,tmpFile) <- createFreeFile title
         hnd --> tmpFileH
@@ -108,7 +107,7 @@ instance CanConvert IoCompiler 'FileSystemBuilder 'FreeFile where
 instance CanConvert IoCompiler 'FileSystemImage 'FileSystemImage where
     runConvert hnd _ destSize = do
         Just (FsCtx inFileH fS) <- useArtifactState hnd
-        outFileH <- runConvert inFileH SFreeFile "resized"
+        outFileH <- runConvert inFileH SFreeFile (Just "resized")
         Just (FileCtx outFile _) <- useArtifactState outFileH
         inFileH --> hnd
         hnd --> outFileH
@@ -122,7 +121,7 @@ instance CanConvert IoCompiler 'FileSystemImage 'FreeFile where
 
 instance CanConvert IoCompiler 'FreeFile 'FileSystemImage where
     runConvert hnd _ fs = do
-        copyH <- runConvert hnd SFreeFile (show fs)
+        copyH <- runConvert hnd SFreeFile (Just (show fs))
         fsImg <- createFsImage copyH fs
         copyH --> fsImg
         return fsImg
@@ -140,7 +139,7 @@ instance CanConvert IoCompiler 'FileSystemBuilder 'VmImage where
 instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
     runConvert hnd _ () = do
         Just (FsCtx fH _) <- useArtifactState hnd
-        fH' <- runConvert fH SFreeFile "Raw-image"
+        fH' <- runConvert fH SFreeFile (Just "Raw-image")
         outH <- createVmImage fH' Raw
         hnd --> outH
         return outH

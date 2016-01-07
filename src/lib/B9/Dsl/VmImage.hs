@@ -32,7 +32,7 @@ type instance ExportSpec 'VmImage = FilePath
 
 instance CanConvert IoCompiler 'FreeFile 'VmImage where
     runConvert hnd _ imgT = do
-        newHnd <- runConvert hnd SFreeFile (printf "vm-image-%s" (show imgT))
+        newHnd <- runConvert hnd SFreeFile (Just (printf "vm-image-%s" (show imgT)))
         createVmImage newHnd imgT
 
 instance CanConvert IoCompiler 'VmImage 'FreeFile where
@@ -47,7 +47,7 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
             runConvert
                 srcImgFileH
                 SFreeFile
-                (printf "resized-%d-%s" destSize (show destSizeU))
+                (Just (printf "resized-%d-%s" destSize (show destSizeU)))
         Just (FileCtx destImgFile _) <- useArtifactState destImgFileH
         addAction
             hnd

@@ -24,7 +24,7 @@ instance CanConvert IoCompiler 'FreeFile 'PartitionedVmImage where
     runConvert hnd@(Handle _ hndT) _ () = do
         let partVmImgHndT = hndT ++ "-partitioned-vm-image"
         (partVmImgHnd,_) <- allocHandle SPartitionedVmImage partVmImgHndT
-        file <- runConvert hnd SFreeFile "partitioned-vm-image"
+        file <- runConvert hnd SFreeFile (Just "partitioned-vm-image")
         putArtifactState partVmImgHnd file
         hnd --> partVmImgHnd
         return partVmImgHnd

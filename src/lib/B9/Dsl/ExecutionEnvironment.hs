@@ -135,7 +135,7 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'VmImage where
             runConvert
                 rawFH
                 SFreeFile
-                (printf "mounted-at-%s" (printMountPoint mp))
+                (Just (printf "mounted-at-%s" (printMountPoint mp)))
         Just (FileCtx mnt _) <- useArtifactState mntH
         modifyArtifactState hnd $ traverse . execImages <>~
             [(Image mnt Raw Ext4, mp)]

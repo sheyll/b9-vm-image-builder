@@ -130,9 +130,9 @@ fileInclusionSpec =
                       fH <- externalFileTempCopy "/tmp/test.file"
                       add fsH SFreeFile (fileSpec "test.file", fH)
                   expected = do
-                      img <- mkTemp "ISO9660-cidata"
+                      img <- mkTemp "cidata.ISO9660"
                       tmpDir <-
-                          mkTempDir "ISO9660-cidata.d"
+                          mkTempDir "cidata.ISO9660.d"
                       ext <- getRealPath "/tmp/test.file"
                       src <- mkTemp "test.file-3"
                       copy ext src
@@ -164,11 +164,11 @@ fileInclusionSpec =
                       -- Allocate all /automatic/ file names:
                       ext <- getRealPath "/tmp/test.file"
                       src1 <- mkTemp "test.file-0"
-                      img1 <- mkTemp "ISO9660-cidata"
+                      img1 <- mkTemp "cidata.ISO9660"
                       tmpDir1 <-
-                          mkTempDir "ISO9660-cidata.d"
-                      img2 <- mkTemp "VFAT-blub"
-                      tmpDir2 <- mkTempDir "VFAT-blub.d"
+                          mkTempDir "cidata.ISO9660.d"
+                      img2 <- mkTemp "blub.VFAT"
+                      tmpDir2 <- mkTempDir "blub.VFAT.d"
                       -- Copy the input file to the directory from which the ISO
                       -- is created:
                       copy
@@ -230,8 +230,8 @@ fsImgSpec = do
                                (FileSystemSpec Ext4 "test-label" 10 MB)
                        fsImg <- convert fs SFileSystemImage ()
                        export fsImg "out-img.raw")
-                   (do fs <- mkTemp "Ext4-test-label"
-                       c <- mkTempDir "Ext4-test-label.d"
+                   (do fs <- mkTemp "test-label.Ext4"
+                       c <- mkTempDir "test-label.Ext4.d"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
                            fs
@@ -249,9 +249,9 @@ fsImgSpec = do
                        fsImgShrunk <-
                            convert fsImg SFileSystemImage ShrinkFileSystem
                        export fsImgShrunk "out-img.raw")
-                   (do fs <- mkTemp "Ext4-test-label"
-                       c <- mkTempDir "Ext4-test-label.d"
-                       r <- mkTemp "Ext4-test-label-1-resized"
+                   (do fs <- mkTemp "test-label.Ext4"
+                       c <- mkTempDir "test-label.Ext4.d"
+                       r <- mkTemp "test-label.Ext4-1-resized"
                        dest <- ensureParentDir "out-img.raw"
                        createFileSystem
                            fs
@@ -277,12 +277,12 @@ fsImgSpec = do
                            convert fsImg SFileSystemImage ShrinkFileSystem
                        export fsImg10MB "out1.raw"
                        export fsImgShrunk "out2.raw")
-                   (do fs <- mkTemp "Ext4-test-label"
-                       c <- mkTempDir "Ext4-test-label.d"
+                   (do fs <- mkTemp "test-label.Ext4"
+                       c <- mkTempDir "test-label.Ext4.d"
                        r1 <-
-                           mkTemp "Ext4-test-label-1-resized"
+                           mkTemp "test-label.Ext4-1-resized"
                        r2 <-
-                           mkTemp "Ext4-test-label-1-resized"
+                           mkTemp "test-label.Ext4-1-resized"
                        dest1 <- ensureParentDir "out1.raw"
                        dest2 <- ensureParentDir "out2.raw"
                        createFileSystem
@@ -446,8 +446,8 @@ cloudInitIsoImageSpec =
                    runPureDump (compile cloudInitIsoImage)
                expectedCmds = dumpToStrings expectedProg
                expectedProg = do
-                   tmpIso <- mkTemp "ISO9660-cidata"
-                   isoDir <- mkTempDir "ISO9660-cidata.d"
+                   tmpIso <- mkTemp "cidata.ISO9660"
+                   isoDir <- mkTempDir "cidata.ISO9660.d"
                    isoDst <- ensureParentDir "test.iso"
                    metaDataFile <-
                        mkTemp "iid-123-meta-data-1"
@@ -488,8 +488,8 @@ cloudInitMultiVfatImageSpec =
     expectedProg dstImg = do
         let files = [fileSpec "meta-data", fileSpec "user-data"]
             fsc = FileSystemSpec VFAT "cidata" 2 MB
-            tmpDir = "/BUILD/VFAT-cidata.d-XXXX.d"
-            tmpImg = "/BUILD/VFAT-cidata-XXXX"
+            tmpDir = "/BUILD/cidata.VFAT.d-XXXX.d"
+            tmpImg = "/BUILD/cidata.VFAT-XXXX"
         dstImg' <- ensureParentDir dstImg
         createFileSystem tmpImg fsc tmpDir files
         moveFile tmpImg dstImg'
@@ -591,7 +591,7 @@ vmImageCreationSpec =
            let expected = do
                    convSrc <-
                        mkTemp
-                           "Ext4-image-1-Raw-image-XXXX-conversion-src"
+                           "image.Ext4-1-Raw-image-XXXX-conversion-src"
                    convDst <- mkTemp "vm-image-Raw-4-converted-to-QCow2"
                    resized <-
                        mkTemp
