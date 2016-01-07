@@ -34,7 +34,7 @@ instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
             vmDestDir = destDir </> "machines" </> snStr </> "disks" </> "raw"
             SharedImageName snStr = sn
         Just (VmImgCtx srcFileH srcType) <- useArtifactState vmI
-        srcFile <- freeFileTempCopy srcFileH snStr
+        srcFile <- freeFileTempCopy srcFileH (Just snStr) -- TODO
         vmI --> hnd
         addAction
             hnd

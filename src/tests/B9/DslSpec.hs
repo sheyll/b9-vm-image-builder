@@ -34,37 +34,50 @@ someStateSpec = do
     let hnd11 = Handle SCloudInit "test1"
         hnd12 = Handle SCloudInit "test2"
         hnd21 = Handle SGeneratedContent "test1"
-    describe "putArtifactState" $ do
-      do it "stores a value such that it can be read" $
-            shouldResultIn (do putArtifactState hnd11 "test"
-                               useArtifactState hnd11)
-                           (Just "test")
-         it "does not overwrite values of other handles in the same artifact type" $
-            shouldResultIn (do putArtifactState hnd11 "test"
-                               putArtifactState hnd12 "XXX"
-                               useArtifactState hnd11)
-                           (Just "test")
-         it "does not overwrite values of other handles with the same title and different artifact types" $
-            shouldResultIn (do putArtifactState hnd11 "test"
-                               putArtifactState hnd21 "XXX"
-                               useArtifactState hnd11)
-                           (Just "test")
-         it "can be called multiple times with different keys to store independent value" $
-            shouldResultIn (do putArtifactState hnd11 "test1"
-                               putArtifactState hnd12 "test2"
-                               putArtifactState hnd21 "test3"
-                               (,,) <$> useArtifactState hnd11 <*> useArtifactState hnd12 <*> useArtifactState hnd21)
-                           (Just "test1",Just "test2",Just "test3")
-    describe "modifyArtifactState" $ do
-        it "adds a new entry" $
-           shouldResultIn (do modifyArtifactState hnd11 (const (Just "test"))
-                              useArtifactState hnd11)
-                          (Just "test")
-        it "modify an new entry" $
-           shouldResultIn (do modifyArtifactState hnd11 (const (Just "tset"))
-                              modifyArtifactState hnd11 (fmap (reverse :: String -> String))
-                              useArtifactState hnd11)
-                          (Just "test")
+    describe "putArtifactState" $
+        do it "stores a value such that it can be read" $
+               shouldResultIn
+                   (do putArtifactState hnd11 "test"
+                       useArtifactState hnd11)
+                   (Just "test")
+           it
+               "does not overwrite values of other handles in the same artifact type" $
+               shouldResultIn
+                   (do putArtifactState hnd11 "test"
+                       putArtifactState hnd12 "XXX"
+                       useArtifactState hnd11)
+                   (Just "test")
+           it
+               "does not overwrite values of other handles with the same title and different artifact types" $
+               shouldResultIn
+                   (do putArtifactState hnd11 "test"
+                       putArtifactState hnd21 "XXX"
+                       useArtifactState hnd11)
+                   (Just "test")
+           it
+               "can be called multiple times with different keys to store independent value" $
+               shouldResultIn
+                   (do putArtifactState hnd11 "test1"
+                       putArtifactState hnd12 "test2"
+                       putArtifactState hnd21 "test3"
+                       (,,) <$> useArtifactState hnd11 <*>
+                           useArtifactState hnd12 <*>
+                           useArtifactState hnd21)
+                   (Just "test1", Just "test2", Just "test3")
+    describe "modifyArtifactState" $
+        do it "adds a new entry" $
+               shouldResultIn
+                   (do modifyArtifactState hnd11 (const (Just "test"))
+                       useArtifactState hnd11)
+                   (Just "test")
+           it "modify an new entry" $
+               shouldResultIn
+                   (do modifyArtifactState hnd11 (const (Just "tset"))
+                       modifyArtifactState
+                           hnd11
+                           (fmap (reverse :: String -> String))
+                       useArtifactState hnd11)
+                   (Just "test")
 
 
 -- * Examples for 'ReadOnlyFile' artifacts
@@ -73,8 +86,7 @@ fileInclusionSpec :: Spec
 fileInclusionSpec =
     describe "FreeFile" $
     do it "has no effects if unused" $
-           do let actual = do
-                      externalFile "/tmp/test.file"
+           do let actual = externalFile "/tmp/test.file"
                   expected = return ()
               actual `shouldDoIo` expected
        it "is moved if only a single copy exists" $
@@ -131,8 +143,7 @@ fileInclusionSpec =
                       add fsH SFreeFile (fileSpec "test.file", fH)
                   expected = do
                       img <- mkTemp "cidata.ISO9660"
-                      tmpDir <-
-                          mkTempDir "cidata.ISO9660.d"
+                      tmpDir <- mkTempDir "cidata.ISO9660.d"
                       ext <- getRealPath "/tmp/test.file"
                       src <- mkTemp "test.file-3"
                       copy ext src
@@ -165,8 +176,7 @@ fileInclusionSpec =
                       ext <- getRealPath "/tmp/test.file"
                       src1 <- mkTemp "test.file-0"
                       img1 <- mkTemp "cidata.ISO9660"
-                      tmpDir1 <-
-                          mkTempDir "cidata.ISO9660.d"
+                      tmpDir1 <- mkTempDir "cidata.ISO9660.d"
                       img2 <- mkTemp "blub.VFAT"
                       tmpDir2 <- mkTempDir "blub.VFAT.d"
                       -- Copy the input file to the directory from which the ISO
@@ -220,82 +230,77 @@ fileInclusionSpec =
 -- * Spec for 'SFileSystemImage's
 
 fsImgSpec :: Spec
-fsImgSpec = do
+fsImgSpec =
     describe "compile SFileSystemImage" $
-        do it "creates an empty Ext4 image" $
-               shouldDoIo
-                   (do fs <-
-                           create
-                               SFileSystemBuilder
-                               (FileSystemSpec Ext4 "test-label" 10 MB)
-                       fsImg <- convert fs SFileSystemImage ()
-                       export fsImg "out-img.raw")
-                   (do fs <- mkTemp "test-label.Ext4"
-                       c <- mkTempDir "test-label.Ext4.d"
-                       dest <- ensureParentDir "out-img.raw"
-                       createFileSystem
-                           fs
+    do it "creates an empty Ext4 image" $
+           shouldDoIo
+               (do fs <-
+                       create
+                           SFileSystemBuilder
                            (FileSystemSpec Ext4 "test-label" 10 MB)
-                           c
-                           []
-                       moveFile fs dest)
-           it "shrinks an Ext4 image" $
-               shouldDoIo
-                   (do fs <-
-                           create
-                               SFileSystemBuilder
-                               (FileSystemSpec Ext4 "test-label" 10 MB)
-                       fsImg <- convert fs SFileSystemImage ()
-                       fsImgShrunk <-
-                           convert fsImg SFileSystemImage ShrinkFileSystem
-                       export fsImgShrunk "out-img.raw")
-                   (do fs <- mkTemp "test-label.Ext4"
-                       c <- mkTempDir "test-label.Ext4.d"
-                       r <- mkTemp "test-label.Ext4-1-resized"
-                       dest <- ensureParentDir "out-img.raw"
-                       createFileSystem
-                           fs
+                   fsImg <- convert fs SFileSystemImage ()
+                   export fsImg "out-img.raw")
+               (do fs <- mkTemp "test-label.Ext4"
+                   c <- mkTempDir "test-label.Ext4.d"
+                   dest <- ensureParentDir "out-img.raw"
+                   createFileSystem
+                       fs
+                       (FileSystemSpec Ext4 "test-label" 10 MB)
+                       c
+                       []
+                   moveFile fs dest)
+       it "shrinks an Ext4 image" $
+           shouldDoIo
+               (do fs <-
+                       create
+                           SFileSystemBuilder
                            (FileSystemSpec Ext4 "test-label" 10 MB)
-                           c
-                           []
-                       moveFile fs r
-                       resizeFileSystem r ShrinkFileSystem Ext4
-                       moveFile r dest)
-           it "can be exported to several differently resized images" $
-               shouldDoIo
-                   (do fs <-
-                           create
-                               SFileSystemBuilder
-                               (FileSystemSpec Ext4 "test-label" 10 MB)
-                       fsImg <- convert fs SFileSystemImage ()
-                       fsImg10MB <-
-                           convert
-                               fsImg
-                               SFileSystemImage
-                               (FileSystemResize 10 MB)
-                       fsImgShrunk <-
-                           convert fsImg SFileSystemImage ShrinkFileSystem
-                       export fsImg10MB "out1.raw"
-                       export fsImgShrunk "out2.raw")
-                   (do fs <- mkTemp "test-label.Ext4"
-                       c <- mkTempDir "test-label.Ext4.d"
-                       r1 <-
-                           mkTemp "test-label.Ext4-1-resized"
-                       r2 <-
-                           mkTemp "test-label.Ext4-1-resized"
-                       dest1 <- ensureParentDir "out1.raw"
-                       dest2 <- ensureParentDir "out2.raw"
-                       createFileSystem
-                           fs
+                   fsImg <- convert fs SFileSystemImage ()
+                   fsImgShrunk <-
+                       convert fsImg SFileSystemImage ShrinkFileSystem
+                   export fsImgShrunk "out-img.raw")
+               (do fs <- mkTemp "test-label.Ext4"
+                   c <- mkTempDir "test-label.Ext4.d"
+                   r <- mkTemp "test-label.Ext4-1-resized"
+                   dest <- ensureParentDir "out-img.raw"
+                   createFileSystem
+                       fs
+                       (FileSystemSpec Ext4 "test-label" 10 MB)
+                       c
+                       []
+                   moveFile fs r
+                   resizeFileSystem r ShrinkFileSystem Ext4
+                   moveFile r dest)
+       it "can be exported to several differently resized images" $
+           shouldDoIo
+               (do fs <-
+                       create
+                           SFileSystemBuilder
                            (FileSystemSpec Ext4 "test-label" 10 MB)
-                           c
-                           []
-                       copy fs r1
-                       moveFile fs r2
-                       resizeFileSystem r1 (FileSystemResize 10 MB) Ext4
-                       resizeFileSystem r2 ShrinkFileSystem Ext4
-                       moveFile r1 dest1
-                       moveFile r2 dest2)
+                   fsImg <- convert fs SFileSystemImage ()
+                   fsImg10MB <-
+                       convert fsImg SFileSystemImage (FileSystemResize 10 MB)
+                   fsImgShrunk <-
+                       convert fsImg SFileSystemImage ShrinkFileSystem
+                   export fsImg10MB "out1.raw"
+                   export fsImgShrunk "out2.raw")
+               (do fs <- mkTemp "test-label.Ext4"
+                   c <- mkTempDir "test-label.Ext4.d"
+                   r1 <- mkTemp "test-label.Ext4-1-resized"
+                   r2 <- mkTemp "test-label.Ext4-1-resized"
+                   dest1 <- ensureParentDir "out1.raw"
+                   dest2 <- ensureParentDir "out2.raw"
+                   createFileSystem
+                       fs
+                       (FileSystemSpec Ext4 "test-label" 10 MB)
+                       c
+                       []
+                   copy fs r1
+                   moveFile fs r2
+                   resizeFileSystem r1 (FileSystemResize 10 MB) Ext4
+                   resizeFileSystem r2 ShrinkFileSystem Ext4
+                   moveFile r1 dest1
+                   moveFile r2 dest2)
 
 -- * Spec for /candy/ functions.
 addFileSpec :: Spec
@@ -481,9 +486,9 @@ cloudInitMultiVfatImageSpec :: Spec
 cloudInitMultiVfatImageSpec =
     describe "compile cloudInitVfatImage" $
     do it "generates test1.vfat" $
-           cloudInitVfatImage `shouldDoIo` (expectedProg "test1.vfat")
+           cloudInitVfatImage `shouldDoIo` expectedProg "test1.vfat"
        it "generates test2.vfat" $
-           cloudInitVfatImage `shouldDoIo` (expectedProg "test2.vfat")
+           cloudInitVfatImage `shouldDoIo` expectedProg "test2.vfat"
   where
     expectedProg dstImg = do
         let files = [fileSpec "meta-data", fileSpec "user-data"]
@@ -505,7 +510,7 @@ cloudInitDirSpec =
     describe "compile cloudInitDir" $
     do let (Handle _ iid,actualCmds) = runPureDump $ compile cloudInitDir
        it "generates a temporary directory" $
-           do cloudInitDir `shouldDoIo` (mkTempDir "local-dir")
+           cloudInitDir `shouldDoIo` mkTempDir "local-dir"
        it "renders user-data and meta-data into the temporary directory" $
            do let renderMetaData =
                       dumpToStrings $
@@ -539,10 +544,10 @@ cloudInitWithContentSpec =
     describe "compile cloudInitWithContent" $
     do it "merges meta-data" $
            cmds `should've`
-           (dumpToStrings (renderContentToFile mdPath mdContent templateVars))
+           dumpToStrings (renderContentToFile mdPath mdContent templateVars)
        it "merges user-data" $
            cmds `should've`
-           (dumpToStrings (renderContentToFile udPath udContent templateVars))
+           dumpToStrings (renderContentToFile udPath udContent templateVars)
   where
     mdPath = "/BUILD/iid-123-meta-data-2-XXXX"
     udPath = "/BUILD/iid-123-user-data-3-XXXX"
@@ -568,7 +573,9 @@ cloudInitWithContentSpec =
                                   [ASTObj [("path", ASTString "file1.txt")
                                           ,("owner", ASTString "user1:group1")
                                           ,("permissions", ASTString "0642")
-                                          ,("content", ASTEmbed (FromBinaryFile "/BUILD/contents-of-file1.txt-9-XXXX-file1.txt-XXXX"))]])]
+                                          ,("content", ASTEmbed
+                                            (FromBinaryFile
+                                             "/BUILD/contents-of-file1.txt-9-10-file1.txt-XXXX"))]])]
                        , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
     (Handle _ iid, cmds) = runPureDump $ compile cloudInitWithContent
     cloudInitWithContent = do
@@ -591,11 +598,11 @@ vmImageCreationSpec =
            let expected = do
                    convSrc <-
                        mkTemp
-                           "image.Ext4-1-Raw-image-XXXX-conversion-src"
-                   convDst <- mkTemp "vm-image-Raw-4-converted-to-QCow2"
+                           "image.Ext4-1-3"
+                   convDst <- mkTemp "image.Ext4-1-3-QCow2"
                    resized <-
                        mkTemp
-                           "vm-image-Raw-4-converted-to-QCow2-5-resized-3-MB"
+                           "image.Ext4-1-3-QCow2-5-resized-3-MB"
                    dest <- ensureParentDir "/tmp/test.qcow2"
                    convertVmImage convSrc Raw convDst QCow2
                    resizeVmImage resized 3 MB QCow2
@@ -616,11 +623,11 @@ vmImageCreationSpec =
            let expected = do
                    origFile <- getRealPath "in.raw"
                    srcFile <- mkTemp "in.raw-0"
-                   srcImg <- mkTemp "in.raw-0-1-vm-image-QCow2"
+                   srcImg <- mkTemp "in.raw-0-1"
                    convSrc <-
                        mkTemp
-                           "in.raw-0-1-vm-image-QCow2-XXXX-conversion-src"
-                   convDest <- mkTemp "vm-image-QCow2-3-converted-to-Vmdk"
+                           "in.raw-0-1-2"
+                   convDest <- mkTemp "in.raw-0-1-2-Vmdk"
                    dest <- ensureParentDir "/tmp/test.vmdk"
                    copy origFile srcFile
                    moveFile srcFile srcImg
@@ -640,28 +647,22 @@ vmImageCreationSpec =
 partitionedDiskSpec :: Spec
 partitionedDiskSpec =
     describe "compile PartionedVmImage" $
-    do it "extracts the selected partition" $
-           let actual = do
-                   partitionedImg <-
-                       fromFile "/tmp/in.raw" SPartitionedVmImage ()
-                   rawPart2File <-
-                       convert partitionedImg SFreeFile (MBRPartition 2)
-                   export rawPart2File "/tmp/part2.raw"
-               expected = do
-                   src <- getRealPath "/tmp/in.raw"
-                   raw <- mkTemp "in.raw-0"
-                   img <-
-                       mkTemp
-                           "in.raw-0-1-partitioned-vm-image"
-                   extracted <-
-                       mkTemp
-                           "in.raw-0-1-partitioned-vm-image-2-partition-2"
-                   dst <- ensureParentDir "/tmp/part2.raw"
-                   copy src raw
-                   moveFile raw img
-                   extractPartition (MBRPartition 2) img extracted
-                   moveFile extracted dst
-           in actual `shouldDoIo` expected
+    it "extracts the selected partition" $
+    let actual = do
+            partitionedImg <- fromFile "/tmp/in.raw" SPartitionedVmImage ()
+            rawPart2File <- convert partitionedImg SFreeFile (MBRPartition 2)
+            export rawPart2File "/tmp/part2.raw"
+        expected = do
+            src <- getRealPath "/tmp/in.raw"
+            raw <- mkTemp "in.raw-0"
+            img <- mkTemp "in.raw-0-1-partitioned-vm-image"
+            extracted <- mkTemp "in.raw-0-1-partitioned-vm-image-2-partition-2"
+            dst <- ensureParentDir "/tmp/part2.raw"
+            copy src raw
+            moveFile raw img
+            extractPartition (MBRPartition 2) img extracted
+            moveFile extracted dst
+    in actual `shouldDoIo` expected
 
 -- * VmImage respository IO
 
@@ -678,7 +679,7 @@ sharedImageSpec =
                  cachedImg' <- getRealPath cachedImg
                  srcTmp <- mkTemp "xxx.qcow2-0"
                  outTmp <-
-                     mkTemp "xxx.qcow2-0-XXXX-out-shared"
+                     mkTemp "xxx.qcow2-0-1-out-shared"
                  copy cachedImg' srcTmp
                  moveFile srcTmp outTmp
                  imageRepoPublish outTmp QCow2 (SharedImageName "out-shared")))
@@ -706,11 +707,11 @@ updateServerImageSpec =
                    srcCopy <- mkTemp "source.qcow2-0"
                    srcImg <-
                        mkTemp
-                           "source.qcow2-0-1-vm-image-QCow2"
+                           "source.qcow2-0-1"
                    tmpDir <- mkTempDir "local-dir"
                    srcImgCopy <-
                        mkTemp
-                           "source.qcow2-0-1-vm-image-QCow2-XXXX-webserver"
+                           "source.qcow2-0-1-2-webserver"
                    dst <- ensureParentDir outDir
                    copy src srcCopy
                    moveFile srcCopy srcImg
@@ -745,8 +746,8 @@ containerExecutionSpec =
                ExecEnvSpec "test-env" LibVirtLXC $
                Resources AutomaticRamSize 2 X86_64
            passwdSpec =
-               (FileSpec "/root/sub1/sub1.1/passwd" (0, 7, 6, 7) "root" "users")
-           issueSpec = (FileSpec "/build/issue" (0, 7, 7, 7) "root" "users")
+               FileSpec "/root/sub1/sub1.1/passwd" (0, 7, 6, 7) "root" "users"
+           issueSpec = FileSpec "/build/issue" (0, 7, 7, 7) "root" "users"
            testProg = do
                e <- boot envSpec
                mountDir e "/hostRO" "/guestRO"
@@ -777,19 +778,12 @@ containerExecutionSpec =
               destOut <- ensureParentDir "out-httpd.conf"
               imgIn <- getRealPath "test-in.qcow2"
               img <- mkTemp "test-in.qcow2-6"
-              imgCopy <-
-                  mkTemp "test-in.qcow2-6-7-vm-image-QCow2"
-              imgConvSrc <-
-                  mkTemp
-                      "test-in.qcow2-6-7-vm-image-QCow2-XXXX-conversion-src"
-              rawImg <-
-                  mkTemp "vm-image-QCow2-9-converted-to-Raw"
-              mountedImg <-
-                  mkTemp
-                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root"
+              imgCopy <- mkTemp "test-in.qcow2-6-7"
+              imgConvSrc <- mkTemp "test-in.qcow2-6-7-8"
+              rawImg <- mkTemp "test-in.qcow2-6-7-8-Raw"
+              mountedImg <- mkTemp "test-in.qcow2-6-7-8-Raw-10-mounted-at-root"
               mountedImgCopy <-
-                  mkTemp
-                      "vm-image-QCow2-9-converted-to-Raw-10-mounted-at-root-12-vm-image-Raw"
+                  mkTemp "test-in.qcow2-6-7-8-Raw-10-mounted-at-root-12"
               imgOut <- ensureParentDir "img-out.raw"
               copy imgIn img
               moveFile img imgCopy
@@ -801,15 +795,15 @@ containerExecutionSpec =
               copy issueIn issue
               moveFile issue issueInc
               let incScript =
-                      (Run "touch /test1" []) <>
+                      Run "touch /test1" [] <>
                       incFileScript buildId issueInc issueSpec <>
-                      (Run "touch /test2" []) <>
+                      Run "touch /test2" [] <>
                       incFileScript buildId passwdInc passwdSpec <>
-                      (Run
-                           "cp"
-                           [ "/etc/httpd/httpd.conf"
-                           , outputFileContainerPath buildId </>
-                             takeFileName tmpOut])
+                      Run
+                          "cp"
+                          [ "/etc/httpd/httpd.conf"
+                          , outputFileContainerPath buildId </>
+                            takeFileName tmpOut]
               executeInEnv
                   envSpec
                   incScript
@@ -827,16 +821,16 @@ containerExecutionSpec =
               moveFile mountedImgCopy imgOut
 
 loggingSpec :: Spec
-loggingSpec = do
+loggingSpec =
     describe "LogEvents" $
-        it "are generated from the 'CanLog (Program a)' instance" $
-        (do traceL "trace log"
-            dbgL "debug" "log"
-            infoL "info log"
-            errorL "error log"
-            return ()) `shouldDoIo`
-        (do logMsg LogTrace "trace log"
-            logMsg LogDebug "debug log"
-            logMsg LogInfo "info log"
-            logMsg LogError "error log"
-            return ())
+    it "are generated from the 'CanLog (Program a)' instance" $
+    (do traceL "trace log"
+        dbgL "debug" "log"
+        infoL "info log"
+        errorL "error log"
+        return ()) `shouldDoIo`
+    (do logMsg LogTrace "trace log"
+        logMsg LogDebug "debug log"
+        logMsg LogInfo "info log"
+        logMsg LogError "error log"
+        return ())

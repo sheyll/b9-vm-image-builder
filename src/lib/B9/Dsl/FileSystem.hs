@@ -139,7 +139,7 @@ instance CanConvert IoCompiler 'FileSystemBuilder 'VmImage where
 instance CanConvert IoCompiler 'FileSystemImage 'VmImage where
     runConvert hnd _ () = do
         Just (FsCtx fH _) <- useArtifactState hnd
-        fH' <- runConvert fH SFreeFile (Just "Raw-image")
+        fH' <- runConvert fH SFreeFile Nothing
         outH <- createVmImage fH' Raw
         hnd --> outH
         return outH

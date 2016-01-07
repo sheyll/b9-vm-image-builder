@@ -39,7 +39,7 @@ instance CanAdd IoCompiler 'ImageRepository 'VmImage where
     runAdd _ _ (sn,vmI) = do
         Just (VmImgCtx imgFileH srcType) <- useArtifactState vmI
         let SharedImageName snStr = sn
-        imgFile <- freeFileTempCopy imgFileH snStr
+        imgFile <- freeFileTempCopy imgFileH (Just snStr) -- TODO
         ensureImageRepositoryH
         vmI --> imageRepositoryH
         addAction

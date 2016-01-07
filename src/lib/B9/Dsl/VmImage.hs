@@ -21,7 +21,7 @@ $(singletons
 data VmImgCtx = VmImgCtx
     { _vmiFile :: Handle 'FreeFile
     , _vmiType :: ImageType
-    } deriving (Show, Typeable)
+    } deriving (Show,Typeable)
 
 makeLenses ''VmImgCtx
 
@@ -32,7 +32,7 @@ type instance ExportSpec 'VmImage = FilePath
 
 instance CanConvert IoCompiler 'FreeFile 'VmImage where
     runConvert hnd _ imgT = do
-        newHnd <- runConvert hnd SFreeFile (Just (printf "vm-image-%s" (show imgT)))
+        newHnd <- runConvert hnd SFreeFile Nothing
         createVmImage newHnd imgT
 
 instance CanConvert IoCompiler 'VmImage 'FreeFile where
@@ -55,11 +55,12 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
                  (resizeVmImage destImgFile destSize destSizeU srcType))
         hnd --> destImgFileH
         createVmImage destImgFileH srcType
-    runConvert hnd@(Handle _ hndT) _ (Left destType) = do
+    runConvert hnd _ (Left destType) = do
         Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
-        srcFileCopy <- freeFileTempCopy srcImgFileH "conversion-src"
+        let (Handle _ srcImgFileTitle) = srcImgFileH
+        srcFileCopy <- freeFileTempCopy srcImgFileH Nothing
         (destImgFileH,destImgFile) <-
-            createFreeFile (hndT ++ "-converted-to-" ++ show destType)
+            createFreeFile (srcImgFileTitle ++ "-" ++ show destType)
         addAction
             hnd
             (liftIoProgram

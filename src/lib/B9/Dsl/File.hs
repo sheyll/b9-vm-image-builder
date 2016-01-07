@@ -152,16 +152,10 @@ copyFreeFile src dest = modifyArtifactState src $ traverse . fCopies <>~ [dest]
 
 -- | Add a new copy to a 'FreeFile' using a unique temp file containg
 -- a given string for better debugging, and return the path to the copy.
-freeFileTempCopy :: Handle 'FreeFile -> String -> IoCompiler FilePath
-freeFileTempCopy src name = do
-    Just fileCtx <- useArtifactState src
-    dest <-
-        liftIoProgram
-            (mkTemp
-                 (printf
-                      "%s-%s"
-                      (takeFileName (fileCtx ^. fFileName))
-                      (takeFileName name)))
+freeFileTempCopy :: Handle 'FreeFile -> Maybe String -> IoCompiler FilePath
+freeFileTempCopy src@(Handle _ oldName) mname = do
+    let prefix = maybe oldName ((oldName ++ "-") ++) mname
+    dest <- liftIoProgram (mkTemp prefix)
     copyFreeFile src dest
     return dest
 
