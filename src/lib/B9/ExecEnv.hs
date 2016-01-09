@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-| Data types describing the execution environment
     of virtual machine builds.
     'ExecEnv', 'Resources' and 'SharedDirectory' describe how

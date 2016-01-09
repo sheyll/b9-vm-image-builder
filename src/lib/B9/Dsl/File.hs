@@ -9,7 +9,6 @@ import Control.Lens         hiding (from, (<.>))
 import Data.Data
 import Data.Singletons.TH   (singletons)
 import System.FilePath
-import Text.Printf          (printf)
 
 $(singletons [d|
   data FileArtifacts = ExternalFile | FreeFile | LocalDirectory

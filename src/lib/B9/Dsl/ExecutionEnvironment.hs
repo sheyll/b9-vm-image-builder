@@ -1,3 +1,7 @@
+{-| Data types describing the execution environment of virtual machine builds.
+'ExecEnv', 'Resources' and 'SharedDirectory' describe how e.g. "LibVirtLXC"
+should configure and execute scripts.
+    -}
 module B9.Dsl.ExecutionEnvironment where
 
 import B9.B9IO
