@@ -332,14 +332,19 @@ convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
            imgOut)
       cmd
         (printf
-           "qemu-img convert -q -f %s -O %s '%s' '%s'"
+           "qemu-img convert -q -f %s -O %s %s '%s' '%s'"
            (imageFileExtension fmtIn)
            (imageFileExtension fmtOut)
+           (conversionOptions fmtOut)
            imgIn
            imgOut)
       when doMove $ do
         dbgL (printf "Removing '%s'" imgIn)
         liftIO (removeFile imgIn)
+
+conversionOptions :: ImageType -> String
+conversionOptions Vmdk = " -o adapter_type=lsilogic "
+conversionOptions _    = " "
 
 toQemuSizeOptVal :: ImageSize -> String
 toQemuSizeOptVal (ImageSize amount u) = show amount ++ case u of
