@@ -2,6 +2,7 @@
 {-| Definition of 'Script' and functions to convert 'Script's to bash
     scripts. -}
 module B9.ShellScript ( writeSh
+                      , renderScript
                       , emptyScript
                       , CmdVerbosity (..)
                       , Cwd (..)
@@ -156,6 +157,9 @@ toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
         i <- reader ctxIgnoreErrors
         v <- reader ctxVerbosity
         return [Cmd cmd args u c i v]
+
+renderScript :: Script -> String
+renderScript = toBash . toCmds
 
 toBash :: [Cmd] -> String
 toBash cmds = intercalate "\n\n" $ bashHeader ++ (cmdToBash <$> cmds)
