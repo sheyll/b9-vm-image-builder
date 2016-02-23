@@ -5,9 +5,9 @@ import B9.B9IO.IoCompiler
 import B9.Content
 import B9.Dsl.Core
 import B9.Logging
-import Control.Lens         hiding (from, (<.>))
+import Control.Lens       hiding (from, (<.>))
 import Data.Data
-import Data.Singletons.TH   (singletons)
+import Data.Singletons.TH (singletons)
 import System.FilePath
 
 $(singletons [d|

@@ -9,27 +9,28 @@ module B9.B9IO
         getBuildId, getBuildDate, copy, copyDir, moveFile, moveDir, mkDir,
         readFileSize, mkTemp, mkTempIn, mkTempDir, mkTempDirIn,
         getRealPath, getParentDir, getFileName, ensureParentDir,
-        renderContentToFile, createFileSystem, resizeFileSystem,
-        convertVmImage, resizeVmImage, extractPartition, imageRepoLookup,
-        imageRepoPublish, executeInEnv, traceEveryAction, dumpToStrings,
-        dumpToResult, runPureDump, arbitraryIoProgram)
+        readContentFromFile, renderContentToFile, createFileSystem,
+        resizeFileSystem, convertVmImage, resizeVmImage, extractPartition,
+        imageRepoLookup, imageRepoPublish, executeInEnv, traceEveryAction,
+        dumpToStrings, dumpToResult, runPureDump, arbitraryIoProgram)
        where
 
-import B9.CommonTypes
-import B9.Content
-import B9.DiskImages
-import B9.ExecEnv
-import B9.FileSystems
-import B9.Logging
-import B9.PartitionTable
-import B9.QCUtil
-import B9.Repository
-import B9.ShellScript
-import Control.Monad.Free
-import Control.Monad.Trans.Writer.Lazy
-import System.FilePath
-import Test.QuickCheck
-import Text.Printf
+import           B9.CommonTypes
+import           B9.Content
+import           B9.DiskImages
+import           B9.ExecEnv
+import           B9.FileSystems
+import           B9.Logging
+import           B9.PartitionTable
+import           B9.QCUtil
+import           B9.Repository
+import           B9.ShellScript
+import           Control.Monad.Free
+import           Control.Monad.Trans.Writer.Lazy
+import qualified Data.ByteString.Char8           as B
+import           System.FilePath
+import           Test.QuickCheck
+import           Text.Printf
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
@@ -92,6 +93,8 @@ data Action next
                    (FilePath -> next)
     | GetFileName FilePath
                   (FilePath -> next)
+    | ReadContentFromFile FilePath
+                  (B.ByteString -> next)
     | RenderContentToFile FilePath
                           Content
                           Environment
@@ -151,6 +154,7 @@ instance Show (Action a) where
     show (GetRealPath p _) = printf "getRealPath %s" p
     show (GetParentDir p _) = printf "getParentDir %s" p
     show (GetFileName p _) = printf "getFileName %s" p
+    show (ReadContentFromFile p _) = printf "readContentFromFile %s" p
     show (RenderContentToFile f c e _) =
         printf "renderContentToFile %s %s %s" f (show c) (show e)
     show (CreateFileSystem dst fs srcDir files _) =
@@ -253,6 +257,10 @@ getFileName f = liftF $ GetFileName f id
 ensureParentDir :: FilePath -> IoProgram FilePath
 ensureParentDir path = liftF $ EnsureParentDir path id
 
+-- | Read contents from a file.
+readContentFromFile :: FilePath -> IoProgram B.ByteString
+readContentFromFile p = liftF $ ReadContentFromFile p id
+
 -- | Render a given content to a file. Implementations should overwrite the file
 -- if it exists.
 renderContentToFile :: FilePath -> Content -> Environment -> IoProgram ()
@@ -314,127 +322,138 @@ executeInEnv e s d i = liftF $ ExecuteInEnv e s d i ()
 -- 'LogMessage' are logged via 'LogMessage'.
 traceEveryAction :: IoProgram a -> IoProgram a
 traceEveryAction = runB9IO traceAction
-  where
-    traceAction (LogMessage l s n) = do
-        logMsg l s
-        return n
-    traceAction a@(GetBuildDir k) = do
-        traceL a
-        b <- getBuildDir
-        traceL "->" b
-        return $ k b
-    traceAction a@(GetBuildId k) = do
-        traceL a
-        b <- getBuildId
-        traceL "->" b
-        return $ k b
-    traceAction a@(GetBuildDate k) = do
-        traceL a
-        b <- getBuildDate
-        traceL "->" b
-        return $ k b
-    traceAction a@(MkTemp prefix k) = do
-        dbgL a
-        t <- mkTemp prefix
-        traceL "->" t
-        return $ k t
-    traceAction a@(MkTempIn parent prefix k) = do
-        dbgL a
-        t <- mkTempIn parent prefix
-        traceL "->" t
-        return $ k t
-    traceAction a@(MkTempDir prefix k) = do
-        dbgL a
-        t <- mkTempDir prefix
-        traceL "->" t
-        return $ k t
-    traceAction a@(MkTempDirIn parent prefix k) = do
-        dbgL a
-        t <- mkTempDirIn parent prefix
-        traceL "->" t
-        return $ k t
-    traceAction a@(MkDir d n) = do
-        dbgL a
-        mkDir d
-        return n
-    traceAction a@(EnsureParentDir p k) = do
-        dbgL a
-        res <- ensureParentDir p
-        traceL "->" res
-        return $ k res
-    traceAction a@(Copy s d n) = do
-        dbgL a
-        copy s d
-        return n
-    traceAction a@(CopyDir s d n) = do
-        dbgL a
-        copyDir s d
-        return n
-    traceAction a@(MoveFile s d n) = do
-        dbgL a
-        moveFile s d
-        return n
-    traceAction a@(MoveDir s d n) = do
-        dbgL a
-        moveDir s d
-        return n
-    traceAction a@(ReadFileSize f k) = do
-        traceL a
-        s <- readFileSize f
-        traceL "->" s
-        return $ k s
-    traceAction a@(GetParentDir f k) = do
-        traceL a
-        p <- getParentDir f
-        traceL "->" p
-        return $ k p
-    traceAction a@(GetRealPath f k) = do
-        traceL a
-        p <- getRealPath f
-        traceL "->" p
-        return $ k p
-    traceAction a@(GetFileName f k) = do
-        traceL a
-        p <- getFileName f
-        traceL "->" p
-        return $ k p
-    traceAction a@(RenderContentToFile f c e n) = do
-        traceL a
-        renderContentToFile f c e
-        return n
-    traceAction a@(CreateFileSystem dst fs srcDir files n) = do
-        dbgL a
-        createFileSystem dst fs srcDir files
-        return n
-    traceAction a@(ResizeFileSystem f r t n) = do
-        dbgL a
-        resizeFileSystem f r t
-        return n
-    traceAction a@(ConvertVmImage srcF srcT dstF dstT n) = do
-        dbgL a
-        convertVmImage srcF srcT dstF dstT
-        return n
-    traceAction a@(ResizeVmImage i s u t n) = do
-        dbgL a
-        resizeVmImage i s u t
-        return n
-    traceAction a@(ExtractPartition p s d n) = do
-        dbgL a
-        extractPartition p s d
-        return n
-    traceAction a@(ImageRepoLookup s k) = do
-        dbgL a
-        r <- imageRepoLookup s
-        traceL "->" r
-        return $ k r
-    traceAction a@(ImageRepoPublish f t sn n) = do
-        dbgL a
-        imageRepoPublish f t sn
-        return n
-    traceAction a@(ExecuteInEnv e s d i n) = do
-        dbgL a
-        executeInEnv e s d i
-        return n
+  where traceAction (LogMessage l s n) =
+          do logMsg l s
+             return n
+        traceAction a@(GetBuildDir k) =
+          do traceL a
+             b <- getBuildDir
+             traceL "->" b
+             return $ k b
+        traceAction a@(GetBuildId k) =
+          do traceL a
+             b <- getBuildId
+             traceL "->" b
+             return $ k b
+        traceAction a@(GetBuildDate k) =
+          do traceL a
+             b <- getBuildDate
+             traceL "->" b
+             return $ k b
+        traceAction a@(MkTemp prefix k) =
+          do dbgL a
+             t <- mkTemp prefix
+             traceL "->" t
+             return $ k t
+        traceAction a@(MkTempIn parent prefix k) =
+          do dbgL a
+             t <- mkTempIn parent prefix
+             traceL "->" t
+             return $ k t
+        traceAction a@(MkTempDir prefix k) =
+          do dbgL a
+             t <- mkTempDir prefix
+             traceL "->" t
+             return $ k t
+        traceAction a@(MkTempDirIn parent prefix k) =
+          do dbgL a
+             t <- mkTempDirIn parent prefix
+             traceL "->" t
+             return $ k t
+        traceAction a@(MkDir d n) =
+          do dbgL a
+             mkDir d
+             return n
+        traceAction a@(EnsureParentDir p k) =
+          do dbgL a
+             res <- ensureParentDir p
+             traceL "->" res
+             return $ k res
+        traceAction a@(Copy s d n) =
+          do dbgL a
+             copy s d
+             return n
+        traceAction a@(CopyDir s d n) =
+          do dbgL a
+             copyDir s d
+             return n
+        traceAction a@(MoveFile s d n) =
+          do dbgL a
+             moveFile s d
+             return n
+        traceAction a@(MoveDir s d n) =
+          do dbgL a
+             moveDir s d
+             return n
+        traceAction a@(ReadFileSize f k) =
+          do traceL a
+             s <- readFileSize f
+             traceL "->" s
+             return $ k s
+        traceAction a@(GetParentDir f k) =
+          do traceL a
+             p <- getParentDir f
+             traceL "->" p
+             return $ k p
+        traceAction a@(GetRealPath f k) =
+          do traceL a
+             p <- getRealPath f
+             traceL "->" p
+             return $ k p
+        traceAction a@(GetFileName f k) =
+          do traceL a
+             p <- getFileName f
+             traceL "->" p
+             return $ k p
+        traceAction a@(ReadContentFromFile f k) =
+          do traceL a
+             p <- readContentFromFile f
+             traceL "->"
+                    (if B.length p < 1024
+                        then unlines ["read file contents:"
+                                     ,"------8<-----"
+                                     ,B.unpack p
+                                     ,"------8<-----"
+                                     ,""]
+                        else (printf "read %d bytes from file" (B.length p)))
+             return $ k p
+        traceAction a@(RenderContentToFile f c e n) =
+          do traceL a
+             renderContentToFile f c e
+             return n
+        traceAction a@(CreateFileSystem dst fs srcDir files n) =
+          do dbgL a
+             createFileSystem dst fs srcDir files
+             return n
+        traceAction a@(ResizeFileSystem f r t n) =
+          do dbgL a
+             resizeFileSystem f r t
+             return n
+        traceAction a@(ConvertVmImage srcF srcT dstF dstT n) =
+          do dbgL a
+             convertVmImage srcF srcT dstF dstT
+             return n
+        traceAction a@(ResizeVmImage i s u t n) =
+          do dbgL a
+             resizeVmImage i s u t
+             return n
+        traceAction a@(ExtractPartition p s d n) =
+          do dbgL a
+             extractPartition p s d
+             return n
+        traceAction a@(ImageRepoLookup s k) =
+          do dbgL a
+             r <- imageRepoLookup s
+             traceL "->" r
+             return $ k r
+        traceAction a@(ImageRepoPublish f t sn n) =
+          do dbgL a
+             imageRepoPublish f t sn
+             return n
+        traceAction a@(ExecuteInEnv e s d i n) =
+          do dbgL a
+             executeInEnv e s d i
+             return n
 
 -- * Testing support
 
@@ -515,6 +534,9 @@ runPureDump p = runWriter $ runB9IO dump p
     dump a@(GetFileName f k) = do
         tell [show a]
         return (k (takeFileName f))
+    dump a@(ReadContentFromFile _f k) = do
+        tell [show a]
+        return (k (B.pack "some contents"))
     dump a@(RenderContentToFile _f _c _e n) = do
         tell [show a]
         return n
@@ -588,6 +610,8 @@ instance Arbitrary a => Arbitrary (Action a) where
             , GetRealPath <$> smaller arbitraryFilePath <*> smaller arbitrary
             , GetParentDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , GetFileName <$> smaller arbitraryFilePath <*> smaller arbitrary
+            , ReadContentFromFile <$> smaller arbitraryFilePath <*>
+                                      smaller ((. B.unpack) <$> arbitrary)
             , RenderContentToFile <$> smaller arbitraryFilePath <*>
               smaller arbitrary <*>
               smaller arbitrary <*>

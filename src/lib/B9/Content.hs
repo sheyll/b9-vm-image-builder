@@ -104,8 +104,6 @@ data Content
     = RenderErlang (AST Content ErlangPropList)
     | RenderYaml (AST Content YamlObject)
     | FromString String
-    | FromTextFile SourceFile
-    | FromBinaryFile FilePath
     | FromBinary B.ByteString
     | Concat [Content]
     deriving (Read,Show,Typeable,Eq,Data,Generic)
@@ -118,8 +116,6 @@ instance CanRender Content where
   render (RenderErlang ast) = encodeSyntax <$> fromAST ast
   render (RenderYaml ast) = encodeSyntax <$> fromAST ast
   render (FromString str) = return (B.pack str)
-  render (FromTextFile s) = readTemplateFile s
-  render (FromBinaryFile f) = liftIO (B.readFile f)
   render (FromBinary b) = return b
   render (Concat cs) = fmap mconcat $ mapM render cs
 
@@ -137,11 +133,9 @@ instance Arbitrary FileSpec where
 instance Arbitrary Content where
     arbitrary =
         oneof
-            [ FromTextFile <$> smaller arbitrary
-            , RenderErlang <$> smaller arbitrary
+            [ RenderErlang <$> smaller arbitrary
             , RenderYaml <$> smaller arbitrary
             , FromString <$> smaller arbitraryNiceString
-            , FromBinaryFile <$> smaller arbitraryFilePath
             , FromBinary <$> B.pack <$> smaller arbitraryNiceString
             , Concat <$> smaller arbitrary
             ]
