@@ -29,11 +29,16 @@ data FsBuilderCtx = FsBuilderCtx
     , _fsImgH :: Handle 'FileSystemImage
     } deriving (Show, Typeable)
 
+type instance IoCompilerArtifactState 'FileSystemBuilder =
+     FsBuilderCtx
+
 -- | Context of a 'SFileSystemImage'
 data FsCtx = FsCtx
     { _fsFileH :: Handle 'FreeFile
     , _fsType :: FileSystem
     } deriving (Show, Typeable)
+
+type instance IoCompilerArtifactState 'FileSystemImage = FsCtx
 
 makeLenses ''FsCtx
 makeLenses ''FsBuilderCtx

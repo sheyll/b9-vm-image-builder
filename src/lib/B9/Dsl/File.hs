@@ -29,17 +29,23 @@ type instance ConvSpec 'FreeFile 'FreeFile = Maybe String
 type instance ExportSpec 'FreeFile = FilePath
 type instance ExportSpec 'LocalDirectory = FilePath
 
+type instance IoCompilerArtifactState 'ExternalFile = FilePath
+
 -- | Context of a 'SFreeFile'
 data FileCtx = FileCtx
     { _fFileName :: FilePath
     , _fCopies :: [FilePath]
     } deriving (Show, Typeable)
 
+type instance IoCompilerArtifactState 'FreeFile = FileCtx
+
 -- | Context of a 'SLocalDirectory'
 data DirCtx = DirCtx
     { _dirTempDir :: FilePath
     , _dirExports :: [FilePath]
     } deriving (Show, Typeable)
+
+type instance IoCompilerArtifactState 'LocalDirectory = DirCtx
 
 makeLenses ''FileCtx
 makeLenses ''DirCtx

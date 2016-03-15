@@ -13,7 +13,6 @@ import           B9.Content.StringTemplate   as X
 import           B9.Content.YamlObject       as X
 import           B9.QCUtil
 import           Control.Lens.TH
-import           Control.Monad.IO.Class
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Bits

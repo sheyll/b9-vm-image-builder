@@ -12,8 +12,9 @@ import B9.Logging
 import Control.Lens         hiding (from, (<.>))
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Default
 import Data.Data
+import Data.Default
+import Data.Dynamic
 import Data.Graph           as Graph
 import Data.Map             as Map hiding (null)
 import Data.Singletons
@@ -51,12 +52,7 @@ instance MonadIoProgram IoProgBuilder where
 -- | State for artifacts required to generate the output program is
 --   held in a single 'Map' containing the existential key/value types
 --  'SomeHandle' -> 'SomeState'. This way the IoCompiler remains extensible.
-type ArtifactStates = Map SomeHandle SomeState
-
--- | A existential type for holding state for artifacts
-data SomeState where
-        SomeState :: Typeable a => a -> SomeState
-    deriving Typeable
+type ArtifactStates = Map SomeHandle Dynamic
 
 -- | The internal state of the 'IoCompiler' monad
 data Ctx = Ctx
@@ -73,42 +69,46 @@ instance Default Ctx where
 
 makeLenses ''Ctx
 
+-- | To get some type safety when dealing with 'Dynamic' values in the generic
+-- map, use this type family to ensure that the value type always matches the
+-- key type when calling 'getArtifactState', 'useArtifactState',
+-- 'putArtifactState' and 'modifyArtifactState'.
+type family IoCompilerArtifactState (a :: k) :: *
+
 -- | * Artifact state accessors
-
-unpackCast :: (Typeable b) => Maybe SomeState -> Maybe b
-unpackCast x =
-  case x of
-    Nothing -> Nothing
-    Just (SomeState s) -> cast s
-
 useArtifactState
-    :: (Typeable b)
-    => Handle a -> IoCompiler (Maybe b)
+  :: (Typeable b,b ~ IoCompilerArtifactState a)
+  => Handle a -> IoCompiler (Maybe b)
 useArtifactState hnd =
-    unpackCast <$> use (artifactStates . at (SomeHandle hnd))
+  do mv <- use (artifactStates . at (SomeHandle hnd))
+     return (mv >>= fromDynamic)
 
 putArtifactState
-    :: (Typeable b)
+    :: (Typeable b, b ~ IoCompilerArtifactState a)
     => Handle a -> b -> IoCompiler ()
 putArtifactState hnd st =
-    artifactStates . at (SomeHandle hnd) ?= SomeState st
+    artifactStates . at (SomeHandle hnd) ?= toDyn st
+
+appendArtifactState
+  :: (Monoid b,Typeable b,b ~ IoCompilerArtifactState a)
+  => Handle a -> b -> IoCompiler ()
+appendArtifactState hnd st =
+  modifyArtifactState hnd
+                      (Just . maybe st (mappend st))
 
 modifyArtifactState
-    :: (Typeable b)
-    => Handle a -> (Maybe b -> Maybe b) -> IoCompiler ()
+  :: (Typeable b,b ~ IoCompilerArtifactState a)
+  => Handle a -> (Maybe b -> Maybe b) -> IoCompiler ()
 modifyArtifactState hnd f =
-    artifactStates . at (SomeHandle hnd) %= mstate . f . mcast
-    where
-      mcast (Just (SomeState b')) = cast b'
-      mcast Nothing = Nothing
-      mstate = fmap SomeState
+  artifactStates . at (SomeHandle hnd) %= applyAndCast
+  where applyAndCast mv = toDyn <$> (f (mv >>= fromDynamic))
 
 getArtifactState
-    :: (Typeable b)
-    => Handle a -> IoProgBuilder (Maybe b)
+  :: (Typeable b,b ~ IoCompilerArtifactState a)
+  => Handle a -> IoProgBuilder (Maybe b)
 getArtifactState hnd =
-    unpackCast <$> view (artifactStates . at (SomeHandle hnd))
-
+  do mv <- view (artifactStates . at (SomeHandle hnd))
+     return (mv >>= fromDynamic)
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile

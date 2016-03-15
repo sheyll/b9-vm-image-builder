@@ -15,6 +15,9 @@ $(singletons
                           deriving Show
   |])
 
+type instance IoCompilerArtifactState 'PartitionedVmImage =
+     Handle 'FreeFile
+
 type instance ConvSpec 'FreeFile 'PartitionedVmImage = ()
 
 type instance ConvSpec 'PartitionedVmImage 'FreeFile =

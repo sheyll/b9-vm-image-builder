@@ -22,6 +22,8 @@ type instance AddSpec 'ImageRepository 'VmImage =
 
 type instance ConvSpec 'ImageRepository 'VmImage = SharedImageName
 
+type instance IoCompilerArtifactState 'ImageRepository = ImageRepository
+
 -- | A Global handle repesenting the (local) share image repository.
 imageRepositoryH :: Handle 'ImageRepository
 imageRepositoryH = globalHandle SImageRepository

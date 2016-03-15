@@ -23,6 +23,8 @@ data VmImgCtx = VmImgCtx
     , _vmiType :: ImageType
     } deriving (Show,Typeable)
 
+type instance IoCompilerArtifactState 'VmImage = VmImgCtx
+
 makeLenses ''VmImgCtx
 
 type instance ConvSpec 'FreeFile 'VmImage = ImageType
