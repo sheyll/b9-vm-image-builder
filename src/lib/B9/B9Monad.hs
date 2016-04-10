@@ -114,12 +114,12 @@ runB9Monad cfgParser cfg action = do
     createBuildDir buildId =
         if uniqueBuildDirs cfg
             then do
-                let subDir = "BUILD-" ++ buildId
+                let subDir = "BUILD-" <> buildId
                 buildDir <- resolveBuildDir subDir
                 createDirectory buildDir
                 canonicalizePath buildDir
             else do
-                let subDir = "BUILD-" ++ buildId
+                let subDir = "BUILD-" <> buildId
                 buildDir <- resolveBuildDir subDir
                 createDirectoryIfMissing True buildDir
                 canonicalizePath buildDir
@@ -207,11 +207,11 @@ cmdWithStdIn toStdOut p = do
                 else cmdLogger LogTrace
     (cpIn,cpOut,cpErr,cph) <- streamingProcess p
     e <-
-        liftIO $
+        liftIO .
         runConcurrently $
-        Concurrently (cpOut $$ outPipe) *>
-        Concurrently (cpErr $$ cmdLogger LogInfo) *>
-        Concurrently (waitForStreamingProcess cph)
+        (Concurrently (cpOut $$ outPipe) *>
+         Concurrently (cpErr $$ cmdLogger LogInfo) *>
+         Concurrently (waitForStreamingProcess cph))
     checkExitCode e
     return cpIn
   where
@@ -221,7 +221,7 @@ cmdWithStdIn toStdOut p = do
         return $
             \level ->
                  CL.mapM_ (logImpl lv lfh level . B.unpack)
-    checkExitCode ExitSuccess = (traceL "COMMAND SUCCESS" :: B9 ())
+    checkExitCode ExitSuccess = traceL "COMMAND SUCCESS" :: B9 ()
     checkExitCode ec@(ExitFailure e) = do
         errorL "COMMAND FAILED: " e "!"
         liftIO $ exitWith ec
@@ -235,7 +235,7 @@ instance (a ~ ()) => CanLog (B9 a) where
                  ctx
                  { bsProf = LogEvent level msg : bsProf ctx
                  }
-        B9 $ liftIO $ logImpl lv lfh level msg
+        B9 . liftIO $ logImpl lv lfh level msg
 
 logImpl :: Maybe LogLevel -> Maybe SysIO.Handle -> LogLevel -> String -> IO ()
 logImpl minLevel mh level msg = do
@@ -249,7 +249,7 @@ formatLogMsg :: LogLevel -> String -> IO String
 formatLogMsg l msg = do
     utct <- getCurrentTime
     let time = formatTime defaultTimeLocale "%H:%M:%S" utct
-    return $ unlines $ printf "[%s] %s - %s" (printLevel l) time <$> lines msg
+    return . unlines $ printf "[%s] %s - %s" (printLevel l) time <$> lines msg
 
 printLevel :: LogLevel -> String
 printLevel l =
