@@ -59,7 +59,7 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
         createVmImage destImgFileH srcType
     runConvert hnd _ (Left destType) = do
         Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
-        let (Handle _ srcImgFileTitle) = srcImgFileH
+        let srcImgFileTitle = case srcImgFileH of (Handle _ x) -> x
         srcFileCopy <- freeFileTempCopy srcImgFileH Nothing
         (destImgFileH,destImgFile) <-
             createFreeFile (srcImgFileTitle ++ "-" ++ show destType)
@@ -71,7 +71,7 @@ instance CanConvert IoCompiler 'VmImage 'VmImage where
         createVmImage destImgFileH destType
 
 instance CanExport IoCompiler 'VmImage where
-    runExport hnd@(Handle SVmImage _) destFile = do
+    runExport hnd@(Handle _ _) destFile = do
         Just (VmImgCtx fH _) <- useArtifactState hnd
         runExport fH destFile
 

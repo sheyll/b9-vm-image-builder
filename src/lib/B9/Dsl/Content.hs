@@ -13,13 +13,12 @@ import Data.Monoid
 import Data.Singletons.TH hiding ((%~))
 
 $(singletons
-    [d|
-
+      [d|
   data GeneratedContent = GeneratedContent
                         | StaticContent
                         deriving Show
   |])
-
+      
 type instance CreateSpec 'GeneratedContent = (Content, String)
 
 type instance AddSpec 'GeneratedContent 'GeneratedContent = Content
@@ -43,7 +42,7 @@ instance CanCreate IoCompiler 'GeneratedContent where
     do (hnd,_) <- allocHandle SGeneratedContent title
        putArtifactState hnd
                         [PureContent c]
-       return hnd 
+       return hnd
 
 instance CanConvert IoCompiler 'GeneratedContent 'FreeFile where
   runConvert hnd@(Handle _ dest) _ env =

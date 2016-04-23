@@ -17,6 +17,9 @@ $(singletons
                        deriving (Show, Typeable)
   |])
 
+instance Show (Sing 'ImageRepository) where
+  show _ = show ImageRepository
+
 type instance AddSpec 'ImageRepository 'VmImage =
      (SharedImageName, Handle 'VmImage)
 

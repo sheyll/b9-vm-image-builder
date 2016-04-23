@@ -19,8 +19,6 @@ import           B9.Repository
 import           Control.Applicative
 import           Control.Concurrent.Async (Concurrently (..))
 import           Control.Exception ( bracket )
-import           Control.Monad
-import           Control.Monad.IO.Class
 import           Control.Monad.State
 import qualified Data.ByteString.Char8 as B
 import           Data.Conduit (($$))
@@ -28,16 +26,10 @@ import qualified Data.Conduit.List as CL
 import           Data.Conduit.Process
 import           Data.ConfigFile as CF
 import           Data.Functor ()
-import           Data.Maybe
 import           Data.Time.Clock
 import           Data.Time.Format
-import           Data.Word ( Word32 )
-import           System.Directory
-import           System.Exit
-import           System.FilePath
 import qualified System.IO as SysIO
 import           System.Random ( randomIO )
-import           Text.Printf
 
 data BuildState = BuildState
     { bsBuildId :: String

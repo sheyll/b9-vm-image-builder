@@ -84,6 +84,7 @@ library
                    , B9.Dsl.ExecutionEnvironment
                    , B9.Dsl.File
                    , B9.Dsl.FileSystem
+                   , B9.Dsl.Handle
                    , B9.Dsl.ImageRepository
                    , B9.Dsl.Logging
                    , B9.Dsl.PartitionedVmImage

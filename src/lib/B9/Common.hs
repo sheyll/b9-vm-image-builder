@@ -17,6 +17,9 @@ import Data.Maybe as ReExport
 import Data.Default as ReExport
 import Data.Function as ReExport (on)
 import Data.Version as ReExport
+import Data.Proxy as ReExport
+
+import GHC.TypeLits as ReExport
 
 import Text.Show.Pretty as ReExport (ppShow)
 import Text.Printf as ReExport (printf)
