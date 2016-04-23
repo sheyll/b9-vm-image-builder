@@ -1,11 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 -- | Install and deploy VM-images using a simple DSL.
 module B9.Dsl
-       (module X, newCloudInit, addMetaData, addUserData,
-        writeCloudInitDir, writeCloudInit, addCloudInitToArtifact,
+       (module X,
         externalFile, externalFileTempCopy, fromFile, outputFile, addFile,
         addExe, addFileP, newDirectory, exportDir, createContent,
-        appendContent, ($=), addTemplate, addTemplateP, addTemplateExe,
+        appendContent, addTemplate, addTemplateP, addTemplateExe,
         addFileFull, addFileFromContent, runCommand, sh, boot, lxc, lxc32,
         mount, mountDir, mountDirRW, fromShared, sharedAs, rootImage,
         dataImage, mountAndShareSharedImage, mountAndShareNewImage)
@@ -39,81 +38,7 @@ import System.FilePath
 import Text.Printf
 
 -- * Cloud-init
-
--- | Create a new cloud init context
-newCloudInit :: (CanCreate m 'CloudInit)
-                => String -> ProgramT m (Handle 'CloudInit)
-newCloudInit = create SCloudInit
-
--- | Add an abstract syntax tree of a document to the __meta data__ of a the cloud
--- init context
-addMetaData :: (CanAdd m 'CloudInit 'CloudInitMetaData)
-               => Handle 'CloudInit -> AST Content YamlObject -> ProgramT m ()
-addMetaData hnd = add hnd SCloudInitMetaData
-
--- | Add an abstract syntax tree of a document to the __user data__ of a the cloud
--- init context
-addUserData :: (CanAdd m 'CloudInit 'CloudInitUserData)
-               => Handle 'CloudInit -> AST Content YamlObject -> ProgramT m ()
-addUserData hnd = add hnd SCloudInitUserData
-
--- | Render the cloud-init contents to a directory.
-writeCloudInitDir :: (CanCreate m 'LocalDirectory
-                     ,CanExport m 'LocalDirectory
-                     ,CanAdd m 'LocalDirectory 'FreeFile
-                     ,CanConvert m 'CloudInit 'CloudInitMetaData
-                     ,CanConvert m 'CloudInit 'CloudInitUserData
-                     ,CanConvert m 'CloudInitMetaData 'GeneratedContent
-                     ,CanConvert m 'CloudInitUserData 'GeneratedContent
-                     ,CanConvert m 'GeneratedContent 'FreeFile)
-                     => Handle 'CloudInit -> FilePath -> ProgramT m ()
-writeCloudInitDir h dst = do
-    dirH <- newDirectory
-    addCloudInitToArtifact h dirH
-    export dirH dst
-
--- | Render the cloud-init contents into an ISO or VFAT image.
-writeCloudInit :: (CanCreate m 'FileSystemBuilder
-                  ,CanConvert m 'FileSystemBuilder 'FileSystemImage
-                  ,CanExport m 'FileSystemImage
-                  ,CanAdd m 'LocalDirectory 'FreeFile
-                  ,CanAdd m 'FileSystemBuilder 'FreeFile
-                  ,CanConvert m 'CloudInit 'CloudInitMetaData
-                  ,CanConvert m 'CloudInit 'CloudInitUserData
-                  ,CanConvert m 'CloudInitMetaData 'GeneratedContent
-                  ,CanConvert m 'CloudInitUserData 'GeneratedContent
-                  ,CanConvert m 'GeneratedContent 'FreeFile)
-                  => Handle 'CloudInit
-                  -> FileSystem
-                  -> FilePath
-                  -> ProgramT m ()
-writeCloudInit h fs dst = do
-    fsBuilder <- create SFileSystemBuilder (FileSystemSpec fs "cidata" 2 MB)
-    fsImage <- convert fsBuilder SFileSystemImage ()
-    export fsImage dst
-    addCloudInitToArtifact h fsBuilder
-
--- | Render the cloud-init contents into an artifact to which 'FreeFile's can be
--- added.
-addCloudInitToArtifact
-    :: (AddSpec a 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanConvert m 'CloudInit 'CloudInitMetaData
-       ,CanConvert m 'CloudInit 'CloudInitUserData
-       ,CanConvert m 'CloudInitMetaData 'GeneratedContent
-       ,CanConvert m 'CloudInitUserData 'GeneratedContent
-       ,CanConvert m 'GeneratedContent 'FreeFile
-       ,CanAdd m a 'FreeFile)
-    => Handle 'CloudInit -> Handle a -> ProgramT m ()
-addCloudInitToArtifact chH destH = do
-    metaData <- convert chH SCloudInitMetaData ()
-    metaDataContent <- convert metaData SGeneratedContent ()
-    metaDataFile <- convert metaDataContent SFreeFile ()
-    add destH SFreeFile (fileSpec "meta-data", metaDataFile)
-    userData <- convert chH SCloudInitUserData ()
-    userDataContent <- convert userData SGeneratedContent ()
-    userDataFile <- convert userDataContent SFreeFile ()
-    add destH SFreeFile (fileSpec "user-data", userDataFile)
-
+-- TODO
 
 -- * Adding Files to an Artifact
 
@@ -214,13 +139,6 @@ appendContent hnd = add hnd SGeneratedContent
 
 -- * Template variable definitions
 
--- | Create a template variable binding. The bindings play a role in generated
--- 'Content' and in the 'addTemplate' (and similar) functions.
-($=) :: CanAdd m 'VariableBindings 'TemplateVariable
-        => String -> String -> ProgramT m ()
-key $= value =
-    add globalVars STemplateVariable (key, value)
-
 -- * 'Content' to file rendering functions
 
 -- | Generate a file to an artifact from a local file template.
@@ -263,7 +181,8 @@ addTemplateP
 addTemplateP dstH f p = do
     let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
         srcFile = Source ExpandVariables f
-    addFileFromContent dstH (FromTextFile srcFile) dstSpec
+    undefined
+    -- TODO addFileFromContent dstH (FromTextFile srcFile) dstSpec
 
 -- | Add an existing file from the file system, optionally with template
 -- variable expansion to an artifact at a 'FileSpec'.
@@ -278,7 +197,8 @@ addFileFull
 addFileFull dstH srcFile dstSpec =
     case srcFile of
         (Source ExpandVariables _) ->
-            addFileFromContent dstH (FromTextFile srcFile) dstSpec
+            -- TODO addFileFromContent dstH (FromTextFile srcFile) dstSpec
+            undefined
         (Source NoConversion f) -> do
             origH <- create SExternalFile f
             tmpH <- convert origH SFreeFile ()
@@ -299,7 +219,7 @@ addFileFromContent dstH content dstSpec = do
             (printf
                  "contents-of-%s"
                  (dstSpec ^. fileSpecPath . to takeFileName))
-    tmpFileH <- convert cH SFreeFile ()
+    tmpFileH <- convert cH SFreeFile (Environment [])
     add dstH SFreeFile (dstSpec, tmpFileH)
 
 -- * Execution environment

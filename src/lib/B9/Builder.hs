@@ -5,12 +5,7 @@ module B9.Builder
        (runProgram, runProgramWithConfigAndCliArgs, runIoProgram,
         runIoProgramNoConfig, defaultMain, configure, module X)
        where
-import           Control.Monad.IO.Class
-import           Control.Monad
-import           Data.Monoid
-import           System.Directory
-import           Text.Printf            (printf)
-import           Text.Show.Pretty       (ppShow)
+import           B9.Common
 import           B9.Dsl                 as X
 import           B9.B9IO                as X
 import           B9.B9IO.IoCompiler     as X
@@ -24,12 +19,12 @@ import           Data.ConfigFile        as CF
 
 
 -- | Use this in your 'B9' script to run a 'Program'.
-defaultMain :: Program a -> IO ()
+defaultMain :: ReaderT Environment Program a -> IO ()
 defaultMain = void . runProgramWithConfigAndCliArgs
 
 -- | Execute a 'Program' using all b9 command line options
 -- and settings from the b9 configuration file.
-runProgramWithConfigAndCliArgs :: Program a -> IO Bool
+runProgramWithConfigAndCliArgs :: ReaderT Environment Program a -> IO Bool
 runProgramWithConfigAndCliArgs p = do
     (opts,vs) <- getGlobalOptsFromCLI
     let cfgCli = cliB9Config opts
@@ -53,17 +48,15 @@ configure b9ConfigPath existingConfig = do
     readB9Config b9ConfigPath
 
 -- | Execute a 'Program'.
-runProgram :: Program Bool
+runProgram :: ReaderT Environment Program Bool
            -> Environment
            -> ConfigParser
            -> B9Config
            -> IO Bool
-runProgram dsl (Environment vs) cfgParser cliCfg =
+runProgram dsl env cfgParser cliCfg =
     runIoProgram (traceEveryAction (compile dsl')) cfgParser cliCfg
   where
-    dsl' = do
-        mapM_ (uncurry ($=)) vs
-        dsl
+    dsl' = runReaderT dsl env
 
 runIoProgramNoConfig :: IoProgram a -> IO a
 runIoProgramNoConfig p =  do

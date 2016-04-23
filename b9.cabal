@@ -62,6 +62,7 @@ source-repository head
 
 library
   exposed-modules:   B9
+                   , B9.Common
                    , B9.B9Config
                    , B9.B9IO
                    , B9.B9IO.Impl

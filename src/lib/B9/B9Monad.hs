@@ -11,6 +11,7 @@ module B9.B9Monad
         getRemoteRepos, getRepoCache, cmd, cmdRaw)
        where
 
+import           B9.Common
 import           B9.B9Config
 import           B9.ExecEnv
 import           B9.Logging

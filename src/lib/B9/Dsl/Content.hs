@@ -43,7 +43,7 @@ instance CanCreate IoCompiler 'GeneratedContent where
     do (hnd,_) <- allocHandle SGeneratedContent title
        putArtifactState hnd
                         [PureContent c]
-       return hnd
+       return hnd 
 
 instance CanConvert IoCompiler 'GeneratedContent 'FreeFile where
   runConvert hnd@(Handle _ dest) _ env =

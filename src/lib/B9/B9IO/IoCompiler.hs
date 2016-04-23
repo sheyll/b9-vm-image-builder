@@ -33,7 +33,7 @@ instance MonadIoProgram IoCompiler where
     liftIoProgram = IoCompiler . lift
 
 -- | An alias for 'ProgramT's over 'IoCompiler'
-type Program a = ProgramT IoCompiler a
+type Program = ProgramT IoCompiler
 
 -- | This monad contains all information gathered in 'Ctx' but is
 -- 'ReaderT'. This is mainly to prevent an action added with 'addAction' to be

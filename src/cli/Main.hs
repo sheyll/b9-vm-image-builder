@@ -88,7 +88,7 @@ runPull mName _cfgFile cp conf =
 
 runRun :: SharedImageName -> [String] -> BuildAction
 runRun (SharedImageName name) cmdAndArgs _cfgFile cp conf =
-    runProgram prog (Environment []) cp conf'
+    runProgram (lift prog) (Environment []) cp conf'
   where
     conf' =
         conf
