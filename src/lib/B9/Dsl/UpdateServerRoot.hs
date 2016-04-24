@@ -4,7 +4,6 @@ module B9.Dsl.UpdateServerRoot where
 
 import B9.B9IO
 import B9.B9IO.IoCompiler
-import B9.Content
 import B9.DiskImages
 import B9.Dsl.Core
 import B9.Dsl.File
@@ -19,15 +18,10 @@ $(singletons
                         deriving Show
   |])
 
-type instance AddSpec 'UpdateServerRoot 'VmImage =
-     (SharedImageName, Handle 'VmImage)
-
-type instance ExtractionArg 'LocalDirectory 'UpdateServerRoot = ()
-
-type instance IoCompilerArtifactState 'UpdateServerRoot =
-     Handle 'LocalDirectory
+type instance IoCompilerArtifactState 'UpdateServerRoot = Handle 'LocalDirectory
 
 instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
+  type AddSpec IoCompiler 'UpdateServerRoot 'VmImage = (SharedImageName, Handle 'VmImage)
   runAdd hnd _ (sn,vmI) =
     do Just (destDirH :: Handle 'LocalDirectory) <- useArtifactState hnd
        Just tmpDirCtx <- useArtifactState destDirH
@@ -49,17 +43,14 @@ instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
                            then convertVmImage srcFile srcType imgFile Raw
                            else moveFile srcFile imgFile
                         imgSize <- B9.B9IO.readFileSize imgFile
-                        renderContentToFile sizeFile
-                                            (FromString (show imgSize))
-                                            (Environment [])
+                        writeContentToFile sizeFile (showB imgSize)
                         bId <- B9.B9IO.getBuildId
                         bT <- B9.B9IO.getBuildDate
-                        renderContentToFile versionFile
-                                            (FromString (printf "%s-%s" bId bT))
-                                            (Environment [])))
+                        writeContentToFile versionFile
+                                           (packB (printf "%s-%s" bId bT))))
 
 instance CanExtract IoCompiler 'LocalDirectory 'UpdateServerRoot where
-  runConvert destDirH _ () =
+  runExtract destDirH _ () =
     do (hnd,_) <- allocHandle SUpdateServerRoot "update-server-root"
        hnd --> destDirH
        putArtifactState hnd destDirH

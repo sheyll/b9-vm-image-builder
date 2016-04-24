@@ -7,24 +7,14 @@ module B9.Content.StringTemplate
         withEnvironment)
        where
 
-import           Control.Arrow hiding (second)
-import           Control.Monad.Reader
-import           Data.Bifunctor
+import           B9.Common
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
-import           Control.Parallel.Strategies
-import           GHC.Generics (Generic)
-import           Data.Binary
-import           Data.Data
-import           Data.Hashable
-import           Data.Maybe
 import qualified Data.Text as T
 import           Data.Text.Encoding as E
 import           Data.Text.Lazy.Encoding as LE
 import           Data.Text.Template (render,templateSafe,renderA)
 import           Test.QuickCheck
-import           Text.Printf
-import           Text.Show.Pretty (ppShow)
 import           B9.ConfigUtils
 import           B9.QCUtil
 
@@ -57,7 +47,7 @@ withEnvironment env action = runReaderT action (Environment env)
 
 readTemplateFile
     :: (MonadIO m, MonadReader Environment m)
-    => SourceFile -> m B.ByteString
+    => SourceFile -> m ByteString
 readTemplateFile (Source conv f') = do
     Environment env <- ask
     case substE env f' of
@@ -93,13 +83,12 @@ subst env templateStr =
 
 -- String template substitution via dollar
 substE :: [(String, String)] -> String -> Either String String
-substE env templateStr =
-    second
-        (T.unpack . E.decodeUtf8)
-        (substEB env (E.encodeUtf8 (T.pack templateStr)))
+substE env templateStr = do
+  s <- substEB env (packB templateStr)
+  return (unpackUtf8 s)
 
 -- String template substitution via dollar
-substEB :: [(String, String)] -> B.ByteString -> Either String B.ByteString
+substEB :: [(String, String)] -> ByteString -> Either String ByteString
 substEB env templateStr = do
     t <- template'
     res <- renderA t env'

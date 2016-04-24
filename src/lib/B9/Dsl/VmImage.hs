@@ -5,7 +5,6 @@ import B9.B9IO.IoCompiler
 import B9.DiskImages
 import B9.Dsl.Core
 import B9.Dsl.File
-import Data.Data
 import Data.Singletons.TH
 
 $(singletons
@@ -25,26 +24,23 @@ type instance IoCompilerArtifactState 'VmImage = VmImgCtx
 
 makeLenses ''VmImgCtx
 
-type instance ExtractionArg 'FreeFile 'VmImage = ImageType
-type instance ExtractionArg 'VmImage 'FreeFile = ()
-type instance ExtractionArg 'VmImage 'VmImage = Either ImageType ImageSize
-type instance ExportSpec 'VmImage = FilePath
-
 instance CanExtract IoCompiler 'FreeFile 'VmImage where
-    runConvert hnd _ imgT = do
-        newHnd <- runConvert hnd SFreeFile Nothing
+    type ExtractionArg IoCompiler 'FreeFile 'VmImage = ImageType
+    runExtract hnd _ imgT = do
+        newHnd <- runExtract hnd SFreeFile Nothing
         createVmImage newHnd imgT
 
 instance CanExtract IoCompiler 'VmImage 'FreeFile where
-    runConvert hnd _ () = do
+    runExtract hnd _ () = do
         Just (VmImgCtx srcFileH _srcType) <- useArtifactState hnd
         return srcFileH
 
 instance CanExtract IoCompiler 'VmImage 'VmImage where
-    runConvert hnd _ (Right (ImageSize destSize destSizeU)) = do
+    type ExtractionArg IoCompiler 'VmImage 'VmImage = Either ImageType ImageSize
+    runExtract hnd _ (Right (ImageSize destSize destSizeU)) = do
         Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
         destImgFileH <-
-            runConvert
+            runExtract
                 srcImgFileH
                 SFreeFile
                 (Just (printf "resized-%d-%s" destSize (show destSizeU)))
@@ -55,7 +51,7 @@ instance CanExtract IoCompiler 'VmImage 'VmImage where
                  (resizeVmImage destImgFile destSize destSizeU srcType))
         hnd --> destImgFileH
         createVmImage destImgFileH srcType
-    runConvert hnd _ (Left destType) = do
+    runExtract hnd _ (Left destType) = do
         Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
         let srcImgFileTitle = case srcImgFileH of (Handle _ x) -> x
         srcFileCopy <- freeFileTempCopy srcImgFileH Nothing
@@ -69,6 +65,7 @@ instance CanExtract IoCompiler 'VmImage 'VmImage where
         createVmImage destImgFileH destType
 
 instance CanExport IoCompiler 'VmImage where
+    type ExportSpec IoCompiler 'VmImage = FilePath
     runExport hnd@(Handle _ _) destFile = do
         Just (VmImgCtx fH _) <- useArtifactState hnd
         runExport fH destFile

@@ -14,7 +14,6 @@ import B9.Dsl.VmImage
 import B9.ExecEnv
 import B9.FileSystems
 import B9.ShellScript (Script(..))
-import Data.Data
 import Data.Singletons.TH
 
 -- | Singletons for the execuition environment library.
@@ -47,23 +46,8 @@ instance Default ExecEnvCtx where
 
 makeLenses ''ExecEnvCtx
 
-type instance CreateSpec 'ExecutionEnvironment = ExecEnvSpec
-
-type instance AddSpec 'ExecutionEnvironment 'ExecutableScript =
-     Script
-
-type instance AddSpec 'ExecutionEnvironment 'FreeFile =
-     (FileSpec, Handle 'FreeFile)
-
-type instance AddSpec 'ExecutionEnvironment 'LocalDirectory =
-     SharedDirectory
-
-type instance ExtractionArg 'ExecutionEnvironment 'VmImage =
-     (Handle 'VmImage, MountPoint)
-
-type instance ExtractionArg 'ExecutionEnvironment 'FreeFile = FilePath
-
 instance CanCreate IoCompiler 'ExecutionEnvironment where
+  type CreateSpec IoCompiler 'ExecutionEnvironment = ExecEnvSpec
   runCreate _ e =
     do (hnd,_) <-
          allocHandle SExecutionEnvironment
@@ -100,9 +84,11 @@ instance CanCreate IoCompiler 'ExecutionEnvironment where
        return hnd
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'ExecutableScript where
+  type AddSpec IoCompiler 'ExecutionEnvironment 'ExecutableScript = Script
   runAdd hnd _ cmds = modifyArtifactState hnd $ traverse . execScript <>~ cmds
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
+  type AddSpec IoCompiler 'ExecutionEnvironment 'FreeFile = (FileSpec, Handle 'FreeFile)
   runAdd hnd _ (destSpec,srcH) =
     do srcH --> hnd
        Just eCxt <- useArtifactState hnd
@@ -115,11 +101,13 @@ instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
          incFileScript bId incFile destSpec
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'LocalDirectory where
+  type AddSpec IoCompiler 'ExecutionEnvironment 'LocalDirectory = SharedDirectory
   runAdd hnd _ sharedDir =
     modifyArtifactState hnd $ traverse . execBindMounts <>~ [sharedDir]
 
 instance CanExtract IoCompiler 'ExecutionEnvironment 'FreeFile where
-  runConvert hnd _ src =
+  type ExtractionArg IoCompiler 'ExecutionEnvironment 'FreeFile = FilePath
+  runExtract hnd _ src =
     do Just ec <- useArtifactState hnd
        (fh,f) <-
          createFreeFileIn
@@ -132,22 +120,23 @@ instance CanExtract IoCompiler 'ExecutionEnvironment 'FreeFile where
        return fh
 
 instance CanExtract IoCompiler 'ExecutionEnvironment 'VmImage where
-  runConvert hnd _ (imgH,mp) =
+  type ExtractionArg IoCompiler 'ExecutionEnvironment 'VmImage = (Handle 'VmImage, MountPoint)
+  runExtract hnd _ (imgH,mp) =
     do rawH <-
-         runConvert imgH
+         runExtract imgH
                     SVmImage
                     (Left Raw)
        rawH --> hnd
-       rawFH <- runConvert rawH SFreeFile ()
+       rawFH <- runExtract rawH SFreeFile ()
        mntH <-
-         runConvert rawFH
+         runExtract rawFH
                     SFreeFile
                     (Just (printf "mounted-at-%s" (printMountPoint mp)))
        Just (FileCtx mnt _) <- useArtifactState mntH
        modifyArtifactState hnd $ traverse . execImages <>~
          [(Image mnt Raw Ext4,mp)]
        hnd --> mntH
-       runConvert mntH SVmImage Raw
+       runExtract mntH SVmImage Raw
 
 -- | Generate a 'Script' that copies an included file in a
 -- container from the mounted directory to the actual destination.

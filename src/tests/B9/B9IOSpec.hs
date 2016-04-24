@@ -81,18 +81,15 @@ actionSpec =
        it "handles GetParentDir" $
            let p = getParentDir "from"
            in runPureDump p `shouldBe` (".", ["getParentDir from"])
-       it "handles RenderContentToFile" $
-           let p = renderContentToFile testFile testContent testEnv
+       it "handles WriteContentToFile" $
+           let p = writeContentToFile testFile testContent
                testFile = "test-file"
-               testContent =
-                   RenderYaml (ASTObj [("test-field", ASTString "test-value")])
-               testEnv = Environment []
+               testContent = B.pack "hello world!\n"
            in dumpToStrings p `shouldBe`
               [ printf
-                    "renderContentToFile %s %s %s"
+                    "writeContentToFile %s %s %s"
                     testFile
-                    (show testContent)
-                    (show testEnv)]
+                    (show testContent)]
        it "handles CreateFileSystem" $
            runPureDump
                (createFileSystem

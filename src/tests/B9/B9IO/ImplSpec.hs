@@ -48,7 +48,7 @@ spec =
           (b1,b2) <- (runIoProgramNoConfig $ (,) <$> getBuildDate <*> getBuildDate)
           b1 `shouldBe` b2
        it "can read a file size" $ do
-         runIoProgramNoConfig (do renderContentToFile "/tmp/reaadFileSizeTest" (FromString "hello") (Environment [])
+         runIoProgramNoConfig (do writeContentToFile "/tmp/reaadFileSizeTest" (FromString "hello") (Environment [])
                                   readFileSize "/tmp/reaadFileSizeTest") `shouldReturn` 5
 #else
     return ()

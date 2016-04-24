@@ -221,7 +221,7 @@ fileInclusionSpec =
                   expected = do
                       src <- mkTemp "test-c-0"
                       _dst <- ensureParentDir "/tmp/rendered-content.file"
-                      renderContentToFile
+                      writeContentToFile
                           src
                           (FromString "test-content")
                           (Environment [])
@@ -458,12 +458,12 @@ cloudInitIsoImageSpec =
                        mkTemp "iid-123-meta-data-1"
                    userDataFile <-
                        mkTemp "iid-123-user-data-2"
-                   renderContentToFile
+                   writeContentToFile
                        metaDataFile
                        (minimalMetaData iid)
                        (Environment [])
                    moveFile metaDataFile (isoDir </> "meta-data")
-                   renderContentToFile
+                   writeContentToFile
                        userDataFile
                        minimalUserData
                        (Environment [])
@@ -516,11 +516,11 @@ cloudInitDirSpec =
                       dumpToStrings $
                       do m <- mkTemp "iid-123-meta-data-1"
                          u <- mkTemp "iid-123-user-data-2"
-                         renderContentToFile
+                         writeContentToFile
                              m
                              (minimalMetaData iid)
                              (Environment [])
-                         renderContentToFile
+                         writeContentToFile
                              u
                              minimalUserData
                              (Environment [])
@@ -544,10 +544,10 @@ cloudInitWithContentSpec =
     describe "compile cloudInitWithContent" $
     do it "merges meta-data" $
            cmds `should've`
-           dumpToStrings (renderContentToFile mdPath mdContent templateVars)
+           dumpToStrings (writeContentToFile mdPath mdContent templateVars)
        it "merges user-data" $
            cmds `should've`
-           dumpToStrings (renderContentToFile udPath udContent templateVars)
+           dumpToStrings (writeContentToFile udPath udContent templateVars)
   where
     mdPath = "/BUILD/iid-123-meta-data-2-XXXX"
     udPath = "/BUILD/iid-123-user-data-3-XXXX"
@@ -724,13 +724,13 @@ updateServerImageSpec =
                    mkDir tmpBase
                    convertVmImage srcImgCopy QCow2 tmpImg Raw
                    size <- B9.B9IO.readFileSize tmpImg
-                   renderContentToFile
+                   writeContentToFile
                        tmpSize
                        (FromString (show size))
                        (Environment [])
                    bId <- B9.B9IO.getBuildId
                    bT <- B9.B9IO.getBuildDate
-                   renderContentToFile
+                   writeContentToFile
                        tmpVersion
                        (FromString (printf "%s-%s" bId bT))
                        (Environment [])

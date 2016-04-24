@@ -1,9 +1,9 @@
 -- | Implement 'B9IO' to do the real-thing(tm).
 module B9.B9IO.Impl where
 
+import           B9.Common
 import           B9.B9IO
 import qualified B9.B9Monad             as B9Monad
-import           B9.Content
 import           B9.DiskImages
 import           B9.ExecEnv
 import           B9.FileSystems
@@ -15,18 +15,10 @@ import           B9.QemuImg
 import           B9.RepositoryIO
 import           B9.ShellScript
 import qualified Conduit                as C
-import           Control.Lens           hiding ((<.>))
-import           Control.Monad.IO.Class
-import           Control.Monad.Reader
 import qualified Data.ByteString        as B
 import qualified Data.Conduit.Binary    as CB
-import qualified Data.Text              as T
-import qualified Data.Text.Encoding     as E
-import           System.Directory
-import           System.FilePath
 import           System.IO
 import           System.Random
-import           Text.Printf
 
 -- | Execute a 'B9IO' Program in the 'B9' monad.
 executeIoProg :: IoProgram a -> B9Monad.B9 a
@@ -101,10 +93,9 @@ executeIoProg = runB9IO go
     go (ReadContentFromFile f k) = do
         c <- liftIO (B.readFile f)
         return (k c)
-    go (RenderContentToFile f c e n) = do
-        result <- runReaderT (render c) e
-        traceL "rendered:" (T.unpack (E.decodeUtf8 result))
-        liftIO $ B.writeFile f result
+    go (WriteContentToFile f c n) = do
+        traceL "writing:" (unpackUtf8 c)
+        liftIO $ B.writeFile f c
         return n
     go (CreateFileSystem dst fs srcDir files n) = do
         createFSWithFiles dst fs srcDir files

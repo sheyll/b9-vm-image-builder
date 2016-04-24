@@ -4,27 +4,12 @@ import B9.B9IO
 import B9.B9IO.IoCompiler
 import B9.Content
 import B9.Dsl.Core
-import Data.Data
 import Data.Singletons.TH (singletons)
 
 $(singletons [d|
   data FileArtifacts = ExternalFile | FreeFile | LocalDirectory
              deriving Show
   |])
-
-type instance CreateSpec 'ExternalFile = FilePath
-type instance CreateSpec 'FreeFile = Maybe String
-type instance CreateSpec 'LocalDirectory = ()
-
-type instance AddSpec 'LocalDirectory 'FreeFile =
-     (FileSpec, Handle 'FreeFile)
-
-type instance ExtractionArg 'ExternalFile 'FreeFile = ()
-type instance ExtractionArg 'FreeFile 'ExternalFile = FilePath
-type instance ExtractionArg 'FreeFile 'FreeFile = Maybe String
-
-type instance ExportSpec 'FreeFile = FilePath
-type instance ExportSpec 'LocalDirectory = FilePath
 
 type instance IoCompilerArtifactState 'ExternalFile = FilePath
 
@@ -48,6 +33,7 @@ makeLenses ''FileCtx
 makeLenses ''DirCtx
 
 instance CanCreate IoCompiler 'ExternalFile where
+     type CreateSpec IoCompiler 'ExternalFile = FilePath
      runCreate _ fn = do
          (hnd,_) <- allocHandle SExternalFile (takeFileName fn)
          fn' <- liftIoProgram (getRealPath fn)
@@ -55,6 +41,7 @@ instance CanCreate IoCompiler 'ExternalFile where
          return hnd
 
 instance CanCreate IoCompiler 'FreeFile where
+    type CreateSpec IoCompiler 'FreeFile = Maybe String
     runCreate _ mTempName = do
         -- TODO escape tempName, allow only a-zA-Z0-9.-_:+=
         let tempName = maybe "tmp-file" takeFileName mTempName
@@ -62,6 +49,7 @@ instance CanCreate IoCompiler 'FreeFile where
         return hnd
 
 instance CanCreate IoCompiler 'LocalDirectory where
+    type CreateSpec IoCompiler 'LocalDirectory = ()
     runCreate _ () = do
         tmp <- liftIoProgram (mkTempDir "local-dir")
         (hnd,_) <- allocHandle SLocalDirectory tmp
@@ -78,13 +66,14 @@ instance CanCreate IoCompiler 'LocalDirectory where
         return hnd
 
 instance CanAdd IoCompiler 'LocalDirectory 'FreeFile where
+    type AddSpec IoCompiler 'LocalDirectory 'FreeFile = (FileSpec, Handle 'FreeFile)
     runAdd dirH _ (fSpec,fH) = do
         Just localDir <- useArtifactState dirH
         copyFreeFile' fH (localDir ^. dirTempDir) fSpec
         fH --> dirH
 
 instance CanExtract IoCompiler 'ExternalFile 'FreeFile where
-    runConvert hnd@(Handle _ hndT) _ () = do
+    runExtract hnd@(Handle _ hndT) _ () = do
         Just externalFileName <- useArtifactState hnd
         (tmpFileH,tmpFile) <- createFreeFile hndT
         hnd --> tmpFileH
@@ -92,7 +81,8 @@ instance CanExtract IoCompiler 'ExternalFile 'FreeFile where
         return tmpFileH
 
 instance CanExtract IoCompiler 'FreeFile 'ExternalFile where
-    runConvert hnd _ dest = do
+    type ExtractionArg IoCompiler 'FreeFile 'ExternalFile = FilePath
+    runExtract hnd _ dest = do
         dest' <- liftIoProgram (ensureParentDir dest)
         newFileH <- runCreate SExternalFile dest'
         hnd --> newFileH
@@ -100,7 +90,8 @@ instance CanExtract IoCompiler 'FreeFile 'ExternalFile where
         return newFileH
 
 instance CanExtract IoCompiler 'FreeFile 'FreeFile where
-    runConvert hnd@(Handle _ hndT) _ mdest = do
+    type ExtractionArg IoCompiler 'FreeFile 'FreeFile = Maybe String
+    runExtract hnd@(Handle _ hndT) _ mdest = do
         (newFileH,newFile) <-
             createFreeFile (maybe hndT ((hndT ++ "-") ++) mdest)
         copyFreeFile hnd newFile
@@ -108,10 +99,12 @@ instance CanExtract IoCompiler 'FreeFile 'FreeFile where
         return newFileH
 
 instance CanExport IoCompiler 'FreeFile where
+    type ExportSpec IoCompiler 'FreeFile = FilePath
     runExport hnd destFile =
         liftIoProgram (ensureParentDir destFile) >>= copyFreeFile hnd
 
 instance CanExport IoCompiler 'LocalDirectory where
+    type ExportSpec IoCompiler 'LocalDirectory = FilePath
     runExport hnd destDir = do
         destDir' <- liftIoProgram (ensureParentDir destDir)
         modifyArtifactState hnd (traverse . dirExports %~ (destDir':))

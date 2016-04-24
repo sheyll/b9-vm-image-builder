@@ -2,34 +2,15 @@ module B9.Dsl.CloudInit where
 
 import B9.B9IO.IoCompiler
 import B9.Content
+import B9.Common
 import B9.Dsl.Content
 import B9.Dsl.Core
 import B9.Dsl.ExecutionEnvironment
 import B9.Dsl.File
 import B9.ShellScript              (toBashOneLiner, Script(..))
-import Data.Data
-import Data.Singletons.TH          hiding ((%~))
 import Data.Time.Clock
 
 -- * Cloud-init API
-$(singletons
-    [d|
-
-  data CloudInitArtifact = CloudInitMetaData
-                         | CloudInitUserData
-                         deriving Show
-  |])
-
-type instance CreateSpec 'CloudInitMetaData = () -- TODO Maybe (Handle
-                                                -- FreeFile)??
-type instance AddSpec 'CloudInitUserData 'ExecutableScript = Script
-
-type instance AddSpec 'CloudInitUserData 'FreeFile =
-     (FileSpec, Handle 'FreeFile)
-
-type instance AddSpec 'CloudInitUserData 'CloudInitUserData = CiUserData
-
-type instance ExtractionArg 'CloudInitUserData 'GeneratedContent = ()
 
 -- | Representation of a @cloud-config@ @user-data@ document.
 data CiUserData =
@@ -58,9 +39,6 @@ instance Monoid CiUserData where
                (mounts <> mounts')
                (getLast (Last phoneHome <> Last phoneHome'))
                (getLast (Last powerState <> Last powerState'))
-
-type instance IoCompilerArtifactState 'CloudInitUserData =
-     CiUserData
 
 data CiGroup =
   CiGroup {_ciGroupName :: String
@@ -94,7 +72,7 @@ data CiUserSudo
   deriving (Show,Typeable)
 
 data CiWriteFile =
-  CiWriteFile {_ciWriteFileContent :: Handle 'GeneratedContent
+  CiWriteFile {_ciWriteFileContent :: ByteString
               ,_ciWriteFile :: FileSpec}
   deriving (Show,Typeable)
 
@@ -110,7 +88,7 @@ instance Monoid CiCaCerts where
               (trusted <> trusted')
 
 data CiCaCert =
-  CiCaCert {_ciCaCert :: Handle 'GeneratedContent}
+  CiCaCert {_ciCaCert :: ByteString}
   deriving (Show,Typeable)
 
 data CiCmd
@@ -161,15 +139,6 @@ data CiPowerStateMode
 
 makeLenses ''CiUserData
 
-
--- | Representation of a @cloud-init@ @meta-data@ document
-type instance CreateSpec 'CloudInitMetaData = () -- TODO Maybe (Handle
-                                                -- FreeFile)??
-
-type instance AddSpec 'CloudInitMetaData 'CloudInitMetaData = CiMetaData
-
-type instance ExtractionArg 'CloudInitMetaData 'GeneratedContent = ()
-
 data CiMetaData =
   CiMetaData {_ciMetaDataInstanceId :: String
              ,_ciMetaDataNetworkInterfaces :: [CiNetworkInterface]
@@ -187,51 +156,22 @@ instance Monoid CiMetaData where
                (getLast (Last localHostname <> Last localHostname'))
                (getLast (Last fqdn <> Last fqdn'))
 
-type instance IoCompilerArtifactState 'CloudInitMetaData =
-     CiMetaData
-
 data CiNetworkInterface =
   CiNetworkInterface String -- TODO
   deriving (Show,Typeable)
 
+instance CanAdd IoCompiler (Cnt CiUserData) 'ExecutableScript where
+  type AddSpec IoCompiler (Cnt CiUserData) 'ExecutableScript = Script
+  runAdd hnd _px scr =
+    appendToArtifactOutput hnd (mempty {_ciRunCmds = [CiCmdScript scr]})
 
-instance CanCreate IoCompiler 'CloudInitUserData where
-  runCreate _ _ =
-    do (hnd,_) <- allocHandle SCloudInitUserData "user-data"
-       putArtifactState hnd mempty
-       return hnd
-
-instance CanAdd IoCompiler 'CloudInitUserData 'CloudInitUserData where
-  runAdd hnd _ userdata = appendArtifactState hnd userdata
-
-instance CanCreate IoCompiler 'CloudInitMetaData where
-  runCreate _ _ =
-    do (hnd,_) <- allocHandle SCloudInitMetaData "meta-data"
-       putArtifactState hnd mempty
-       return hnd
-
-instance CanAdd IoCompiler 'CloudInitMetaData 'CloudInitMetaData where
-  runAdd hnd _ metadata = appendArtifactState hnd metadata
-
-instance CanAdd IoCompiler 'CloudInitUserData 'ExecutableScript where
-  runAdd hnd _ scr =
-    interpret $
-    add hnd SCloudInitUserData (mempty {_ciRunCmds = [CiCmdScript scr]})
-
-instance CanAdd IoCompiler 'CloudInitUserData 'FreeFile where
+instance CanAdd IoCompiler (Cnt CiUserData) 'FreeFile where
+  type AddSpec IoCompiler (Cnt CiUserData) 'FreeFile = (FileSpec, Handle 'FreeFile)
   runAdd hnd _ (fspec,fH) =
-    do fH --> hnd
-       interpret $
-         do fileContent <- extract fH SGeneratedContent ()
-            add hnd
-                SCloudInitUserData
-                (mempty {_ciWriteFiles = [CiWriteFile fileContent fspec]})
-
-instance CanExtract IoCompiler 'CloudInitMetaData 'GeneratedContent where
-  runConvert (Handle _ h) _ () = return (Handle SGeneratedContent h)
-
-instance CanExtract IoCompiler 'CloudInitUserData 'GeneratedContent where
-  runConvert (Handle _ h) _ () = return (Handle SGeneratedContent h)
+    do fileContentH <- runExtract fH (Proxy :: Proxy (Cnt ByteString)) ()
+       mergeArtifactOutputInto fileContentH hnd
+        $ \fileContent ->
+             (<> mempty {_ciWriteFiles = [CiWriteFile fileContent fspec]})
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.
 toUserDataWriteFilesAST

@@ -6,22 +6,14 @@ module B9.Content
         fileSpecPermissions, fileSpecOwner, fileSpecGroup, UnixUser(..))
        where
 
+import           B9.Common
 import           B9.Content.AST              as X
 import           B9.Content.ErlTerms         as X
 import           B9.Content.ErlangPropList   as X
 import           B9.Content.StringTemplate   as X
 import           B9.Content.YamlObject       as X
 import           B9.QCUtil
-import           Control.Lens.TH
-import           Control.Parallel.Strategies
-import           Data.Binary
-import           Data.Bits
-import qualified Data.ByteString.Char8       as B
-import           Data.Data
-import           Data.Hashable
-import           GHC.Generics                (Generic)
 import           Test.QuickCheck
-import           Text.Printf
 
 -- | This contains most of the information elements necessary to specify a file
 -- in some file system. This is used to specify where e.g. cloud-init or the
@@ -38,7 +30,7 @@ instance Binary FileSpec
 instance NFData FileSpec
 
 instance Show FileSpec where
-    show (FileSpec path (s,u,g,o) owner group) =
+    show (FileSpec path (s,u,g,o) owner grp) =
         printf
                "%s%s%s%s %s %s %s"
                (str' s)
@@ -46,7 +38,7 @@ instance Show FileSpec where
                (str g)
                (str o)
                owner
-               group
+               grp
                path
       where
         str' x =
@@ -103,7 +95,7 @@ data Content
     = RenderErlang (AST Content ErlangPropList)
     | RenderYaml (AST Content YamlObject)
     | FromString String
-    | FromBinary B.ByteString
+    | FromBinary ByteString
     | Concat [Content]
     deriving (Read,Show,Typeable,Eq,Data,Generic)
 
@@ -114,7 +106,7 @@ instance NFData Content
 instance CanRender Content where
   render (RenderErlang ast) = encodeSyntax <$> fromAST ast
   render (RenderYaml ast) = encodeSyntax <$> fromAST ast
-  render (FromString str) = return (B.pack str)
+  render (FromString str) = return (packB str)
   render (FromBinary b) = return b
   render (Concat cs) = fmap mconcat $ mapM render cs
 
@@ -135,6 +127,6 @@ instance Arbitrary Content where
             [ RenderErlang <$> smaller arbitrary
             , RenderYaml <$> smaller arbitrary
             , FromString <$> smaller arbitraryNiceString
-            , FromBinary <$> B.pack <$> smaller arbitraryNiceString
+            , FromBinary <$> packB <$> smaller arbitraryNiceString
             , Concat <$> smaller arbitrary
             ]

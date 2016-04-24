@@ -20,11 +20,6 @@ $(singletons
 instance Show (Sing 'ImageRepository) where
   show _ = show ImageRepository
 
-type instance AddSpec 'ImageRepository 'VmImage =
-     (SharedImageName, Handle 'VmImage)
-
-type instance ExtractionArg 'ImageRepository 'VmImage = SharedImageName
-
 type instance IoCompilerArtifactState 'ImageRepository = ImageRepository
 
 -- | A Global handle repesenting the (local) share image repository.
@@ -41,6 +36,7 @@ ensureImageRepositoryH = do
         Just _ -> return ()
 
 instance CanAdd IoCompiler 'ImageRepository 'VmImage where
+    type AddSpec IoCompiler 'ImageRepository 'VmImage = (SharedImageName, Handle 'VmImage)
     runAdd _ _ (sn,vmI) = do
         Just (VmImgCtx imgFileH srcType) <- useArtifactState vmI
         let SharedImageName snStr = sn
@@ -52,9 +48,10 @@ instance CanAdd IoCompiler 'ImageRepository 'VmImage where
             (liftIoProgram (imageRepoPublish imgFile srcType sn))
 
 instance CanExtract IoCompiler 'ImageRepository 'VmImage where
-    runConvert _ _ sharedImgName = do
+    type ExtractionArg IoCompiler 'ImageRepository 'VmImage = SharedImageName
+    runExtract _ _ sharedImgName = do
         (sharedImgInfo,cachedImage) <-
             liftIoProgram (imageRepoLookup sharedImgName)
         imgH <- runCreate SExternalFile cachedImage
-        imgCopyH <- runConvert imgH SFreeFile ()
+        imgCopyH <- runExtract imgH SFreeFile ()
         createVmImage imgCopyH (siImgType sharedImgInfo)

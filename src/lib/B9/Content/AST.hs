@@ -23,18 +23,11 @@ module B9.Content.AST ( ConcatableSyntax (..)
                       , astMerge
                       ) where
 
-import           Control.Parallel.Strategies
-import           Data.Binary
-import qualified Data.ByteString as B
-import           Data.Data
-import           Data.Hashable
 import           Data.Semigroup
-import           GHC.Generics (Generic)
-import           Control.Monad.IO.Class
-import           Control.Monad.Reader
 import           B9.Content.StringTemplate
 import           Test.QuickCheck
 import           B9.QCUtil
+import           B9.Common
 
 -- | Types of values that can be parsed/rendered from/to 'ByteString's. This
 -- class is used as basis for the 'ASTish' class.
@@ -42,13 +35,13 @@ class (Semigroup a) => ConcatableSyntax a  where
     -- Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
     decodeSyntax
         :: FilePath -- ^ An arbitrary string for error messages that
-        -> B.ByteString -- ^ The raw input to parse
+        -> ByteString -- ^ The raw input to parse
         -> Either String a
     -- Generate a string representation of @a@
     encodeSyntax
-        :: a -> B.ByteString
+        :: a -> ByteString
 
-instance ConcatableSyntax B.ByteString where
+instance ConcatableSyntax ByteString where
     decodeSyntax _ = Right
     encodeSyntax = id
 
@@ -98,7 +91,7 @@ class (ConcatableSyntax a) => ASTish a  where
 class CanRender c  where
     render
         :: (Functor m, Applicative m, MonadIO m, MonadReader Environment m)
-        => c -> m B.ByteString
+        => c -> m ByteString
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where
     arbitrary =

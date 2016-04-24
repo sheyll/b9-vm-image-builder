@@ -9,13 +9,6 @@ module B9.Content.ErlTerms (parseErlTerm
                            ,arbitraryErlFloat
                            ,arbitraryErlNameChar) where
 
-import           Control.Parallel.Strategies
-import           Data.Binary
-import qualified Data.ByteString.Char8 as B
-import           Data.Data
-import           Data.Function
-import           Data.Hashable
-import           GHC.Generics (Generic)
 import           Test.QuickCheck
 import           Text.Parsec
        ((<|>), many, spaces, char, option, between, string, choice,
@@ -23,11 +16,9 @@ import           Text.Parsec
         lower, parse)
 import           Text.Parsec.ByteString
 import           Text.Show.Pretty
-import           Control.Monad
-import           Text.Printf
 import qualified Text.PrettyPrint as PP
-
 import           B9.QCUtil
+import           B9.Common
 
 -- | Simplified Erlang term representation.
 data SimpleErlangTerm
@@ -50,14 +41,14 @@ instance NFData SimpleErlangTerm
 -- restricted to either empty binaries or binaries with a string. The input
 -- encoding must be restricted to ascii compatible 8-bit characters
 -- (e.g. latin-1 or UTF8).
-parseErlTerm :: String -> B.ByteString -> Either String SimpleErlangTerm
+parseErlTerm :: String -> ByteString -> Either String SimpleErlangTerm
 parseErlTerm src content =
   either (Left . ppShow) Right (parse erlTermParser src content)
 
 -- | Convert an abstract Erlang term to a pretty byte string preserving the
 -- encoding.
-renderErlTerm :: SimpleErlangTerm -> B.ByteString
-renderErlTerm s = B.pack (PP.render (prettyPrintErlTerm s PP.<> PP.char '.'))
+renderErlTerm :: SimpleErlangTerm -> ByteString
+renderErlTerm s = packB (PP.render (prettyPrintErlTerm s PP.<> PP.char '.'))
 
 prettyPrintErlTerm :: SimpleErlangTerm -> PP.Doc
 prettyPrintErlTerm (ErlString str) = PP.doubleQuotes (PP.text (toErlStringString str))

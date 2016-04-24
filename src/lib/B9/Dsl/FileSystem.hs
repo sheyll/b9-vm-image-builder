@@ -41,21 +41,8 @@ type instance IoCompilerArtifactState 'FileSystemImage = FsCtx
 makeLenses ''FsCtx
 makeLenses ''FsBuilderCtx
 
-type instance CreateSpec 'FileSystemBuilder = FileSystemSpec
-type instance AddSpec 'FileSystemBuilder 'FreeFile =
-     (FileSpec, Handle 'FreeFile)
-type instance ExtractionArg 'FileSystemBuilder 'FileSystemImage = ()
-type instance ExtractionArg 'FileSystemBuilder 'FreeFile = ()
-type instance ExtractionArg 'FileSystemImage 'FileSystemImage =
-     FileSystemResize
-type instance ExtractionArg 'FileSystemImage 'FreeFile = ()
-type instance ExtractionArg 'FreeFile 'FileSystemImage = FileSystem
-type instance ExtractionArg 'FileSystemBuilder 'VmImage = ()
-type instance ExtractionArg 'FileSystemImage 'VmImage = ()
-type instance ExtractionArg 'VmImage 'FileSystemImage = ()
-type instance ExportSpec 'FileSystemImage = FilePath
-
 instance CanCreate IoCompiler 'FileSystemBuilder where
+    type CreateSpec IoCompiler 'FileSystemBuilder = FileSystemSpec
     runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
         let title =
                 (if null fsLabel
@@ -90,6 +77,7 @@ createFsImage fH fs = do
     return hnd
 
 instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
+    type AddSpec IoCompiler 'FileSystemBuilder 'FreeFile = (FileSpec, Handle 'FreeFile)
     runAdd fsH _ (fSpec,fH) = do
         modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
         Just fsBuilder <- useArtifactState fsH
@@ -98,19 +86,20 @@ instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
         copyFreeFile' fH tmpDir fSpec
 
 instance CanExtract IoCompiler 'FileSystemBuilder 'FileSystemImage where
-    runConvert hnd _ () = do
+    runExtract hnd _ () = do
         Just fsBuilder <- useArtifactState hnd
         return (fsBuilder ^. fsImgH)
 
 instance CanExtract IoCompiler 'FileSystemBuilder 'FreeFile where
-    runConvert hnd _ () = do
+    runExtract hnd _ () = do
         Just fsBuilder <- useArtifactState hnd
-        runConvert (fsBuilder ^. fsImgH) SFreeFile ()
+        runExtract (fsBuilder ^. fsImgH) SFreeFile ()
 
 instance CanExtract IoCompiler 'FileSystemImage 'FileSystemImage where
-    runConvert hnd _ destSize = do
+    type ExtractionArg IoCompiler 'FileSystemImage 'FileSystemImage = FileSystemResize
+    runExtract hnd _ destSize = do
         Just (FsCtx inFileH fS) <- useArtifactState hnd
-        outFileH <- runConvert inFileH SFreeFile (Just "resized")
+        outFileH <- runExtract inFileH SFreeFile (Just "resized")
         Just (FileCtx outFile _) <- useArtifactState outFileH
         inFileH --> hnd
         hnd --> outFileH
@@ -118,37 +107,39 @@ instance CanExtract IoCompiler 'FileSystemImage 'FileSystemImage where
         createFsImage outFileH fS
 
 instance CanExtract IoCompiler 'FileSystemImage 'FreeFile where
-    runConvert hnd _ () = do
+    runExtract hnd _ () = do
         Just (FsCtx fH _fS) <- useArtifactState hnd
         return fH
 
 instance CanExtract IoCompiler 'FreeFile 'FileSystemImage where
-    runConvert hnd _ fs = do
-        copyH <- runConvert hnd SFreeFile (Just (show fs))
+    type ExtractionArg IoCompiler 'FreeFile 'FileSystemImage = FileSystem
+    runExtract hnd _ fs = do
+        copyH <- runExtract hnd SFreeFile (Just (show fs))
         fsImg <- createFsImage copyH fs
         copyH --> fsImg
         return fsImg
 
 instance CanExport IoCompiler 'FileSystemImage where
-     runExport hnd destFile = do
+    type ExportSpec IoCompiler 'FileSystemImage = FilePath
+    runExport hnd destFile = do
          Just fsImg <- useArtifactState hnd
          runExport (fsImg ^. fsFileH) destFile
 
 instance CanExtract IoCompiler 'FileSystemBuilder 'VmImage where
-    runConvert hnd _ () = do
+    runExtract hnd _ () = do
         Just fsImg <- useArtifactState hnd
-        runConvert (fsImg ^. fsImgH) SVmImage ()
+        runExtract (fsImg ^. fsImgH) SVmImage ()
 
 instance CanExtract IoCompiler 'FileSystemImage 'VmImage where
-    runConvert hnd _ () = do
+    runExtract hnd _ () = do
         Just (FsCtx fH _) <- useArtifactState hnd
-        fH' <- runConvert fH SFreeFile Nothing
+        fH' <- runExtract fH SFreeFile Nothing
         outH <- createVmImage fH' Raw
         hnd --> outH
         return outH
 
 instance CanExtract IoCompiler 'VmImage 'FileSystemImage where
-    runConvert hnd _ () = do
-        hnd' <- runConvert hnd SVmImage (Left Raw)
+    runExtract hnd _ () = do
+        hnd' <- runExtract hnd SVmImage (Left Raw)
         Just (VmImgCtx srcFileH Raw) <- useArtifactState hnd'
-        runConvert srcFileH SFileSystemImage Ext4
+        runExtract srcFileH SFileSystemImage Ext4

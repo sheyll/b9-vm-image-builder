@@ -11,7 +11,6 @@ import B9.Dsl.Core
 import Control.Lens         hiding (from, (<.>))
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Data
 import Data.Dynamic
 import Data.Graph           as Graph
 import Data.Map             as Map hiding (null)
@@ -212,9 +211,7 @@ printSomeHandle Nothing = "??error??"
 -- * Utilities
 
 -- | Create a new unique handle and store it in the state.
-allocHandle :: (SingKind ('KProxy :: KProxy k)
-               ,Show (Demote (a :: k)))
-               => Sing a
+allocHandle :: p a
                -> String
                -> IoCompiler (Handle a, SomeHandle)
 allocHandle sa str = do
@@ -252,9 +249,7 @@ addVertex = do
     return v
 
 -- | Generate a handle with formatted title
-formatHandle :: (SingKind ('KProxy :: KProxy k)
-                ,Show (Demote (a :: k)))
-                => Vertex -> Sing a -> String -> Handle a
+formatHandle :: Vertex -> p a -> String -> Handle a
 formatHandle v sa str =
     Handle
         sa
@@ -262,7 +257,13 @@ formatHandle v sa str =
              then show v
              else str ++ "-" ++ show v)
 
--- | Add a dependency of one resource to another
+-- | Add a dependency of one resource to another: @addDependency x y@ means
+-- first build @x@ then @y@.
+addDependency :: Handle a -> Handle b -> IoCompiler ()
+addDependency = (-->)
+
+-- | An alias for 'addDependency': @x --> y@ means @addDependency x y@ - i.e.
+-- first build @x@ then @y@.
 (-->) :: Handle a -> Handle b -> IoCompiler ()
 h --> h' = do
     Just v <- lookupVertex h
@@ -280,3 +281,10 @@ addAction :: Handle a -> IoProgBuilder () -> IoCompiler ()
 addAction h a = do
   Just v <- lookupVertex h
   actions . at v . traverse <>= [a]
+
+
+
+-- * TODO
+appendToArtifactOutput = undefined
+
+mergeArtifactOutputInto = undefined

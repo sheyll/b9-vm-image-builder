@@ -9,12 +9,13 @@ module B9.B9IO
         getBuildId, getBuildDate, copy, copyDir, moveFile, moveDir, mkDir,
         readFileSize, mkTemp, mkTempIn, mkTempDir, mkTempDirIn,
         getRealPath, getParentDir, getFileName, ensureParentDir,
-        readContentFromFile, renderContentToFile, createFileSystem,
+        readContentFromFile, writeContentToFile, createFileSystem,
         resizeFileSystem, convertVmImage, resizeVmImage, extractPartition,
         imageRepoLookup, imageRepoPublish, executeInEnv, traceEveryAction,
         dumpToStrings, dumpToResult, runPureDump, arbitraryIoProgram)
        where
 
+import           B9.Common
 import           B9.CommonTypes
 import           B9.Content
 import           B9.DiskImages
@@ -27,10 +28,7 @@ import           B9.Repository
 import           B9.ShellScript
 import           Control.Monad.Free
 import           Control.Monad.Trans.Writer.Lazy
-import qualified Data.ByteString.Char8           as B
-import           System.FilePath
 import           Test.QuickCheck
-import           Text.Printf
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
@@ -94,10 +92,9 @@ data Action next
     | GetFileName FilePath
                   (FilePath -> next)
     | ReadContentFromFile FilePath
-                  (B.ByteString -> next)
-    | RenderContentToFile FilePath
-                          Content
-                          Environment
+                  (ByteString -> next)
+    | WriteContentToFile FilePath
+                          ByteString
                           next
     | CreateFileSystem FilePath
                        FileSystemSpec
@@ -155,8 +152,8 @@ instance Show (Action a) where
     show (GetParentDir p _) = printf "getParentDir %s" p
     show (GetFileName p _) = printf "getFileName %s" p
     show (ReadContentFromFile p _) = printf "readContentFromFile %s" p
-    show (RenderContentToFile f c e _) =
-        printf "renderContentToFile %s %s %s" f (show c) (show e)
+    show (WriteContentToFile f c _) =
+        printf "writeContentToFile %s %s" f (show c)
     show (CreateFileSystem dst fs srcDir files _) =
         printf "createFileSystem %s %s %s %s" dst (show fs) srcDir (show files)
     show (ResizeFileSystem fs fsResize fsType _) =
@@ -196,19 +193,19 @@ getBuildDate = liftF $ GetBuildDate id
 
 -- | Copy a file
 copy :: FilePath -> FilePath -> IoProgram ()
-copy from to = liftF $ Copy from to ()
+copy from dst = liftF $ Copy from dst ()
 
 -- | Copy a directory recursively
 copyDir :: FilePath -> FilePath -> IoProgram ()
-copyDir from to = liftF $ CopyDir from to ()
+copyDir from dst = liftF $ CopyDir from dst ()
 
 -- | Move a file
 moveFile :: FilePath -> FilePath -> IoProgram ()
-moveFile from to = liftF $ MoveFile from to ()
+moveFile from dst = liftF $ MoveFile from dst ()
 
 -- | Move a directory
 moveDir :: FilePath -> FilePath -> IoProgram ()
-moveDir from to = liftF $ MoveDir from to ()
+moveDir from dst = liftF $ MoveDir from dst ()
 
 -- | Just like @mkdir -p@
 mkDir :: FilePath -> IoProgram ()
@@ -258,13 +255,13 @@ ensureParentDir :: FilePath -> IoProgram FilePath
 ensureParentDir path = liftF $ EnsureParentDir path id
 
 -- | Read contents from a file.
-readContentFromFile :: FilePath -> IoProgram B.ByteString
+readContentFromFile :: FilePath -> IoProgram ByteString
 readContentFromFile p = liftF $ ReadContentFromFile p id
 
 -- | Render a given content to a file. Implementations should overwrite the file
 -- if it exists.
-renderContentToFile :: FilePath -> Content -> Environment -> IoProgram ()
-renderContentToFile f c e = liftF $ RenderContentToFile f c e ()
+writeContentToFile :: FilePath -> ByteString -> IoProgram ()
+writeContentToFile f c = liftF $ WriteContentToFile f c ()
 
 -- | Create a 'FileSystem' inside a file, such that the criteria in a
 -- 'FileSystemSpec' record are matched and all files listed in the third
@@ -409,17 +406,17 @@ traceEveryAction = runB9IO traceAction
           do traceL a
              p <- readContentFromFile f
              traceL "->"
-                    (if B.length p < 1024
+                    (if lengthB p < 1024
                         then unlines ["read file contents:"
                                      ,"------8<-----"
-                                     ,B.unpack p
+                                     ,unpackUtf8 p
                                      ,"------8<-----"
                                      ,""]
-                        else (printf "read %d bytes from file" (B.length p)))
+                        else (printf "read %d bytes from file" (lengthB p)))
              return $ k p
-        traceAction a@(RenderContentToFile f c e n) =
+        traceAction a@(WriteContentToFile f c n) =
           do traceL a
-             renderContentToFile f c e
+             writeContentToFile f c
              return n
         traceAction a@(CreateFileSystem dst fs srcDir files n) =
           do dbgL a
@@ -536,8 +533,8 @@ runPureDump p = runWriter $ runB9IO dump p
         return (k (takeFileName f))
     dump a@(ReadContentFromFile _f k) = do
         tell [show a]
-        return (k (B.pack "some contents"))
-    dump a@(RenderContentToFile _f _c _e n) = do
+        return (k (packB "some contents"))
+    dump a@(WriteContentToFile _f _c n) = do
         tell [show a]
         return n
     dump a@(CreateFileSystem _f _c _d _fs n) = do
@@ -611,10 +608,9 @@ instance Arbitrary a => Arbitrary (Action a) where
             , GetParentDir <$> smaller arbitraryFilePath <*> smaller arbitrary
             , GetFileName <$> smaller arbitraryFilePath <*> smaller arbitrary
             , ReadContentFromFile <$> smaller arbitraryFilePath <*>
-                                      smaller ((. B.unpack) <$> arbitrary)
-            , RenderContentToFile <$> smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitrary <*>
+                                      smaller ((. unpackUtf8) <$> arbitrary)
+            , WriteContentToFile <$> smaller arbitraryFilePath <*>
+              (packB <$> smaller arbitrary) <*>
               smaller arbitrary
             , CreateFileSystem <$> smaller arbitraryFilePath <*>
               smaller arbitrary <*>
