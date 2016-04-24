@@ -98,6 +98,9 @@ executeIoProg = runB9IO go
         f' <- liftIO $ makeAbsolute f
         return $ k f'
     go (GetFileName f k) = return $ k (takeFileName f)
+    go (ReadContentFromFile f k) = do
+        c <- liftIO (B.readFile f)
+        return (k c)
     go (RenderContentToFile f c e n) = do
         result <- runReaderT (render c) e
         traceL "rendered:" (T.unpack (E.decodeUtf8 result))
