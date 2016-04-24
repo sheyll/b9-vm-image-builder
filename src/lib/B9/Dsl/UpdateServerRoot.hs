@@ -10,10 +10,7 @@ import B9.Dsl.Core
 import B9.Dsl.File
 import B9.Dsl.VmImage
 import B9.Repository
-import Control.Lens
 import Data.Singletons.TH
-import System.FilePath
-import Text.Printf
 
 $(singletons
     [d|
@@ -25,7 +22,7 @@ $(singletons
 type instance AddSpec 'UpdateServerRoot 'VmImage =
      (SharedImageName, Handle 'VmImage)
 
-type instance ConvSpec 'LocalDirectory 'UpdateServerRoot = ()
+type instance ExtractionArg 'LocalDirectory 'UpdateServerRoot = ()
 
 type instance IoCompilerArtifactState 'UpdateServerRoot =
      Handle 'LocalDirectory
@@ -61,7 +58,7 @@ instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
                                             (FromString (printf "%s-%s" bId bT))
                                             (Environment [])))
 
-instance CanConvert IoCompiler 'LocalDirectory 'UpdateServerRoot where
+instance CanExtract IoCompiler 'LocalDirectory 'UpdateServerRoot where
   runConvert destDirH _ () =
     do (hnd,_) <- allocHandle SUpdateServerRoot "update-server-root"
        hnd --> destDirH

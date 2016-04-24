@@ -36,7 +36,7 @@ The second layer is already front facing API, although actually a little more
 complex than the first, it is still appropriate to call it a toy-language.
 
 It has exactly *four* primitives similar to CRUD. It describes how to `Create`,
-`Add`, `Convert` and `Export` things that - for no good reason - are called
+`Add`, `Extract` and `Export` things that - for no good reason - are called
 `Artifacts`.
 
 Heck, you could even invent your own artifact types, just implement an instance

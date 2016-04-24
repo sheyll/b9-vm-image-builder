@@ -9,7 +9,6 @@ import B9.Content
 import B9.Dsl.Core
 import B9.Dsl.File
 import qualified Data.ByteString.Char8 as B
-import Data.Monoid
 import Data.Singletons.TH hiding ((%~))
 
 $(singletons
@@ -18,14 +17,14 @@ $(singletons
                         | StaticContent
                         deriving Show
   |])
-      
+
 type instance CreateSpec 'GeneratedContent = (Content, String)
 
 type instance AddSpec 'GeneratedContent 'GeneratedContent = Content
 
-type instance ConvSpec 'GeneratedContent 'FreeFile = Environment
+type instance ExtractionArg 'GeneratedContent 'FreeFile = Environment
 
-type instance ConvSpec 'FreeFile 'GeneratedContent = ()
+type instance ExtractionArg 'FreeFile 'GeneratedContent = ()
 
 -- * Implementation
 type GeneratedContentList = [GeneratedContentChunk]
@@ -44,7 +43,7 @@ instance CanCreate IoCompiler 'GeneratedContent where
                         [PureContent c]
        return hnd
 
-instance CanConvert IoCompiler 'GeneratedContent 'FreeFile where
+instance CanExtract IoCompiler 'GeneratedContent 'FreeFile where
   runConvert hnd@(Handle _ dest) _ env =
     do (destH,destFile) <- createFreeFile dest
        hnd --> destH
@@ -60,7 +59,7 @@ instance CanConvert IoCompiler 'GeneratedContent 'FreeFile where
             where renderChunk (PureContent c) = return c
                   renderChunk (ContentFromIo m) = FromBinary <$> m
 
-instance CanConvert IoCompiler 'FreeFile 'GeneratedContent where
+instance CanExtract IoCompiler 'FreeFile 'GeneratedContent where
   runConvert srcFileH@(Handle _ srcFileN) _ () =
     do (hnd,_) <- allocHandle SGeneratedContent srcFileN
        srcFileH --> hnd

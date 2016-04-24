@@ -5,10 +5,8 @@ import B9.B9IO.IoCompiler
 import B9.DiskImages
 import B9.Dsl.Core
 import B9.Dsl.File
-import Control.Lens
 import Data.Data
 import Data.Singletons.TH
-import Text.Printf
 
 $(singletons
       [d|
@@ -27,22 +25,22 @@ type instance IoCompilerArtifactState 'VmImage = VmImgCtx
 
 makeLenses ''VmImgCtx
 
-type instance ConvSpec 'FreeFile 'VmImage = ImageType
-type instance ConvSpec 'VmImage 'FreeFile = ()
-type instance ConvSpec 'VmImage 'VmImage = Either ImageType ImageSize
+type instance ExtractionArg 'FreeFile 'VmImage = ImageType
+type instance ExtractionArg 'VmImage 'FreeFile = ()
+type instance ExtractionArg 'VmImage 'VmImage = Either ImageType ImageSize
 type instance ExportSpec 'VmImage = FilePath
 
-instance CanConvert IoCompiler 'FreeFile 'VmImage where
+instance CanExtract IoCompiler 'FreeFile 'VmImage where
     runConvert hnd _ imgT = do
         newHnd <- runConvert hnd SFreeFile Nothing
         createVmImage newHnd imgT
 
-instance CanConvert IoCompiler 'VmImage 'FreeFile where
+instance CanExtract IoCompiler 'VmImage 'FreeFile where
     runConvert hnd _ () = do
         Just (VmImgCtx srcFileH _srcType) <- useArtifactState hnd
         return srcFileH
 
-instance CanConvert IoCompiler 'VmImage 'VmImage where
+instance CanExtract IoCompiler 'VmImage 'VmImage where
     runConvert hnd _ (Right (ImageSize destSize destSizeU)) = do
         Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
         destImgFileH <-

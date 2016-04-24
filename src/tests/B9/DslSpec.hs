@@ -164,8 +164,8 @@ fileInclusionSpec =
                               SFileSystemBuilder
                               (FileSystemSpec ISO9660 "cidata" 1 MB)
                       add fsH SFreeFile (fileSpec "test.file", fH)
-                      fileSysImgH <- convert fsH SFileSystemImage ()
-                      fileSysFileH <- convert fileSysImgH SFreeFile ()
+                      fileSysImgH <- extract fsH SFileSystemImage ()
+                      fileSysFileH <- extract fileSysImgH SFreeFile ()
                       fsH2 <-
                           create
                               SFileSystemBuilder
@@ -216,7 +216,7 @@ fileInclusionSpec =
        it "can be exported from GeneratedContent" $
            do let actual = do
                       fcH <- createContent (FromString "test-content") "test-c"
-                      fH <- convert fcH SFreeFile ()
+                      fH <- extract fcH SFreeFile ()
                       void $ export fH "/tmp/rendered-content.file"
                   expected = do
                       src <- mkTemp "test-c-0"
@@ -238,7 +238,7 @@ fsImgSpec =
                        create
                            SFileSystemBuilder
                            (FileSystemSpec Ext4 "test-label" 10 MB)
-                   fsImg <- convert fs SFileSystemImage ()
+                   fsImg <- extract fs SFileSystemImage ()
                    export fsImg "out-img.raw")
                (do fs <- mkTemp "test-label.Ext4"
                    c <- mkTempDir "test-label.Ext4.d"
@@ -255,9 +255,9 @@ fsImgSpec =
                        create
                            SFileSystemBuilder
                            (FileSystemSpec Ext4 "test-label" 10 MB)
-                   fsImg <- convert fs SFileSystemImage ()
+                   fsImg <- extract fs SFileSystemImage ()
                    fsImgShrunk <-
-                       convert fsImg SFileSystemImage ShrinkFileSystem
+                       extract fsImg SFileSystemImage ShrinkFileSystem
                    export fsImgShrunk "out-img.raw")
                (do fs <- mkTemp "test-label.Ext4"
                    c <- mkTempDir "test-label.Ext4.d"
@@ -277,11 +277,11 @@ fsImgSpec =
                        create
                            SFileSystemBuilder
                            (FileSystemSpec Ext4 "test-label" 10 MB)
-                   fsImg <- convert fs SFileSystemImage ()
+                   fsImg <- extract fs SFileSystemImage ()
                    fsImg10MB <-
-                       convert fsImg SFileSystemImage (FileSystemResize 10 MB)
+                       extract fsImg SFileSystemImage (FileSystemResize 10 MB)
                    fsImgShrunk <-
-                       convert fsImg SFileSystemImage ShrinkFileSystem
+                       extract fsImg SFileSystemImage ShrinkFileSystem
                    export fsImg10MB "out1.raw"
                    export fsImgShrunk "out2.raw")
                (do fs <- mkTemp "test-label.Ext4"
@@ -611,12 +611,12 @@ vmImageCreationSpec =
                    -- create a raw Ext4 image
                    rawFS <-
                        create SFileSystemBuilder (FileSystemSpec Ext4 "" 10 MB)
-                   -- convert to qcow2
-                   rawFS' <- convert rawFS SFileSystemImage ()
-                   rawImg <- convert rawFS' SVmImage ()
-                   qCowImg <- convert rawImg SVmImage (Left QCow2)
+                   -- extract to qcow2
+                   rawFS' <- extract rawFS SFileSystemImage ()
+                   rawImg <- extract rawFS' SVmImage ()
+                   qCowImg <- extract rawImg SVmImage (Left QCow2)
                    smallerImg <-
-                       convert qCowImg SVmImage (Right (ImageSize 3 MB))
+                       extract qCowImg SVmImage (Right (ImageSize 3 MB))
                    void $ export smallerImg "/tmp/test.qcow2"
            in actual `shouldDoIo` expected
        it "it converts an image from Raw to Vmdk" $
@@ -638,7 +638,7 @@ vmImageCreationSpec =
                actual = do
                    -- create a raw Ext4 image
                    rawImg <- fromFile "in.raw" SVmImage QCow2
-                   vmdkImg <- convert rawImg SVmImage (Left Vmdk)
+                   vmdkImg <- extract rawImg SVmImage (Left Vmdk)
                    export vmdkImg "/tmp/test.vmdk"
            in actual `shouldDoIo` expected
 
@@ -650,7 +650,7 @@ partitionedDiskSpec =
     it "extracts the selected partition" $
     let actual = do
             partitionedImg <- fromFile "/tmp/in.raw" SPartitionedVmImage ()
-            rawPart2File <- convert partitionedImg SFreeFile (MBRPartition 2)
+            rawPart2File <- extract partitionedImg SFreeFile (MBRPartition 2)
             export rawPart2File "/tmp/part2.raw"
         expected = do
             src <- getRealPath "/tmp/in.raw"
@@ -693,7 +693,7 @@ updateServerImageSpec =
                -- TODO extract this to Dsl.hs:
                srcImg <- fromFile srcFile SVmImage QCow2
                outDirH <- create SLocalDirectory ()
-               usRoot <- convert outDirH SUpdateServerRoot ()
+               usRoot <- extract outDirH SUpdateServerRoot ()
                add usRoot SVmImage (SharedImageName machine, srcImg)
                export outDirH outDir
            srcFile = "source.qcow2"

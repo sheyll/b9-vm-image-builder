@@ -4,11 +4,8 @@ import B9.B9IO
 import B9.B9IO.IoCompiler
 import B9.Content
 import B9.Dsl.Core
-import B9.Logging
-import Control.Lens       hiding (from, (<.>))
 import Data.Data
 import Data.Singletons.TH (singletons)
-import System.FilePath
 
 $(singletons [d|
   data FileArtifacts = ExternalFile | FreeFile | LocalDirectory
@@ -22,9 +19,9 @@ type instance CreateSpec 'LocalDirectory = ()
 type instance AddSpec 'LocalDirectory 'FreeFile =
      (FileSpec, Handle 'FreeFile)
 
-type instance ConvSpec 'ExternalFile 'FreeFile = ()
-type instance ConvSpec 'FreeFile 'ExternalFile = FilePath
-type instance ConvSpec 'FreeFile 'FreeFile = Maybe String
+type instance ExtractionArg 'ExternalFile 'FreeFile = ()
+type instance ExtractionArg 'FreeFile 'ExternalFile = FilePath
+type instance ExtractionArg 'FreeFile 'FreeFile = Maybe String
 
 type instance ExportSpec 'FreeFile = FilePath
 type instance ExportSpec 'LocalDirectory = FilePath
@@ -86,7 +83,7 @@ instance CanAdd IoCompiler 'LocalDirectory 'FreeFile where
         copyFreeFile' fH (localDir ^. dirTempDir) fSpec
         fH --> dirH
 
-instance CanConvert IoCompiler 'ExternalFile 'FreeFile where
+instance CanExtract IoCompiler 'ExternalFile 'FreeFile where
     runConvert hnd@(Handle _ hndT) _ () = do
         Just externalFileName <- useArtifactState hnd
         (tmpFileH,tmpFile) <- createFreeFile hndT
@@ -94,7 +91,7 @@ instance CanConvert IoCompiler 'ExternalFile 'FreeFile where
         addAction hnd (liftIoProgram (copy externalFileName tmpFile))
         return tmpFileH
 
-instance CanConvert IoCompiler 'FreeFile 'ExternalFile where
+instance CanExtract IoCompiler 'FreeFile 'ExternalFile where
     runConvert hnd _ dest = do
         dest' <- liftIoProgram (ensureParentDir dest)
         newFileH <- runCreate SExternalFile dest'
@@ -102,7 +99,7 @@ instance CanConvert IoCompiler 'FreeFile 'ExternalFile where
         copyFreeFile hnd dest'
         return newFileH
 
-instance CanConvert IoCompiler 'FreeFile 'FreeFile where
+instance CanExtract IoCompiler 'FreeFile 'FreeFile where
     runConvert hnd@(Handle _ hndT) _ mdest = do
         (newFileH,newFile) <-
             createFreeFile (maybe hndT ((hndT ++ "-") ++) mdest)

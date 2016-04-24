@@ -23,7 +23,7 @@ instance Show (Sing 'ImageRepository) where
 type instance AddSpec 'ImageRepository 'VmImage =
      (SharedImageName, Handle 'VmImage)
 
-type instance ConvSpec 'ImageRepository 'VmImage = SharedImageName
+type instance ExtractionArg 'ImageRepository 'VmImage = SharedImageName
 
 type instance IoCompilerArtifactState 'ImageRepository = ImageRepository
 
@@ -51,7 +51,7 @@ instance CanAdd IoCompiler 'ImageRepository 'VmImage where
             imageRepositoryH
             (liftIoProgram (imageRepoPublish imgFile srcType sn))
 
-instance CanConvert IoCompiler 'ImageRepository 'VmImage where
+instance CanExtract IoCompiler 'ImageRepository 'VmImage where
     runConvert _ _ sharedImgName = do
         (sharedImgInfo,cachedImage) <-
             liftIoProgram (imageRepoLookup sharedImgName)

@@ -281,7 +281,7 @@ createFileSystem dst fs srcDir files =
 resizeFileSystem :: FilePath -> FileSystemResize -> FileSystem -> IoProgram ()
 resizeFileSystem f r t = liftF $ ResizeFileSystem f r t ()
 
--- | Convert a virtual machine disk image file into another format.
+-- | Extract a virtual machine disk image file into another format.
 convertVmImage :: FilePath -> ImageType -> FilePath -> ImageType -> IoProgram ()
 convertVmImage srcF srcT dstF dstT = liftF $ ConvertVmImage srcF srcT dstF dstT ()
 

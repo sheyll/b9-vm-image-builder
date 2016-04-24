@@ -7,7 +7,6 @@ import Data.ConfigFile as CF
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
 import Paths_b9
-import System.Directory
 import System.IO.Error hiding (isDoesNotExistErrorType)
 
 main :: IO ()

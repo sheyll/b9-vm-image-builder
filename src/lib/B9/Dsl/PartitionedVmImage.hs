@@ -18,12 +18,12 @@ $(singletons
 type instance IoCompilerArtifactState 'PartitionedVmImage =
      Handle 'FreeFile
 
-type instance ConvSpec 'FreeFile 'PartitionedVmImage = ()
+type instance ExtractionArg 'FreeFile 'PartitionedVmImage = ()
 
-type instance ConvSpec 'PartitionedVmImage 'FreeFile =
+type instance ExtractionArg 'PartitionedVmImage 'FreeFile =
      PartitionSpec
 
-instance CanConvert IoCompiler 'FreeFile 'PartitionedVmImage where
+instance CanExtract IoCompiler 'FreeFile 'PartitionedVmImage where
     runConvert hnd@(Handle _ hndT) _ () = do
         let partVmImgHndT = hndT ++ "-partitioned-vm-image"
         (partVmImgHnd,_) <- allocHandle SPartitionedVmImage partVmImgHndT
@@ -32,7 +32,7 @@ instance CanConvert IoCompiler 'FreeFile 'PartitionedVmImage where
         hnd --> partVmImgHnd
         return partVmImgHnd
 
-instance CanConvert IoCompiler 'PartitionedVmImage 'FreeFile where
+instance CanExtract IoCompiler 'PartitionedVmImage 'FreeFile where
     runConvert hnd@(Handle _ hndT) _ partSpec@(MBRPartition pIndex) = do
         let dest = hndT ++ "-partition-" ++ show pIndex
         Just (srcFileH :: Handle 'FreeFile) <- useArtifactState hnd

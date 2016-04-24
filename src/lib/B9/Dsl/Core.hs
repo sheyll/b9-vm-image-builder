@@ -30,10 +30,10 @@ data BuildStep m next where
         (Show (AddSpec a b), CanAdd m a b) =>
         Handle a ->
           p b -> AddSpec a b -> next -> BuildStep m next
-    Convert ::
-        (Show (ConvSpec a b), CanConvert m a b) =>
+    Extract ::
+        (Show (ExtractionArg a b), CanExtract m a b) =>
         Handle a ->
-          p b -> ConvSpec a b -> (Handle b -> next) -> BuildStep m next
+          p b -> ExtractionArg a b -> (Handle b -> next) -> BuildStep m next
     Export ::
         (Show (ExportSpec a), CanExport m a) =>
         Handle a ->
@@ -43,7 +43,7 @@ data BuildStep m next where
 instance Functor (BuildStep m) where
     fmap f (Create sa src k)            = Create sa src (f . k)
     fmap f (Add hndEnv sa addSpec next) = Add hndEnv sa addSpec (f next)
-    fmap f (Convert hA sB conv k)       = Convert hA sB conv (f . k)
+    fmap f (Extract hA sB conv k)       = Extract hA sB conv (f . k)
     fmap f (Export hnd out next)        = Export hnd out (f next)
 
 -- * Artifact Creation
@@ -86,21 +86,21 @@ add hndA sB addSpec = liftF $
 -- * Artifact to Artifact copy/clone/conversion
 
 -- | Conversion parameter type
-type family ConvSpec (a :: k1) (b :: k2) :: *
+type family ExtractionArg (a :: k1) (b :: k2) :: *
 
 -- | Class of artifacts that can be copied or converted into a possibly
 -- different type of new artifact, for which a handle is returned. The old
 -- artifact does not change.
-class CanConvert m (a :: k1) (b :: k2)  where
+class CanExtract m (a :: k1) (b :: k2)  where
     -- | Execute the conversion yielding a handle for the converted artifact
-    runConvert :: Handle a -> p b -> ConvSpec a b -> m (Handle b)
+    runConvert :: Handle a -> p b -> ExtractionArg a b -> m (Handle b)
 
--- | Convert an artifact referenced by a handle to a different kind
+-- | Extract an artifact referenced by a handle to a different kind
 --  of artifact and return the handle of the new artifact.
-convert :: (Show (ConvSpec a b),CanConvert m a b)
-        => Handle a -> p b -> ConvSpec a b -> ProgramT m (Handle b)
-convert hndA sB convSpec = liftF $
-    Convert hndA sB convSpec id
+extract :: (Show (ExtractionArg a b),CanExtract m a b)
+        => Handle a -> p b -> ExtractionArg a b -> ProgramT m (Handle b)
+extract hndA sB convSpec = liftF $
+    Extract hndA sB convSpec id
 
 -- * Artifact output generation
 
@@ -133,7 +133,7 @@ interpret = foldFree go
     go (Add hndA sB addSpec next) = do
         runAdd hndA sB addSpec
         return next
-    go (Convert hndA sB convSpec k) = do
+    go (Extract hndA sB convSpec k) = do
         hnd <- runConvert hndA sB convSpec
         return (k hnd)
     go (Export hnd exportSpec next) = do

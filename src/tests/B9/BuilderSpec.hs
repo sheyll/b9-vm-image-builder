@@ -60,9 +60,9 @@ ciVfat = do
 extractPartitionOfQCow2 :: Int -> FilePath -> FilePath -> Program ()
 extractPartitionOfQCow2 p srcFile dstFile = do
     inQCow <- fromFile srcFile SVmImage QCow2
-    inRaw <- convert inQCow SVmImage (Left Raw)
-    partedRawF <- convert inRaw SFreeFile ()
-    partedRaw <- convert partedRawF SPartitionedVmImage ()
+    inRaw <- extract inQCow SVmImage (Left Raw)
+    partedRawF <- extract inRaw SFreeFile ()
+    partedRaw <- extract partedRawF SPartitionedVmImage ()
     outputFile partedRaw (MBRPartition p) dstFile
 
 _copyEtcPasswdOntoSharedImage :: Program ()
@@ -71,9 +71,9 @@ _copyEtcPasswdOntoSharedImage = do
     e <- lxc "juhu"
     addFileFull e (Source NoConversion "test.mp3") (fileSpec "/test.mp3")
     outImgRaw <- mount e root "/"
-    rwFs <- convert outImgRaw SFileSystemImage ()
-    vmImg <- convert rwFs SVmImage ()
-    vmQCow <- convert vmImg SVmImage (Left QCow2)
+    rwFs <- extract outImgRaw SFileSystemImage ()
+    vmImg <- extract rwFs SVmImage ()
+    vmQCow <- extract vmImg SVmImage (Left QCow2)
     vmQCow `sharedAs` "juhu-out"
     outputFile e "/etc/passwd" "/home/sven/fc-passwd"
 

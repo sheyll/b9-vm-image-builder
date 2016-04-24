@@ -20,22 +20,15 @@ import B9.Dsl.ExecutionEnvironment as X
 import B9.Dsl.File                 as X
 import B9.Dsl.FileSystem           as X
 import B9.Dsl.ImageRepository      as X
-import B9.Dsl.Logging              as X
 import B9.Dsl.PartitionedVmImage   as X
 import B9.Dsl.UpdateServerRoot     as X
 import B9.Dsl.VmImage              as X
 import B9.ExecEnv                  as X
 import B9.FileSystems              as X
-import B9.Logging                  as X
 import B9.PartitionTable           as X
 import B9.Repository               as X
 import B9.ShellScript              as X (Script(..))
-import Control.Lens
-import Data.Functor                (void)
 import Data.Singletons             (Sing)
-import Data.Word
-import System.FilePath
-import Text.Printf
 
 -- * Cloud-init
 -- TODO
@@ -51,28 +44,28 @@ externalFile = create SExternalFile
 -- | Get a reference to a copy of an external file inside the build root that
 -- can be modified.
 externalFileTempCopy
-    :: (CanCreate m 'ExternalFile, CanConvert m 'ExternalFile 'FreeFile)
+    :: (CanCreate m 'ExternalFile, CanExtract m 'ExternalFile 'FreeFile)
     => FilePath -> ProgramT m (Handle 'FreeFile)
 externalFileTempCopy f = do
     extH <- externalFile f
-    convert extH SFreeFile ()
+    extract extH SFreeFile ()
 
 -- | 'use' an external file to introduce an artifact with the help of a
 --  artifact dependent extra arguement and return the artifacts handle.
 fromFile
-    :: (Show (ConvSpec 'FreeFile b), CanCreate m 'ExternalFile, CanConvert m 'FreeFile b, CanConvert m 'ExternalFile 'FreeFile)
-    => FilePath -> Sing b -> ConvSpec 'FreeFile b -> ProgramT m (Handle b)
+    :: (Show (ExtractionArg 'FreeFile b), CanCreate m 'ExternalFile, CanExtract m 'FreeFile b, CanExtract m 'ExternalFile 'FreeFile)
+    => FilePath -> Sing b -> ExtractionArg 'FreeFile b -> ProgramT m (Handle b)
 fromFile f a conversionArg = do
     h <- externalFileTempCopy f
-    convert h a conversionArg
+    extract h a conversionArg
 
 -- | Given an artifact that support extraction or conversion to a file
 -- create/write a file to a given output path.
 outputFile
-    :: (Show (ConvSpec a 'FreeFile), CanConvert m a 'FreeFile, CanExport m 'FreeFile)
-    => Handle a -> ConvSpec a 'FreeFile -> FilePath -> ProgramT m ()
+    :: (Show (ExtractionArg a 'FreeFile), CanExtract m a 'FreeFile, CanExport m 'FreeFile)
+    => Handle a -> ExtractionArg a 'FreeFile -> FilePath -> ProgramT m ()
 outputFile e src dst = do
-    outF <- convert e SFreeFile src
+    outF <- extract e SFreeFile src
     export outF dst
 
 -- * File Inclusion, File-Templating and Script Rendering
@@ -84,7 +77,7 @@ outputFile e src dst = do
 addFile
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
        ,CanAdd m e 'FreeFile)
        => Handle e -> FilePath -> ProgramT m ()
 addFile d f = addFileP d f (0, 6, 4, 4)
@@ -94,7 +87,7 @@ addFile d f = addFileP d f (0, 6, 4, 4)
 addExe
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
        ,CanAdd m e 'FreeFile)
        => Handle e -> FilePath -> ProgramT m ()
 addExe d f = addFileP d f (0, 7, 5, 5)
@@ -103,13 +96,13 @@ addExe d f = addFileP d f (0, 7, 5, 5)
 addFileP
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
        ,CanAdd m e 'FreeFile)
        => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> ProgramT m ()
 addFileP dstH f p = do
     let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
     origH <- create SExternalFile f
-    tmpH <- convert origH SFreeFile ()
+    tmpH <- extract origH SFreeFile ()
     add dstH SFreeFile (dstSpec, tmpH)
 
 -- * Directories
@@ -150,10 +143,10 @@ appendContent hnd = add hnd SGeneratedContent
 addTemplate
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
        ,CanAdd m e 'FreeFile
        ,CanCreate m 'GeneratedContent
-       ,CanConvert m 'GeneratedContent 'FreeFile)
+       ,CanExtract m 'GeneratedContent 'FreeFile)
        => Handle e -> FilePath -> ProgramT m ()
 addTemplate d f = addTemplateP d f (0,6,4,4)
 
@@ -162,10 +155,10 @@ addTemplate d f = addTemplateP d f (0,6,4,4)
 addTemplateExe
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
        ,CanAdd m e 'FreeFile
        ,CanCreate m 'GeneratedContent
-       ,CanConvert m 'GeneratedContent 'FreeFile)
+       ,CanExtract m 'GeneratedContent 'FreeFile)
        => Handle e -> FilePath -> ProgramT m ()
 addTemplateExe d f = addTemplateP d f (0, 6, 4, 4)
 
@@ -173,10 +166,10 @@ addTemplateExe d f = addTemplateP d f (0, 6, 4, 4)
 addTemplateP
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
        ,CanAdd m e 'FreeFile
        ,CanCreate m 'GeneratedContent
-       ,CanConvert m 'GeneratedContent 'FreeFile)
+       ,CanExtract m 'GeneratedContent 'FreeFile)
        => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> ProgramT m ()
 addTemplateP dstH f p = do
     let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
@@ -189,8 +182,8 @@ addTemplateP dstH f p = do
 addFileFull
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
        ,CanCreate m 'ExternalFile
-       ,CanConvert m 'ExternalFile 'FreeFile
-       ,CanConvert m 'GeneratedContent 'FreeFile
+       ,CanExtract m 'ExternalFile 'FreeFile
+       ,CanExtract m 'GeneratedContent 'FreeFile
        ,CanAdd m e 'FreeFile
        ,CanCreate m 'GeneratedContent)
        => Handle e -> SourceFile -> FileSpec -> ProgramT m ()
@@ -201,14 +194,14 @@ addFileFull dstH srcFile dstSpec =
             undefined
         (Source NoConversion f) -> do
             origH <- create SExternalFile f
-            tmpH <- convert origH SFreeFile ()
+            tmpH <- extract origH SFreeFile ()
             add dstH SFreeFile (dstSpec, tmpH)
 
 -- | Generate a file with a content and add that file to an artifact at a
 -- 'FileSpec'.
 addFileFromContent
     :: (AddSpec e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanConvert m 'GeneratedContent 'FreeFile
+       ,CanExtract m 'GeneratedContent 'FreeFile
        ,CanAdd m e 'FreeFile
        ,CanCreate m 'GeneratedContent)
        => Handle e -> Content -> FileSpec -> ProgramT m ()
@@ -219,7 +212,7 @@ addFileFromContent dstH content dstSpec = do
             (printf
                  "contents-of-%s"
                  (dstSpec ^. fileSpecPath . to takeFileName))
-    tmpFileH <- convert cH SFreeFile (Environment [])
+    tmpFileH <- extract cH SFreeFile (Environment [])
     add dstH SFreeFile (dstSpec, tmpFileH)
 
 -- * Execution environment
@@ -267,12 +260,12 @@ mountDirRW e hostDir dest =
     add e SLocalDirectory (SharedDirectory hostDir (MountPoint dest))
 
 mount
-    :: (CanConvert m 'ExecutionEnvironment 'VmImage)
+    :: (CanExtract m 'ExecutionEnvironment 'VmImage)
        => Handle 'ExecutionEnvironment
        -> Handle 'VmImage
        -> FilePath
        -> ProgramT m (Handle 'VmImage)
-mount e imgHnd dest = convert e SVmImage (imgHnd, MountPoint dest)
+mount e imgHnd dest = extract e SVmImage (imgHnd, MountPoint dest)
 
 -- * Some utility vm builder lego
 
@@ -280,9 +273,9 @@ mount e imgHnd dest = convert e SVmImage (imgHnd, MountPoint dest)
 -- * Image import
 
 -- | Load the newest version of the shared image from the local cache.
-fromShared :: (CanConvert m 'ImageRepository 'VmImage)
+fromShared :: (CanExtract m 'ImageRepository 'VmImage)
               => String -> ProgramT m (Handle 'VmImage)
-fromShared sharedImgName = convert
+fromShared sharedImgName = extract
         imageRepositoryH
         SVmImage
         (SharedImageName sharedImgName)
@@ -295,8 +288,8 @@ sharedAs :: (CanAdd m 'ImageRepository 'VmImage)
             => Handle 'VmImage -> String -> ProgramT m ()
 sharedAs hnd name = add imageRepositoryH SVmImage (SharedImageName name, hnd)
 
-rootImage :: (CanConvert m 'ImageRepository 'VmImage
-             ,CanConvert m 'ExecutionEnvironment 'VmImage
+rootImage :: (CanExtract m 'ImageRepository 'VmImage
+             ,CanExtract m 'ExecutionEnvironment 'VmImage
              ,CanAdd m 'ImageRepository 'VmImage)
              => String
              -> String
@@ -305,18 +298,18 @@ rootImage :: (CanConvert m 'ImageRepository 'VmImage
 rootImage nameFrom nameExport env =
     void $ mountAndShareSharedImage nameFrom nameExport "/" env
 
-dataImage :: (CanConvert m 'GeneratedContent 'FreeFile
+dataImage :: (CanExtract m 'GeneratedContent 'FreeFile
              ,CanCreate m 'FileSystemBuilder
-             ,CanConvert m 'FileSystemBuilder 'FileSystemImage
-             ,CanConvert m 'FileSystemImage 'VmImage
+             ,CanExtract m 'FileSystemBuilder 'FileSystemImage
+             ,CanExtract m 'FileSystemImage 'VmImage
              ,CanAdd m 'ImageRepository 'VmImage
-             ,CanConvert m 'ExecutionEnvironment 'VmImage)
+             ,CanExtract m 'ExecutionEnvironment 'VmImage)
              => String -> Handle 'ExecutionEnvironment -> ProgramT m ()
 dataImage nameExport env =
     void $ mountAndShareNewImage "data" 64 nameExport "/data" env
 
-mountAndShareSharedImage :: (CanConvert m 'ImageRepository 'VmImage
-                            ,CanConvert m 'ExecutionEnvironment 'VmImage
+mountAndShareSharedImage :: (CanExtract m 'ImageRepository 'VmImage
+                            ,CanExtract m 'ExecutionEnvironment 'VmImage
                             ,CanAdd m 'ImageRepository 'VmImage)
                             => String
                             -> String
@@ -329,12 +322,12 @@ mountAndShareSharedImage nameFrom nameTo mountPoint env = do
     i' `sharedAs` nameTo
 
 mountAndShareNewImage
-    :: (CanConvert m 'GeneratedContent 'FreeFile
+    :: (CanExtract m 'GeneratedContent 'FreeFile
        ,CanCreate m 'FileSystemBuilder
-       ,CanConvert m 'FileSystemBuilder 'FileSystemImage
-       ,CanConvert m 'FileSystemImage 'VmImage
+       ,CanExtract m 'FileSystemBuilder 'FileSystemImage
+       ,CanExtract m 'FileSystemImage 'VmImage
        ,CanAdd m 'ImageRepository 'VmImage
-       ,CanConvert m 'ExecutionEnvironment 'VmImage)
+       ,CanExtract m 'ExecutionEnvironment 'VmImage)
     => String
     -> Int
     -> String
@@ -344,7 +337,7 @@ mountAndShareNewImage
 mountAndShareNewImage label sizeGB nameTo mountPoint env = do
     fs <-
         create SFileSystemBuilder (FileSystemSpec Ext4 label sizeGB GB)
-    fi <- convert fs SFileSystemImage ()
-    i <- convert fi SVmImage ()
+    fi <- extract fs SFileSystemImage ()
+    i <- extract fi SVmImage ()
     i' <- mount env i mountPoint
     i' `sharedAs` nameTo

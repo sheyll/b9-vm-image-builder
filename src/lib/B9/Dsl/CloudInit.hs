@@ -7,13 +7,9 @@ import B9.Dsl.Core
 import B9.Dsl.ExecutionEnvironment
 import B9.Dsl.File
 import B9.ShellScript              (toBashOneLiner, Script(..))
-import Control.Lens
 import Data.Data
-import Data.Monoid
 import Data.Singletons.TH          hiding ((%~))
 import Data.Time.Clock
-import Data.Word
-import Text.Printf                 (printf)
 
 -- * Cloud-init API
 $(singletons
@@ -33,7 +29,7 @@ type instance AddSpec 'CloudInitUserData 'FreeFile =
 
 type instance AddSpec 'CloudInitUserData 'CloudInitUserData = CiUserData
 
-type instance ConvSpec 'CloudInitUserData 'GeneratedContent = ()
+type instance ExtractionArg 'CloudInitUserData 'GeneratedContent = ()
 
 -- | Representation of a @cloud-config@ @user-data@ document.
 data CiUserData =
@@ -172,7 +168,7 @@ type instance CreateSpec 'CloudInitMetaData = () -- TODO Maybe (Handle
 
 type instance AddSpec 'CloudInitMetaData 'CloudInitMetaData = CiMetaData
 
-type instance ConvSpec 'CloudInitMetaData 'GeneratedContent = ()
+type instance ExtractionArg 'CloudInitMetaData 'GeneratedContent = ()
 
 data CiMetaData =
   CiMetaData {_ciMetaDataInstanceId :: String
@@ -226,15 +222,15 @@ instance CanAdd IoCompiler 'CloudInitUserData 'FreeFile where
   runAdd hnd _ (fspec,fH) =
     do fH --> hnd
        interpret $
-         do fileContent <- convert fH SGeneratedContent ()
+         do fileContent <- extract fH SGeneratedContent ()
             add hnd
                 SCloudInitUserData
                 (mempty {_ciWriteFiles = [CiWriteFile fileContent fspec]})
 
-instance CanConvert IoCompiler 'CloudInitMetaData 'GeneratedContent where
+instance CanExtract IoCompiler 'CloudInitMetaData 'GeneratedContent where
   runConvert (Handle _ h) _ () = return (Handle SGeneratedContent h)
 
-instance CanConvert IoCompiler 'CloudInitUserData 'GeneratedContent where
+instance CanExtract IoCompiler 'CloudInitUserData 'GeneratedContent where
   runConvert (Handle _ h) _ () = return (Handle SGeneratedContent h)
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.

@@ -8,18 +8,15 @@ module B9.B9IO.IoCompiler where
 
 import B9.B9IO
 import B9.Dsl.Core
-import B9.Logging
 import Control.Lens         hiding (from, (<.>))
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Data
-import Data.Default
 import Data.Dynamic
 import Data.Graph           as Graph
 import Data.Map             as Map hiding (null)
 import Data.Singletons
 import Data.Tree            as Tree
-import Text.Printf          (printf)
 
 -- | The monad transformer used to compile a 'ProgramT'
 newtype IoCompiler a = IoCompiler

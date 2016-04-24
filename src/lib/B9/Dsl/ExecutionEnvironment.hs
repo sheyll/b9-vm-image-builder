@@ -14,13 +14,8 @@ import B9.Dsl.VmImage
 import B9.ExecEnv
 import B9.FileSystems
 import B9.ShellScript (Script(..))
-import Control.Lens hiding ((<.>))
 import Data.Data
-import Data.Default
-import Data.Monoid
 import Data.Singletons.TH
-import System.FilePath
-import Text.Printf
 
 -- | Singletons for the execuition environment library.
 $(singletons
@@ -63,10 +58,10 @@ type instance AddSpec 'ExecutionEnvironment 'FreeFile =
 type instance AddSpec 'ExecutionEnvironment 'LocalDirectory =
      SharedDirectory
 
-type instance ConvSpec 'ExecutionEnvironment 'VmImage =
+type instance ExtractionArg 'ExecutionEnvironment 'VmImage =
      (Handle 'VmImage, MountPoint)
 
-type instance ConvSpec 'ExecutionEnvironment 'FreeFile = FilePath
+type instance ExtractionArg 'ExecutionEnvironment 'FreeFile = FilePath
 
 instance CanCreate IoCompiler 'ExecutionEnvironment where
   runCreate _ e =
@@ -123,7 +118,7 @@ instance CanAdd IoCompiler 'ExecutionEnvironment 'LocalDirectory where
   runAdd hnd _ sharedDir =
     modifyArtifactState hnd $ traverse . execBindMounts <>~ [sharedDir]
 
-instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
+instance CanExtract IoCompiler 'ExecutionEnvironment 'FreeFile where
   runConvert hnd _ src =
     do Just ec <- useArtifactState hnd
        (fh,f) <-
@@ -136,7 +131,7 @@ instance CanConvert IoCompiler 'ExecutionEnvironment 'FreeFile where
        hnd --> fh
        return fh
 
-instance CanConvert IoCompiler 'ExecutionEnvironment 'VmImage where
+instance CanExtract IoCompiler 'ExecutionEnvironment 'VmImage where
   runConvert hnd _ (imgH,mp) =
     do rawH <-
          runConvert imgH
