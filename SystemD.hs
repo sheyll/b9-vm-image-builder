@@ -1,4 +1,21 @@
 
+data SdUnit =
+  SdUnit { sdUnitRequires :: [SystemDUnit]
+         , sdUnitRequisite :: [SystemDUnit]
+         , sdUnitWants :: [SystemDUnit]
+         , sdUnitBindsTo :: [SystemDUnit]
+         , sdUnitPartOf :: [SystemDUnit]
+         , sdUnitConflicts :: [SystemDUnit]
+         , sdUnitBefore :: [SystemDUnit]
+         , sdUnitAfter :: [SystemDUnit]
+         , sdUnitOnFailure :: [SystemDUnit]
+         , sdUnitPropagatesReloadTo :: [SystemDUnit]
+         , sdUnitPropagatesReloadFrom :: [SystemDUnit]
+         , sdUnitJoinsNamespaceOf :: [SystemDUnit]
+         }
+
+data SystemDUnit = SystemDUnit String
+
 -- | Create a systemd unit that executes a given 'Script'.
 data SdService =
   SdService {sdServiceType :: SystemDServiceType
