@@ -76,6 +76,7 @@ library
                    , B9.Content.ErlTerms
                    , B9.Content.ErlangPropList
                    , B9.Content.StringTemplate
+                   , B9.Content.SystemD
                    , B9.Content.YamlObject
                    , B9.Dsl
                    , B9.Dsl.CloudInit
