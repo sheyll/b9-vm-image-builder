@@ -1,109 +1,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module B9.Content.SystemD where
 
+import B9.Content.PropList
 import B9.Common
-
-test1 =
-  renderSdProps $
-  (ZValue "this, is the test service" :: ZKey "Documentation") <+>
-  (ZValue 123 :: ZKey "XYZ") <+>
-  (ZValue "test service" :: ZKey "Description") <+> sdUnitSection
-
-
-type instance RequiredKeys "Unit" = '["Description"]
-
-sdUnitSection :: SystemDSection "Unit"
-sdUnitSection = SdPropsEmpty
-
-instance ZProp "Documentation"
-instance ZProp "Description"
-
-instance ZProp "XYZ" where
-  type ZValueType "XYZ" = Int
-
-renderSdProps :: forall section ps.
-                 KnownSymbol section
-              => MinimalSystemDSection (section :: Symbol) (ps :: [Symbol])
-              -> [String]
-renderSdProps props =
-  printf "[%s]" (symbolVal (Proxy :: Proxy section)) : go props
-  where go
-          :: forall s r p.
-             SdProps (s :: Symbol) (r :: [Symbol]) (p :: [Symbol]) -> [String]
-        go SdPropsEmpty = []
-        go (SdPropsAdd s rest) = zPrint s : go rest
-
--- | The type of empty systemD sections.
-type SystemDSection (section :: Symbol) =
-  SdProps section (RequiredKeys section) '[]
-
-type MinimalSystemDSection (section :: Symbol) (ps :: [Symbol]) =
-  SdProps section ('[] :: [Symbol]) ps
-
-type family RequiredKeys (section :: Symbol) :: [Symbol]
-
-data SdProps (section :: Symbol) (required :: [Symbol])
-     (contents :: [Symbol]) where
-        SdPropsEmpty :: SdProps section required '[]
-        SdPropsAdd ::
-            (ZProp key,
-             CanAddProperty (ZPropRestriction key section) key keys ~ 'True) =>
-             ZKey key ->
-              SdProps section required keys ->
-                SdProps section (Remove key required) (key ': keys)
-
-(<+>)
-  :: (ZProp key
-     ,CanAddProperty (ZPropRestriction key section) key keys ~ 'True)
-  => ZKey key
-  -> SdProps section required keys
-  -> SdProps section (Remove key required) (key ': keys)
-(<+>) = SdPropsAdd
-
-infixr 1 <+>
-
-type family CanAddProperty (r :: MaxOccurences) (p :: k)
-     (ps :: [k]) where
-        CanAddProperty 'NoOccurence p ps = 'False
-        CanAddProperty 'SingleOccurence p ps = (NotElem p ps)
-        CanAddProperty 'ZeroOrMoreOccurences p ps = 'True
-
-type family NotElem (p :: k) (ps :: [k]) :: Bool where
-        NotElem p '[] = 'True
-        NotElem p (p ': ps) = 'False
-        NotElem p (x ': ps) = NotElem p ps
-
-type family Remove (p :: k) (ps :: [k]) :: [k] where
-        Remove p '[] = '[]
-        Remove p (p ': ps) = Remove p ps
-        Remove p (x ': ps) = x ': Remove p ps
-
-zPrint :: forall k.
-          ZProp k
-       => ZKey k -> String
-zPrint zv = symbolVal (Proxy :: Proxy k) ++ "=" ++ zShowValue zv
-
-class (KnownSymbol k) => ZProp (k :: Symbol)  where
-  type ZPropRestriction k (u :: Symbol) :: MaxOccurences
-  type ZPropRestriction k (u :: Symbol) = 'ZeroOrMoreOccurences
-  type ZValueType k :: *
-  type ZValueType k = String
-  zShowValue :: ZKey k -> String
-  default zShowValue :: (Show (ZValueType k)) => (ZKey k) -> String
-  zShowValue (ZValue v) = show v
-
-data ZKey (k :: Symbol) where
-  ZValue :: ZProp k => ZValueType k -> ZKey k
-
-
-data MaxOccurences
-  = NoOccurence
-  | SingleOccurence
-  | ZeroOrMoreOccurences
 
 -- * Type unsafe
 data SystemDUnit =
@@ -126,13 +30,13 @@ data SdUnit =
          ,sdUnitJoinsNamespaceOf :: [SystemDUnit]
          ,sdUnitRequiresMountFor :: [SdResetable FilePath]}
 
-data SdService where
-        SdSimple :: (SdServiceOptions Sd1 Sd0) -> SdService
-        SdForking :: (SdServiceOptions Sd1 Sd0) -> SdService
-        SdOneShot :: (SdServiceOptions Sd0_n Sd0) -> SdService
-        SdDBus :: (SdServiceOptions Sd1 Sd1) -> SdService
-        SdNotify :: (SdServiceOptions Sd1 Sd0) -> SdService
-        SdIdle :: (SdServiceOptions Sd1 Sd0) -> SdService
+-- data SdService where
+--         SdSimple :: (SdServiceOptions Sd1 Sd0) -> SdService
+--         SdForking :: (SdServiceOptions Sd1 Sd0) -> SdService
+--         SdOneShot :: (SdServiceOptions Sd0_n Sd0) -> SdService
+--         SdDBus :: (SdServiceOptions Sd1 Sd1) -> SdService
+--         SdNotify :: (SdServiceOptions Sd1 Sd0) -> SdService
+--         SdIdle :: (SdServiceOptions Sd1 Sd0) -> SdService
 
 -- | Create a systemd unit that executes a given 'Script'.
 data SdServiceOptions execStartF busNameF =
@@ -248,7 +152,8 @@ data SystemDFailureAction
   | SdFailureActionPoweroffImmediate
 
 data SystemDExec =
-  SystemDExec {sdExecWorkingDirectory :: Maybe FilePath
+  SystemDExec
+              {sdExecWorkingDirectory :: Maybe FilePath
               ,sdExecRootDirectory :: Maybe FilePath
               ,sdExecUser :: Maybe String
               ,sdExecGroup :: Maybe String
@@ -459,21 +364,6 @@ data SdAddressFamily
   | SdAF_INET6
 
 -- * Parameterized data types
-newtype Sd1 a =
-  Sd1 a
-
-data Sd0 a =
-  Sd0
-
-type Sd0_n = []
-
-type Sd0_1 = Maybe
-
-instance Default a => Default (Sd1 a) where
-  def = Sd1 def
-
-instance Default (Sd0 a) where
-  def = Sd0
 
 data SdMightFail a
   = SdMayFail a

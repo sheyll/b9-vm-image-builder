@@ -75,6 +75,7 @@ library
                    , B9.Content.AST
                    , B9.Content.ErlTerms
                    , B9.Content.ErlangPropList
+                   , B9.Content.PropList
                    , B9.Content.StringTemplate
                    , B9.Content.SystemD
                    , B9.Content.YamlObject
