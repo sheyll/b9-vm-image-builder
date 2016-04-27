@@ -15,13 +15,24 @@ import B9.Common
 testSdUnit = renderProperties
      (   (Begin        :: EmptyProperties "Unit")
      <++ (Value "blah" :: Property "Description")
-     <++ (Value
-          (SdSet
-           (SdList
-            [SystemDUnit "blah.service"
-            ,SystemDUnit "blub.service"])) :: Property "Wants")
+     <++ (valuesR
+            SystemDUnit ["blah.service"
+                        ,"blub.service"] :: Property "Wants")
+     <++ (sdDependencies ["blah.service", "blub.service"] :: Property "Wants")
      <++ (Value SdResetPrior :: Property "Wants")
      )
+
+sdDependencies
+  :: forall t (k :: sym)
+   . (IsProperty k, ValueType k ~ SdResetable (SdList SystemDUnit))
+  => t -> [String] -> Property k
+sdDependencies as = valuesR SystemDUnit
+
+valuesR
+   :: forall (k :: sym) a a1
+    . (IsProperty k, ValueType k ~ SdResetable (SdList a))
+   => (a1 -> a) -> [a1] -> Property k
+valuesR f as = Value (SdSet (SdList (map f as)))
 
 type instance RequiredKeys "Unit" = '["Description"]
 

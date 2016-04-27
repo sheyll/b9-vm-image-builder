@@ -134,7 +134,8 @@ renderProperties :: forall section ps.
               => SufficientProperties (section :: sym) (ps :: [sym])
               -> String
 renderProperties props =
-  unlines $ printf "[%s]" (showProxy (Proxy :: Proxy section)) : go props
+  unlines $
+    printf "[%s]" (showProxy (Proxy :: Proxy section)) : reverse (go props)
   where go
           :: forall s r p.
              Properties (s :: sym) (r :: [sym]) (p :: [sym]) -> [String]
