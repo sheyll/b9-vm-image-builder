@@ -52,10 +52,80 @@
 -- > instance IsProperty "XYZ" where
 -- >  type ValueType "XYZ" = Int
 -- >
--- 
+--
 module B9.Content.PropList where
 
 import B9.Common
+
+-- * Properties
+
+-- | (Type-) Configurable PropList
+data Properties (section :: sym) (required :: [sym])
+     (contents :: [sym]) where
+        Begin :: Properties section required '[]
+        AddProperty ::
+            (IsProperty key,
+             CanAddProperty (Cardinality key section) key keys ~ 'True) =>
+              Property key ->
+              Properties section required keys ->
+              Properties section (Remove key required) (key ': keys)
+
+type EmptyProperties (section :: sym) =
+  Properties section (RequiredKeys section) '[]
+
+type SufficientProperties (section :: sym) (ps :: [sym]) =
+  Properties section ('[] :: [sym]) ps
+
+-- | Type family to indicate what @section@ identified by a type of any kind may
+-- contain what entries.
+type family RequiredKeys (section :: sym) :: [k]
+
+-- * Single Property configuration
+
+-- | A property with a type-level key and a value of the type determined by the
+-- type class instance 'IsProperty' for the key.
+data Property (k :: sym) where
+  Value :: IsProperty k => ValueType k -> Property k
+
+-- | Class of properties that can be assembled into 'Properties' given they obey
+-- the  cardinality rules.
+class IsProperty (k :: sym)  where
+  -- | Max occurences for the property in a unit
+  type Cardinality k (u :: h) :: MaxCardinality
+  type Cardinality k (u :: h) = 'ZeroOrMore
+  -- | Values accepted for the property
+  type ValueType k :: *
+  type ValueType k = String
+  -- | Render the value
+  showPropertyValue :: Property k -> String
+  default showPropertyValue :: (Show (ValueType k)) => (Property k) -> String
+  -- | Render the value using the 'Show' for the value type by default.
+  showPropertyValue (Value v) = show v
+  -- | Render the key of the property
+  showPropertyKey :: proxy k -> String
+  default showPropertyKey :: (ShowUninhabited k) => proxy k -> String
+  -- | Render the key of the property using 'showProxy' by default.
+  showPropertyKey = showProxy
+  -- | Render the complete key-value assignment
+  showProperty :: Property k -> String
+  default showProperty :: (ShowUninhabited k) => Property k -> String
+  -- | Render the complete key-value assignment as @key=value@ by default
+  showProperty zv = showPropertyKey zv ++ "=" ++ showPropertyValue zv
+
+-- | A class similar to 'Show' especially for uninhabited types.
+class ShowUninhabited (k :: t) where
+  showProxy :: p k -> String
+
+instance KnownSymbol k => ShowUninhabited k where
+  showProxy = symbolVal
+
+-- | Defined how often a 'Property' may occur.
+data MaxCardinality
+  = Never
+  | AtMostOnce
+  | ZeroOrMore
+
+-- * Functions on 'Properties'
 
 -- | Convert 'Properties' which contain at least all required entries to a
 -- 'String'.
@@ -104,24 +174,6 @@ getMembers keyPx props =
   let memberPositions = getMemberPositions Proxy keyPx props
   in getMembersAtPositions keyPx memberPositions props
 
--- | Return how many occurences of a 'Property' with a given 'k' are in a type
--- level list 'ks'.
-getMemberCount
-  :: KnownNat (MemberCount k ks)
-  => proxy1 (k :: t)
-  -> proxy2 (ks :: [t])
-  -> Integer
-getMemberCount pe pes = natVal (getMemberCountProxy  pe pes)
-
--- | Return a 'Nat' 'Proxy' matching the number of occurences of a 'Property'
--- with a given 'k' are in a type level list 'ks'.
-getMemberCountProxy
-  :: KnownNat (MemberCount k ks)
-  => proxy1 (k :: t)
-  -> proxy2 (ks :: [t])
-  -> Proxy (MemberCount k ks)
-getMemberCountProxy _k _ks = Proxy
-
 -- | Return a list of 'Property' entries for a given key 'k' from a
 -- 'MemberPositions', usually derived from an instance of 'IsMember'.
 getMembersAtPositions
@@ -140,6 +192,26 @@ getMembersAtPositions px pos props =
       getMembersAtPositions px nextPos nextProp
     (Here nextPos, AddProperty r nextProp) ->
       r : getMembersAtPositions px nextPos nextProp
+
+-- * General Functions on type-level lists
+
+-- | Return how many occurences of a 'Property' with a given 'k' are in a type
+-- level list 'ks'.
+getMemberCount
+  :: KnownNat (MemberCount k ks)
+  => proxy1 (k :: t)
+  -> proxy2 (ks :: [t])
+  -> Integer
+getMemberCount pe pes = natVal (getMemberCountProxy  pe pes)
+
+-- | Return a 'Nat' 'Proxy' matching the number of occurences of a 'Property'
+-- with a given 'k' are in a type level list 'ks'.
+getMemberCountProxy
+  :: KnownNat (MemberCount k ks)
+  => proxy1 (k :: t)
+  -> proxy2 (ks :: [t])
+  -> Proxy (MemberCount k ks)
+getMemberCountProxy _k _ks = Proxy
 
 -- | A witness for count and the positions at which a type 'a' occurs in a type
 -- level list 'as'.
@@ -190,27 +262,6 @@ type family MemberCount (a :: k) (as :: [k]) :: Nat where
   MemberCount a (a ': rest) = 1 + MemberCount a rest
   MemberCount a (b ': rest) = MemberCount a rest
 
--- | The type of empty systemD sections.
-type EmptyProperties (section :: sym) =
-  Properties section (RequiredKeys section) '[]
-
-type SufficientProperties (section :: sym) (ps :: [sym]) =
-  Properties section ('[] :: [sym]) ps
-
--- | Type family to indicate what @section@ identified by a type of any kind may
--- contain what entries.
-type family RequiredKeys (section :: sym) :: [k]
-
-data Properties (section :: sym) (required :: [sym])
-     (contents :: [sym]) where
-        Begin :: Properties section required '[]
-        AddProperty ::
-            (IsProperty key,
-             CanAddProperty (Cardinality key section) key keys ~ 'True) =>
-              Property key ->
-              Properties section required keys ->
-              Properties section (Remove key required) (key ': keys)
-
 type family CanAddProperty (r :: MaxCardinality) (p :: k)
      (ps :: [k]) where
         CanAddProperty 'Never      p ps = 'False
@@ -231,41 +282,3 @@ type family Remove (p :: k) (ps :: [k]) :: [k] where
         Remove p '[]       =              '[]
         Remove p (p ': ps) =      Remove p ps
         Remove p (x ': ps) = x ': Remove p ps
-
-class IsProperty (k :: sym)  where
-  -- | Max occurences for the property in a unit
-  type Cardinality k (u :: h) :: MaxCardinality
-  type Cardinality k (u :: h) = 'ZeroOrMore
-  -- | Values accepted for the property
-  type ValueType k :: *
-  type ValueType k = String
-  -- | Render the value
-  showPropertyValue :: Property k -> String
-  default showPropertyValue :: (Show (ValueType k)) => (Property k) -> String
-  -- | Render the value using the 'Show' for the value type by default.
-  showPropertyValue (Value v) = show v
-  -- | Render the key of the property
-  showPropertyKey :: proxy k -> String
-  default showPropertyKey :: (ShowUninhabited k) => proxy k -> String
-  -- | Render the key of the property using 'showProxy' by default.
-  showPropertyKey = showProxy
-  -- | Render the complete key-value assignment
-  showProperty :: Property k -> String
-  default showProperty :: (ShowUninhabited k) => Property k -> String
-  -- | Render the complete key-value assignment as @key=value@ by default
-  showProperty zv = showPropertyKey zv ++ "=" ++ showPropertyValue zv
-
--- | A class similar to 'Show' especially for uninhabited types.
-class ShowUninhabited (k :: t) where
-  showProxy :: p k -> String
-
-instance KnownSymbol k => ShowUninhabited k where
-  showProxy = symbolVal
-
-data Property (k :: sym) where
-  Value :: IsProperty k => ValueType k -> Property k
-
-data MaxCardinality
-  = Never
-  | AtMostOnce
-  | ZeroOrMore

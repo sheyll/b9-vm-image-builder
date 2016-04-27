@@ -10,8 +10,7 @@ import B9.Content.PropList
 import B9.Common
 
 -- * Type unsafe
-data SystemDUnit =
-  SystemDUnit String
+data SystemDUnit = SystemDUnit String
 
 data SdUnit =
   SdUnit {sdUnitDescription :: Maybe String
