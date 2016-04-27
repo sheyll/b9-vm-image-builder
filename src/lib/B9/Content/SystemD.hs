@@ -3,31 +3,86 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module B9.Content.SystemD where
 
 import B9.Content.PropList
 import B9.Common
 
--- * Type unsafe
-data SystemDUnit = SystemDUnit String
+-- * @Unit@ section
 
-data SdUnit =
-  SdUnit {sdUnitDescription :: Maybe String
-         ,sdUnitDocumentation :: Maybe String
-         ,sdUnitRequires :: [SystemDUnit]
-         ,sdUnitRequisite :: [SystemDUnit]
-         ,sdUnitWants :: [SystemDUnit]
-         ,sdUnitBindsTo :: [SystemDUnit]
-         ,sdUnitPartOf :: [SystemDUnit]
-         ,sdUnitConflicts :: [SystemDUnit]
-         ,sdUnitBefore :: [SystemDUnit]
-         ,sdUnitAfter :: [SystemDUnit]
-         ,sdUnitOnFailure :: [SystemDUnit]
-         ,sdUnitPropagatesReloadTo :: [SystemDUnit]
-         ,sdUnitPropagatesReloadFrom :: [SystemDUnit]
-         ,sdUnitJoinsNamespaceOf :: [SystemDUnit]
-         ,sdUnitRequiresMountFor :: [SdResetable FilePath]}
+testSdUnit = renderProperties
+     (   (Begin        :: EmptyProperties "Unit")
+     <++ (Value "blah" :: Property "Description")
+     <++ (Value
+          (SdSet
+           (SdList
+            [SystemDUnit "blah.service"
+            ,SystemDUnit "blub.service"])) :: Property "Wants")
+     <++ (Value SdResetPrior :: Property "Wants")
+     )
+
+type instance RequiredKeys "Unit" = '["Description"]
+
+instance IsProperty "Description" where
+  type Cardinality "Description" "Unit" = 'AtMostOnce
+
+instance IsProperty "Documentation" where
+  type Cardinality "Documentation" "Unit" = 'AtMostOnce
+
+instance IsProperty "Requires" where
+  type Cardinality "Requires" "Unit" = 'ZeroOrMore
+  type ValueType   "Requires"        = SdResetable SystemDUnit
+
+instance IsProperty "Requisite" where
+  type Cardinality "Requisite" "Unit" = 'ZeroOrMore
+  type ValueType   "Requisite"        = SdResetable SystemDUnit
+
+instance IsProperty "Wants" where
+  type Cardinality "Wants" "Unit" = 'ZeroOrMore
+  type ValueType   "Wants"        = SdResetable (SdList SystemDUnit)
+
+instance IsProperty "BindsTo" where
+  type Cardinality "BindsTo" "Unit" = 'ZeroOrMore
+  type ValueType   "BindsTo"        = SdResetable SystemDUnit
+
+instance IsProperty "PartOf" where
+  type Cardinality "PartOf" "Unit" = 'ZeroOrMore
+  type ValueType   "PartOf"        = SdResetable SystemDUnit
+
+instance IsProperty "Conflicts" where
+  type Cardinality "Conflicts" "Unit" = 'ZeroOrMore
+  type ValueType   "Conflicts"        = SdResetable SystemDUnit
+
+instance IsProperty "Before" where
+  type Cardinality "Before" "Unit" = 'ZeroOrMore
+  type ValueType   "Before"        = SdResetable SystemDUnit
+
+instance IsProperty "After" where
+  type Cardinality "After" "Unit" = 'ZeroOrMore
+  type ValueType   "After"        = SdResetable SystemDUnit
+
+instance IsProperty "OnFailure" where
+  type Cardinality "OnFailure" "Unit" = 'ZeroOrMore
+  type ValueType   "OnFailure"        = SdResetable SystemDUnit
+
+instance IsProperty "PropagatesReloadTo" where
+  type Cardinality "PropagatesReloadTo" "Unit" = 'ZeroOrMore
+  type ValueType   "PropagatesReloadTo"        = SdResetable SystemDUnit
+
+instance IsProperty "PropagatesReloadFrom" where
+  type Cardinality "PropagatesReloadFrom" "Unit" = 'ZeroOrMore
+  type ValueType   "PropagatesReloadFrom"        = SdResetable SystemDUnit
+
+instance IsProperty "JoinsNamespaceOf" where
+  type Cardinality "JoinsNamespaceOf" "Unit" = 'ZeroOrMore
+  type ValueType   "JoinsNamespaceOf"        = SdResetable SystemDUnit
+
+instance IsProperty "RequiresMountFor" where
+  type Cardinality "RequiresMountFor" "Unit" = 'ZeroOrMore
+  type ValueType   "RequiresMountFor"        = [FilePath]
+
 
 -- data SdService where
 --         SdSimple :: (SdServiceOptions Sd1 Sd0) -> SdService
@@ -362,18 +417,50 @@ data SdAddressFamily
   | SdAF_INET
   | SdAF_INET6
 
+data SystemDUnit = SystemDUnit String
+
+instance Show SystemDUnit where
+  show (SystemDUnit u) = u
+
 -- * Parameterized data types
+
+data SdNegatable a
+  = SdNot a
+  | SdId a
+
+instance Show a => Show (SdNegatable a) where
+  show (SdNot a) = "!" ++ show a
+  show (SdId a)  =        show a
 
 data SdMightFail a
   = SdMayFail a
   | SdMustSucceed a
 
+instance Show a => Show (SdMightFail a) where
+  show (SdMayFail a)     = "-" ++ show a
+  show (SdMustSucceed a) =        show a
+
 data SdResetable a
   = SdResetPrior
   | SdSet a
 
+instance Show a => Show (SdResetable a) where
+  show (SdSet a)    = show a
+  show SdResetPrior = ""
+
+data SdList a = SdList [a]
+
+instance Show a => Show (SdList a) where
+  show (SdList as) = unwords (show <$> as)
+
 data SdBWList a
   = SdBlackListAll
   | SdWhiteListAll
-  | SdBlackList [a]
-  | SdWhiteList [a]
+  | SdBlackList (SdList a)
+  | SdWhiteList (SdList a)
+
+instance Show a => Show (SdBWList a) where
+  show (SdBlackList a) = "~" ++ show a
+  show (SdWhiteList a) =        show a
+  show SdBlackListAll  = "~"
+  show SdWhiteListAll  = ""
