@@ -4,7 +4,6 @@ module B9.VmBuilder (buildWithVm) where
 
 import Data.List
 import Control.Monad
-import Control.Applicative
 import Control.Monad.IO.Class
 import System.Directory (createDirectoryIfMissing, canonicalizePath)
 import Text.Printf ( printf )

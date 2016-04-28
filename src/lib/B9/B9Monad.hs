@@ -163,21 +163,21 @@ getRemoteRepos = gets bsRemoteRepos
 getRepoCache :: B9 RepoCache
 getRepoCache = gets bsRepoCache
 
-getDownloader :: B9 Downloader
-getDownloader = gets bsDownloader
-
--- | Configuration for a tool that retreives arbitrary URL and returns them to
--- @stdout@.
-data Downloader =
-  Downloader {downloaderCmd :: FilePath
-             ,downloaderArgsBeforeUrl :: [String]
-             ,downloaderUrlArgPrintfFormatString :: [String]
-             ,downloaderArgsAfterUrl :: [String]}
-  deriving (Read,Show,Eq,Ord,Typeable,Generic)
-
-readContentFromUrl :: String -> B9 B.ByteString
-readContentFromUrl url = do
-  return expression
+-- getDownloader :: B9 Downloader
+-- getDownloader = gets bsDownloader
+--
+-- -- | Configuration for a tool that retreives arbitrary URL and returns them to
+-- -- @stdout@.
+-- data Downloader =
+--   Downloader {downloaderCmd :: FilePath
+--              ,downloaderArgsBeforeUrl :: [String]
+--              ,downloaderUrlArgPrintfFormatString :: [String]
+--              ,downloaderArgsAfterUrl :: [String]}
+--   deriving (Read,Show,Eq,Ord,Typeable,Generic)
+--
+-- readContentFromUrl :: String -> B9 B.ByteString
+-- readContentFromUrl url = do
+--   return expression
 
 cmd :: String -> B9 ()
 cmd str =

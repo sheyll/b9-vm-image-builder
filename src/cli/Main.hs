@@ -5,7 +5,6 @@ import Options.Applicative.Help.Pretty hiding ((</>))
 
 import Control.Exception
 import Data.Function                   (on)
-import Data.List                       (groupBy)
 import Data.Maybe
 import Data.Version
 import Paths_b9

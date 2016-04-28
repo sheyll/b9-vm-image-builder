@@ -23,7 +23,6 @@ import Data.Generics.Aliases
 import Data.List
 import Data.Function
 import Control.Arrow
-import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Writer

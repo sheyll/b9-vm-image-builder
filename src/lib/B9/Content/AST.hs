@@ -36,6 +36,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 
 import           B9.Content.StringTemplate
+import           B9.B9Monad(B9)
 
 import           Test.QuickCheck
 import           B9.QCUtil
@@ -88,14 +89,13 @@ instance (NFData c, NFData a) => NFData (AST c a)
 -- | Types of values that describe content, that can be created from an 'AST'.
 class (ConcatableSyntax a) => ASTish a  where
     fromAST
-        :: (CanRender c, Applicative m, Monad m, MonadIO m, MonadReader Environment m)
-        => AST c a -> m a
+        :: (CanRender c)
+        => AST c a -> ReaderT Environment B9  a
 
 -- | Types of values that can be /rendered/ into a 'ByteString'
 class CanRender c  where
     render
-        :: (Functor m, Applicative m, MonadIO m, MonadReader Environment m)
-        => c -> m B.ByteString
+        :: c -> ReaderT Environment B9 B.ByteString
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where
     arbitrary =

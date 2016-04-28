@@ -25,26 +25,7 @@ import System.FilePath as X
 import Text.Printf as X (printf)
 import Data.Version as X
 import B9.Builder as X
-
-import Control.Applicative
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.Monoid
-import Data.List
-import Data.Maybe
-import Text.Show.Pretty (ppShow)
-import System.Exit ( exitWith
-                   , ExitCode (..) )
-import System.FilePath ( takeDirectory
-                       , takeFileName
-                       , replaceExtension
-                       , (</>)
-                       , (<.>) )
-import Text.Printf ( printf )
 import Paths_b9 (version)
-import Data.Version
-
-import B9.Builder
 import qualified B9.LibVirtLXC as LibVirtLXC
 
 -- | Merge 'existingConfig' with the configuration from the main b9 config

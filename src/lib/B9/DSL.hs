@@ -19,7 +19,7 @@ import B9.DiskImages
        (Image(..), ImageSource(..), ImageDestination(..), FileSystem(..),
         Partition(..), ImageResize(..), ImageSize(..), ImageType(..),
         SizeUnit(..))
-import B9.ExecEnv (CPUArch(..), SharedDirectory(..))
+import B9.ExecEnv (CPUArch(..))
 import B9.ShellScript (Script(..))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -212,7 +212,7 @@ instance DSLCanMount (Tagged ImageSource String) where
   data MountOpts (Tagged ImageSource String) = MountImgNoOptions deriving Show
   defaultMountOpts _ = MountImgNoOptions
   mountArtifactS _ = SMountedImage
-  mountArtifact opts e src dest = (e, src, dest)
+  mountArtifact _opts e src dest = (e, src, dest)
 
 mount
     :: DSLCanMount src
