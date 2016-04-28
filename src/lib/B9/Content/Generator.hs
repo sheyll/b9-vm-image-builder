@@ -20,11 +20,14 @@ import qualified Data.ByteString.Char8 as B
 import           Test.QuickCheck
 import           B9.QCUtil
 
+import           System.Process
+
 data Content
     = RenderErlang (AST Content ErlangPropList)
     | RenderYaml (AST Content YamlObject)
     | FromString String
     | FromTextFile SourceFile
+    | FromURL String
     deriving (Read,Show,Typeable,Eq,Data,Generic)
 
 instance Hashable Content
@@ -35,10 +38,15 @@ instance Arbitrary Content where
   arbitrary = oneof [FromTextFile <$> smaller arbitrary
                     ,RenderErlang <$> smaller arbitrary
                     ,RenderYaml <$> smaller arbitrary
-                    ,FromString <$> smaller arbitrary]
+                    ,FromString <$> smaller arbitrary
+                    ,FromURL <$> smaller arbitrary]
 
 instance CanRender Content where
   render (RenderErlang ast) = encodeSyntax <$> fromAST ast
   render (RenderYaml ast) = encodeSyntax <$> fromAST ast
   render (FromTextFile s) = readTemplateFile s
   render (FromString str) = return (B.pack str)
+  render (FromURL url) = liftIO $ do
+     debugL $ "Downloading: " ++ url
+     traceL $ "Executing: " ++ url
+     (exitcode,out,err) <- readProcessWithExitCode "curl" [url] ""
