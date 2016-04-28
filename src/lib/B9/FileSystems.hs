@@ -1,14 +1,10 @@
 -- | A module for general file system creation and resize.
 module B9.FileSystems where
 
+import B9.Common
 import B9.CommonTypes
 import B9.Logging
 import B9.QCUtil
-import Control.Parallel.Strategies
-import Data.Binary
-import Data.Data
-import Data.Hashable
-import GHC.Generics (Generic)
 import Test.QuickCheck
 
 -- | Descibe how a 'FileSystem' should be created.

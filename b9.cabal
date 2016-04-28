@@ -62,6 +62,7 @@ source-repository head
 
 library
   exposed-modules:   B9
+                   , B9.DynMap
                    , B9.Common
                    , B9.B9Config
                    , B9.B9IO
@@ -88,7 +89,6 @@ library
                    , B9.Dsl.FileSystem
                    , B9.Dsl.Handle
                    , B9.Dsl.ImageRepository
-                   , B9.Dsl.Logging
                    , B9.Dsl.PartitionedVmImage
                    , B9.Dsl.UpdateServerRoot
                    , B9.Dsl.VmImage
@@ -150,6 +150,7 @@ library
                    , yaml
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
+                    , ConstraintKinds
                     , DeriveDataTypeable
                     , DeriveGeneric
                     , RankNTypes
@@ -163,6 +164,7 @@ library
                     , TypeFamilies
                     , DeriveFunctor
                     , TemplateHaskell
+                    , TypeOperators
                     , StandaloneDeriving
                     , CPP
                     , TypeSynonymInstances

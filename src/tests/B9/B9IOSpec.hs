@@ -1,5 +1,6 @@
 module B9.B9IOSpec (spec) where
 
+import B9.Common
 import B9.B9IO
 import B9.CommonTypes
 import B9.Content
@@ -8,11 +9,8 @@ import B9.FileSystems
 import B9.Logging
 import B9.PartitionTable
 import B9.Repository
-import Data.Default
-import System.FilePath
 import Test.Hspec
 import Test.QuickCheck
-import Text.Printf
 
 spec :: Spec
 spec = do
@@ -84,10 +82,10 @@ actionSpec =
        it "handles WriteContentToFile" $
            let p = writeContentToFile testFile testContent
                testFile = "test-file"
-               testContent = B.pack "hello world!\n"
+               testContent = packB "hello world!\n"
            in dumpToStrings p `shouldBe`
               [ printf
-                    "writeContentToFile %s %s %s"
+                    "writeContentToFile %s %s"
                     testFile
                     (show testContent)]
        it "handles CreateFileSystem" $

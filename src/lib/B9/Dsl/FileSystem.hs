@@ -20,6 +20,9 @@ $(singletons
                           deriving Show
   |])
 
+instance Show (Sing 'FileSystemBuilder) where show _ = "FileSystemBuilder"
+instance Show (Sing 'FileSystemImage) where show _ = "FileSystemImage"
+
 -- | Context of a 'SFileSystemBuilder'
 data FsBuilderCtx = FsBuilderCtx
     { _fsFiles :: [FileSpec]

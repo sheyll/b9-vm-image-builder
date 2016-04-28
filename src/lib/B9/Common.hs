@@ -20,7 +20,7 @@ import Data.Word as ReExport
 import Data.Bits as ReExport
 import Data.Either as ReExport
 import Data.Monoid as ReExport
-import Data.List as ReExport
+import Data.List as ReExport hiding (insert)
 import Data.Maybe as ReExport
 import Data.Default as ReExport
 import Data.Function as ReExport (on)

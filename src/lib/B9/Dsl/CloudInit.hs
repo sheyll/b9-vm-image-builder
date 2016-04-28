@@ -169,9 +169,12 @@ instance CanAdd IoCompiler (Cnt CiUserData) 'FreeFile where
   type AddSpec IoCompiler (Cnt CiUserData) 'FreeFile = (FileSpec, Handle 'FreeFile)
   runAdd hnd _ (fspec,fH) =
     do fileContentH <- runExtract fH (Proxy :: Proxy (Cnt ByteString)) ()
-       mergeArtifactOutputInto fileContentH hnd
-        $ \fileContent ->
-             (<> mempty {_ciWriteFiles = [CiWriteFile fileContent fspec]})
+       interpret $
+        add hnd
+            (Proxy :: Proxy (Handle (Cnt ByteString)))
+            (fileContentH,
+             \fileContent ->
+                mempty {_ciWriteFiles = [CiWriteFile fileContent fspec]})
 
 -- | Create a @cloud-config@ compatibe @write_files@ 'AST' object.
 toUserDataWriteFilesAST

@@ -3,8 +3,6 @@ module B9.B9IO.ImplSpec (spec) where
 #ifdef INTEGRATION_TESTS
 import B9.B9IO
 import B9.Builder
-import System.Directory
-import System.FilePath
 #endif
 import Test.Hspec
 
@@ -48,7 +46,7 @@ spec =
           (b1,b2) <- (runIoProgramNoConfig $ (,) <$> getBuildDate <*> getBuildDate)
           b1 `shouldBe` b2
        it "can read a file size" $ do
-         runIoProgramNoConfig (do writeContentToFile "/tmp/reaadFileSizeTest" (FromString "hello") (Environment [])
+         runIoProgramNoConfig (do writeContentToFile "/tmp/reaadFileSizeTest" (packB "hello")
                                   readFileSize "/tmp/reaadFileSizeTest") `shouldReturn` 5
 #else
     return ()

@@ -8,11 +8,30 @@ import B9.B9IO.IoCompiler
 import B9.Dsl.Core
 import B9.Dsl.File
 
--- | A type to indicate
+-- | A type to indicate _content_.
 data Cnt (content :: *) = Cnt
 
+instance Typeable c => Show (Cnt c) where
+  show cnt = "Cnt_" ++ show (typeRep cnt)
+
+-- | Create a 'Cnt c'.
+mkCnt :: c -> Cnt c
+mkCnt _ = Cnt
+
 -- | A Proxy to use as parameter to 'BuildStep's.
-data CntProxy (c :: *) where CntProxy :: c -> CntProxy (Cnt c)
+data CntProxy (c :: *) = CntProxy
+
+-- | Create a 'CntProxy c'.
+cntProxy :: c -> CntProxy (Cnt c)
+cntProxy _ = CntProxy
+
+-- | Convert a 'CntProxy (Cnt c)' back to a 'Cnt c'.
+unCntProxy :: CntProxy (Cnt c) -> Cnt c
+unCntProxy _ = Cnt
+
+
+instance Show (Cnt c) => Show (CntProxy (Cnt c)) where
+  show = show . unCntProxy
 
 class Typeable content => IsCnt content where
   type CntRenderArgs content -- TODO remove CntRenderArgs
@@ -58,16 +77,17 @@ type instance IoCompilerArtifactState (Cnt c) = [IoProgram c]
 
 instance IsCnt c => CanCreate IoCompiler (Cnt c) where
   type CreateSpec IoCompiler (Cnt c) = (c, String)
-  runCreate px (c,title) =
-    do (hnd,_) <- allocHandle px title
+  runCreate _px (c,title) =
+    do (hnd,_) <- allocHandle Proxy title
        putArtifactState hnd
                         [return c]
        return hnd
 
 instance IsCnt c => CanExtract IoCompiler (Cnt c) 'FreeFile where
   type ExtractionArg IoCompiler (Cnt c) 'FreeFile = CntRenderArgs c
-  runExtract hnd@(Handle _ dest) _ env =
-    do (destH,destFile) <- createFreeFile dest
+  runExtract hnd _ env =
+    do let dest = handleTitle hnd
+       (destH,destFile) <- createFreeFile dest
        hnd --> destH
        addAction hnd
                  (do Just contentList <- getArtifactState hnd
@@ -79,8 +99,8 @@ instance IsCnt c => CanExtract IoCompiler (Cnt c) 'FreeFile where
           renderContents = fmap (renderCnt env . mergeCnt) . sequence
 
 instance IsCnt c => CanExtract IoCompiler 'FreeFile (Cnt c) where
-  runExtract srcFileH@(Handle _ srcFileN) _ () =
-    do (hnd,_) <- allocHandle (Proxy :: Proxy (Cnt c)) srcFileN
+  runExtract srcFileH _ () =
+    do (hnd,_) <- allocHandle (Proxy :: Proxy (Cnt c)) (handleTitle srcFileH)
        srcFileH --> hnd
        srcCopy <-
          freeFileTempCopy srcFileH

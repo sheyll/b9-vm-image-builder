@@ -18,6 +18,8 @@ $(singletons
                         deriving Show
   |])
 
+instance Show (Sing 'UpdateServerRoot) where show _ = "UpdateServerRoot"
+
 type instance IoCompilerArtifactState 'UpdateServerRoot = Handle 'LocalDirectory
 
 instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where

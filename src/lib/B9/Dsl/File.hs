@@ -4,12 +4,16 @@ import B9.B9IO
 import B9.B9IO.IoCompiler
 import B9.Content
 import B9.Dsl.Core
-import Data.Singletons.TH (singletons)
+import Data.Singletons.TH (singletons, Sing)
 
 $(singletons [d|
   data FileArtifacts = ExternalFile | FreeFile | LocalDirectory
              deriving Show
   |])
+
+instance Show (Sing 'ExternalFile) where show _ = "SExternalFile"
+instance Show (Sing 'FreeFile) where show _ = "SFreeFile"
+instance Show (Sing 'LocalDirectory) where show _ = "SLocalDirectory"
 
 type instance IoCompilerArtifactState 'ExternalFile = FilePath
 
@@ -73,9 +77,9 @@ instance CanAdd IoCompiler 'LocalDirectory 'FreeFile where
         fH --> dirH
 
 instance CanExtract IoCompiler 'ExternalFile 'FreeFile where
-    runExtract hnd@(Handle _ hndT) _ () = do
+    runExtract hnd _ () = do
         Just externalFileName <- useArtifactState hnd
-        (tmpFileH,tmpFile) <- createFreeFile hndT
+        (tmpFileH,tmpFile) <- createFreeFile (handleTitle hnd)
         hnd --> tmpFileH
         addAction hnd (liftIoProgram (copy externalFileName tmpFile))
         return tmpFileH
@@ -91,7 +95,8 @@ instance CanExtract IoCompiler 'FreeFile 'ExternalFile where
 
 instance CanExtract IoCompiler 'FreeFile 'FreeFile where
     type ExtractionArg IoCompiler 'FreeFile 'FreeFile = Maybe String
-    runExtract hnd@(Handle _ hndT) _ mdest = do
+    runExtract hnd _ mdest = do
+        let hndT = handleTitle hnd
         (newFileH,newFile) <-
             createFreeFile (maybe hndT ((hndT ++ "-") ++) mdest)
         copyFreeFile hnd newFile
@@ -148,8 +153,9 @@ copyFreeFile src dest = modifyArtifactState src $ traverse . fCopies <>~ [dest]
 -- | Add a new copy to a 'FreeFile' using a unique temp file containg
 -- a given string for better debugging, and return the path to the copy.
 freeFileTempCopy :: Handle 'FreeFile -> Maybe String -> IoCompiler FilePath
-freeFileTempCopy src@(Handle _ oldName) mname = do
+freeFileTempCopy src mname = do
     let prefix = maybe oldName ((oldName ++ "-") ++) mname
+        oldName = handleTitle src
     dest <- liftIoProgram (mkTemp prefix)
     copyFreeFile src dest
     return dest

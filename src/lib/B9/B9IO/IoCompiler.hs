@@ -11,11 +11,14 @@ import B9.Dsl.Core
 import Control.Lens         hiding (from, (<.>))
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Control.Monad.RWS as RWS
 import Data.Dynamic
 import Data.Graph           as Graph
 import Data.Map             as Map hiding (null)
 import Data.Singletons
 import Data.Tree            as Tree
+import B9.DynMap            as DynMap
+
 
 -- | The monad transformer used to compile a 'ProgramT'
 newtype IoCompiler a = IoCompiler
@@ -47,8 +50,18 @@ instance MonadIoProgram IoProgBuilder where
 
 -- | State for artifacts required to generate the output program is
 --   held in a single 'Map' containing the existential key/value types
---  'SomeHandle' -> 'SomeState'. This way the IoCompiler remains extensible.
-type ArtifactStates = Map SomeHandle Dynamic
+--  'SomeHandle' -> 'Dynamic'. This way the IoCompiler remains extensible.
+--  In order to assert type-safety
+type ArtifactStates = DynMap.DynMap "artifact-states"
+
+-- | To get some type safety when dealing with 'Dynamic' values in the generic
+-- map, use this type family to ensure that the value type always matches the
+-- key type when calling 'getArtifactState', 'useArtifactState',
+-- 'putArtifactState' and 'modifyArtifactState'.
+type family IoCompilerArtifactState (a :: k) :: *
+
+type instance DynMap.DynMapValue "artifact-states" k = IoCompilerArtifactState k
+
 
 -- | The internal state of the 'IoCompiler' monad
 data Ctx = Ctx
@@ -61,29 +74,23 @@ data Ctx = Ctx
     }
 
 instance Default Ctx where
-    def = Ctx 0 def def def [] def
+    def = Ctx 0 def def def [] DynMap.empty
 
 makeLenses ''Ctx
-
--- | To get some type safety when dealing with 'Dynamic' values in the generic
--- map, use this type family to ensure that the value type always matches the
--- key type when calling 'getArtifactState', 'useArtifactState',
--- 'putArtifactState' and 'modifyArtifactState'.
-type family IoCompilerArtifactState (a :: k) :: *
 
 -- | * Artifact state accessors
 useArtifactState
   :: (Typeable b,b ~ IoCompilerArtifactState a)
   => Handle a -> IoCompiler (Maybe b)
-useArtifactState hnd =
-  do mv <- use (artifactStates . at (SomeHandle hnd))
-     return (mv >>= fromDynamic)
+useArtifactState hnd = do
+  a <- use artifactStates
+  return (DynMap.lookup (DynMap.KeyFromProxy hnd) a)
 
 putArtifactState
     :: (Typeable b, b ~ IoCompilerArtifactState a)
     => Handle a -> b -> IoCompiler ()
 putArtifactState hnd st =
-    artifactStates . at (SomeHandle hnd) ?= toDyn st
+    artifactStates %= DynMap.insert (DynMap.KeyFromProxy hnd) st
 
 appendArtifactState
   :: (Monoid b,Typeable b,b ~ IoCompilerArtifactState a)
@@ -95,16 +102,14 @@ appendArtifactState hnd st =
 modifyArtifactState
   :: (Typeable b,b ~ IoCompilerArtifactState a)
   => Handle a -> (Maybe b -> Maybe b) -> IoCompiler ()
-modifyArtifactState hnd f =
-  artifactStates . at (SomeHandle hnd) %= applyAndCast
-  where applyAndCast mv = toDyn <$> (f (mv >>= fromDynamic))
+modifyArtifactState hnd f = do
+  artifactStates %= DynMap.alter f (DynMap.KeyFromProxy hnd)
 
 getArtifactState
   :: (Typeable b,b ~ IoCompilerArtifactState a)
   => Handle a -> IoProgBuilder (Maybe b)
 getArtifactState hnd =
-  do mv <- view (artifactStates . at (SomeHandle hnd))
-     return (mv >>= fromDynamic)
+  view (artifactStates . to (DynMap.lookup (DynMap.KeyFromProxy hnd)))
 
 -- | Compile a 'Program' to an 'IoProgram'
 compile
@@ -211,12 +216,13 @@ printSomeHandle Nothing = "??error??"
 -- * Utilities
 
 -- | Create a new unique handle and store it in the state.
-allocHandle :: p a
+allocHandle :: Show (p a)
+               => p a
                -> String
                -> IoCompiler (Handle a, SomeHandle)
 allocHandle sa str = do
     v <- addVertex
-    let h = formatHandle v sa str
+    let h = formatHandleP v sa str
     h' <- storeHandle h v
     actions . at v ?=
         [liftIoProgram (traceL "==[B9-EXEC-ARTIFACT]==============[" h "]")]
@@ -224,8 +230,7 @@ allocHandle sa str = do
 
 -- | Setup a predefined global handle
 allocPredefinedHandle
-    :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))
-    => Handle a -> IoCompiler ()
+    :: Handle a -> IoCompiler ()
 allocPredefinedHandle h = do
     v <- addVertex
     void (storeHandle h v)
@@ -249,13 +254,17 @@ addVertex = do
     return v
 
 -- | Generate a handle with formatted title
-formatHandle :: Vertex -> p a -> String -> Handle a
-formatHandle v sa str =
-    Handle
-        sa
-        (if str == ""
-             then show v
-             else str ++ "-" ++ show v)
+formatHandleP :: Show (p a) => Vertex -> p a -> String -> Handle a
+formatHandleP v sa str = mkHandleP sa (if str == ""
+                                      then show v
+                                      else str ++ "-" ++ show v)
+
+-- | Generate a handle with formatted title
+formatHandleS :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))
+              => Vertex -> Sing a -> String -> Handle a
+formatHandleS v sa str = mkHandleS sa (if str == ""
+                                      then show v
+                                      else str ++ "-" ++ show v)
 
 -- | Add a dependency of one resource to another: @addDependency x y@ means
 -- first build @x@ then @y@.
@@ -282,9 +291,36 @@ addAction h a = do
   Just v <- lookupVertex h
   actions . at v . traverse <>= [a]
 
+type BPlan thisIn thisSt thisOut m a = RWS.RWST thisIn thisSt thisOut m a
 
+addPlanNode ::
+  BPlan parentIn parentSt parentOut m a
+  -> (a -> BPlan parentOut childSt childOut m b)
+  -> BPlan parentIn (parentSt, childSt) (parentOut, childOut) m b
+addPlanNode p c = RWS.RWST $ \ pIn (psi, csi) -> do
+  (a,pso, po) <- RWS.runRWST p     pIn psi
+  (b,cso, co) <- RWS.runRWST (c a) po  csi
+  return (b, (pso, cso), (po, co))
+
+addPlanNodeFirst ::
+  BPlan pIn (ps,qs) (po,qo) m a
+  -> (a -> BPlan po cs co m b)
+  -> BPlan pIn ((ps,cs),qs) ((po,co),qo) m b
+addPlanNodeFirst pq c = RWS.RWST $ \ pIn ((psi,qsi), csi) -> do
+  (a, (pso, qso), (po,qo)) <- RWS.runRWST pq    pIn (psi,qsi)
+  (b, cso,        co)      <- RWS.runRWST (c a) po  csi
+  return (b, ((pso, cso), qso), ((po, co), qo))
 
 -- * TODO
 appendToArtifactOutput = undefined
 
-mergeArtifactOutputInto = undefined
+-- type family IoProgBuilderResult a :: *
+
+-- mergeArtifactOutputInto
+--   :: Handle a
+--   -> Handle b
+--   -> (IoProgBuilderResult a
+--       -> IoProgBuilderResult b
+--       -> IoProgBuilderResult b)
+--   -> IoCompiler ()
+mergeArtifactOutputInto oH cH f = undefined

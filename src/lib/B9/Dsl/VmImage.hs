@@ -14,6 +14,8 @@ $(singletons
                deriving Show
   |])
 
+instance Show (Sing 'VmImage) where show _ = "VmImage"
+
 -- | Context of a 'SVmImage'
 data VmImgCtx = VmImgCtx
     { _vmiFile :: Handle 'FreeFile
@@ -53,7 +55,7 @@ instance CanExtract IoCompiler 'VmImage 'VmImage where
         createVmImage destImgFileH srcType
     runExtract hnd _ (Left destType) = do
         Just (VmImgCtx srcImgFileH srcType) <- useArtifactState hnd
-        let srcImgFileTitle = case srcImgFileH of (Handle _ x) -> x
+        let srcImgFileTitle = handleTitle srcImgFileH
         srcFileCopy <- freeFileTempCopy srcImgFileH Nothing
         (destImgFileH,destImgFile) <-
             createFreeFile (srcImgFileTitle ++ "-" ++ show destType)
@@ -66,7 +68,7 @@ instance CanExtract IoCompiler 'VmImage 'VmImage where
 
 instance CanExport IoCompiler 'VmImage where
     type ExportSpec IoCompiler 'VmImage = FilePath
-    runExport hnd@(Handle _ _) destFile = do
+    runExport hnd destFile = do
         Just (VmImgCtx fH _) <- useArtifactState hnd
         runExport fH destFile
 

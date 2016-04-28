@@ -25,6 +25,9 @@ $(singletons
                             deriving Show
   |])
 
+instance Show (Sing 'ExecutionEnvironment) where show _ = "ExecutionEnvironment"
+instance Show (Sing 'ExecutableScript) where show _ = "ExecutableScript"
+
 -- | Context of a 'ExecutionEnvironment'
 data ExecEnvCtx =
   ExecEnvCtx {_execImages :: [Mounted Image]

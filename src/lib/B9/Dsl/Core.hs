@@ -24,18 +24,18 @@ type ProgramT m = Free (BuildStep m)
 -- | The abstract _CRUD_-like GADT underlying all 'ProgramT's.
 data BuildStep m next where
     Create ::
-        (Show (CreateSpec m a), CanCreate m a) =>
+        (CanCreate m a) =>
         p a -> CreateSpec m a -> (Handle a -> next) -> BuildStep m next
     Add ::
-        (Show (AddSpec m a b), CanAdd m a b) =>
+        (CanAdd m a b) =>
         Handle a ->
           p b -> AddSpec m a b -> next -> BuildStep m next
     Extract ::
-        (Show (ExtractionArg m a b), CanExtract m a b) =>
+        (CanExtract m a b) =>
         Handle a ->
           p b -> ExtractionArg m a b -> (Handle b -> next) -> BuildStep m next
     Export ::
-        (Show (ExportSpec m a), CanExport m a) =>
+        (CanExport m a) =>
         Handle a ->
           ExportSpec m a -> next -> BuildStep m next
 
@@ -59,7 +59,7 @@ class CanCreate m (a :: k)  where
 -- | Declare or define an artifact that implements 'CanCreate' in terms of
 --   artifact specific parameters.
 create
-    :: (Show (CreateSpec m a), CanCreate m a)
+    :: (CanCreate m a)
     => p a -> CreateSpec m a -> ProgramT m (Handle a)
 create sa src = liftF $ Create sa src id
 
@@ -79,7 +79,7 @@ class CanAdd m (a1 :: k1) (a2 :: k2)  where
     runAdd :: Handle a1 -> p a2 -> AddSpec m a1 a2 -> m ()
 
 -- | Add an artifact to another artifact.
-add :: (Show (AddSpec m a b),CanAdd m a b)
+add :: (CanAdd m a b)
     => Handle a -> p b -> AddSpec m a b -> ProgramT m ()
 add hndA sB addSpec = liftF $
     Add hndA sB addSpec ()
@@ -98,7 +98,7 @@ class CanExtract m (a :: k1) (b :: k2)  where
 
 -- | Extract an artifact referenced by a handle to a different kind
 --  of artifact and return the handle of the new artifact.
-extract :: (Show (ExtractionArg m a b),CanExtract m a b)
+extract :: (CanExtract m a b)
         => Handle a -> p b -> ExtractionArg m a b -> ProgramT m (Handle b)
 extract hndA sB convSpec = liftF $
     Extract hndA sB convSpec id
@@ -117,7 +117,7 @@ class CanExport m (a :: k)  where
 
 -- | Export an artifact referenced by a handle a to a /real/ output,
 -- i.e. something that is not necessarily referenced to by 'Handle'.
-export :: (Show (ExportSpec m a),CanExport m a)
+export :: (CanExport m a)
        => Handle a -> ExportSpec m a -> ProgramT m ()
 export hnd out = liftF $
     Export hnd out ()
@@ -150,7 +150,7 @@ data LoggingArtifact = LoggingOutput | LogEvent deriving Show
 -- | A Global handle repesenting the (symbolic) logging output. Currently, the
 -- logging output is determined by b9 conifiguration rather than explicit code.
 loggingH :: Handle 'LoggingOutput
-loggingH = globalHandle (Proxy :: Proxy 'LoggingOutput)
+loggingH = globalHandleP (Proxy :: Proxy 'LoggingOutput)
 
 -- | Log messages using the logging API defined in 'B9.Logging'
 instance (CanAdd m 'LoggingOutput 'LogEvent, a ~ ())

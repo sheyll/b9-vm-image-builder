@@ -1,9 +1,15 @@
 -- | A 'Proxy' like data type to references resources throughout the B9 DSL.
 
-module B9.Dsl.Handle (module B9.Dsl.Handle, module X) where
+module B9.Dsl.Handle (Handle(handleTitle, handleType)
+                     ,globalHandle,globalHandleP,globalHandleS
+                     ,mkHandle,mkHandleP,mkHandleS
+                     ,handleTitle
+                     ,SomeHandle(..)
+                     ,module X) where
 
 import B9.Common as X
 import B9.Logging as X
+import Data.Singletons
 
 -- * Handle for artifacts.
 
@@ -14,28 +20,40 @@ import B9.Logging as X
 -- indirection and proctection around an actual artifact representation. A
 -- handle is a proxy for an artifact singleton type paired with a string
 -- identifieing the runtime value referenced to by the handle.
-data Handle (a :: k) where
-    -- | Create a 'Handle' that contains a string.
-    Handle :: p a -> String -> Handle a
+data Handle (a :: k) =
+  Handle {handleType :: String, handleTitle :: String}
+  deriving (Eq, Ord)
 
-instance Eq (Handle (a :: k)) where
-    (Handle _ t) == (Handle _ t') = t == t'
-instance Ord (Handle (a :: k)) where
-    compare (Handle _ t) (Handle _ t') = compare t t'
-
-instance {-# OVERLAPPING #-} KnownSymbol a => Show (Handle a) where
-    show (Handle p t) = symbolVal p ++ "//" ++ t
-
-instance {-# OVERLAPPABLE #-} Show (Handle a) where
-    show (Handle _ t) = "//" ++ t
+instance Show (Handle a) where
+  show (Handle tt it) = tt ++ "_AT_" ++ it
 
 instance LogArg (Handle a)
 
 -- | Make a handle for some global/static pseudo artifact, like e.g. logging.
 -- Specifically, create a handle for types of artifacts that are only ever
 -- inhabited by a single value, by simply @show@ing the singleton.
-globalHandle :: Show (p a) => p a -> Handle a
-globalHandle p = Handle p (show p)
+globalHandle :: String -> Handle a
+globalHandle p = mkHandle p p
+
+globalHandleP :: Show (p a) => p a -> Handle a
+globalHandleP = globalHandle . show
+
+globalHandleS :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))
+              => Sing a -> Handle a
+globalHandleS = globalHandle . show . fromSing
+
+-- | Generate a handle with formatted title
+mkHandle :: String -> String -> Handle a
+mkHandle hType hInst = Handle hType hInst
+
+-- | Generate a handle with formatted title
+mkHandleP :: Show (p a) => p a -> String -> Handle a
+mkHandleP = mkHandle . show
+
+-- | Generate a handle with formatted title from a 'Sing' instance
+mkHandleS :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))
+             => Sing a -> String -> Handle a
+mkHandleS = mkHandle . show . fromSing
 
 -- | A wrapper around 'Handle' with existential quantification over the
 -- artifact type.

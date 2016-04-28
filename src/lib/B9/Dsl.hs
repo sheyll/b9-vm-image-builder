@@ -56,8 +56,7 @@ externalFileTempCopy f = do
 -- | 'use' an external file to introduce an artifact with the help of a
 --  artifact dependent extra arguement and return the artifacts handle.
 fromFile
-    :: (Show (ExtractionArg m 'FreeFile b)
-       ,CanCreate m 'ExternalFile
+    :: (CanCreate m 'ExternalFile
        ,CreateSpec m 'ExternalFile ~ FilePath
        ,CanExtract m 'FreeFile b
        ,CanExtract m 'ExternalFile 'FreeFile
@@ -70,8 +69,7 @@ fromFile f a conversionArg = do
 -- | Given an artifact that support extraction or conversion to a file
 -- create/write a file to a given output path.
 outputFile
-    :: (Show (ExtractionArg m a 'FreeFile)
-       ,CanExtract m a 'FreeFile
+    :: (CanExtract m a 'FreeFile
        ,CanExport m 'FreeFile
        ,ExportSpec m 'FreeFile ~ FilePath)
     => Handle a -> ExtractionArg m a 'FreeFile -> FilePath -> ProgramT m ()
@@ -144,7 +142,7 @@ createContent :: (IsCnt c
                  ,CanCreate m (Cnt c)
                  ,CreateSpec m (Cnt c) ~ (c,String))
                  => c -> String -> ProgramT m (Handle (Cnt c))
-createContent c title = create (CntProxy c) (c, title)
+createContent c title = create (cntProxy c) (c, title)
 
 -- | Accumulate/Append more 'Content' to the 'GeneratedContent'
 --   handle obtained by e.g. 'createContent'
@@ -153,7 +151,7 @@ appendContent :: (Show c
                  ,CanAdd m (Cnt c) (Cnt c)
                  ,AddSpec m (Cnt c) (Cnt c) ~ c)
                  => Handle (Cnt c) -> c -> ProgramT m ()
-appendContent hnd c = add hnd (CntProxy c) c
+appendContent hnd c = add hnd (cntProxy c) c
 
 -- * Template variable definitions
 
@@ -201,8 +199,7 @@ addFileFromContent dstH content dstSpec = do
 
 -- | Run a command in an environment.
 runCommand
-    :: (Show (AddSpec m a 'ExecutableScript)
-       ,CanAdd m a 'ExecutableScript)
+    :: (CanAdd m a 'ExecutableScript)
     => Handle a -> AddSpec m a 'ExecutableScript -> ProgramT m ()
 runCommand hnd = add hnd SExecutableScript
 

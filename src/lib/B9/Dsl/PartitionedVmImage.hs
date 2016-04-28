@@ -15,12 +15,14 @@ $(singletons
                           deriving Show
   |])
 
+instance Show (Sing 'PartitionedVmImage) where show _ = "PartitionedVmImage"
+
 type instance IoCompilerArtifactState 'PartitionedVmImage =
      Handle 'FreeFile
 
 instance CanExtract IoCompiler 'FreeFile 'PartitionedVmImage where
-    runExtract hnd@(Handle _ hndT) _ () = do
-        let partVmImgHndT = hndT ++ "-partitioned-vm-image"
+    runExtract hnd _ () = do
+        let partVmImgHndT = handleTitle hnd ++ "-partitioned-vm-image"
         (partVmImgHnd,_) <- allocHandle SPartitionedVmImage partVmImgHndT
         file <- runExtract hnd SFreeFile (Just "partitioned-vm-image")
         putArtifactState partVmImgHnd file
@@ -29,8 +31,8 @@ instance CanExtract IoCompiler 'FreeFile 'PartitionedVmImage where
 
 instance CanExtract IoCompiler 'PartitionedVmImage 'FreeFile where
     type ExtractionArg IoCompiler 'PartitionedVmImage 'FreeFile = PartitionSpec
-    runExtract hnd@(Handle _ hndT) _ partSpec@(MBRPartition pIndex) = do
-        let dest = hndT ++ "-partition-" ++ show pIndex
+    runExtract hnd _ partSpec@(MBRPartition pIndex) = do
+        let dest = handleTitle hnd ++ "-partition-" ++ show pIndex
         Just (srcFileH :: Handle 'FreeFile) <- useArtifactState hnd
         Just (FileCtx srcFileName _) <- useArtifactState srcFileH
         (destH,destFile) <- createFreeFile dest

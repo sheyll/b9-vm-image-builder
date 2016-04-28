@@ -1,9 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 module B9.DslSpec (spec) where
-import B9 hiding (CloudInit)
+import B9
 import B9.B9IO
-import B9.Dsl
 import B9.SpecExtra
 import Test.Hspec
 import Test.QuickCheck (property)
@@ -17,10 +16,6 @@ spec = do
     fsImgSpec
     addFileSpec
     localDirSpec
-    cloudInitIsoImageSpec
-    cloudInitMultiVfatImageSpec
-    cloudInitDirSpec
-    cloudInitWithContentSpec
     vmImageCreationSpec
     partitionedDiskSpec
     sharedImageSpec
@@ -28,12 +23,19 @@ spec = do
     containerExecutionSpec
     loggingSpec
 
+
+data TestArtifact1 deriving Typeable
+data TestArtifact2 deriving Typeable
+
+type instance IoCompilerArtifactState TestArtifact1 = String
+type instance IoCompilerArtifactState TestArtifact2 = Bool
+
 -- * Examples for the extensible state
 someStateSpec :: Spec
 someStateSpec = do
-    let hnd11 = Handle SCloudInit "test1"
-        hnd12 = Handle SCloudInit "test2"
-        hnd21 = Handle SGeneratedContent "test1"
+    let hnd11 = mkHandleP (Cnt :: Cnt TestArtifact1) "test1"
+        hnd12 = mkHandleP (Cnt :: Cnt TestArtifact1) "test2"
+        hnd21 = mkHandleP (Cnt :: Cnt TestArtifact2) "test1"
     describe "putArtifactState" $
         do it "stores a value such that it can be read" $
                shouldResultIn
@@ -51,7 +53,7 @@ someStateSpec = do
                "does not overwrite values of other handles with the same title and different artifact types" $
                shouldResultIn
                    (do putArtifactState hnd11 "test"
-                       putArtifactState hnd21 "XXX"
+                       putArtifactState hnd21 False
                        useArtifactState hnd11)
                    (Just "test")
            it
@@ -59,11 +61,11 @@ someStateSpec = do
                shouldResultIn
                    (do putArtifactState hnd11 "test1"
                        putArtifactState hnd12 "test2"
-                       putArtifactState hnd21 "test3"
+                       putArtifactState hnd21 True
                        (,,) <$> useArtifactState hnd11 <*>
                            useArtifactState hnd12 <*>
                            useArtifactState hnd21)
-                   (Just "test1", Just "test2", Just "test3")
+                   (Just "test1", Just "test2", Just True)
     describe "modifyArtifactState" $
         do it "adds a new entry" $
                shouldResultIn
@@ -202,20 +204,9 @@ fileInclusionSpec =
                           [fileSpec "test1.iso"]
                       return ()
               actual `shouldDoIo` expected
-       it "can be added to CloudInit" $
-           do let actual = do
-                      fH <- externalFileTempCopy "/tmp/test.file"
-                      c <- newCloudInit "iid-1"
-                      add c SFreeFile (fileSpec "test.file", fH)
-                      writeCloudInitDir c "/tmp/ci.d"
-                  expected = do
-                      src <- mkTempDir "local-dir"
-                      dst <- ensureParentDir "/tmp/ci.d"
-                      moveDir src dst
-              actual `shouldDoIo` expected
        it "can be exported from GeneratedContent" $
            do let actual = do
-                      fcH <- createContent (FromString "test-content") "test-c"
+                      fcH <- createContent "Juhu! Mr. Tentacle guy!" "test-c"
                       fH <- extract fcH SFreeFile ()
                       void $ export fH "/tmp/rendered-content.file"
                   expected = do
@@ -223,8 +214,7 @@ fileInclusionSpec =
                       _dst <- ensureParentDir "/tmp/rendered-content.file"
                       writeContentToFile
                           src
-                          (FromString "test-content")
-                          (Environment [])
+                          (packB "Juhu! Mr. Tentacle guy!")
               actual `shouldDoIo` expected
 
 -- * Spec for 'SFileSystemImage's
@@ -312,10 +302,10 @@ addFileSpec = do
                    addFile d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addFileFull
-                       d
-                       (Source NoConversion "/some/path/test.txt")
-                       (fileSpec "test.txt")
+                   void $ addFileFull
+                             d
+                             "/some/path/test.txt"
+                             (fileSpec "test.txt")
            actual `shouldDo` expected
     describe "addExe" $
         it "is equal to addFile, but changes permissions to 0755" $
@@ -324,11 +314,11 @@ addFileSpec = do
                    addExe d "/some/path/test.txt"
                expected = do
                    d <- newDirectory
-                   addFileFull
-                       d
-                       (Source NoConversion "/some/path/test.txt")
-                       (fileSpec "test.txt" & fileSpecPermissions .~
-                        (0, 7, 5, 5))
+                   void $ addFileFull
+                             d
+                             "/some/path/test.txt"
+                             (fileSpec "test.txt" & fileSpecPermissions .~
+                              (0, 7, 5, 5))
            actual `shouldDo` expected
     describe "addFileP" $
         it "is equal to addFile, but changes permissions to the given value" $
@@ -339,50 +329,10 @@ addFileSpec = do
                         addFileP d "/some/path/test.txt" perm
                     expected = do
                         d <- newDirectory
-                        addFileFull
-                            d
-                            (Source NoConversion "/some/path/test.txt")
-                            (fileSpec "test.txt" & fileSpecPermissions .~ perm)
-                actual `does` expected
-    describe "addTemplate" $
-        it "strips the directory and replaces template variables" $
-        do let actual = do
-                   d <- newDirectory
-                   addTemplate d "/some/path/test.txt"
-               expected = do
-                   d <- newDirectory
-                   addFileFull
-                       d
-                       (Source ExpandVariables "/some/path/test.txt")
-                       (fileSpec "test.txt")
-           actual `shouldDo` expected
-    describe "addTemplateExe" $
-        it "is equal to addTemplate, but changes permissions to 0755" $
-        do let actual = do
-                   d <- newDirectory
-                   addTemplateExe d "/some/path/test.txt"
-               expected = do
-                   d <- newDirectory
-                   addFileFull
-                       d
-                       (Source ExpandVariables "/some/path/test.txt")
-                       (fileSpec "test.txt" & fileSpecPermissions .~
-                        (0, 7, 5, 5))
-           actual `shouldDo` expected
-    describe "addTemplateP" $
-        it
-            "is equal to addTemplate, but changes permissions to the given value" $
-        property $
-        \perm ->
-             do let actual = do
-                        d <- newDirectory
-                        addTemplateP d "/some/path/test.txt" perm
-                    expected = do
-                        d <- newDirectory
-                        addFileFull
-                            d
-                            (Source ExpandVariables "/some/path/test.txt")
-                            (fileSpec "test.txt" & fileSpecPermissions .~ perm)
+                        void $ addFileFull
+                                  d
+                                  "/some/path/test.txt"
+                                  (fileSpec "test.txt" & fileSpecPermissions .~ perm)
                 actual `does` expected
     describe "mountAndShareSharedImage" $
         it "is implemented" $
@@ -422,171 +372,6 @@ localDirSpec =
                (do src <- mkTempDir "local-dir"
                    dest1 <- ensureParentDir "/tmp/test1.d"
                    moveDir src dest1)
-
--- * Cloud init examples
-
-minimalMetaData :: String -> Content
-minimalMetaData iid =
-    Concat
-        [ FromString "#cloud-config\n"
-        , RenderYaml (ASTObj [("instance-id", ASTString iid)])]
-
-minimalUserData :: Content
-minimalUserData = Concat [FromString "#cloud-config\n", RenderYaml (ASTObj [])]
-
-cloudInitIsoImageSpec :: Spec
-cloudInitIsoImageSpec =
-    describe "compile cloudInitIsoImage" $
-    do it "appends the build id to the instance id" $
-           cloudInitIsoImage `shouldDoIo` B9.B9IO.getBuildId
-       it "creates unique cloud-init handles" $
-           dumpToResult
-               (compile $
-                do hnd1 <- cloudInitIsoImage
-                   hnd2 <- cloudInitIsoImage
-                   return (hnd1 == hnd2)) `shouldBe`
-           False
-       it "generates an iso image with meta- and user-data" $
-           let (Handle _ iid,actualCmds) =
-                   runPureDump (compile cloudInitIsoImage)
-               expectedCmds = dumpToStrings expectedProg
-               expectedProg = do
-                   tmpIso <- mkTemp "cidata.ISO9660"
-                   isoDir <- mkTempDir "cidata.ISO9660.d"
-                   isoDst <- ensureParentDir "test.iso"
-                   metaDataFile <-
-                       mkTemp "iid-123-meta-data-1"
-                   userDataFile <-
-                       mkTemp "iid-123-user-data-2"
-                   writeContentToFile
-                       metaDataFile
-                       (minimalMetaData iid)
-                       (Environment [])
-                   moveFile metaDataFile (isoDir </> "meta-data")
-                   writeContentToFile
-                       userDataFile
-                       minimalUserData
-                       (Environment [])
-                   moveFile userDataFile (isoDir </> "user-data")
-                   createFileSystem
-                       tmpIso
-                       (FileSystemSpec ISO9660 "cidata" 2 MB)
-                       isoDir
-                       [fileSpec "meta-data", fileSpec "user-data"]
-                   moveFile tmpIso isoDst
-           in actualCmds `should've` expectedCmds
-  where
-    cloudInitIsoImage :: Program (Handle 'CloudInit)
-    cloudInitIsoImage = do
-        i <- newCloudInit "iid-123"
-        writeCloudInit i ISO9660 "test.iso"
-        return i
-
-cloudInitMultiVfatImageSpec :: Spec
-cloudInitMultiVfatImageSpec =
-    describe "compile cloudInitVfatImage" $
-    do it "generates test1.vfat" $
-           cloudInitVfatImage `shouldDoIo` expectedProg "test1.vfat"
-       it "generates test2.vfat" $
-           cloudInitVfatImage `shouldDoIo` expectedProg "test2.vfat"
-  where
-    expectedProg dstImg = do
-        let files = [fileSpec "meta-data", fileSpec "user-data"]
-            fsc = FileSystemSpec VFAT "cidata" 2 MB
-            tmpDir = "/BUILD/cidata.VFAT.d-XXXX.d"
-            tmpImg = "/BUILD/cidata.VFAT-XXXX"
-        dstImg' <- ensureParentDir dstImg
-        createFileSystem tmpImg fsc tmpDir files
-        moveFile tmpImg dstImg'
-    cloudInitVfatImage :: Program (Handle 'CloudInit)
-    cloudInitVfatImage = do
-        i <- newCloudInit "iid-123"
-        writeCloudInit i VFAT "test1.vfat"
-        writeCloudInit i VFAT "test2.vfat"
-        return i
-
-cloudInitDirSpec :: Spec
-cloudInitDirSpec =
-    describe "compile cloudInitDir" $
-    do let (Handle _ iid,actualCmds) = runPureDump $ compile cloudInitDir
-       it "generates a temporary directory" $
-           cloudInitDir `shouldDoIo` mkTempDir "local-dir"
-       it "renders user-data and meta-data into the temporary directory" $
-           do let renderMetaData =
-                      dumpToStrings $
-                      do m <- mkTemp "iid-123-meta-data-1"
-                         u <- mkTemp "iid-123-user-data-2"
-                         writeContentToFile
-                             m
-                             (minimalMetaData iid)
-                             (Environment [])
-                         writeContentToFile
-                             u
-                             minimalUserData
-                             (Environment [])
-              actualCmds `should've` renderMetaData
-       it "copies the temporary directory to the destination directories" $
-           do let copyToOutputDir =
-                      dumpToStrings $
-                      do srcDir <- mkTempDir "local-dir"
-                         destDir <- ensureParentDir "test.d"
-                         moveDir srcDir destDir
-              actualCmds `should've` copyToOutputDir
-  where
-    cloudInitDir :: Program (Handle 'CloudInit)
-    cloudInitDir = do
-        i <- newCloudInit "iid-123"
-        writeCloudInitDir i "test.d"
-        return i
-
-cloudInitWithContentSpec :: Spec
-cloudInitWithContentSpec =
-    describe "compile cloudInitWithContent" $
-    do it "merges meta-data" $
-           cmds `should've`
-           dumpToStrings (writeContentToFile mdPath mdContent templateVars)
-       it "merges user-data" $
-           cmds `should've`
-           dumpToStrings (writeContentToFile udPath udContent templateVars)
-  where
-    mdPath = "/BUILD/iid-123-meta-data-2-XXXX"
-    udPath = "/BUILD/iid-123-user-data-3-XXXX"
-    templateVars = Environment [("x","3")]
-    mdContent =
-        Concat
-            [ FromString "#cloud-config\n"
-            , RenderYaml
-                  (ASTMerge
-                       [ ASTObj
-                             [ ( "instance-id"
-                               , ASTString iid)]
-                       , ASTObj [("bootcmd", ASTArr [ASTString "ifdown eth0"])]
-                       , ASTObj [("bootcmd", ASTArr [ASTString "ifup eth0"])]])]
-    udContent =
-        Concat
-            [ FromString "#cloud-config\n"
-            , RenderYaml
-                  (ASTMerge
-                       [ ASTObj []
-                       , ASTObj [("write_files",
-                                  ASTArr
-                                  [ASTObj [("path", ASTString "file1.txt")
-                                          ,("owner", ASTString "user1:group1")
-                                          ,("permissions", ASTString "0642")
-                                          ,("content", ASTEmbed
-                                            (FromBinaryFile
-                                             "/BUILD/contents-of-file1.txt-9-10-file1.txt-XXXX"))]])]
-                       , ASTObj [("runcmd",ASTArr[ASTString "ls -la /tmp"])]])]
-    (Handle _ iid, cmds) = runPureDump $ compile cloudInitWithContent
-    cloudInitWithContent = do
-        "x" $= "3"
-        i <- newCloudInit "iid-123"
-        writeCloudInit i ISO9660 "test.iso"
-        addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifdown eth0"])])
-        addMetaData i (ASTObj [("bootcmd", ASTArr [ASTString "ifup eth0"])])
-        addFileFromContent i (FromString "file1") (FileSpec "file1.txt" (0,6,4,2) "user1" "group1")
-        sh i "ls -la /tmp"
-        return i
 
 -- * vmImage tests
 
@@ -726,14 +511,12 @@ updateServerImageSpec =
                    size <- B9.B9IO.readFileSize tmpImg
                    writeContentToFile
                        tmpSize
-                       (FromString (show size))
-                       (Environment [])
+                       (showB size)
                    bId <- B9.B9IO.getBuildId
                    bT <- B9.B9IO.getBuildDate
                    writeContentToFile
                        tmpVersion
-                       (FromString (printf "%s-%s" bId bT))
-                       (Environment [])
+                       (packB (printf "%s-%s" bId bT))
                    moveDir tmpDir dst
                    return ())
 
@@ -753,9 +536,9 @@ containerExecutionSpec =
                mountDir e "/hostRO" "/guestRO"
                mountDirRW e "/hostRW" "/guestRW"
                sh e "touch /test1"
-               addFileFull e (Source NoConversion "/etc/issue") issueSpec
+               void $ addFileFull e "/etc/issue" issueSpec
                sh e "touch /test2"
-               addFileFull e (Source NoConversion "/etc/passwd") passwdSpec
+               void $ addFileFull e "/etc/passwd" passwdSpec
                outputFile e "/etc/httpd/httpd.conf" "out-httpd.conf"
                rootImg <- fromFile "test-in.qcow2" SVmImage QCow2
                rootOutImg <- mount e rootImg "/"
