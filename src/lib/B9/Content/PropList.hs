@@ -60,8 +60,10 @@ import B9.Common
 -- * Properties
 
 -- | (Type-) Configurable PropList
-data Properties (section :: sym) (required :: [sym])
-     (contents :: [sym]) where
+data Properties (section :: sym)
+                (required :: [sym]) -- TODO s/[sym]/[r]/
+                (contents :: [sym]) -- TODO s/[sym]/[r]/
+     where
         Begin :: Properties section required '[]
         AddProperty ::
             (IsProperty key,
@@ -166,8 +168,7 @@ infixl 1 <++
 
 -- | Lookup all entries for a 'Property' in a 'Properties'
 getMembers
-  :: (IsProperty k
-     ,IsMember n k ks)
+  :: IsMember n k ks
   => proxy k
   -> Properties s r ks
   -> [Property k]
@@ -178,8 +179,7 @@ getMembers keyPx props =
 -- | Return a list of 'Property' entries for a given key 'k' from a
 -- 'MemberPositions', usually derived from an instance of 'IsMember'.
 getMembersAtPositions
-  :: (IsProperty k)
-  => proxy k
+  :: proxy k
   -> MemberPositions n k ks
   -> Properties s r ks
   -> [Property k]
@@ -235,10 +235,10 @@ class (KnownNat n, n ~ MemberCount a as)
     -> proxy2 as
     -> MemberPositions n a as
 
-instance IsMember 0 a '[] where
+instance {-# OVERLAPPABLE #-} IsMember 0 a '[] where
   getMemberPositions _ _ _ = NotHere
 
-instance
+instance  {-# OVERLAPPING #-}
      (IsMember n a as
      ,KnownNat n
      ,n ~ MemberCount a as
@@ -247,7 +247,7 @@ instance
   getMemberPositions pn pa _ =
     AndNotHere (getMemberPositions pn pa (Proxy :: Proxy as))
 
-instance
+instance {-# OVERLAPPING #-}
     (IsMember n a as
     ,KnownNat n
     ,n ~ MemberCount a as

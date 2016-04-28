@@ -13,26 +13,36 @@ import B9.Common
 -- * @Unit@ section
 
 testSdUnit = renderProperties
-     (   (Begin        :: EmptyProperties "Unit")
+     (  sdUnit
      <++ (Value "blah" :: Property "Description")
-     <++ (valuesR
-            SystemDUnit ["blah.service"
-                        ,"blub.service"] :: Property "Wants")
-     <++ (sdDependencies ["blah.service", "blub.service"] :: Property "Wants")
-     <++ (Value SdResetPrior :: Property "Wants")
+     <++ wants "sdf.service"
+     <++ wants "foo.service"
+     <++ (reset :: Property "Wants")
+     <++ (reset :: Property "Requires")
+     <++ wants "sdf.service"
      )
 
-sdDependencies
-  :: forall t (k :: sym)
-   . (IsProperty k, ValueType k ~ SdResetable (SdList SystemDUnit))
-  => t -> [String] -> Property k
-sdDependencies as = valuesR SystemDUnit
+sdUnit :: EmptyProperties "Unit"
+sdUnit = Begin
 
-valuesR
-   :: forall (k :: sym) a a1
-    . (IsProperty k, ValueType k ~ SdResetable (SdList a))
-   => (a1 -> a) -> [a1] -> Property k
-valuesR f as = Value (SdSet (SdList (map f as)))
+wants :: String -> Property "Wants"
+wants = Value . SdSet . SystemDUnit
+
+reset :: (ValueType k ~ SdResetable a, IsProperty k)
+      => Property k
+reset = Value SdResetPrior
+
+must :: (ValueType k ~ SdMightFail a, IsProperty k)
+      => a -> Property k
+must = Value . SdMustSucceed
+
+forgive :: (ValueType k ~ SdMightFail a, IsProperty k)
+        => a -> Property k
+forgive = Value . SdMayFail
+
+instance IsProperty "Requires2" where
+  type Cardinality "Requires2" "Unit" = 'ZeroOrMore
+  type ValueType   "Requires2"        = SdResetable (SdList SystemDUnit)
 
 type instance RequiredKeys "Unit" = '["Description"]
 
@@ -52,7 +62,7 @@ instance IsProperty "Requisite" where
 
 instance IsProperty "Wants" where
   type Cardinality "Wants" "Unit" = 'ZeroOrMore
-  type ValueType   "Wants"        = SdResetable (SdList SystemDUnit)
+  type ValueType   "Wants"        = SdResetable SystemDUnit
 
 instance IsProperty "BindsTo" where
   type Cardinality "BindsTo" "Unit" = 'ZeroOrMore
@@ -459,7 +469,7 @@ instance Show a => Show (SdResetable a) where
   show (SdSet a)    = show a
   show SdResetPrior = ""
 
-data SdList a = SdList [a]
+newtype SdList a = SdList [a] deriving (Functor, Applicative)
 
 instance Show a => Show (SdList a) where
   show (SdList as) = unwords (show <$> as)
