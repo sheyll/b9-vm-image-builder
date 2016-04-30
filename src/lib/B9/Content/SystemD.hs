@@ -22,6 +22,37 @@ testSdUnit = renderProperties
      <++ wants "sdf.service"
      )
 
+testSdUnit2 = renderProperties
+     (  sdUnit
+     <++ (Value "blah" :: Property "Description")
+     <++ wants "sdf.service"
+     <++ wants "foo.service"
+     <++ (reset :: Property "Wants")
+     <++ (reset :: Property "Requires")
+     <++ wants "sdf.service"
+     )
+
+mkSection :: SufficientProperties "Unit" _
+mkSection = toProperties sdUnit (Value "blah" :: Property "Description") (wants "sdf")
+
+class PropertiesBuilder (section :: k) (required :: [e]) (keys :: [e]) args where
+  toProperties :: Properties section required keys -> args
+
+instance PropertiesBuilder section required keys (Properties section required keys) where
+  toProperties = id
+
+instance (IsProperty key
+         ,CanAddProperty (Cardinality key section) key keys ~ 'True
+         ,(Remove key required) ~ required')
+          =>
+          PropertiesBuilder
+              section
+              required
+              keys
+              (Property key -> Properties section required' (key ': keys))
+          where
+  toProperties propsIn = \prop -> AddProperty prop propsIn
+
 sdUnit :: EmptyProperties "Unit"
 sdUnit = Begin
 
