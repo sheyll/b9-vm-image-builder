@@ -12,8 +12,9 @@ import B9.Common
 
 -- * @Unit@ section
 
-testSdUnit = renderProperties
-     (  sdUnit
+testSdUnit = showProperty
+  ( sdUnit $
+     Begin
      <++ (Value "blah" :: Property "Description")
      <++ wants "sdf.service"
      <++ wants "foo.service"
@@ -22,118 +23,145 @@ testSdUnit = renderProperties
      <++ wants "sdf.service"
      )
 
-testSdUnit2 = renderProperties
-     (  sdUnit
-     <++ (Value "blah" :: Property "Description")
-     <++ wants "sdf.service"
-     <++ wants "foo.service"
-     <++ (reset :: Property "Wants")
-     <++ (reset :: Property "Requires")
-     <++ wants "sdf.service"
-     )
+data Section k where
+  Section :: Properties k '[] keys -> Section k
 
-mkSection :: SufficientProperties "Unit" _
-mkSection = toProperties sdUnit (Value "blah" :: Property "Description") (wants "sdf")
+section
+  :: (IsProperty k, ValueType k ~ Section k,
+      RequiredKeys k ~ required)
+  => Properties k '[] keys
+  -> Property k
+section = Value . Section
 
-class PropertiesBuilder (section :: k) (required :: [e]) (keys :: [e]) args where
-  toProperties :: Properties section required keys -> args
+instance IsProperty "Unit" where
+  type Cardinality "Unit" k = 'AtMostOnce
+  type ValueType   "Unit"   = Section "Unit"
+  showProperty (Value (Section props)) = renderProperties props
 
-instance PropertiesBuilder section required keys (Properties section required keys) where
-  toProperties = id
-
-instance (IsProperty key
-         ,CanAddProperty (Cardinality key section) key keys ~ 'True
-         ,(Remove key required) ~ required')
-          =>
-          PropertiesBuilder
-              section
-              required
-              keys
-              (Property key -> Properties section required' (key ': keys))
-          where
-  toProperties propsIn = \prop -> AddProperty prop propsIn
-
-sdUnit :: EmptyProperties "Unit"
-sdUnit = Begin
-
-wants :: String -> Property "Wants"
-wants = Value . SdSet . SystemDUnit
+sdUnit :: Properties "Unit" '[] keys -> Property "Unit"
+sdUnit = section
 
 reset :: (ValueType k ~ SdResetable a, IsProperty k)
       => Property k
 reset = Value SdResetPrior
-
-must :: (ValueType k ~ SdMightFail a, IsProperty k)
-      => a -> Property k
-must = Value . SdMustSucceed
-
-forgive :: (ValueType k ~ SdMightFail a, IsProperty k)
-        => a -> Property k
-forgive = Value . SdMayFail
-
-instance IsProperty "Requires2" where
-  type Cardinality "Requires2" "Unit" = 'ZeroOrMore
-  type ValueType   "Requires2"        = SdResetable (SdList SystemDUnit)
 
 type instance RequiredKeys "Unit" = '["Description"]
 
 instance IsProperty "Description" where
   type Cardinality "Description" "Unit" = 'AtMostOnce
 
+description :: String -> Property "Description"
+description = Value
+
 instance IsProperty "Documentation" where
   type Cardinality "Documentation" "Unit" = 'AtMostOnce
+
+documentation :: String -> Property "Documentation"
+documentation = Value
+
+depends
+  :: (KnownSymbol k, IsProperty k, ValueType k ~ SdResetable SystemDUnit)
+  => String -> Property k
+depends = Value . SdSet . SystemDUnit
 
 instance IsProperty "Requires" where
   type Cardinality "Requires" "Unit" = 'ZeroOrMore
   type ValueType   "Requires"        = SdResetable SystemDUnit
 
+requires :: String -> Property "Requires"
+requires = depends
+
 instance IsProperty "Requisite" where
   type Cardinality "Requisite" "Unit" = 'ZeroOrMore
   type ValueType   "Requisite"        = SdResetable SystemDUnit
+
+requisite :: String -> Property "Requisite"
+requisite = depends
 
 instance IsProperty "Wants" where
   type Cardinality "Wants" "Unit" = 'ZeroOrMore
   type ValueType   "Wants"        = SdResetable SystemDUnit
 
+wants :: String -> Property "Wants"
+wants = depends
+
 instance IsProperty "BindsTo" where
   type Cardinality "BindsTo" "Unit" = 'ZeroOrMore
   type ValueType   "BindsTo"        = SdResetable SystemDUnit
+
+bindsTo :: String -> Property "BindsTo"
+bindsTo = depends
 
 instance IsProperty "PartOf" where
   type Cardinality "PartOf" "Unit" = 'ZeroOrMore
   type ValueType   "PartOf"        = SdResetable SystemDUnit
 
+partOf :: String -> Property "PartOf"
+partOf = depends
+
 instance IsProperty "Conflicts" where
   type Cardinality "Conflicts" "Unit" = 'ZeroOrMore
   type ValueType   "Conflicts"        = SdResetable SystemDUnit
+
+conflicts :: String -> Property "Conflicts"
+conflicts = depends
 
 instance IsProperty "Before" where
   type Cardinality "Before" "Unit" = 'ZeroOrMore
   type ValueType   "Before"        = SdResetable SystemDUnit
 
+before :: String -> Property "Before"
+before = depends
+
 instance IsProperty "After" where
   type Cardinality "After" "Unit" = 'ZeroOrMore
   type ValueType   "After"        = SdResetable SystemDUnit
+
+after :: String -> Property "After"
+after = depends
 
 instance IsProperty "OnFailure" where
   type Cardinality "OnFailure" "Unit" = 'ZeroOrMore
   type ValueType   "OnFailure"        = SdResetable SystemDUnit
 
+onFailure :: String -> Property "OnFailure"
+onFailure = depends
+
 instance IsProperty "PropagatesReloadTo" where
   type Cardinality "PropagatesReloadTo" "Unit" = 'ZeroOrMore
   type ValueType   "PropagatesReloadTo"        = SdResetable SystemDUnit
+
+propagatesReloadTo :: String -> Property "PropagatesReloadTo"
+propagatesReloadTo = depends
 
 instance IsProperty "PropagatesReloadFrom" where
   type Cardinality "PropagatesReloadFrom" "Unit" = 'ZeroOrMore
   type ValueType   "PropagatesReloadFrom"        = SdResetable SystemDUnit
 
+propagatesReloadFrom :: String -> Property "PropagatesReloadFrom"
+propagatesReloadFrom = depends
+
 instance IsProperty "JoinsNamespaceOf" where
   type Cardinality "JoinsNamespaceOf" "Unit" = 'ZeroOrMore
   type ValueType   "JoinsNamespaceOf"        = SdResetable SystemDUnit
 
+joinsNamespaceOf :: String -> Property "JoinsNamespaceOf"
+joinsNamespaceOf = depends
+
 instance IsProperty "RequiresMountFor" where
   type Cardinality "RequiresMountFor" "Unit" = 'ZeroOrMore
-  type ValueType   "RequiresMountFor"        = [FilePath]
+  type ValueType   "RequiresMountFor"        = FilePath
+
+requiresMountFor :: FilePath -> Property "RequiresMountFor"
+requiresMountFor = Value
+
+exec :: (ValueType k ~ SdMightFail a, IsProperty k)
+      => a -> Property k
+exec = Value . SdMustSucceed
+
+exec_forgive :: (ValueType k ~ SdMightFail a, IsProperty k)
+      => a -> Property k
+exec_forgive = Value . SdMayFail
 
 
 -- data SdService where
@@ -143,6 +171,7 @@ instance IsProperty "RequiresMountFor" where
 --         SdDBus :: (SdServiceOptions Sd1 Sd1) -> SdService
 --         SdNotify :: (SdServiceOptions Sd1 Sd0) -> SdService
 --         SdIdle :: (SdServiceOptions Sd1 Sd0) -> SdService
+
 
 -- | Create a systemd unit that executes a given 'Script'.
 data SdServiceOptions execStartF busNameF =

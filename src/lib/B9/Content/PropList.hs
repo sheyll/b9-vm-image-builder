@@ -61,16 +61,15 @@ import B9.Common
 
 -- | (Type-) Configurable PropList
 data Properties (section :: sym)
-                (required :: [sym]) -- TODO s/[sym]/[r]/
-                (contents :: [sym]) -- TODO s/[sym]/[r]/
+                (required :: [sym]) 
+                (contents :: [sym]) 
      where
-        Begin :: Properties section required '[]
+        Begin :: required ~ (RequiredKeys section) => Properties section required '[]
         AddProperty ::
             (IsProperty key,
              CanAddProperty (Cardinality key section) key keys ~ 'True) =>
               Property key ->
-              Properties section required keys ->
-              Properties section (Remove key required) (key ': keys)
+              Properties section req
 
 type EmptyProperties (section :: sym) =
   Properties section (RequiredKeys section) '[]
@@ -98,21 +97,12 @@ class IsProperty (k :: sym)  where
   -- | Values accepted for the property
   type ValueType k :: *
   type ValueType k = String
-  -- | Render the value
-  showPropertyValue :: Property k -> String
-  default showPropertyValue :: (Show (ValueType k)) => (Property k) -> String
-  -- | Render the value using the 'Show' for the value type by default.
-  showPropertyValue (Value v) = show v
-  -- | Render the key of the property
-  showPropertyKey :: proxy k -> String
-  default showPropertyKey :: (ShowUninhabited k) => proxy k -> String
-  -- | Render the key of the property using 'showProxy' by default.
-  showPropertyKey = showProxy
-  -- | Render the complete key-value assignment
+  -- | Render the property
   showProperty :: Property k -> String
-  default showProperty :: (ShowUninhabited k) => Property k -> String
+  default showProperty :: (Show (ValueType k), ShowUninhabited k)
+                        => Property k -> String
   -- | Render the complete key-value assignment as @key=value@ by default
-  showProperty zv = showPropertyKey zv ++ "=" ++ showPropertyValue zv
+  showProperty zv@(Value v) = showProxy zv ++ "=" ++ show v
 
 -- | A class similar to 'Show' especially for uninhabited types.
 class ShowUninhabited (k :: t) where
@@ -283,3 +273,8 @@ type family Remove (p :: k) (ps :: [k]) :: [k] where
         Remove p '[]       =              '[]
         Remove p (p ': ps) =      Remove p ps
         Remove p (x ': ps) = x ': Remove p ps
+
+     (Proxy :: Proxy (Handle (Cnt ByteString)))
+     (fileContentH,
+     (Proxy :: Proxy (Handle (Cnt ByteString)))
+     (fileContentH,

@@ -291,26 +291,6 @@ addAction h a = do
   Just v <- lookupVertex h
   actions . at v . traverse <>= [a]
 
-type BPlan thisIn thisSt thisOut m a = RWS.RWST thisIn thisSt thisOut m a
-
-addPlanNode ::
-  BPlan parentIn parentSt parentOut m a
-  -> (a -> BPlan parentOut childSt childOut m b)
-  -> BPlan parentIn (parentSt, childSt) (parentOut, childOut) m b
-addPlanNode p c = RWS.RWST $ \ pIn (psi, csi) -> do
-  (a,pso, po) <- RWS.runRWST p     pIn psi
-  (b,cso, co) <- RWS.runRWST (c a) po  csi
-  return (b, (pso, cso), (po, co))
-
-addPlanNodeFirst ::
-  BPlan pIn (ps,qs) (po,qo) m a
-  -> (a -> BPlan po cs co m b)
-  -> BPlan pIn ((ps,cs),qs) ((po,co),qo) m b
-addPlanNodeFirst pq c = RWS.RWST $ \ pIn ((psi,qsi), csi) -> do
-  (a, (pso, qso), (po,qo)) <- RWS.runRWST pq    pIn (psi,qsi)
-  (b, cso,        co)      <- RWS.runRWST (c a) po  csi
-  return (b, ((pso, cso), qso), ((po, co), qo))
-
 -- * TODO
 appendToArtifactOutput = undefined
 

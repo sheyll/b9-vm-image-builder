@@ -29,7 +29,6 @@ cntProxy _ = CntProxy
 unCntProxy :: CntProxy (Cnt c) -> Cnt c
 unCntProxy _ = Cnt
 
-
 instance Show (Cnt c) => Show (CntProxy (Cnt c)) where
   show = show . unCntProxy
 
