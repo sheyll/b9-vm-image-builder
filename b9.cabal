@@ -148,25 +148,30 @@ library
                    , vector
                    , vector-binary-instances
                    , yaml
-  default-extensions: TupleSections
-                    , GeneralizedNewtypeDeriving
-                    , ConstraintKinds
-                    , DeriveDataTypeable
-                    , DeriveGeneric
-                    , RankNTypes
-                    , FlexibleContexts
-                    , FlexibleInstances
-                    , MultiParamTypeClasses
-                    , GADTs
-                    , PolyKinds
-                    , DataKinds
-                    , KindSignatures
-                    , TypeFamilies
-                    , DeriveFunctor
-                    , TemplateHaskell
-                    , TypeOperators
-                    , StandaloneDeriving
+  default-extensions: ConstraintKinds
                     , CPP
+                    , DataKinds
+                    , DefaultSignatures
+                    , DeriveDataTypeable
+                    , DeriveFunctor
+                    , DeriveGeneric
+                    , FlexibleInstances
+                    , FlexibleContexts
+                    , FunctionalDependencies
+                    , GADTs
+                    , GeneralizedNewtypeDeriving
+                    , KindSignatures
+                    , MultiParamTypeClasses
+                    , PolyKinds
+                    , QuasiQuotes
+                    , RecordWildCards
+                    , RankNTypes
+                    , ScopedTypeVariables
+                    , StandaloneDeriving
+                    , TemplateHaskell
+                    , TupleSections
+                    , TypeOperators
+                    , TypeFamilies
                     , TypeSynonymInstances
   hs-source-dirs:    src/lib
   default-language:  Haskell2010

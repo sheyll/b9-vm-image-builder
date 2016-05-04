@@ -1,9 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 -- | (Type-) Configurable PropList
 --
 -- A PropList Contains key-value pairs. See these examples: (TODO Documentation)
@@ -61,8 +56,8 @@ import B9.Common
 
 -- | (Type-) Configurable PropList
 data Properties (section :: sym)
-                (required :: [sym]) 
-                (contents :: [sym]) 
+                (required :: [sym])
+                (contents :: [sym])
      where
         Begin :: required ~ (RequiredKeys section) => Properties section required '[]
         AddProperty ::
@@ -273,8 +268,3 @@ type family Remove (p :: k) (ps :: [k]) :: [k] where
         Remove p '[]       =              '[]
         Remove p (p ': ps) =      Remove p ps
         Remove p (x ': ps) = x ': Remove p ps
-
-     (Proxy :: Proxy (Handle (Cnt ByteString)))
-     (fileContentH,
-     (Proxy :: Proxy (Handle (Cnt ByteString)))
-     (fileContentH,
