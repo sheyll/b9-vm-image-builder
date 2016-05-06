@@ -40,6 +40,8 @@ instance Monoid CiUserData where
                (getLast (Last phoneHome <> Last phoneHome'))
                (getLast (Last powerState <> Last powerState'))
 
+instance IsCnt CiUserData where -- TODO add impl!!
+
 data CiGroup =
   CiGroup {_ciGroupName :: String
           ,_ciGroupMembers :: [String]}
