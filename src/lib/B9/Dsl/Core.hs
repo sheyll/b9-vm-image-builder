@@ -54,7 +54,19 @@ class CanCreate m (a :: k)  where
     type family CreateSpec m (a :: k) :: *
     type CreateSpec m (a :: k) = ()
     -- | Execute the creation yielding a handle for the created artifact
-    runCreate :: p a -> CreateSpec m a -> m (Handle a)
+    runCreate :: p a -> CreateSpec m a -> m (Handle a) -- TODO rename to runCreateHandle??
+
+    -- | An artifact contains stuff. This could be 'Text' for text content
+    -- artifacts, or if the artifact is a 'File' the contents could be a
+    -- 'ByteString', and a 'CanExtract' instance for 'File' could yield
+    -- 'UniqueFileCopy's, which could have content of type
+    -- >
+    -- > data UFC = UFC { originalFile :: FilePath
+    -- >                , uniqueCopies ::[FilePath]
+    -- >                }
+
+    -- | Create the initial content of an Artifact.
+
 
 -- | Declare or define an artifact that implements 'CanCreate' in terms of
 --   artifact specific parameters.
