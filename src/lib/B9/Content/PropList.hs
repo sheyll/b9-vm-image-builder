@@ -64,7 +64,8 @@ data Properties (section :: sym)
             (IsProperty key,
              CanAddProperty (Cardinality key section) key keys ~ 'True) =>
               Property key ->
-              Properties section req
+              Properties section  required                     keys ->
+              Properties section (Remove key required) (key ': keys)
 
 type EmptyProperties (section :: sym) =
   Properties section (RequiredKeys section) '[]
