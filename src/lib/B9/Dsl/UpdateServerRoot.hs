@@ -20,12 +20,12 @@ $(singletons
 
 instance Show (Sing 'UpdateServerRoot) where show _ = "UpdateServerRoot"
 
-type instance IoCompilerArtifactState 'UpdateServerRoot = Handle 'LocalDirectory
+type instance IoCompilerArtifactState 'UpdateServerRoot = Handle LocalDirectory
 
 instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
   type AddSpec IoCompiler 'UpdateServerRoot 'VmImage = (SharedImageName, Handle 'VmImage)
   runAdd hnd _ (sn,vmI) =
-    do Just (destDirH :: Handle 'LocalDirectory) <- useArtifactState hnd
+    do Just (destDirH :: Handle LocalDirectory) <- useArtifactState hnd
        Just tmpDirCtx <- useArtifactState destDirH
        let destDir = tmpDirCtx ^. dirTempDir
            vmDestDir = destDir </> "machines" </> snStr </> "disks" </> "raw"
@@ -51,9 +51,9 @@ instance CanAdd IoCompiler 'UpdateServerRoot 'VmImage where
                         writeContentToFile versionFile
                                            (packB (printf "%s-%s" bId bT))))
 
-instance CanExtract IoCompiler 'LocalDirectory 'UpdateServerRoot where
+instance CanExtract IoCompiler LocalDirectory 'UpdateServerRoot where
   runExtract destDirH _ () =
-    do (hnd,_) <- allocHandle SUpdateServerRoot "update-server-root"
+    do hnd <- allocHandle SUpdateServerRoot "update-server-root"
        hnd --> destDirH
        putArtifactState hnd destDirH
        return hnd

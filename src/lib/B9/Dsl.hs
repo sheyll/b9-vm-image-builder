@@ -36,19 +36,19 @@ import B9.ShellScript              as X (Script(..))
 
 -- | Reference an external file. An external file will never be modified.
 externalFile
-    :: (CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath)
-    => FilePath -> ProgramT m (Handle 'ExternalFile)
+    :: (HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath)
+    => FilePath -> ProgramT m (Handle ExternalFile)
 externalFile = create SExternalFile
 
 -- | Get a reference to a copy of an external file inside the build root that
 -- can be modified.
 externalFileTempCopy
-    :: (CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath
-       ,CanExtract m 'ExternalFile 'FreeFile
-       ,ExtractionArg m 'ExternalFile 'FreeFile ~ ())
-    => FilePath -> ProgramT m (Handle 'FreeFile)
+    :: (HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath
+       ,CanExtract m ExternalFile FreeFile
+       ,ExtractionArg m ExternalFile FreeFile ~ ())
+    => FilePath -> ProgramT m (Handle FreeFile)
 externalFileTempCopy f = do
     extH <- externalFile f
     extract extH SFreeFile ()
@@ -56,12 +56,12 @@ externalFileTempCopy f = do
 -- | 'use' an external file to introduce an artifact with the help of a
 --  artifact dependent extra arguement and return the artifacts handle.
 fromFile
-    :: (CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath
-       ,CanExtract m 'FreeFile b
-       ,CanExtract m 'ExternalFile 'FreeFile
-       ,ExtractionArg m 'ExternalFile 'FreeFile ~ ())
-    => FilePath -> proxy b -> ExtractionArg m 'FreeFile b -> ProgramT m (Handle b)
+    :: (HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath
+       ,CanExtract m FreeFile b
+       ,CanExtract m ExternalFile FreeFile
+       ,ExtractionArg m ExternalFile FreeFile ~ ())
+    => FilePath -> proxy b -> ExtractionArg m FreeFile b -> ProgramT m (Handle b)
 fromFile f a conversionArg = do
     h <- externalFileTempCopy f
     extract h a conversionArg
@@ -69,10 +69,10 @@ fromFile f a conversionArg = do
 -- | Given an artifact that support extraction or conversion to a file
 -- create/write a file to a given output path.
 outputFile
-    :: (CanExtract m a 'FreeFile
-       ,CanExport m 'FreeFile
-       ,ExportSpec m 'FreeFile ~ FilePath)
-    => Handle a -> ExtractionArg m a 'FreeFile -> FilePath -> ProgramT m ()
+    :: (CanExtract m a FreeFile
+       ,CanExport m FreeFile
+       ,ExportSpec m FreeFile ~ FilePath)
+    => Handle a -> ExtractionArg m a FreeFile -> FilePath -> ProgramT m ()
 outputFile e src dst = do
     outF <- extract e SFreeFile src
     export outF dst
@@ -84,35 +84,35 @@ outputFile e src dst = do
 -- @blob.conf@ in the artifact. The file will be world readable and not
 -- executable. The source file must not be a directory.
 addFile
-    :: (AddSpec m e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath
-       ,CanExtract m 'ExternalFile 'FreeFile
-       ,ExtractionArg m 'ExternalFile 'FreeFile ~ ()
-       ,CanAdd m e 'FreeFile)
+    :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
+       ,HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath
+       ,CanExtract m ExternalFile FreeFile
+       ,ExtractionArg m ExternalFile FreeFile ~ ()
+       ,CanAdd m e FreeFile)
        => Handle e -> FilePath -> ProgramT m ()
 addFile d f = addFileP d f (0, 6, 4, 4)
 
 -- | Same as 'addFile' but set the destination file permissions to @0755@
 -- (executable for all).
 addExe
-    :: (AddSpec m e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath
-       ,CanExtract m 'ExternalFile 'FreeFile
-       ,ExtractionArg m 'ExternalFile 'FreeFile ~ ()
-       ,CanAdd m e 'FreeFile)
+    :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
+       ,HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath
+       ,CanExtract m ExternalFile FreeFile
+       ,ExtractionArg m ExternalFile FreeFile ~ ()
+       ,CanAdd m e FreeFile)
        => Handle e -> FilePath -> ProgramT m ()
 addExe d f = addFileP d f (0, 7, 5, 5)
 
 -- | Same as 'addFile' but with an extra output file permission parameter.
 addFileP
-    :: (AddSpec m e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath
-       ,CanExtract m 'ExternalFile 'FreeFile
-       ,ExtractionArg m 'ExternalFile 'FreeFile ~ ()
-       ,CanAdd m e 'FreeFile)
+    :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
+       ,HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath
+       ,CanExtract m ExternalFile FreeFile
+       ,ExtractionArg m ExternalFile FreeFile ~ ()
+       ,CanAdd m e FreeFile)
        => Handle e -> FilePath -> (Word8, Word8, Word8, Word8) -> ProgramT m ()
 addFileP dstH f p = do
     let dstSpec = fileSpec (takeFileName f) & fileSpecPermissions .~ p
@@ -123,15 +123,15 @@ addFileP dstH f p = do
 -- * Directories
 
 -- | Create a temp directory
-newDirectory :: (CanCreate m 'LocalDirectory
-                ,CreateSpec m 'LocalDirectory ~ ())
-                => ProgramT m (Handle 'LocalDirectory)
+newDirectory :: (HasBuilder m LocalDirectory
+                ,InitArgs m LocalDirectory ~ ())
+                => ProgramT m (Handle LocalDirectory)
 newDirectory = create SLocalDirectory ()
 
 -- | Render the directory to the actual destination (which must not exist)
-exportDir :: (CanExport m 'LocalDirectory
-             ,ExportSpec m 'LocalDirectory ~ FilePath)
-             => Handle 'LocalDirectory -> FilePath -> ProgramT m ()
+exportDir :: (CanExport m LocalDirectory
+             ,ExportSpec m LocalDirectory ~ FilePath)
+             => Handle LocalDirectory -> FilePath -> ProgramT m ()
 exportDir = export
 
 -- * /Low-level/ 'Content' generation functions
@@ -139,8 +139,8 @@ exportDir = export
 -- | Create a handle for accumulating 'Content' with an initial 'Content'.
 createContent :: (IsCnt c
                  ,Show c
-                 ,CanCreate m (Cnt c)
-                 ,CreateSpec m (Cnt c) ~ (c,String))
+                 ,HasBuilder m (Cnt c)
+                 ,InitArgs m (Cnt c) ~ (c,String))
                  => c -> String -> ProgramT m (Handle (Cnt c))
 createContent c title = create (cntProxy c) (c, title)
 
@@ -159,13 +159,13 @@ appendContent hnd c = add hnd (cntProxy c) c
 
 -- | Add an existing file from the file system to an artifact at a 'FileSpec'.
 addFileFull
-    :: (AddSpec m e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanCreate m 'ExternalFile
-       ,CreateSpec m 'ExternalFile ~ FilePath
-       ,CanExtract m 'ExternalFile 'FreeFile
-       ,ExtractionArg m 'ExternalFile 'FreeFile ~ ()
-       ,CanAdd m e 'FreeFile)
-       => Handle e -> FilePath -> FileSpec -> ProgramT m (Handle 'FreeFile)
+    :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
+       ,HasBuilder m ExternalFile
+       ,InitArgs m ExternalFile ~ FilePath
+       ,CanExtract m ExternalFile FreeFile
+       ,ExtractionArg m ExternalFile FreeFile ~ ()
+       ,CanAdd m e FreeFile)
+       => Handle e -> FilePath -> FileSpec -> ProgramT m (Handle FreeFile)
 addFileFull dstH srcFile dstSpec = do
     origH <- create SExternalFile srcFile
     tmpH <- extract origH SFreeFile ()
@@ -177,12 +177,12 @@ addFileFull dstH srcFile dstSpec = do
 addFileFromContent
     :: (Show c
        ,IsCnt c
-       ,CanCreate m (Cnt c)
-       ,CreateSpec m (Cnt c) ~ (c, String)
-       ,CanExtract m (Cnt c) 'FreeFile
-       ,ExtractionArg m (Cnt c) 'FreeFile ~ ()
-       ,AddSpec m e 'FreeFile ~ (FileSpec, Handle 'FreeFile)
-       ,CanAdd m e 'FreeFile)
+       ,HasBuilder m (Cnt c)
+       ,InitArgs m (Cnt c) ~ (c, String)
+       ,CanExtract m (Cnt c) FreeFile
+       ,ExtractionArg m (Cnt c) FreeFile ~ ()
+       ,AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
+       ,CanAdd m e FreeFile)
        => Handle e -> c -> FileSpec -> ProgramT m (Handle (Cnt c))
 addFileFromContent dstH content dstSpec = do
     cH <-
@@ -210,25 +210,25 @@ sh
     => Handle a -> String -> ProgramT m ()
 sh e s = runCommand e (Run s [])
 
-boot :: (CanCreate m 'ExecutionEnvironment
-        ,CreateSpec m 'ExecutionEnvironment ~ ExecEnvSpec)
+boot :: (HasBuilder m 'ExecutionEnvironment
+        ,InitArgs m 'ExecutionEnvironment ~ ExecEnvSpec)
         => ExecEnvSpec -> ProgramT m (Handle 'ExecutionEnvironment)
 boot = create SExecutionEnvironment
 
-lxc :: (CanCreate m 'ExecutionEnvironment
-       ,CreateSpec m 'ExecutionEnvironment ~ ExecEnvSpec)
+lxc :: (HasBuilder m 'ExecutionEnvironment
+       ,InitArgs m 'ExecutionEnvironment ~ ExecEnvSpec)
        => String -> ProgramT m (Handle 'ExecutionEnvironment)
 lxc name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 X86_64)
 
-lxc32 :: (CanCreate m 'ExecutionEnvironment
-         ,CreateSpec m 'ExecutionEnvironment ~ ExecEnvSpec)
+lxc32 :: (HasBuilder m 'ExecutionEnvironment
+         ,InitArgs m 'ExecutionEnvironment ~ ExecEnvSpec)
          => String -> ProgramT m (Handle 'ExecutionEnvironment)
 lxc32 name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 I386)
 
 -- * Mounting
 
-mountDir :: (CanAdd m 'ExecutionEnvironment 'LocalDirectory
-            ,AddSpec m 'ExecutionEnvironment 'LocalDirectory ~ SharedDirectory)
+mountDir :: (CanAdd m 'ExecutionEnvironment LocalDirectory
+            ,AddSpec m 'ExecutionEnvironment LocalDirectory ~ SharedDirectory)
             => Handle 'ExecutionEnvironment
             -> FilePath
             -> FilePath
@@ -236,8 +236,8 @@ mountDir :: (CanAdd m 'ExecutionEnvironment 'LocalDirectory
 mountDir e hostDir dest =
     add e SLocalDirectory (SharedDirectoryRO hostDir (MountPoint dest))
 
-mountDirRW :: (CanAdd m 'ExecutionEnvironment 'LocalDirectory
-              ,AddSpec m 'ExecutionEnvironment 'LocalDirectory ~ SharedDirectory)
+mountDirRW :: (CanAdd m 'ExecutionEnvironment LocalDirectory
+              ,AddSpec m 'ExecutionEnvironment LocalDirectory ~ SharedDirectory)
               => Handle 'ExecutionEnvironment
               -> FilePath
               -> FilePath
@@ -290,8 +290,8 @@ rootImage :: (CanExtract m 'ImageRepository 'VmImage
 rootImage nameFrom nameExport env =
     void $ mountAndShareSharedImage nameFrom nameExport "/" env
 
-dataImage :: (CanCreate m 'FileSystemBuilder
-             ,CreateSpec m 'FileSystemBuilder ~ FileSystemSpec
+dataImage :: (HasBuilder m 'FileSystemBuilder
+             ,InitArgs m 'FileSystemBuilder ~ FileSystemSpec
              ,CanExtract m 'FileSystemBuilder 'FileSystemImage
              ,ExtractionArg m 'FileSystemBuilder 'FileSystemImage ~ ()
              ,CanExtract m 'FileSystemImage 'VmImage
@@ -321,8 +321,8 @@ mountAndShareSharedImage nameFrom nameTo mountPoint env = do
     i' `sharedAs` nameTo
 
 mountAndShareNewImage
-    :: (CanCreate m 'FileSystemBuilder
-       ,CreateSpec m 'FileSystemBuilder ~ FileSystemSpec
+    :: (HasBuilder m 'FileSystemBuilder
+       ,InitArgs m 'FileSystemBuilder ~ FileSystemSpec
        ,CanExtract m 'FileSystemBuilder 'FileSystemImage
        ,ExtractionArg m 'FileSystemBuilder 'FileSystemImage ~ ()
        ,CanExtract m 'FileSystemImage 'VmImage

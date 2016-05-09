@@ -1,306 +1,247 @@
--- | Compile a 'ProgramT' to 'IoProgram' that can be executed in the real-world.
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module B9.B9IO.IoCompiler where
 
 import B9.B9IO
 import B9.Dsl.Core
-import Control.Lens         hiding (from, (<.>))
-import Control.Monad.Reader
+import Control.Lens hiding (from, (<.>))
 import Control.Monad.State
-import qualified Control.Monad.RWS as RWS
-import Data.Dynamic
-import Data.Graph           as Graph
-import Data.Map             as Map hiding (null)
+import Data.Graph as Graph
+import qualified Data.Map as Map hiding (null)
 import Data.Singletons
-import Data.Tree            as Tree
-import B9.DynMap            as DynMap
+import Data.Tree as Tree
+import B9.DynMap as DynMap
+import Control.Monad.Free (foldFree)
+import Data.Foldable (sequenceA_)
 
+-- * DSL Interpreter
+-- | The monad transformer used to /compile/ a 'BuildPlanT'
+newtype DslInterpreter a =
+  DslInterpreter {runDslInterpreter :: State Ctx a}
+  deriving (Functor,Applicative,Monad,MonadState Ctx)
 
--- | The monad transformer used to compile a 'ProgramT'
-newtype IoCompiler a = IoCompiler
-    { runIoCompiler :: StateT Ctx IoProgram a
-    } deriving (Functor,Applicative,Monad,MonadState Ctx)
-
-instance (a ~ ()) => CanLog (IoCompiler a) where
-    logMsg l str = liftIoProgram (logMsg l str)
-
-instance MonadIoProgram IoCompiler where
-    liftIoProgram = IoCompiler . lift
-
--- | An alias for 'ProgramT's over 'IoCompiler'
-type Program = ProgramT IoCompiler
-
--- | This monad contains all information gathered in 'Ctx' but is
--- 'ReaderT'. This is mainly to prevent an action added with 'addAction' to be
--- able to change the state, especially by adding more actions (which would not
--- be executed).
-newtype IoProgBuilder a = IoProgBuilder
-    { runIoProgBuilder :: ReaderT Ctx IoProgram a
-    } deriving (Functor,Applicative,Monad,MonadReader Ctx)
-
-instance (a ~ ()) => CanLog (IoProgBuilder a) where
-    logMsg l str = liftIoProgram (logMsg l str)
-
-instance MonadIoProgram IoProgBuilder where
-    liftIoProgram = IoProgBuilder . lift
-
--- | State for artifacts required to generate the output program is
---   held in a single 'Map' containing the existential key/value types
---  'SomeHandle' -> 'Dynamic'. This way the IoCompiler remains extensible.
---  In order to assert type-safety
-type ArtifactStates = DynMap.DynMap "artifact-states"
-
--- | To get some type safety when dealing with 'Dynamic' values in the generic
--- map, use this type family to ensure that the value type always matches the
--- key type when calling 'getArtifactState', 'useArtifactState',
--- 'putArtifactState' and 'modifyArtifactState'.
-type family IoCompilerArtifactState (a :: k) :: *
-
-type instance DynMap.DynMapValue "artifact-states" k = IoCompilerArtifactState k
-
-
--- | The internal state of the 'IoCompiler' monad
-data Ctx = Ctx
-    { _nextVertex :: Vertex
-    , _actions :: Map Vertex [IoProgBuilder ()]
-    , _hToV :: Map SomeHandle Vertex
-    , _vToH :: Map Vertex SomeHandle
-    , _dependencies :: [Edge]
-    , _artifactStates :: ArtifactStates
-    }
+-- | The internal state of the 'DslInterpreter' monad
+data Ctx =
+  Ctx {_nextVertex :: Vertex
+      ,_hToV :: Map.Map SomeHandle Vertex
+      ,_vToH :: Map.Map Vertex SomeHandle
+      ,_dependencies :: [Edge]
+      ,_builderMap :: BuilderMap
+      ,_generatorMap :: Map.Map SomeHandle Generator}
 
 instance Default Ctx where
-    def = Ctx 0 def def def [] DynMap.empty
+  def = Ctx 0 def def [] DynMap.empty def
+
+type BuilderMap = DynMap.DynMap "builders"
+
+type ArtifactMap = DynMap.DynMap "artifacts"
+
+type BuilderCtx k = [ArtifactMap -> (BuilderT IoProgram k ())]
+
+type Generator = (ArtifactMap,BuilderMap) -> IoProgram (ArtifactMap,BuilderMap)
+
+type instance DynMap.DynMapValue "builders" k = BuilderCtx k
+
+type instance DynMap.DynMapValue "artifacts" k =
+     Artifact IoProgram k
 
 makeLenses ''Ctx
 
--- | * Artifact state accessors
-useArtifactState
-  :: (Typeable b,b ~ IoCompilerArtifactState a)
-  => Handle a -> IoCompiler (Maybe b)
-useArtifactState hnd = do
-  a <- use artifactStates
-  return (DynMap.lookup (DynMap.KeyFromProxy hnd) a)
+-- | Interpret a 'ProgramT' into a sequence of actions of a monad @m@.
+interpret
+  :: BuildPlanT IoProgram a -> DslInterpreter a
+interpret = foldFree go
+  where go
+          :: BuildStep IoProgram x -> DslInterpreter x
+        go (Create initialParameter k) =
+          do h <-
+               allocHandle initialParameter
+                           (show initialParameter)
+             putBuilderT h
+                         [const (initialiseBuilder initialParameter)]
+             generatorMap . at (SomeHandle h) ?= mkGenerator h
+             return $ k h
+        go (Modify handle action pureArg next) =
+          do addBuilderT handle
+                         [const (buildAction action pureArg)]
+             return next
+        go (Merge destinationHandle action sourceHandle next) =
+          do sourceHandle --> destinationHandle
+             addBuilderT
+               destinationHandle
+               [buildAction action . fromJust .
+                DynMap.lookup (handleKey sourceHandle)]
+             return next
 
-putArtifactState
-    :: (Typeable b, b ~ IoCompilerArtifactState a)
-    => Handle a -> b -> IoCompiler ()
-putArtifactState hnd st =
-    artifactStates %= DynMap.insert (DynMap.KeyFromProxy hnd) st
+-- | Create a unique key for 'ArtifactMap' and 'BuilderMap' from a handle.
+handleKey :: Handle a -> DynMap.Key a
+handleKey = DynMap.KeyFromProxy 
 
-appendArtifactState
-  :: (Monoid b,Typeable b,b ~ IoCompilerArtifactState a)
-  => Handle a -> b -> IoCompiler ()
-appendArtifactState hnd st =
-  modifyArtifactState hnd
-                      (Just . maybe st (mappend st))
+-- | Create a 'Generator' for a 'Handle'.
+mkGenerator :: (HasBuilder IoProgram a)
+            => Handle a -> Generator
+mkGenerator handle (artifactMapIn,builderMapIn) =
+  do let key = handleKey handle
+         builder =
+           sequenceA_ $ map ($ artifactMapIn) $ join $ maybeToList $
+           DynMap.lookup key builderMapIn
+     artifact <- buildArtifact builder
+     let artifactMapOut = DynMap.insert key artifact artifactMapIn
+         builderMapOut = DynMap.delete key builderMapIn
+     return (artifactMapOut,builderMapOut)
 
-modifyArtifactState
-  :: (Typeable b,b ~ IoCompilerArtifactState a)
-  => Handle a -> (Maybe b -> Maybe b) -> IoCompiler ()
-modifyArtifactState hnd f = do
-  artifactStates %= DynMap.alter f (DynMap.KeyFromProxy hnd)
+-- | * Builder and Artifact accessors
+putBuilderT :: (Typeable b,b ~ BuilderCtx a)
+            => Handle a -> b -> DslInterpreter ()
+putBuilderT handle b =
+  builderMap %=
+  DynMap.insert (handleKey handle)
+                b
 
-getArtifactState
-  :: (Typeable b,b ~ IoCompilerArtifactState a)
-  => Handle a -> IoProgBuilder (Maybe b)
-getArtifactState hnd =
-  view (artifactStates . to (DynMap.lookup (DynMap.KeyFromProxy hnd)))
-
--- | Compile a 'Program' to an 'IoProgram'
-compile
-    :: forall a.
-       Program a -> IoProgram a
-compile p = evalStateT (runIoCompiler compileSt) def
-  where
-    compileSt :: IoCompiler a
-    compileSt = do
-        liftIoProgram
-            (do b <- getBuildId
-                dbgL
-                    "==[B9-PREPARE]=======================================================["
+addBuilderT :: (Typeable b,b ~ BuilderCtx a)
+            => Handle a -> b -> DslInterpreter ()
+addBuilderT handle b =
+  builderMap %=
+  DynMap.insertWith (++)
+                    (handleKey handle)
                     b
-                    "]")
-        result <- interpret p
-        runAllActions
-        liftIoProgram
-            (do b <- getBuildId
-                dbgL
-                    "==[B9-FINISHED]======================================================["
-                    b
-                    "]")
-        return result
 
--- | Compile a 'Program' but run no actions, instead just print out information
--- about the program using 'logTrace'
-inspect :: Show a => Program a -> IoProgram String
-inspect p = evalStateT (runIoCompiler compileSt) def
-  where
-    compileSt = do
-        res <- interpret p
-        mG <- dependencyGraph
-        case mG of
-            Just g -> do
-                handles <- use vToH
-                return (printDependencyGraph g handles)
-            Nothing ->
-                return ("No artifacts." ++ show res)
+-- | Create a new unique handle and store it in the state.
+allocHandle
+  :: Show (Proxy a)
+  => p ignored a -> String -> DslInterpreter (Handle a)
+allocHandle sa str =
+  do let toProxy2 :: p x y -> Proxy y
+         toProxy2 _ = Proxy
+     v <- addVertex
+     let h =
+           formatHandleP v
+                         (toProxy2 sa)
+                         str
+     void $ storeHandle h v
+     return h
 
--- | Run all actions in correct order according to the dependency graph.
-runAllActions :: IoCompiler ()
-runAllActions = do
-    liftIoProgram
-             (do b <- getBuildId
-                 traceL
-                     "==[B9-EXECUTE]=======================================================["
-                     b
-                     "]")
-    mG <- dependencyGraph
-    case mG of
-        Just g -> forM_ (topSort g) runActionForVertex
-        Nothing -> liftIoProgram (traceL "No artifacts.")
-  where
-    runActionForVertex vertex = do
-        Just actionsForVertex <- use (actions . at vertex)
-        execIoProgBuilder (sequence_ actionsForVertex)
+-- | Add a handle to the vertex <-> handle maps in the state and return the
+-- existential 'SomeHandle' that was stored in place of the polymorphic 'Handle
+-- a'.
+storeHandle
+  :: Handle a -> Vertex -> DslInterpreter SomeHandle
+storeHandle h v =
+  do let h' = SomeHandle h
+     hToV . at h' ?= v
+     vToH . at v ?= h'
+     return h'
 
--- | Run an 'IoProgBuilder' action.
-execIoProgBuilder :: IoProgBuilder a -> IoCompiler a
-execIoProgBuilder a = do
-    ctx <- get
-    IoCompiler (lift (runReaderT (runIoProgBuilder a) ctx))
+-- | Return a new and unique vertex (i.e. artifact id)
+addVertex :: DslInterpreter Vertex
+addVertex =
+  do v <- use nextVertex
+     nextVertex += 1
+     return v
+
+-- | Generate a handle with formatted title
+formatHandleP
+  :: Show (p a)
+  => Vertex -> p a -> String -> Handle a
+formatHandleP v sa str =
+  mkHandleP sa
+            (if str == ""
+                then show v
+                else str ++ "-" ++ show v)
+
+-- | Generate a handle with formatted title
+formatHandleS
+  :: (SingKind ('KProxy :: KProxy k),Show (Demote (a :: k)))
+  => Vertex -> Sing a -> String -> Handle a
+formatHandleS v sa str =
+  mkHandleS sa
+            (if str == ""
+                then show v
+                else str ++ "-" ++ show v)
+
+-- | Add a dependency of one resource to another: @addDependency x y@ means
+-- first build @x@ then @y@.
+addDependency
+  :: Handle a -> Handle b -> DslInterpreter ()
+addDependency = (-->)
+
+-- | An alias for 'addDependency': @x --> y@ means @addDependency x y@ - i.e.
+-- first build @x@ then @y@.
+(-->)
+  :: Handle a -> Handle b -> DslInterpreter ()
+h --> h' =
+  do Just v <- lookupVertex h
+     Just v' <- lookupVertex h'
+     dependencies <>= [(v,v')]
+
+-- | Return the vertex of a handle.
+lookupVertex
+  :: Handle a -> DslInterpreter (Maybe Vertex)
+lookupVertex h = use (hToV . at (SomeHandle h))
+
+-- * Execution of the interpreter
+-- | Compose all build steps into an 'IoProgram', with all build actions
+-- executed in the order determined by the data-dependencies between buildsteps.
+toIoProgram :: DslInterpreter a -> IoProgram (a, ArtifactMap)
+toIoProgram di =
+  let ((a,depGraph),ctx) =
+        runState (runDslInterpreter ((,) <$> di <*> dependencyGraph)) def
+      orderedVertices = maybe [0 .. _nextVertex ctx - 1] topSort depGraph
+      vToG =
+        Map.map (flip Map.lookup (_generatorMap ctx))
+                (_vToH ctx)
+      builders = catMaybes $ map (join . flip Map.lookup vToG) orderedVertices
+  in do (artifactsOut,_builderOut) <-
+          foldr (=<<) (return (DynMap.empty,_builderMap ctx)) builders
+        return (a, artifactsOut)
+
+testDi =
+  toIoProgram $ interpret $
+    do t1 <- createFrom (FromPureValue "test1")
+       t2 <- createFrom (FromPureValue "test2")
+       merge t1 AppendPure t2
+       modifyWith t2 AppendPure " 222 "
+       modifyWith t1 AppendPure " 333 "
+
 
 -- | Generate a graph from the artifact dependencies in the compiler context.
-dependencyGraph :: IoCompiler (Maybe Graph)
-dependencyGraph = do
-    maxVertex <- use nextVertex
-    if maxVertex > 0
-        then do
-            deps <- use dependencies
-            return (Just (buildG (0, maxVertex - 1) deps))
+dependencyGraph :: DslInterpreter (Maybe Graph)
+dependencyGraph =
+  do maxVertex <- use nextVertex
+     if maxVertex > 0
+        then do deps <- use dependencies
+                return (Just (buildG (0,maxVertex - 1) deps))
         else return Nothing
 
+-- * Debugging and tracing support
 -- | Show the dependency graph from the compiler context.
-printDependencyGraph :: Graph -> Map Vertex SomeHandle -> String
+printDependencyGraph
+  :: Graph -> Map.Map Vertex SomeHandle -> String
 printDependencyGraph g handles =
-    unlines
-        ("digraph artifactDependencyGraph {" :
-         fmap (printEdge handles) (edges g) ++
-         "}" :
-         "Dependency forest:" :
-         Tree.drawForest (fmap (printVertex handles) <$> dff g) :
-         "Build order:" : (printVertex handles <$> topSort g))
+  unlines ("digraph artifactDependencyGraph {" :
+           fmap (printEdge handles)
+                (edges g) ++
+           "}" :
+           "Dependency forest:" :
+           Tree.drawForest (fmap (printVertex handles) <$> dff g) :
+           "Build order:" :
+           (printVertex handles <$> topSort g))
 
 -- | Convert an edge to a formatted string
-printEdge :: Map Vertex SomeHandle -> Edge -> String
+printEdge
+  :: Map.Map Vertex SomeHandle -> Edge -> String
 printEdge handles (u,v) =
-    printf
-        "  %s   ->    %s"
-        (show (printVertex handles u))
-        (show (printVertex handles v))
+  printf "  %s   ->    %s"
+         (show (printVertex handles u))
+         (show (printVertex handles v))
 
 -- | Convert a vertex to a formatted string
-printVertex :: Map Vertex SomeHandle -> Vertex -> String
+printVertex
+  :: Map.Map Vertex SomeHandle -> Vertex -> String
 printVertex handles v =
-    printf "%s(%d)" (printSomeHandle (Map.lookup v handles)) v
+  printf "%s(%d)" (printSomeHandle (Map.lookup v handles)) v
 
 -- | Convert maybe a handle to a string
 printSomeHandle :: Maybe SomeHandle -> String
 printSomeHandle (Just (SomeHandle h)) = show h
 printSomeHandle Nothing = "??error??"
-
--- * Utilities
-
--- | Create a new unique handle and store it in the state.
-allocHandle :: Show (p a)
-               => p a
-               -> String
-               -> IoCompiler (Handle a, SomeHandle)
-allocHandle sa str = do
-    v <- addVertex
-    let h = formatHandleP v sa str
-    h' <- storeHandle h v
-    actions . at v ?=
-        [liftIoProgram (traceL "==[B9-EXEC-ARTIFACT]==============[" h "]")]
-    return (h, h')
-
--- | Setup a predefined global handle
-allocPredefinedHandle
-    :: Handle a -> IoCompiler ()
-allocPredefinedHandle h = do
-    v <- addVertex
-    void (storeHandle h v)
-    actions . at v ?= []
-
--- | Add a handle to the vertex <-> handle maps in the state and return the
--- existential 'SomeHandle' that was stored in place of the polymorphic 'Handle
--- a'.
-storeHandle :: Handle a -> Vertex -> IoCompiler SomeHandle
-storeHandle h v = do
-    let h' = SomeHandle h
-    hToV . at h' ?= v
-    vToH . at v ?= h'
-    return h'
-
--- | Return a new and unique vertex (i.e. artifact id)
-addVertex :: IoCompiler Vertex
-addVertex = do
-    v <- use nextVertex
-    nextVertex += 1
-    return v
-
--- | Generate a handle with formatted title
-formatHandleP :: Show (p a) => Vertex -> p a -> String -> Handle a
-formatHandleP v sa str = mkHandleP sa (if str == ""
-                                      then show v
-                                      else str ++ "-" ++ show v)
-
--- | Generate a handle with formatted title
-formatHandleS :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))
-              => Vertex -> Sing a -> String -> Handle a
-formatHandleS v sa str = mkHandleS sa (if str == ""
-                                      then show v
-                                      else str ++ "-" ++ show v)
-
--- | Add a dependency of one resource to another: @addDependency x y@ means
--- first build @x@ then @y@.
-addDependency :: Handle a -> Handle b -> IoCompiler ()
-addDependency = (-->)
-
--- | An alias for 'addDependency': @x --> y@ means @addDependency x y@ - i.e.
--- first build @x@ then @y@.
-(-->) :: Handle a -> Handle b -> IoCompiler ()
-h --> h' = do
-    Just v <- lookupVertex h
-    Just v' <- lookupVertex h'
-    dependencies <>= [(v, v')]
-
--- | Return the vertex of a handle.
-lookupVertex :: Handle a -> IoCompiler (Maybe Vertex)
-lookupVertex h = use (hToV . at (SomeHandle h))
-
--- * Support for 'IoProgBuilder's
-
--- | Add a build action to a handle
-addAction :: Handle a -> IoProgBuilder () -> IoCompiler ()
-addAction h a = do
-  Just v <- lookupVertex h
-  actions . at v . traverse <>= [a]
-
--- * TODO
-appendToArtifactOutput = undefined
-
--- type family IoProgBuilderResult a :: *
-
--- mergeArtifactOutputInto
---   :: Handle a
---   -> Handle b
---   -> (IoProgBuilderResult a
---       -> IoProgBuilderResult b
---       -> IoProgBuilderResult b)
---   -> IoCompiler ()
-mergeArtifactOutputInto oH cH f = undefined

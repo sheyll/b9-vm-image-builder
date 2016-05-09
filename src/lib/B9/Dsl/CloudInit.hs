@@ -167,8 +167,8 @@ instance CanAdd IoCompiler (Cnt CiUserData) 'ExecutableScript where
   runAdd hnd _px scr =
     appendToArtifactOutput hnd (mempty {_ciRunCmds = [CiCmdScript scr]})
 
-instance CanAdd IoCompiler (Cnt CiUserData) 'FreeFile where
-  type AddSpec IoCompiler (Cnt CiUserData) 'FreeFile = (FileSpec, Handle 'FreeFile)
+instance CanAdd IoCompiler (Cnt CiUserData) FreeFile where
+  type AddSpec IoCompiler (Cnt CiUserData) FreeFile = (FileSpec, Handle FreeFile)
   runAdd hnd _ (fspec,fH) =
     do fileContentH <- runExtract fH (Proxy :: Proxy (Cnt ByteString)) ()
        interpret $

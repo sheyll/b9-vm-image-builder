@@ -18,7 +18,7 @@ instance Show (Sing 'VmImage) where show _ = "VmImage"
 
 -- | Context of a 'SVmImage'
 data VmImgCtx = VmImgCtx
-    { _vmiFile :: Handle 'FreeFile
+    { _vmiFile :: Handle FreeFile
     , _vmiType :: ImageType
     } deriving (Show,Typeable)
 
@@ -26,13 +26,13 @@ type instance IoCompilerArtifactState 'VmImage = VmImgCtx
 
 makeLenses ''VmImgCtx
 
-instance CanExtract IoCompiler 'FreeFile 'VmImage where
-    type ExtractionArg IoCompiler 'FreeFile 'VmImage = ImageType
+instance CanExtract IoCompiler FreeFile 'VmImage where
+    type ExtractionArg IoCompiler FreeFile 'VmImage = ImageType
     runExtract hnd _ imgT = do
         newHnd <- runExtract hnd SFreeFile Nothing
         createVmImage newHnd imgT
 
-instance CanExtract IoCompiler 'VmImage 'FreeFile where
+instance CanExtract IoCompiler 'VmImage FreeFile where
     runExtract hnd _ () = do
         Just (VmImgCtx srcFileH _srcType) <- useArtifactState hnd
         return srcFileH
@@ -73,9 +73,9 @@ instance CanExport IoCompiler 'VmImage where
         runExport fH destFile
 
 -- | Create a vm image entry in the context.
-createVmImage :: Handle 'FreeFile -> ImageType -> IoCompiler (Handle 'VmImage)
+createVmImage :: Handle FreeFile -> ImageType -> IoCompiler (Handle 'VmImage)
 createVmImage srcFileH vmt = do
-    (hnd,_) <- allocHandle SVmImage ("vm-image-" ++ show vmt)
+    hnd <- allocHandle SVmImage ("vm-image-" ++ show vmt)
     putArtifactState hnd $ VmImgCtx srcFileH vmt
     srcFileH --> hnd
     return hnd

@@ -74,16 +74,16 @@ type GeneratedContentChunk c = IoProgram c
 
 type instance IoCompilerArtifactState (Cnt c) = [IoProgram c]
 
-instance IsCnt c => CanCreate IoCompiler (Cnt c) where
-  type CreateSpec IoCompiler (Cnt c) = (c, String)
+instance IsCnt c => HasBuilder IoCompiler (Cnt c) where
+  data InitArgs IoCompiler (Cnt c) = (c, String)
   runCreate _px (c,title) =
-    do (hnd,_) <- allocHandle Proxy title
+    do hnd <- allocHandle Proxy title
        putArtifactState hnd
                         [return c]
        return hnd
 
-instance IsCnt c => CanExtract IoCompiler (Cnt c) 'FreeFile where
-  type ExtractionArg IoCompiler (Cnt c) 'FreeFile = CntRenderArgs c
+instance IsCnt c => CanExtract IoCompiler (Cnt c) FreeFile where
+  type ExtractionArg IoCompiler (Cnt c) FreeFile = CntRenderArgs c
   runExtract hnd _ env =
     do let dest = handleTitle hnd
        (destH,destFile) <- createFreeFile dest
@@ -97,9 +97,9 @@ instance IsCnt c => CanExtract IoCompiler (Cnt c) 'FreeFile where
     where renderContents :: [IoProgram c] -> IoProgram ByteString
           renderContents = fmap (renderCnt env . mergeCnt) . sequence
 
-instance IsCnt c => CanExtract IoCompiler 'FreeFile (Cnt c) where
+instance IsCnt c => CanExtract IoCompiler FreeFile (Cnt c) where
   runExtract srcFileH _ () =
-    do (hnd,_) <- allocHandle (Proxy :: Proxy (Cnt c)) (handleTitle srcFileH)
+    do hnd <- allocHandle (Proxy :: Proxy (Cnt c)) (handleTitle srcFileH)
        srcFileH --> hnd
        srcCopy <-
          freeFileTempCopy srcFileH
@@ -111,7 +111,7 @@ instance IsCnt c => CanExtract IoCompiler 'FreeFile (Cnt c) where
 instance IsCnt c => CanAdd IoCompiler (Cnt c) (Cnt c) where
   type AddSpec IoCompiler (Cnt c) (Cnt c) = c
   runAdd hnd _ c =
-    do modifyArtifactState
+    do modificationBuilderState
          hnd
          (Just .
           maybe [return c]

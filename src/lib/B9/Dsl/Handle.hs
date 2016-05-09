@@ -2,8 +2,7 @@
 
 module B9.Dsl.Handle (Handle(handleTitle, handleType)
                      ,globalHandle,globalHandleP,globalHandleS
-                     ,mkHandle,mkHandleP,mkHandleS
-                     ,handleTitle
+                     ,mkHandle,mkHandleP,mkHandleS,mkHandleT
                      ,SomeHandle(..)
                      ,module X) where
 
@@ -25,7 +24,7 @@ data Handle (a :: k) =
   deriving (Eq, Ord)
 
 instance Show (Handle a) where
-  show (Handle tt it) = tt ++ "_AT_" ++ it
+  show (Handle tt it) = tt ++ " for " ++ it
 
 instance LogArg (Handle a)
 
@@ -44,11 +43,15 @@ globalHandleS = globalHandle . show . fromSing
 
 -- | Generate a handle with formatted title
 mkHandle :: String -> String -> Handle a
-mkHandle hType hInst = Handle hType hInst
+mkHandle hType title = Handle hType title
 
 -- | Generate a handle with formatted title
 mkHandleP :: Show (p a) => p a -> String -> Handle a
 mkHandleP = mkHandle . show
+
+-- | Generate a handle with formatted title
+mkHandleT :: Typeable a => p a -> String -> Handle a
+mkHandleT = mkHandle . show . typeRep
 
 -- | Generate a handle with formatted title from a 'Sing' instance
 mkHandleS :: (SingKind ('KProxy :: KProxy k), Show (Demote (a :: k)))

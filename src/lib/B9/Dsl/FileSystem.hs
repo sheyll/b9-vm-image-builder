@@ -35,7 +35,7 @@ type instance IoCompilerArtifactState 'FileSystemBuilder =
 
 -- | Context of a 'SFileSystemImage'
 data FsCtx = FsCtx
-    { _fsFileH :: Handle 'FreeFile
+    { _fsFileH :: Handle FreeFile
     , _fsType :: FileSystem
     } deriving (Show, Typeable)
 
@@ -44,15 +44,15 @@ type instance IoCompilerArtifactState 'FileSystemImage = FsCtx
 makeLenses ''FsCtx
 makeLenses ''FsBuilderCtx
 
-instance CanCreate IoCompiler 'FileSystemBuilder where
-    type CreateSpec IoCompiler 'FileSystemBuilder = FileSystemSpec
+instance HasBuilder IoCompiler 'FileSystemBuilder where
+    data InitArgs IoCompiler 'FileSystemBuilder = FileSystemSpec
     runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
         let title =
                 (if null fsLabel
                      then "image"
                      else fsLabel)
                 <.> show t
-        (hnd,_) <- allocHandle SFileSystemBuilder fsLabel
+        hnd <- allocHandle SFileSystemBuilder fsLabel
         (tmpFileH,tmpFile) <- createFreeFile title
         hnd --> tmpFileH
         fH <- createFsImage tmpFileH t
@@ -71,18 +71,18 @@ instance CanCreate IoCompiler 'FileSystemBuilder where
         return hnd
 
 -- | Create a 'FsCtx' from an existing file and the file system type.
-createFsImage :: Handle 'FreeFile
+createFsImage :: Handle FreeFile
               -> FileSystem
               -> IoCompiler (Handle 'FileSystemImage)
 createFsImage fH fs = do
-    (hnd,_) <- allocHandle SFileSystemImage ("fs-img-" ++ show fs)
+    hnd <- allocHandle SFileSystemImage ("fs-img-" ++ show fs)
     putArtifactState hnd $ FsCtx fH fs
     return hnd
 
-instance CanAdd IoCompiler 'FileSystemBuilder 'FreeFile where
-    type AddSpec IoCompiler 'FileSystemBuilder 'FreeFile = (FileSpec, Handle 'FreeFile)
+instance CanAdd IoCompiler 'FileSystemBuilder FreeFile where
+    type AddSpec IoCompiler 'FileSystemBuilder FreeFile = (FileSpec, Handle FreeFile)
     runAdd fsH _ (fSpec,fH) = do
-        modifyArtifactState fsH (traverse . fsFiles <>~ [fSpec])
+        modificationBuilderState fsH (traverse . fsFiles <>~ [fSpec])
         Just fsBuilder <- useArtifactState fsH
         let tmpDir = fsBuilder ^. fsTempDir
         fH --> fsH
@@ -93,7 +93,7 @@ instance CanExtract IoCompiler 'FileSystemBuilder 'FileSystemImage where
         Just fsBuilder <- useArtifactState hnd
         return (fsBuilder ^. fsImgH)
 
-instance CanExtract IoCompiler 'FileSystemBuilder 'FreeFile where
+instance CanExtract IoCompiler 'FileSystemBuilder FreeFile where
     runExtract hnd _ () = do
         Just fsBuilder <- useArtifactState hnd
         runExtract (fsBuilder ^. fsImgH) SFreeFile ()
@@ -109,13 +109,13 @@ instance CanExtract IoCompiler 'FileSystemImage 'FileSystemImage where
         addAction hnd (liftIoProgram (resizeFileSystem outFile destSize fS))
         createFsImage outFileH fS
 
-instance CanExtract IoCompiler 'FileSystemImage 'FreeFile where
+instance CanExtract IoCompiler 'FileSystemImage FreeFile where
     runExtract hnd _ () = do
         Just (FsCtx fH _fS) <- useArtifactState hnd
         return fH
 
-instance CanExtract IoCompiler 'FreeFile 'FileSystemImage where
-    type ExtractionArg IoCompiler 'FreeFile 'FileSystemImage = FileSystem
+instance CanExtract IoCompiler FreeFile 'FileSystemImage where
+    type ExtractionArg IoCompiler FreeFile 'FileSystemImage = FileSystem
     runExtract hnd _ fs = do
         copyH <- runExtract hnd SFreeFile (Just (show fs))
         fsImg <- createFsImage copyH fs

@@ -49,10 +49,10 @@ instance Default ExecEnvCtx where
 
 makeLenses ''ExecEnvCtx
 
-instance CanCreate IoCompiler 'ExecutionEnvironment where
-  type CreateSpec IoCompiler 'ExecutionEnvironment = ExecEnvSpec
+instance HasBuilder IoCompiler 'ExecutionEnvironment where
+  data InitArgs IoCompiler 'ExecutionEnvironment = ExecEnvSpec
   runCreate _ e =
-    do (hnd,_) <-
+    do hnd <-
          allocHandle SExecutionEnvironment
                      (e ^. execEnvTitle)
        incDir <- liftIoProgram (mkTempDir "included-files")
@@ -88,28 +88,28 @@ instance CanCreate IoCompiler 'ExecutionEnvironment where
 
 instance CanAdd IoCompiler 'ExecutionEnvironment 'ExecutableScript where
   type AddSpec IoCompiler 'ExecutionEnvironment 'ExecutableScript = Script
-  runAdd hnd _ cmds = modifyArtifactState hnd $ traverse . execScript <>~ cmds
+  runAdd hnd _ cmds = modificationBuilderState hnd $ traverse . execScript <>~ cmds
 
-instance CanAdd IoCompiler 'ExecutionEnvironment 'FreeFile where
-  type AddSpec IoCompiler 'ExecutionEnvironment 'FreeFile = (FileSpec, Handle 'FreeFile)
+instance CanAdd IoCompiler 'ExecutionEnvironment FreeFile where
+  type AddSpec IoCompiler 'ExecutionEnvironment FreeFile = (FileSpec, Handle FreeFile)
   runAdd hnd _ (destSpec,srcH) =
     do srcH --> hnd
        Just eCxt <- useArtifactState hnd
        incFile <- liftIoProgram (mkTempIn (eCxt ^. execIncDir) "added-file")
        copyFreeFile srcH incFile
-       modifyArtifactState hnd $ traverse . execIncFiles <>~
+       modificationBuilderState hnd $ traverse . execIncFiles <>~
          [(incFile,destSpec)]
        bId <- liftIoProgram B9.B9IO.getBuildId
-       modifyArtifactState hnd $ traverse . execScript <>~
+       modificationBuilderState hnd $ traverse . execScript <>~
          incFileScript bId incFile destSpec
 
-instance CanAdd IoCompiler 'ExecutionEnvironment 'LocalDirectory where
-  type AddSpec IoCompiler 'ExecutionEnvironment 'LocalDirectory = SharedDirectory
+instance CanAdd IoCompiler 'ExecutionEnvironment LocalDirectory where
+  type AddSpec IoCompiler 'ExecutionEnvironment LocalDirectory = SharedDirectory
   runAdd hnd _ sharedDir =
-    modifyArtifactState hnd $ traverse . execBindMounts <>~ [sharedDir]
+    modificationBuilderState hnd $ traverse . execBindMounts <>~ [sharedDir]
 
-instance CanExtract IoCompiler 'ExecutionEnvironment 'FreeFile where
-  type ExtractionArg IoCompiler 'ExecutionEnvironment 'FreeFile = FilePath
+instance CanExtract IoCompiler 'ExecutionEnvironment FreeFile where
+  type ExtractionArg IoCompiler 'ExecutionEnvironment FreeFile = FilePath
   runExtract hnd _ src =
     do Just ec <- useArtifactState hnd
        (fh,f) <-
@@ -118,7 +118,7 @@ instance CanExtract IoCompiler 'ExecutionEnvironment 'FreeFile where
            (printf "%s-%s"
                    (ec ^. execEnvSpec . execEnvTitle)
                    (takeFileName src))
-       modifyArtifactState hnd $ traverse . execOutFiles <>~ [(src,f)]
+       modificationBuilderState hnd $ traverse . execOutFiles <>~ [(src,f)]
        hnd --> fh
        return fh
 
@@ -136,7 +136,7 @@ instance CanExtract IoCompiler 'ExecutionEnvironment 'VmImage where
                     SFreeFile
                     (Just (printf "mounted-at-%s" (printMountPoint mp)))
        Just (FileCtx mnt _) <- useArtifactState mntH
-       modifyArtifactState hnd $ traverse . execImages <>~
+       modificationBuilderState hnd $ traverse . execImages <>~
          [(Image mnt Raw Ext4,mp)]
        hnd --> mntH
        runExtract mntH SVmImage Raw

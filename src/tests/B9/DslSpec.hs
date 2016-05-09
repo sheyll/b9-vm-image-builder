@@ -66,16 +66,16 @@ someStateSpec = do
                            useArtifactState hnd12 <*>
                            useArtifactState hnd21)
                    (Just "test1", Just "test2", Just True)
-    describe "modifyArtifactState" $
+    describe "modificationBuilderState" $
         do it "adds a new entry" $
                shouldResultIn
-                   (do modifyArtifactState hnd11 (const (Just "test"))
+                   (do modificationBuilderState hnd11 (const (Just "test"))
                        useArtifactState hnd11)
                    (Just "test")
            it "modify an new entry" $
                shouldResultIn
-                   (do modifyArtifactState hnd11 (const (Just "tset"))
-                       modifyArtifactState
+                   (do modificationBuilderState hnd11 (const (Just "tset"))
+                       modificationBuilderState
                            hnd11
                            (fmap (reverse :: String -> String))
                        useArtifactState hnd11)

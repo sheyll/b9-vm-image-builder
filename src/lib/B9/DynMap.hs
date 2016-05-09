@@ -7,13 +7,14 @@ module B9.DynMap
     ,empty
     ,singleton
     ,insert
+    ,delete
     ,insertWith
     ,alter
     ,lookup
     ) where
 
 import Prelude hiding (lookup)
-import B9.Common hiding (lookup)
+import B9.Common hiding (lookup,delete)
 import Data.Dynamic
 import qualified Data.Map as Map
 
@@ -75,6 +76,12 @@ singleton k v = insert k v empty
 insert :: DynMapEntry m k v => Key k -> v -> DynMap m -> DynMap m
 insert k v =
   DynMap . Map.insert (SomeKey k) (toDyn v) . unDynMap
+
+-- | Remove an entry for the given key. If the key is not a member of the map,
+-- return the old map.
+delete :: DynMapEntry m k v => Key k -> DynMap m -> DynMap m
+delete k =
+  DynMap . Map.delete (SomeKey k) . unDynMap
 
 -- | Insert a value for the given key, possibly combining it with a previous
 -- value.

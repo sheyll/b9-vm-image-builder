@@ -84,3 +84,31 @@ whenM cond a = cond >>= flip when (void a)
 -- | 'unless' with a monadic condition.
 unlessM :: Monad m => m Bool -> m a -> m ()
 unlessM cond a = cond >>= flip unless (void a)
+--
+--
+--
+--
+--
+-- class C v a where
+--   data ActionArgs v a :: * -> *
+--   type WithOptionalArgs v a t r
+--   type WithOptionalArgs v a t r = r
+--   build :: ActionArgs v a t -> WithOptionalArgs v a t (IO ())
+--
+-- data Foo = Foo
+--
+-- data Reverse = Reverse
+-- data Append = Append
+--
+-- instance C Foo Reverse where
+--   data ActionArgs Foo Reverse k where
+--     ReverseFoo :: ActionArgs Foo Reverse ()
+--   type WithOptionalArgs Foo Reverse () r = r
+--   build ReverseFoo = putStrLn "Reversing Foo"
+--
+-- instance C Foo Append where
+--   data ActionArgs Foo Append k where
+--     AppendToFoo :: Show s => ActionArgs Foo Append s
+--   type WithOptionalArgs Foo Append s r = s -> r
+--   build AppendToFoo s =
+--     putStrLn $ "Appending to Foo " ++ show s
