@@ -4,177 +4,117 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
+
 module B9.B9IO
        (IoProgram, MonadIoProgram(..), runB9IO, Action(..), getBuildDir,
-        getBuildId, getBuildDate, copy, copyDir, moveFile, moveDir, mkDir,
-        readFileSize, mkTemp, mkTempIn, mkTempDir, mkTempDirIn,
-        getRealPath, getParentDir, getFileName, ensureParentDir,
-        readContentFromFile, writeContentToFile, createFileSystem,
-        resizeFileSystem, convertVmImage, resizeVmImage, extractPartition,
-        imageRepoLookup, imageRepoPublish, executeInEnv, traceEveryAction,
+        getBuildId, getBuildDate, exitError, newUUID, nextInteger,
+        CommandSpec(..), runCommand, getConfigEntry, putConfigEntry,
+        readContentFromFile, writeContentToFile, traceEveryAction,
         dumpToStrings, dumpToResult, runPureDump, arbitraryIoProgram)
        where
 
-import           B9.Common
-import           B9.CommonTypes
-import           B9.Content
-import           B9.DiskImages
-import           B9.ExecEnv
-import           B9.FileSystems
-import           B9.Logging
-import           B9.PartitionTable
-import           B9.QCUtil
-import           B9.Repository
-import           B9.ShellScript
-import           Control.Monad.Free
-import           Control.Monad.Trans.Writer.Lazy
-import           Test.QuickCheck
+import B9.Common
+import B9.Logging
+import B9.QCUtil
+import Control.Monad.Free
+import Control.Monad.Trans.Writer.Lazy
+import Test.QuickCheck
+import System.Posix.Types
+import Data.UUID
 
 -- | Programs representing imperative, /impure/ IO actions required by B9 to
 -- create, convert and install VM images or cloud init disks.  Pure 'Action's
 -- are combined to a free monad. This seperation from actually doing the IO and
 -- modelling the IO actions as pure data enables unit testing and debugging.
-newtype IoProgram a = IoProgram
-    { runIoProgram :: Free Action a
-    } deriving (Functor,Applicative,Monad,MonadFree Action)
+newtype IoProgram a =
+  IoProgram {runIoProgram :: Free Action a}
+  deriving (Functor,Applicative,Monad,MonadFree Action)
 
 -- | Class of monads that can contain 'IoProgram's.
-class MonadIoProgram m where
-    liftIoProgram :: IoProgram a -> m a
+class MonadIoProgram m  where
+  liftIoProgram :: IoProgram a -> m a
 
 -- | Execute an 'IoProgram' using a monadic interpretation function.
 runB9IO
-    :: Monad m
-    => (forall a. Action a -> m a) -> IoProgram b -> m b
+  :: Monad m
+  => (forall a. Action a -> m a) -> IoProgram b -> m b
 runB9IO a = foldFree a . runIoProgram
 
--- | Pure commands for disk image creation and conversion, file
--- IO and libvirt lxc interaction.
+-- | Basic IO actions that are easy to implement on any platform. There are no
+-- platform specific commands like user creation, these would have to be
+-- implemented using 'RunCommand'. To create an multiplatform version of B9
+-- there would be different implementation on top of 'Action' - not below.
 data Action next
-    = LogMessage LogLevel
-                 String
-                 next
-    | GetBuildDir (FilePath -> next)
-    | GetBuildId (String -> next)
-    | GetBuildDate (String -> next)
-    | Copy FilePath
-           FilePath
-           next
-    | CopyDir FilePath
-              FilePath
-              next
-    | MoveFile FilePath
-               FilePath
+  = LogMessage LogLevel
+               String
                next
-    | MoveDir FilePath
-              FilePath
+  | ExitError String
+              ExitCode
               next
-    | ReadFileSize FilePath
-                   (Integer -> next)
-    | MkDir FilePath
-            next
-    | EnsureParentDir FilePath
-                      (FilePath -> next)
-    | MkTemp FilePath
-             (FilePath -> next)
-    | MkTempIn FilePath
-               FilePath
-               (FilePath -> next)
-    | MkTempDir FilePath
-                (FilePath -> next)
-    | MkTempDirIn FilePath
-                  FilePath
-                  (FilePath -> next)
-    | GetRealPath FilePath
-                  (FilePath -> next)
-    | GetParentDir FilePath
-                   (FilePath -> next)
-    | GetFileName FilePath
-                  (FilePath -> next)
-    | ReadContentFromFile FilePath
-                  (ByteString -> next)
-    | WriteContentToFile FilePath
-                          ByteString
-                          next
-    | CreateFileSystem FilePath
-                       FileSystemSpec
-                       FilePath
-                       [FileSpec]
-                       next
-    | ResizeFileSystem FilePath
-                       FileSystemResize
-                       FileSystem
-                       next
-    | ConvertVmImage FilePath
-                     ImageType
-                     FilePath
-                     ImageType
-                     next
-    | ResizeVmImage FilePath
-                    Int
-                    SizeUnit
-                    ImageType
-                    next
-    | ExtractPartition PartitionSpec
-                       FilePath
-                       FilePath
-                       next
-    | ImageRepoLookup SharedImageName
-                      ((SharedImage, FilePath) -> next)
-    | ImageRepoPublish FilePath
-                       ImageType
-                       SharedImageName
-                       next
-    | ExecuteInEnv ExecEnvSpec
-                   Script
-                   [SharedDirectory]
-                   [Mounted Image]
+  | GetBuildDir (FilePath -> next)
+  | GetBuildId (String -> next)
+  | GetBuildDate (String -> next)
+  | NewUUID (UUID -> next)
+  | NextInteger (Integer -> next)
+  | GetConfigEntry String
+                   ([String] -> next)
+  | PutConfigEntry String
+                   [String]
                    next
-    deriving (Functor)
+  | RunCommand CommandSpec
+               ((ExitCode,ByteString,ByteString) -> next)
+  |
+  | ReadContentFromFile FilePath
+                        (ByteString -> next)
+  | WriteContentToFile FilePath
+                       ByteString
+                       next
+  deriving (Typeable,Functor)
+
+-- | Define the command to run.
+data CommandSpec =
+  CommandSpec {csCmdExe :: FilePath
+              ,csCmdArgs :: [String]
+              ,csCwd :: Maybe FilePath
+              ,csEnv :: Maybe [(String,String)]
+              ,csDelegateCtlC :: Bool
+              ,csChildGroup :: Maybe GroupID
+              ,csChildUser :: Maybe UserID}
+  deriving (Read,Show,Typeable)
 
 instance Show (Action a) where
-    show (LogMessage l m _) = printf "logMessage %s %s" (show l) (show m)
-    show (GetBuildId _) = "getBuildId"
-    show (GetBuildDate _) = "getBuildDate"
-    show (GetBuildDir _) = "getBuildDir"
-    show (Copy s d _) = printf "copy %s %s" s d
-    show (CopyDir s d _) = printf "copyDir %s %s" s d
-    show (MoveFile s d _) = printf "moveFile %s %s" s d
-    show (MoveDir s d _) = printf "moveDir %s %s" s d
-    show (ReadFileSize f _) = printf "readFileSize %s" f
-    show (MkDir d _) = printf "mkDir %s" d
-    show (EnsureParentDir d _) = printf "ensureParentDir %s" d
-    show (MkTempIn d p _) = printf "mkTempIn %s %s" d p
-    show (MkTemp p _) = printf "mkTemp %s" p
-    show (MkTempDirIn d p _) = printf "mkTempDirIn %s %s" d p
-    show (MkTempDir p _) = printf "mkTempDir %s" p
-    show (GetRealPath p _) = printf "getRealPath %s" p
-    show (GetParentDir p _) = printf "getParentDir %s" p
-    show (GetFileName p _) = printf "getFileName %s" p
-    show (ReadContentFromFile p _) = printf "readContentFromFile %s" p
-    show (WriteContentToFile f c _) =
-        printf "writeContentToFile %s %s" f (show c)
-    show (CreateFileSystem dst fs srcDir files _) =
-        printf "createFileSystem %s %s %s %s" dst (show fs) srcDir (show files)
-    show (ResizeFileSystem fs fsResize fsType _) =
-        printf "resizeFileSystem %s %s %s" fs (show fsResize) (show fsType)
-    show (ConvertVmImage srcF srcT dstF dstT _) =
-        printf "convertVmImage %s %s %s %s" srcF (show srcT) dstF (show dstT)
-    show (ResizeVmImage img s u imgT _) =
-        printf "resizeVmImage %s %d %s %s" img s (show u) (show imgT)
-    show (ExtractPartition p s d _) =
-        printf "extractPartition %s %s %s" (show p) s d
-    show (ImageRepoLookup sn _) = printf "imageRepoLookup %s" (show sn)
-    show (ImageRepoPublish f t n _) =
-        printf "imageRepoPublish %s %s %s" f (show t) (show n)
-    show (ExecuteInEnv e s d i _) =
-        printf "executeInEnv %s %s %s %s" (show e) (show s) (show d) (show i)
+  show (LogMessage l m _) =
+    printf "logMessage %s %s"
+           (show l)
+           (show m)
+  show (ExitError msg code _) =
+    printf "exitError (%s) %s"
+           (show msg)
+           (show code)
+  show (GetBuildId _) = "getBuildId"
+  show (GetBuildDate _) = "getBuildDate"
+  show (GetBuildDir _) = "getBuildDir"
+  show (NewUUID _) = "newUUID"
+  show (NextInteger _) = "nextInteger"
+  show (GetConfigEntry k _) = printf "getConfigEntry %s" (show k)
+  show (PutConfigEntry k vs _) =
+    printf "putConfigEntry %s %s"
+           (show k)
+           (show vs)
+  show (RunCommand cs _) = printf "runCommand %s" (show cs)
+  show (ReadContentFromFile p _) = printf "readContentFromFile %s" p
+  show (WriteContentToFile f c _) =
+    printf "writeContentToFile %s %s" f (show c)
 
 instance LogArg (Action a)
 
 -- | High-level logging API
 instance (a ~ ()) => CanLog (IoProgram a) where
-    logMsg l str = liftF $ LogMessage l str ()
+  logMsg l str = liftF $ LogMessage l str ()
+
+-- | Exit with error.
+exitError :: String -> ExitCode -> IoProgram ()
+exitError msg code = liftF $ ExitError msg code ()
 
 -- | Get the (temporary) directory of the current b9 execution
 getBuildDir :: IoProgram FilePath
@@ -191,136 +131,50 @@ getBuildId = liftF $ GetBuildId id
 getBuildDate :: IoProgram String
 getBuildDate = liftF $ GetBuildDate id
 
--- | Copy a file
-copy :: FilePath -> FilePath -> IoProgram ()
-copy from dst = liftF $ Copy from dst ()
+-- | Create a new 'UUID'.
+newUUID :: IoProgram UUID
+newUUID = liftF $ NewUUID id
 
--- | Copy a directory recursively
-copyDir :: FilePath -> FilePath -> IoProgram ()
-copyDir from dst = liftF $ CopyDir from dst ()
+-- | Return the next of a monotonically increasing series of positive naturals.
+nextInteger :: IoProgram Integer
+nextInteger = liftF $ NextInteger id
 
--- | Move a file
-moveFile :: FilePath -> FilePath -> IoProgram ()
-moveFile from dst = liftF $ MoveFile from dst ()
+-- | Retreive all values for a given configuration key from the b9 config.
+getConfigEntry :: String -> IoProgram [String]
+getConfigEntry k = liftF $ GetConfigEntry k id
 
--- | Move a directory
-moveDir :: FilePath -> FilePath -> IoProgram ()
-moveDir from dst = liftF $ MoveDir from dst ()
+-- | Overwrite the values for a given configuration key.
+putConfigEntry
+  :: String -> [String] -> IoProgram ()
+putConfigEntry k vs = liftF $ PutConfigEntry k vs ()
 
--- | Just like @mkdir -p@
-mkDir :: FilePath -> IoProgram ()
-mkDir d = liftF $ MkDir d ()
-
--- | Get the size of the contents of a file in bytes.
-readFileSize :: FilePath -> IoProgram Integer
-readFileSize f = liftF $ ReadFileSize f id
-
--- | Create a unique file path inside the build directory starting with a given
--- prefix and ending with a unique random token. The parent directory is
--- guaranteed to be created, if it does not exist.
-mkTemp :: FilePath -> IoProgram FilePath
-mkTemp prefix = liftF $ MkTemp prefix id
-
--- | Create a unique file path inside a given directory starting with a given
--- prefix and ending with a unique random token. The parent directory is
--- guaranteed to be created, if it does not exist.
-mkTempIn :: FilePath -> FilePath -> IoProgram FilePath
-mkTempIn parent prefix = liftF $ MkTempIn parent prefix id
-
--- | Create a temporary directory inside the build directory, create missing
--- parent directories and return an absolute path to the new directory.
-mkTempDir :: FilePath -> IoProgram FilePath
-mkTempDir prefix = liftF $ MkTempDir prefix id
-
--- | Create a temporary directory inside any given directory, create missing
--- parent directories and return an absolute path to the new directory.
-mkTempDirIn :: FilePath -> FilePath -> IoProgram FilePath
-mkTempDirIn parent prefix = liftF $ MkTempDirIn parent prefix id
-
--- | Return the canonical path of a relative path. NOTE: The file should exist!
-getRealPath :: FilePath -> IoProgram FilePath
-getRealPath d = liftF $ GetRealPath d id
-
--- | Return the parent directory of a file (or directory)
-getParentDir :: FilePath -> IoProgram FilePath
-getParentDir d = liftF $ GetParentDir d id
-
--- | Return the filename (last part) of a path.
-getFileName :: FilePath -> IoProgram FilePath
-getFileName f = liftF $ GetFileName f id
-
--- | Extract the parent directory from a path, create it if it does not exist
--- and return the canonical path
-ensureParentDir :: FilePath -> IoProgram FilePath
-ensureParentDir path = liftF $ EnsureParentDir path id
+-- | Execute an external command identified by a 'CommandSpec'.
+runCommand
+  :: CommandSpec -> IoProgram (ExitCode,ByteString,ByteString)
+runCommand cs = liftF $ RunCommand cs id
 
 -- | Read contents from a file.
-readContentFromFile :: FilePath -> IoProgram ByteString
+readContentFromFile
+  :: FilePath -> IoProgram ByteString
 readContentFromFile p = liftF $ ReadContentFromFile p id
 
 -- | Render a given content to a file. Implementations should overwrite the file
 -- if it exists.
-writeContentToFile :: FilePath -> ByteString -> IoProgram ()
+writeContentToFile
+  :: FilePath -> ByteString -> IoProgram ()
 writeContentToFile f c = liftF $ WriteContentToFile f c ()
 
--- | Create a 'FileSystem' inside a file, such that the criteria in a
--- 'FileSystemSpec' record are matched and all files listed in the third
--- parameter are copied into the file system.
-createFileSystem :: FilePath
-                 -> FileSystemSpec
-                 -> FilePath
-                 -> [FileSpec]
-                 -> IoProgram ()
-createFileSystem dst fs srcDir files =
-    liftF $ CreateFileSystem dst fs srcDir files ()
-
--- | Resize a file system in a raw disk image.
-resizeFileSystem :: FilePath -> FileSystemResize -> FileSystem -> IoProgram ()
-resizeFileSystem f r t = liftF $ ResizeFileSystem f r t ()
-
--- | Extract a virtual machine disk image file into another format.
-convertVmImage :: FilePath -> ImageType -> FilePath -> ImageType -> IoProgram ()
-convertVmImage srcF srcT dstF dstT = liftF $ ConvertVmImage srcF srcT dstF dstT ()
-
--- | Resize a virtual machine disk image.
-resizeVmImage :: FilePath -> Int -> SizeUnit -> ImageType -> IoProgram ()
-resizeVmImage i s u t = liftF $ ResizeVmImage i s u t ()
-
--- | Extract a partition from a partitioned disk image file and copy it as raw
--- image into a new file.
-extractPartition :: PartitionSpec -> FilePath -> FilePath -> IoProgram ()
-extractPartition p s d = liftF $ ExtractPartition p s d ()
-
--- | Lookup the latest 'SharedImage' by with a given name.
-imageRepoLookup :: SharedImageName -> IoProgram (SharedImage, FilePath)
-imageRepoLookup sn =
-  liftF $ ImageRepoLookup sn id
-
--- | Store a local vm image file in the image repository
-imageRepoPublish :: FilePath
-                 -> ImageType
-                 -> SharedImageName
-                 -> IoProgram ()
-imageRepoPublish f t n = liftF $ ImageRepoPublish f t n ()
-
--- * Container execution
-
--- | Run a 'Script' in an isolated environment specified by an 'ExecEnvSpec'.
-executeInEnv :: ExecEnvSpec
-             -> Script
-             -> [SharedDirectory]
-             -> [Mounted Image]
-             -> IoProgram ()
-executeInEnv e s d i = liftF $ ExecuteInEnv e s d i ()
-
 -- * Program transformation
-
 -- | Wrap a interpreter for a 'IoProgram' such that all invokations except for
 -- 'LogMessage' are logged via 'LogMessage'.
 traceEveryAction :: IoProgram a -> IoProgram a
 traceEveryAction = runB9IO traceAction
   where traceAction (LogMessage l s n) =
           do logMsg l s
+             return n
+        traceAction e@(ExitError m c n) =
+          do traceL e
+             exitError m c
              return n
         traceAction a@(GetBuildDir k) =
           do traceL a
@@ -337,71 +191,30 @@ traceEveryAction = runB9IO traceAction
              b <- getBuildDate
              traceL "->" b
              return $ k b
-        traceAction a@(MkTemp prefix k) =
-          do dbgL a
-             t <- mkTemp prefix
-             traceL "->" t
-             return $ k t
-        traceAction a@(MkTempIn parent prefix k) =
-          do dbgL a
-             t <- mkTempIn parent prefix
-             traceL "->" t
-             return $ k t
-        traceAction a@(MkTempDir prefix k) =
-          do dbgL a
-             t <- mkTempDir prefix
-             traceL "->" t
-             return $ k t
-        traceAction a@(MkTempDirIn parent prefix k) =
-          do dbgL a
-             t <- mkTempDirIn parent prefix
-             traceL "->" t
-             return $ k t
-        traceAction a@(MkDir d n) =
-          do dbgL a
-             mkDir d
-             return n
-        traceAction a@(EnsureParentDir p k) =
-          do dbgL a
-             res <- ensureParentDir p
-             traceL "->" res
-             return $ k res
-        traceAction a@(Copy s d n) =
-          do dbgL a
-             copy s d
-             return n
-        traceAction a@(CopyDir s d n) =
-          do dbgL a
-             copyDir s d
-             return n
-        traceAction a@(MoveFile s d n) =
-          do dbgL a
-             moveFile s d
-             return n
-        traceAction a@(MoveDir s d n) =
-          do dbgL a
-             moveDir s d
-             return n
-        traceAction a@(ReadFileSize f k) =
+        traceAction a@(NewUUID k) =
           do traceL a
-             s <- readFileSize f
-             traceL "->" s
-             return $ k s
-        traceAction a@(GetParentDir f k) =
+             b <- newUUID
+             traceL "->" (toString b)
+             return $ k b
+        traceAction a@(NextInteger k) =
           do traceL a
-             p <- getParentDir f
-             traceL "->" p
-             return $ k p
-        traceAction a@(GetRealPath f k) =
+             b <- nextInteger
+             traceL "->" b
+             return $ k b
+        traceAction a@(GetConfigEntry key k) =
           do traceL a
-             p <- getRealPath f
-             traceL "->" p
-             return $ k p
-        traceAction a@(GetFileName f k) =
+             vs <- getConfigEntry key
+             traceL "->" (show vs)
+             return $ k vs
+        traceAction a@(PutConfigEntry key vs n) =
           do traceL a
-             p <- getFileName f
-             traceL "->" p
-             return $ k p
+             putConfigEntry key vs
+             return n
+        traceAction a@(RunCommand spec k) =
+          do traceL a
+             res <- runCommand spec
+             traceL "->" (show res)
+             return (k res)
         traceAction a@(ReadContentFromFile f k) =
           do traceL a
              p <- readContentFromFile f
@@ -418,42 +231,8 @@ traceEveryAction = runB9IO traceAction
           do traceL a
              writeContentToFile f c
              return n
-        traceAction a@(CreateFileSystem dst fs srcDir files n) =
-          do dbgL a
-             createFileSystem dst fs srcDir files
-             return n
-        traceAction a@(ResizeFileSystem f r t n) =
-          do dbgL a
-             resizeFileSystem f r t
-             return n
-        traceAction a@(ConvertVmImage srcF srcT dstF dstT n) =
-          do dbgL a
-             convertVmImage srcF srcT dstF dstT
-             return n
-        traceAction a@(ResizeVmImage i s u t n) =
-          do dbgL a
-             resizeVmImage i s u t
-             return n
-        traceAction a@(ExtractPartition p s d n) =
-          do dbgL a
-             extractPartition p s d
-             return n
-        traceAction a@(ImageRepoLookup s k) =
-          do dbgL a
-             r <- imageRepoLookup s
-             traceL "->" r
-             return $ k r
-        traceAction a@(ImageRepoPublish f t sn n) =
-          do dbgL a
-             imageRepoPublish f t sn
-             return n
-        traceAction a@(ExecuteInEnv e s d i n) =
-          do dbgL a
-             executeInEnv e s d i
-             return n
 
 -- * Testing support
-
 -- | Run a program without any I/O
 --   and return a list of strings, each list element is a textual representation
 --   of the command and its parameters. This is useful for testing and
@@ -470,176 +249,85 @@ dumpToResult = fst . runPureDump
 -- | Run a program without any I/O using a simple writer
 --   monad where the output is a list of strings each representing an action of
 --   the program and its paraters.  This is useful for testing and inspection.
-runPureDump :: IoProgram a -> (a, [String])
+runPureDump :: IoProgram a -> (a,[String])
 runPureDump p = runWriter $ runB9IO dump p
-  where
-    dump :: Action a -> Writer [String] a
-    dump a@(LogMessage _l _s n) = do
-        tell [show a]
-        return n
-    dump a@(GetBuildDir k) = do
-        tell [show a]
-        return (k "/BUILD")
-    dump a@(GetBuildId n) = do
-        tell [show a]
-        return (n "build-id-1234")
-    dump a@(GetBuildDate n) = do
-        tell [show a]
-        return (n "1970-01-01 00:00:00")
-    dump a@(MkTemp prefix n) = do
-        tell [show a]
-        return (n ("/BUILD" </> prefix ++ "-XXXX"))
-    dump a@(MkTempIn parent prefix n) = do
-        tell [show a]
-        return (n (parent </> prefix ++ "-XXXX"))
-    dump a@(MkTempDir prefix n) = do
-        tell [show a]
-        return (n ("/BUILD" </> prefix ++ "-XXXX.d"))
-    dump a@(MkTempDirIn parent prefix n) = do
-        tell [show a]
-        return (n (parent </> prefix ++ "-XXXX.d"))
-    dump a@(MkDir _d n) = do
-        tell [show a]
-        return n
-    dump a@(EnsureParentDir f k) = do
-        tell [show a]
-        return (k ("/abs/path" </> f))
-    dump a@(Copy _s _d n) = do
-        tell [show a]
-        return n
-    dump a@(CopyDir _s _d n) = do
-        tell [show a]
-        return n
-    dump a@(MoveFile _s _d n) = do
-        tell [show a]
-        return n
-    dump a@(MoveDir _s _d n) = do
-        tell [show a]
-        return n
-    dump a@(ReadFileSize _f n) = do
-        tell [show a]
-        return (n 1234)
-    dump a@(GetParentDir f k) = do
-        tell [show a]
-        return (k (takeDirectory f))
-    dump a@(GetRealPath "." k) = do
-        tell [show a]
-        return (k "/cwd")
-    dump a@(GetRealPath f k) = do
-        tell [show a]
-        return (k ("/abs/path" </> f))
-    dump a@(GetFileName f k) = do
-        tell [show a]
-        return (k (takeFileName f))
-    dump a@(ReadContentFromFile _f k) = do
-        tell [show a]
-        return (k (packB "some contents"))
-    dump a@(WriteContentToFile _f _c n) = do
-        tell [show a]
-        return n
-    dump a@(CreateFileSystem _f _c _d _fs n) = do
-        tell [show a]
-        return n
-    dump a@(ResizeFileSystem _f _r _t n) = do
-        tell [show a]
-        return n
-    dump a@(ConvertVmImage _srcF _srcT _dstF _dstT n) = do
-        tell [show a]
-        return n
-    dump a@(ResizeVmImage _i _s _u _t n) = do
-        tell [show a]
-        return n
-    dump a@(ExtractPartition _p _s _d n) = do
-        tell [show a]
-        return n
-    dump a@(ImageRepoLookup s k) = do
-        tell [show a]
-        return $
-            k
-                ( SharedImage
-                      s
-                      (SharedImageDate "01-01-1970")
-                      (SharedImageBuildId "00000000")
-                      QCow2
-                      Ext4
-                , "~/.b9/cache/xxx.qcow2")
-    dump a@(ImageRepoPublish _f _t _sn n) = do
-        tell [show a]
-        return n
-    dump a@(ExecuteInEnv _e _s _d _i n) = do
-        tell [show a]
-        return n
+  where dump :: Action a -> Writer [String] a
+        dump a@(LogMessage _l _s n) =
+          do tell [show a]
+             return n
+        dump a@(ExitError _m _c n) =
+          do tell [show a]
+             return n
+        dump a@(GetBuildDir k) =
+          do tell [show a]
+             return (k "/BUILD")
+        dump a@(GetBuildId n) =
+          do tell [show a]
+             return (n "build-id-1234")
+        dump a@(GetBuildDate n) =
+          do tell [show a]
+             return (n "1970-01-01 00:00:00")
+        dump a@(NewUUID k) =
+          do tell [show a]
+             return (k $
+                     fromJust $
+                     fromString "c2cf10e1-52d6-4b6f-b899-38d97a112d8c")
+        dump a@(NextInteger k) =
+          do tell [show a]
+             return (k 123)
+        dump a@(GetConfigEntry key k) =
+          do tell [show a]
+             return (k [key ++ "-value"])
+        dump a@(PutConfigEntry _key _vs n) =
+          do tell [show a]
+             return n
+        dump a@(RunCommand _c k) =
+          do tell [show a]
+             return (k (ExitFailure 1,packB "stdout",packB "stderr"))
+        dump a@(ReadContentFromFile _f k) =
+          do tell [show a]
+             return (k (packB "some contents"))
+        dump a@(WriteContentToFile _f _c n) =
+          do tell [show a]
+             return n
 
 arbitraryIoProgram :: Gen (IoProgram ())
 arbitraryIoProgram = IoProgram <$> arbitraryFree
 
 instance Arbitrary a => Arbitrary (Action a) where
-    arbitrary =
-        oneof
-            [ LogMessage LogTrace <$> smaller arbitraryNiceString <*>
-              smaller arbitrary
-            , GetBuildId <$> arbitrary
-            , GetBuildDir <$> arbitrary
-            , GetBuildDate <$> arbitrary
-            , Copy <$> smaller arbitraryFilePath <*> smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , CopyDir <$> smaller arbitraryFilePath <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , MoveFile <$> smaller arbitraryFilePath <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , MoveDir <$> smaller arbitraryFilePath <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , ReadFileSize <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , MkDir <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , MkTemp <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , MkTempIn <$> smaller arbitraryFilePath <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , EnsureParentDir <$> smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , MkTempDir <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , MkTempDirIn <$> smaller arbitraryFilePath <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , GetRealPath <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , GetParentDir <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , GetFileName <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , ReadContentFromFile <$> smaller arbitraryFilePath <*>
-                                      smaller ((. unpackUtf8) <$> arbitrary)
-            , WriteContentToFile <$> smaller arbitraryFilePath <*>
-              (packB <$> smaller arbitrary) <*>
-              smaller arbitrary
-            , CreateFileSystem <$> smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitrary
-            , ResizeFileSystem <$> smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary
-            , ConvertVmImage <$> smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitrary
-            , ResizeVmImage <$> smaller arbitraryFilePath <*> smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary
-            , ExtractPartition <$> (MBRPartition <$> smaller arbitrary) <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitraryFilePath <*>
-              smaller arbitrary
-            , ImageRepoLookup <$> smaller arbitrary <*> smaller arbitrary
-            , ImageRepoPublish <$> smaller arbitraryFilePath <*>
-              smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary
-            , ExecuteInEnv <$> smaller arbitrary <*> smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary]
+  arbitrary =
+    oneof [LogMessage LogTrace <$> smaller arbitraryNiceString <*>
+           smaller arbitrary
+          ,ExitError <$> smaller arbitrary <*>
+           smaller (ExitFailure <$> arbitrary) <*>
+           smaller arbitrary
+          ,GetBuildId <$> arbitrary
+          ,GetBuildDir <$> arbitrary
+          ,GetBuildDate <$> arbitrary
+          ,NewUUID <$> ((. toString) <$> arbitrary)
+          ,NextInteger <$> arbitrary
+          ,GetConfigEntry <$> smaller arbitrary <*> smaller arbitrary
+          ,PutConfigEntry <$> smaller arbitrary <*> smaller arbitrary <*>
+           smaller arbitrary
+          ,RunCommand <$> smaller arbitrary <*>
+           smaller ((. (\(ExitFailure c,stdo,stde) ->
+                          (c,unpackUtf8 stdo,unpackUtf8 stde))) <$>
+                    arbitrary)
+          ,ReadContentFromFile <$> smaller arbitraryFilePath <*>
+           smaller ((. unpackUtf8) <$> arbitrary)
+          ,WriteContentToFile <$> smaller arbitraryFilePath <*>
+           (packB <$> smaller arbitrary) <*>
+           smaller arbitrary]
+
+--  f (g <*> h <*> j)
+instance Arbitrary CommandSpec where
+  arbitrary =
+    CommandSpec <$> smaller arbitraryFilePath <*>
+    smaller (listOf arbitraryNiceString) <*>
+    smaller arbitrary <*>
+    smaller (oneof [pure Nothing
+                   ,Just <$>
+                    listOf ((,) <$> arbitraryNiceString <*> arbitraryNiceString)]) <*>
+    smaller arbitrary <*>
+    smaller (oneof [Just . CGid <$> arbitrary,pure Nothing]) <*>
+    smaller (oneof [Just . CUid <$> arbitrary,pure Nothing])

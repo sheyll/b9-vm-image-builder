@@ -1,16 +1,16 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module B9.B9IO.IoCompiler where
+module B9.Dsl.Interpreter where
 
 import B9.B9IO
 import B9.Dsl.Core
+import B9.DynMap as DynMap
 import Control.Lens hiding (from, (<.>))
 import Control.Monad.State
 import Data.Graph as Graph
 import qualified Data.Map as Map hiding (null)
 import Data.Singletons
 import Data.Tree as Tree
-import B9.DynMap as DynMap
 import Control.Monad.Free (foldFree)
 import Data.Foldable (sequenceA_)
 
@@ -61,16 +61,16 @@ interpret = foldFree go
                          [const (initialiseBuilder initialParameter)]
              generatorMap . at (SomeHandle h) ?= mkGenerator h
              return $ k h
-        go (Apply action handle next) =
+        go (Apply handle action pureArg next) =
           do addBuilderT handle
-                         [const (execAction action)]
+                         [const (buildAction action pureArg)]
              return next
-        go (Bind src f dst next) =
-          do src --> dst
+        go (Bind destinationHandle action sourceHandle next) =
+          do sourceHandle --> destinationHandle
              addBuilderT
-               dst
-               [execAction . f . fromJust .
-                DynMap.lookup (handleKey src)]
+               destinationHandle
+               [buildAction action . fromJust .
+                DynMap.lookup (handleKey sourceHandle)]
              return next
 
 -- | Create a unique key for 'ArtifactMap' and 'BuilderMap' from a handle.
@@ -199,9 +199,9 @@ testDi =
   execBuildPlan $ interpret $
     do t1 <- createFrom (FromPureValue "test1")
        t2 <- createFrom (FromPureValue "test2")
-       bindTo t1 Append t2
-       applyTo (Append " 222 ") t2
-       applyTo (Append " 333 ") t1
+       bindTo t1 AppendPure t2
+       applyTo t2 AppendPure " 222 "
+       applyTo t1 AppendPure " 333 "
 
 
 -- | Generate a graph from the artifact dependencies in the compiler context.

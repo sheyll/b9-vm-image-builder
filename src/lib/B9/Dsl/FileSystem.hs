@@ -44,7 +44,7 @@ type instance IoCompilerArtifactState 'FileSystemImage = FsCtx
 makeLenses ''FsCtx
 makeLenses ''FsBuilderCtx
 
-instance HasBuilder IoCompiler 'FileSystemBuilder where
+instance IsBuilder IoCompiler 'FileSystemBuilder where
     data InitArgs IoCompiler 'FileSystemBuilder = FileSystemSpec
     runCreate _ fsSpec@(FileSystemSpec t fsLabel _ _) = do
         let title =

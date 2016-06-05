@@ -56,7 +56,7 @@ data AST c a
     | ASTArr [AST c a]
       -- ^ An array.
     | ASTMerge [AST c a]
-      -- ^ Merge the nested elements, this is a very powerful tool that allows
+      -- ^ Bind the nested elements, this is a very powerful tool that allows
       -- to combine several inputs in a smart and safe way, e.g. by merging the
       -- values of the same fields in yaml objects.
     | ASTEmbed c
@@ -74,7 +74,7 @@ instance (Hashable c, Hashable a) => Hashable (AST c a)
 instance (Binary c, Binary a) => Binary (AST c a)
 instance (NFData c, NFData a) => NFData (AST c a)
 
--- | Merge two 'AST's.
+-- | Bind two 'AST's.
 astMerge :: AST c a -> AST c a -> AST c a
 astMerge (ASTMerge l) (ASTMerge r) = ASTMerge (l ++ r)
 astMerge (ASTMerge l) r = ASTMerge (l ++ [r])

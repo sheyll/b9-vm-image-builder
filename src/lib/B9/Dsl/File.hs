@@ -29,7 +29,7 @@ type instance IoCompilerArtifactState LocalDirectory = DirCtx
 makeLenses ''FileCtx
 makeLenses ''DirCtx
 
-instance HasBuilder IoCompiler ExternalFile where
+instance IsBuilder IoCompiler ExternalFile where
      data InitArgs IoCompiler ExternalFile = ExternalFile FilePath
      runCreate (ExternalFile fn) = do
          hnd <- allocHandleX (takeFileName fn)
@@ -37,7 +37,7 @@ instance HasBuilder IoCompiler ExternalFile where
          putArtifactState hnd fn'
          return hnd
 
-instance HasBuilder IoCompiler FreeFile where
+instance IsBuilder IoCompiler FreeFile where
     data InitArgs IoCompiler FreeFile = FreeFile (Maybe String)
     runCreate (FreeFile mTempName) = do
         -- TODO escape tempName, allow only a-zA-Z0-9.-_:+=
@@ -45,7 +45,7 @@ instance HasBuilder IoCompiler FreeFile where
         (hnd,_) <- createFreeFile tempName
         return hnd
 
-instance HasBuilder IoCompiler LocalDirectory where
+instance IsBuilder IoCompiler LocalDirectory where
     data InitArgs IoCompiler LocalDirectory = LocalDirectory
     runCreate LocalDirectory = do
         tmp <- liftIoProgram (mkTempDir "local-dir")

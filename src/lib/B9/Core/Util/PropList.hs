@@ -48,13 +48,15 @@
 -- >  type ValueType "XYZ" = Int
 -- >
 --
-module B9.Content.PropList where
+module B9.Core.Util.PropList where
 
-import B9.Common
+import B9.Core.Prelude
 
 -- * Properties
 
--- | (Type-) Configurable PropList
+-- | (Type-) Configurable PropList. The @section@ is used further mark a
+-- /proplist/ with a type that allows a description of what must, may and must
+-- not be added to proplists with that @section@.
 data Properties (section :: sym)
                 (required :: [sym])
                 (contents :: [sym])

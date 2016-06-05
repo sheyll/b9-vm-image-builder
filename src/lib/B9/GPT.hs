@@ -1,6 +1,5 @@
 module B9.GPT where
 
-import           Control.Lens.TH
 import           Data.Word
 
 {-

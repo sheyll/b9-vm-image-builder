@@ -32,7 +32,7 @@ runProgramWithConfigAndCliArgs p = do
     cp <- configure cfgFile cfgCli
     runProgram (p >> return True) vs cp cfgCli
 
--- | Merge 'existingConfig' with the configuration from the b9 config
+-- | Bind 'existingConfig' with the configuration from the b9 config
 -- file. If the file does not exists, a new config file with the given
 -- configuration will be written. The return value is a parser for the config
 -- file. Returning the raw config file parser allows modules unkown to

@@ -49,7 +49,7 @@ instance Default ExecEnvCtx where
 
 makeLenses ''ExecEnvCtx
 
-instance HasBuilder IoCompiler 'ExecutionEnvironment where
+instance IsBuilder IoCompiler 'ExecutionEnvironment where
   data InitArgs IoCompiler 'ExecutionEnvironment = ExecEnvSpec
   runCreate _ e =
     do hnd <-

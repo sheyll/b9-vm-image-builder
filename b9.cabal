@@ -44,8 +44,8 @@ author:              Sven Heyll <svh@posteo.de>
 maintainer:          svh@posteo.de
 homepage:            https://github.com/sheyll/b9-vm-image-builder
 bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
-copyright:           2015 Sven Heyll <svh@posteo.de>
-category:            Development
+copyright:           2015,2016 Sven Heyll <svh@posteo.de>
+category:            DevOps
 build-type:          Simple
 extra-source-files:  README.md, LICENSE, TODO.org, Setup.hs, stack.yaml, b9.cabal, .gitignore, .travis.yml, CONTRIBUTORS
 cabal-version:       >=1.10
@@ -61,51 +61,28 @@ source-repository head
   location:             git://github.com/sheyll/b9-vm-image-builder.git
 
 library
-  exposed-modules:   B9
-                   , B9.DynMap
-                   , B9.Common
-                   , B9.B9Config
-                   , B9.B9IO
-                   , B9.B9IO.Impl
-                   , B9.B9IO.IoCompiler
-                   , B9.B9Monad
-                   , B9.Builder
-                   , B9.CommonTypes
-                   , B9.ConfigUtils
-                   , B9.Content
-                   , B9.Content.AST
-                   , B9.Content.ErlTerms
-                   , B9.Content.ErlangPropList
-                   , B9.Content.PropList
-                   , B9.Content.StringTemplate
-                   , B9.Content.SystemD
-                   , B9.Content.YamlObject
-                   , B9.Dsl
-                   , B9.Dsl.CloudInit
-                   , B9.Dsl.Content
-                   , B9.Dsl.Core
-                   , B9.Dsl.ExecutionEnvironment
-                   , B9.Dsl.File
-                   , B9.Dsl.FileSystem
-                   , B9.Dsl.Handle
-                   , B9.Dsl.ImageRepository
-                   , B9.Dsl.PartitionedVmImage
-                   , B9.Dsl.UpdateServerRoot
-                   , B9.Dsl.VmImage
-                   , B9.DiskImages
-                   , B9.ExecEnv
-                   , B9.FileSystems
-                   , B9.FileSystemsImpl
-                   , B9.GPT
-                   , B9.LibVirtLXC
-                   , B9.Logging
-                   , B9.MBR
-                   , B9.PartitionTable
-                   , B9.QCUtil
-                   , B9.QemuImg
-                   , B9.Repository
-                   , B9.RepositoryIO
-                   , B9.ShellScript
+  exposed-modules:   B9.Core.Dsl.Basic.Document.Dictionaries.ErlangTerm
+                   , B9.Core.Dsl.Basic.Document.Dictionaries.HaskellTerm
+                   , B9.Core.Dsl.Basic.Document.Dictionaries.Json
+                   , B9.Core.Dsl.Basic.Document.Dictionaries.Yaml
+                   , B9.Core.Dsl.Basic.Document.Dictionary
+                   , B9.Core.Dsl.Basic.Document.Raw
+                   , B9.Core.Dsl.Basic.System.Command
+                   , B9.Core.Dsl.Basic.System.File
+                   , B9.Core.Dsl.Basic.System.Http
+                   , B9.Core.Dsl.Types.BuildStep
+                   , B9.Core.Dsl.Types.Handle
+                   , B9.Core.Dsl.Interpreter
+                   , B9.Core.System.B9IO
+                   , B9.Core.System.Command
+                   , B9.Core.System.Configuration
+                   , B9.Core.System.Unique
+                   , B9.Core.System.Directory
+                   , B9.Core.Util.DynMap
+                   , B9.Core.Util.Logging
+                   , B9.Core.Util.PropList
+                   , B9.Core.Util.Size
+                   , B9.Core.Prelude
   other-modules:   Paths_b9
   -- other-extensions:
   build-depends:     ConfigFile
@@ -145,6 +122,7 @@ library
                    , time
                    , transformers
                    , unordered-containers
+                   , uuid
                    , vector
                    , vector-binary-instances
                    , yaml
@@ -178,80 +156,80 @@ library
   ghc-options:       -with-rtsopts=-N -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind
 
-executable b9c
-  main-is:           Main.hs
-  other-modules:     Paths_b9
-  -- other-extensions:
-  build-depends:     b9
-                   , ConfigFile
-                   , base >= 4.8 && < 5
-                   , bytestring
-                   , directory
-                   , optparse-applicative
-  hs-source-dirs:    src/cli
-  default-language:  Haskell2010
-  default-extensions: TupleSections
-                    , GeneralizedNewtypeDeriving
-                    , DeriveDataTypeable
-                    , RankNTypes
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , KindSignatures
-                    , TypeFamilies
-                    , DeriveFunctor
-                    , TemplateHaskell
-                    , CPP
-  ghc-options:       -threaded -with-rtsopts=-N -Wall
-                     -fwarn-unused-binds -fno-warn-unused-do-bind
-
-test-suite spec
-  type:              exitcode-stdio-1.0
-  ghc-options:       -Wall
-  hs-source-dirs:    src/tests
-  default-language:  Haskell2010
-  main-is:           Spec.hs
-  other-modules:     B9.Content.ErlTermsSpec
-                   , B9.Content.ErlangPropListSpec
-                   , B9.Content.YamlObjectSpec
-                   , B9.Dsl.CoreSpec
-                   , B9.SpecExtra
-                   , B9.B9IOSpec
-                   , B9.B9IO.ImplSpec
-                   , B9.DslSpec
-                   , B9.BuilderSpec
-                   , B9.LoggingSpec
-  if flag(IntegrationTests)
-    CC-Options: "-DINTEGRATION_TESTS"
-    CPP-Options: -DINTEGRATION_TESTS
-
-  build-depends:     QuickCheck
-                   , aeson
-                   , b9
-                   , base >= 4.8 && < 5
-                   , bytestring
-                   , containers
-                   , data-default
-                   , directory
-                   , filepath
-                   , hspec
-                   , hspec-expectations
-                   , mtl
-                   , lens
-                   , semigroups
-                   , text
-                   , unordered-containers
-                   , vector
-                   , yaml
-  default-extensions: TupleSections
-                    , GeneralizedNewtypeDeriving
-                    , DeriveDataTypeable
-                    , RankNTypes
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , KindSignatures
-                    , TypeFamilies
-                    , DeriveFunctor
-                    , TemplateHaskell
-                    , CPP
+-- executable b9c
+--   main-is:           Main.hs
+--   other-modules:     Paths_b9
+--   -- other-extensions:
+--   build-depends:     b9
+--                    , ConfigFile
+--                    , base >= 4.8 && < 5
+--                    , bytestring
+--                    , directory
+--                    , optparse-applicative
+--   hs-source-dirs:    src/cli
+--   default-language:  Haskell2010
+--   default-extensions: TupleSections
+--                     , GeneralizedNewtypeDeriving
+--                     , DeriveDataTypeable
+--                     , RankNTypes
+--                     , FlexibleContexts
+--                     , GADTs
+--                     , DataKinds
+--                     , KindSignatures
+--                     , TypeFamilies
+--                     , DeriveFunctor
+--                     , TemplateHaskell
+--                     , CPP
+--   ghc-options:       -threaded -with-rtsopts=-N -Wall
+--                      -fwarn-unused-binds -fno-warn-unused-do-bind
+--
+-- test-suite spec
+--   type:              exitcode-stdio-1.0
+--   ghc-options:       -Wall
+--   hs-source-dirs:    src/tests
+--   default-language:  Haskell2010
+--   main-is:           Spec.hs
+--   other-modules:     B9.Content.ErlTermsSpec
+--                    , B9.Content.ErlangPropListSpec
+--                    , B9.Content.YamlObjectSpec
+--                    , B9.Dsl.CoreSpec
+--                    , B9.SpecExtra
+--                    , B9.B9IOSpec
+--                    , B9.B9IO.ImplSpec
+--                    , B9.DslSpec
+--                    , B9.BuilderSpec
+--                    , B9.LoggingSpec
+--   if flag(IntegrationTests)
+--     CC-Options: "-DINTEGRATION_TESTS"
+--     CPP-Options: -DINTEGRATION_TESTS
+--
+--   build-depends:     QuickCheck
+--                    , aeson
+--                    , b9
+--                    , base >= 4.8 && < 5
+--                    , bytestring
+--                    , containers
+--                    , data-default
+--                    , directory
+--                    , filepath
+--                    , hspec
+--                    , hspec-expectations
+--                    , mtl
+--                    , lens
+--                    , semigroups
+--                    , text
+--                    , unordered-containers
+--                    , vector
+--                    , yaml
+--   default-extensions: TupleSections
+--                     , GeneralizedNewtypeDeriving
+--                     , DeriveDataTypeable
+--                     , RankNTypes
+--                     , FlexibleContexts
+--                     , GADTs
+--                     , DataKinds
+--                     , KindSignatures
+--                     , TypeFamilies
+--                     , DeriveFunctor
+--                     , TemplateHaskell
+--                     , CPP

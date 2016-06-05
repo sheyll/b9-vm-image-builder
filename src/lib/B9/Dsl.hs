@@ -36,7 +36,7 @@ import B9.ShellScript              as X (Script(..))
 
 -- | Reference an external file. An external file will never be modified.
 externalFile
-    :: (HasBuilder m ExternalFile
+    :: (IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath)
     => FilePath -> ProgramT m (Handle ExternalFile)
 externalFile = create SExternalFile
@@ -44,7 +44,7 @@ externalFile = create SExternalFile
 -- | Get a reference to a copy of an external file inside the build root that
 -- can be modified.
 externalFileTempCopy
-    :: (HasBuilder m ExternalFile
+    :: (IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath
        ,CanExtract m ExternalFile FreeFile
        ,ExtractionArg m ExternalFile FreeFile ~ ())
@@ -56,7 +56,7 @@ externalFileTempCopy f = do
 -- | 'use' an external file to introduce an artifact with the help of a
 --  artifact dependent extra arguement and return the artifacts handle.
 fromFile
-    :: (HasBuilder m ExternalFile
+    :: (IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath
        ,CanExtract m FreeFile b
        ,CanExtract m ExternalFile FreeFile
@@ -85,7 +85,7 @@ outputFile e src dst = do
 -- executable. The source file must not be a directory.
 addFile
     :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
-       ,HasBuilder m ExternalFile
+       ,IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath
        ,CanExtract m ExternalFile FreeFile
        ,ExtractionArg m ExternalFile FreeFile ~ ()
@@ -97,7 +97,7 @@ addFile d f = addFileP d f (0, 6, 4, 4)
 -- (executable for all).
 addExe
     :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
-       ,HasBuilder m ExternalFile
+       ,IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath
        ,CanExtract m ExternalFile FreeFile
        ,ExtractionArg m ExternalFile FreeFile ~ ()
@@ -108,7 +108,7 @@ addExe d f = addFileP d f (0, 7, 5, 5)
 -- | Same as 'addFile' but with an extra output file permission parameter.
 addFileP
     :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
-       ,HasBuilder m ExternalFile
+       ,IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath
        ,CanExtract m ExternalFile FreeFile
        ,ExtractionArg m ExternalFile FreeFile ~ ()
@@ -123,7 +123,7 @@ addFileP dstH f p = do
 -- * Directories
 
 -- | Create a temp directory
-newDirectory :: (HasBuilder m LocalDirectory
+newDirectory :: (IsBuilder m LocalDirectory
                 ,InitArgs m LocalDirectory ~ ())
                 => ProgramT m (Handle LocalDirectory)
 newDirectory = create SLocalDirectory ()
@@ -139,7 +139,7 @@ exportDir = export
 -- | Create a handle for accumulating 'Content' with an initial 'Content'.
 createContent :: (IsCnt c
                  ,Show c
-                 ,HasBuilder m (Cnt c)
+                 ,IsBuilder m (Cnt c)
                  ,InitArgs m (Cnt c) ~ (c,String))
                  => c -> String -> ProgramT m (Handle (Cnt c))
 createContent c title = create (cntProxy c) (c, title)
@@ -160,7 +160,7 @@ appendContent hnd c = add hnd (cntProxy c) c
 -- | Add an existing file from the file system to an artifact at a 'FileSpec'.
 addFileFull
     :: (AddSpec m e FreeFile ~ (FileSpec, Handle FreeFile)
-       ,HasBuilder m ExternalFile
+       ,IsBuilder m ExternalFile
        ,InitArgs m ExternalFile ~ FilePath
        ,CanExtract m ExternalFile FreeFile
        ,ExtractionArg m ExternalFile FreeFile ~ ()
@@ -177,7 +177,7 @@ addFileFull dstH srcFile dstSpec = do
 addFileFromContent
     :: (Show c
        ,IsCnt c
-       ,HasBuilder m (Cnt c)
+       ,IsBuilder m (Cnt c)
        ,InitArgs m (Cnt c) ~ (c, String)
        ,CanExtract m (Cnt c) FreeFile
        ,ExtractionArg m (Cnt c) FreeFile ~ ()
@@ -210,17 +210,17 @@ sh
     => Handle a -> String -> ProgramT m ()
 sh e s = runCommand e (Run s [])
 
-boot :: (HasBuilder m 'ExecutionEnvironment
+boot :: (IsBuilder m 'ExecutionEnvironment
         ,InitArgs m 'ExecutionEnvironment ~ ExecEnvSpec)
         => ExecEnvSpec -> ProgramT m (Handle 'ExecutionEnvironment)
 boot = create SExecutionEnvironment
 
-lxc :: (HasBuilder m 'ExecutionEnvironment
+lxc :: (IsBuilder m 'ExecutionEnvironment
        ,InitArgs m 'ExecutionEnvironment ~ ExecEnvSpec)
        => String -> ProgramT m (Handle 'ExecutionEnvironment)
 lxc name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 X86_64)
 
-lxc32 :: (HasBuilder m 'ExecutionEnvironment
+lxc32 :: (IsBuilder m 'ExecutionEnvironment
          ,InitArgs m 'ExecutionEnvironment ~ ExecEnvSpec)
          => String -> ProgramT m (Handle 'ExecutionEnvironment)
 lxc32 name = boot $ ExecEnvSpec name LibVirtLXC (Resources AutomaticRamSize 2 I386)
@@ -290,7 +290,7 @@ rootImage :: (CanExtract m 'ImageRepository 'VmImage
 rootImage nameFrom nameExport env =
     void $ mountAndShareSharedImage nameFrom nameExport "/" env
 
-dataImage :: (HasBuilder m 'FileSystemBuilder
+dataImage :: (IsBuilder m 'FileSystemBuilder
              ,InitArgs m 'FileSystemBuilder ~ FileSystemSpec
              ,CanExtract m 'FileSystemBuilder 'FileSystemImage
              ,ExtractionArg m 'FileSystemBuilder 'FileSystemImage ~ ()
@@ -321,7 +321,7 @@ mountAndShareSharedImage nameFrom nameTo mountPoint env = do
     i' `sharedAs` nameTo
 
 mountAndShareNewImage
-    :: (HasBuilder m 'FileSystemBuilder
+    :: (IsBuilder m 'FileSystemBuilder
        ,InitArgs m 'FileSystemBuilder ~ FileSystemSpec
        ,CanExtract m 'FileSystemBuilder 'FileSystemImage
        ,ExtractionArg m 'FileSystemBuilder 'FileSystemImage ~ ()

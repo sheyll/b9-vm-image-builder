@@ -13,48 +13,48 @@
 -- >    applyTo bar Append "pure-value"
 --
 -- Might be executed
-module B9.Dsl.Core (module B9.Dsl.Core, module X) where
+module B9.Core.Dsl.Types.BuildStep
+       (module B9.Core.Dsl.Types.BuildStep, module ReExport) where
 
-import B9.Dsl.Handle as X
-import Control.Monad.Free (Free(..), liftF)
+import B9.Core.Prelude
+import B9.Core.Dsl.Types.Handle as ReExport
+import B9.Core.System.B9IO as ReExport
 import Control.Monad.Writer
-
--- | A BuildPlanT is a free monad of 'BuildStep's.
-type BuildPlanT m = Free (BuildStep m)
 
 -- | A single step in a large build plan. The indiviual steps are restricted to
 -- types from the type families below. These steps form a very basic,
 -- declerative language, to describe artifacts and data dependencies between
 -- artifacts. Meaning is created by the type class instances of 'IsBuilder' and
 -- 'ApplicableTo', and the respective interpreters.
-data BuildStep m next where
+data BuildStep next where
         Create ::
-            IsBuilder m a =>
-            InitArgs m a -> (Handle a -> next) -> BuildStep m next
+            IsBuilder a => InitArgs a -> (Handle a -> next) -> BuildStep next
         Apply ::
-            ApplicableTo a action m =>
-            action -> Handle a -> next -> BuildStep m next
+            ApplicableTo a action =>
+            action -> Handle a -> next -> BuildStep next
         Bind ::
-            (IsBuilder m src, IsBuilder m dst, Artifact m src ~ srcOut,
-             ApplicableTo dst dstIn m) =>
+            (IsBuilder src, IsBuilder dst, Artifact src ~ srcOut,
+             ApplicableTo dst dstIn) =>
             Handle src ->
-              (srcOut -> dstIn) -> Handle dst -> next -> BuildStep m next
+              (srcOut -> dstIn) -> Handle dst -> next -> BuildStep next
+
+-- | A 'BuildStepMonad' is a 'Free' monad of 'BuildStep's.
+type BuildStepMonad = Free BuildStep
 
 -- | The requirement to create a free monad of a type is a functor instance.
-instance Functor (BuildStep m) where
+instance Functor BuildStep where
   fmap f (Create src k) = Create src (f . k)
   fmap f (Apply action a next) = Apply action a (f next)
   fmap f (Bind a aToAction b next) = Bind a aToAction b (f next)
 
 -- | Create a builder and return the handle representing the build output.
-createFrom
-  :: IsBuilder m a
-  => InitArgs m a -> BuildPlanT m (Handle a)
+createFrom :: IsBuilder a
+           => InitArgs a -> BuildStepMonad (Handle a)
 createFrom src = liftF $ Create src id
 
 -- | Apply an artifact using an /action/ and an action specific (pure) value.
-applyTo :: ApplicableTo a action m
-        => action -> Handle a -> BuildPlanT m ()
+applyTo :: ApplicableTo a action
+        => action -> Handle a -> BuildStepMonad ()
 applyTo action handle = liftF $ Apply action handle ()
 
 -- | Bind the 'Artifact' referred to by the second 'Handle' into the artifact
@@ -62,8 +62,8 @@ applyTo action handle = liftF $ Apply action handle ()
 -- 'applyTo', but use the 'Artifact' value of an artifact identified by a
 -- 'Handle' instead of using a pure value.
 bindTo
-  :: (IsBuilder m src,IsBuilder m dst,Artifact m src ~ t,ApplicableTo dst action m)
-  => Handle src -> (t -> action) -> Handle dst -> BuildPlanT m ()
+  :: (IsBuilder src,IsBuilder dst,Artifact src ~ t,ApplicableTo dst action)
+  => Handle src -> (t -> action) -> Handle dst -> BuildStepMonad ()
 bindTo src toAction dst = liftF $ Bind src toAction dst ()
 
 -- * Artifact Creation
@@ -140,7 +140,7 @@ bindTo src toAction dst = liftF $ Bind src toAction dst ()
 -- used as input to other artifact builds. The output of an artifact build
 -- is not necessarily effectful, it isn't required for an 'ArtifactOutput'
 -- to be a functor/monad/applicative or even a monoid.
-class (Show (InitArgs m a),Typeable (BuilderT m a),Typeable (Artifact m a),Functor (BuilderT m a),Applicative (BuilderT m a)) => IsBuilder m (a :: k)  where
+class (Show (InitArgs a),Typeable (BuilderT a),Typeable (Artifact a),Functor (BuilderT a),Applicative (BuilderT a)) => IsBuilder (a :: k)  where
   -- | Contruction parameters required to create the artifact.
   -- You may wonder why on earth do I need a data family, why not just
   -- use 'a' directly?
@@ -171,7 +171,7 @@ class (Show (InitArgs m a),Typeable (BuilderT m a),Typeable (Artifact m a),Funct
   -- | Run the 'BuilderT' of an artifact in order to create the desired effect
   -- in 'm' that e.g. copies files, converts vm-images, launches missles, etc.
   buildArtifact
-    :: BuilderT a () -> m (Artifact a)
+    :: BuilderT a () -> B9IO (Artifact a)
 
 -- * Build Actions
 -- | Artifacts can be modified during the build phase. Instances define *how* an

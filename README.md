@@ -66,7 +66,7 @@ Right now you are empowered to:
 * Create and convert QCow2, Vmdk, ISO9660, VFAT and Raw disk images
 * Add files to disk-images
 * Get files from disk-images
-* Modify disk images using shell scripts inside a libvirt-lxc container
+* Apply disk images using shell scripts inside a libvirt-lxc container
 
 Planned features:
 

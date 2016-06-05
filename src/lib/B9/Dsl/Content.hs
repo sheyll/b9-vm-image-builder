@@ -74,7 +74,7 @@ type GeneratedContentChunk c = IoProgram c
 
 type instance IoCompilerArtifactState (Cnt c) = [IoProgram c]
 
-instance IsCnt c => HasBuilder IoCompiler (Cnt c) where
+instance IsCnt c => IsBuilder IoCompiler (Cnt c) where
   data InitArgs IoCompiler (Cnt c) = (c, String)
   runCreate _px (c,title) =
     do hnd <- allocHandle Proxy title
