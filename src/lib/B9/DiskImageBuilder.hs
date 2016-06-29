@@ -237,15 +237,18 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
                (show imgType'))
   | otherwise = do
       let (Image imgFile imgFmt imgFs) = dest
+          qemuImgOpts = conversionOptions imgFmt
       dbgL
           (printf
-               "Creating empty raw image '%s' with size %s"
+               "Creating empty raw image '%s' with size %s and options %s"
                imgFile
-               (toQemuSizeOptVal imgSize))
+               (toQemuSizeOptVal imgSize)
+               qemuImgOpts)
       cmd
           (printf
-               "qemu-img create -f %s '%s' '%s'"
+               "qemu-img create -f %s %s '%s' '%s'"
                (imageFileExtension imgFmt)
+               qemuImgOpts
                imgFile
                (toQemuSizeOptVal imgSize))
       case (imgFmt, imgFs) of
@@ -343,8 +346,9 @@ convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
         liftIO (removeFile imgIn)
 
 conversionOptions :: ImageType -> String
-conversionOptions Vmdk = " -o adapter_type=lsilogic "
-conversionOptions _    = " "
+conversionOptions Vmdk  = " -o adapter_type=lsilogic "
+conversionOptions QCow2 = " -o compat=1.1,preallocation=metadata,lazy_refcounts=on "
+conversionOptions _     = " "
 
 toQemuSizeOptVal :: ImageSize -> String
 toQemuSizeOptVal (ImageSize amount u) = show amount ++ case u of

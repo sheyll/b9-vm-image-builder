@@ -9,9 +9,9 @@
 #
 set -eu
 
-cabal clean
-./build_and_test.sh
-./build_haddock.sh
-cabal check
-cabal sdist
+stack clean
+stack build
+stack test
+stack haddock
+stack sdist
 
