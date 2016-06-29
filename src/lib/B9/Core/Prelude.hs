@@ -8,7 +8,7 @@ import Control.Lens as ReExport (makeLenses
                                 ,(%~),(.~),(<>~),(&~)
                                 ,(^.)
                                 ,(<>=),(.=),(?=)
-                                ,over,to,at,traverse)
+                                ,over,to,at,traverse,use,view)
 import Control.Monad as ReExport
 import Control.Monad.Reader as ReExport
 import Control.Monad.State as ReExport
@@ -33,7 +33,7 @@ import Data.Binary as ReExport (Binary)
 import Data.Hashable as ReExport
 import Control.Monad.Free as ReExport (Free(..), liftF, foldFree)
 import Data.Foldable as ReExport
-
+import Data.Kind as ReExport (Type)
 import GHC.TypeLits as ReExport
 import GHC.Generics as ReExport (Generic)
 

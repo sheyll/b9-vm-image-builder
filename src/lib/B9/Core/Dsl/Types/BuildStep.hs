@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 -- | The internal core definitions for the DSL of B9.
 -- At the core is the 'BuildStep' GADT that specifies the basic build steps.
 --
@@ -7,10 +8,10 @@
 -- This means that a plan that consists of these steps:
 --
 -- > do
--- >    foo <- createFrom EmptyContent
--- >    bar <- createFrom EmptyContent
--- >    bindTo foo Append bar
--- >    applyTo bar Append "pure-value"
+-- >    foo <- create EmptyContent
+-- >    bar <- create EmptyContent
+-- >    bind foo Append bar
+-- >    apply bar Append "pure-value"
 --
 -- Might be executed
 module B9.Core.Dsl.Types.BuildStep
@@ -19,22 +20,22 @@ module B9.Core.Dsl.Types.BuildStep
 import B9.Core.Prelude
 import B9.Core.Dsl.Types.Handle as ReExport
 import B9.Core.System.B9IO as ReExport
-import Control.Monad.Writer
+import Control.Monad.RWS
 
 -- | A single step in a large build plan. The indiviual steps are restricted to
 -- types from the type families below. These steps form a very basic,
 -- declerative language, to describe artifacts and data dependencies between
--- artifacts. Meaning is created by the type class instances of 'IsBuilder' and
+-- artifacts. Meaning is created by the type class instances of 'CanBuild' and
 -- 'ApplicableTo', and the respective interpreters.
 data BuildStep next where
         Create ::
-            IsBuilder a => InitArgs a -> (Handle a -> next) -> BuildStep next
+            (Typeable a, CanBuild a) => InitArgs a -> (Handle a -> next) -> BuildStep next
         Apply ::
-            ApplicableTo a action =>
+            (Typeable a, ApplicableTo a action) =>
             action -> Handle a -> next -> BuildStep next
         Bind ::
-            (IsBuilder src, IsBuilder dst, Artifact src ~ srcOut,
-             ApplicableTo dst dstIn) =>
+            (CanBuild src, CanBuild dst, Artifact src ~ srcOut,
+             Typeable dst, ApplicableTo dst dstIn) =>
             Handle src ->
               (srcOut -> dstIn) -> Handle dst -> next -> BuildStep next
 
@@ -48,23 +49,25 @@ instance Functor BuildStep where
   fmap f (Bind a aToAction b next) = Bind a aToAction b (f next)
 
 -- | Create a builder and return the handle representing the build output.
-createFrom :: IsBuilder a
-           => InitArgs a -> BuildStepMonad (Handle a)
-createFrom src = liftF $ Create src id
+create
+  :: CanBuild a
+  => InitArgs a -> BuildStepMonad (Handle a)
+create src = liftF $ Create src id
 
 -- | Apply an artifact using an /action/ and an action specific (pure) value.
-applyTo :: ApplicableTo a action
-        => action -> Handle a -> BuildStepMonad ()
-applyTo action handle = liftF $ Apply action handle ()
+apply
+  :: (ApplicableTo a action)
+  => action -> Handle a -> BuildStepMonad ()
+apply action handle = liftF $ Apply action handle ()
 
 -- | Bind the 'Artifact' referred to by the second 'Handle' into the artifact
 -- identified by the first handle using a given action. This is similar to
--- 'applyTo', but use the 'Artifact' value of an artifact identified by a
+-- 'apply', but use the 'Artifact' value of an artifact identified by a
 -- 'Handle' instead of using a pure value.
-bindTo
-  :: (IsBuilder src,IsBuilder dst,Artifact src ~ t,ApplicableTo dst action)
+bind
+  :: (CanBuild src,CanBuild dst,Artifact src ~ t,ApplicableTo dst action)
   => Handle src -> (t -> action) -> Handle dst -> BuildStepMonad ()
-bindTo src toAction dst = liftF $ Bind src toAction dst ()
+bind src toAction dst = liftF $ Bind src toAction dst ()
 
 -- * Artifact Creation
 -- | Type class for builders producing artifacts as defined by the 'InitArgs'.
@@ -88,13 +91,14 @@ bindTo src toAction dst = liftF $ Bind src toAction dst ()
 --
 -- This is an example for usage of the types in a manner allowing this:
 --
--- > outHandle <- allocateHandle (initialiseBuilder (OutputFile "dest"))
--- > srcHandle <- allocateHandle (initialiseBuilder (OutputFile "source"))
--- > docHandle <- allocateHandle (initialiseBuilder (Document EmptyYamlObject))
--- > applyToArtifact outHandle docHandle $
--- >   \doc -> execAction (WriteFile . renderYaml) doc
--- > applyToArtifact docHandle srcHandle $
--- >   \out -> execAction (AppendDocument . parseYaml) out
+-- > do
+-- >    outHandle <- initialiseBuilder (OutputFile "dest")
+-- >    srcHandle <- initialiseBuilder (OutputFile "source")
+-- >    docHandle <- (initialiseBuilder (Document EmptyYamlObject)
+-- >    applyToArtifact outHandle docHandle $
+-- >      \doc -> execAction (WriteFile . renderYaml) doc
+-- >    applyToArtifact docHandle srcHandle $
+-- >      \out -> execAction (AppendDocument . parseYaml) out
 --
 -- This can be simplified with a helper function:
 -- > modifyWithInput buildHandle modification inputHandle =
@@ -140,18 +144,22 @@ bindTo src toAction dst = liftF $ Bind src toAction dst ()
 -- used as input to other artifact builds. The output of an artifact build
 -- is not necessarily effectful, it isn't required for an 'ArtifactOutput'
 -- to be a functor/monad/applicative or even a monoid.
-class (Show (InitArgs a),Typeable (BuilderT a),Typeable (Artifact a),Functor (BuilderT a),Applicative (BuilderT a)) => IsBuilder (a :: k)  where
+class (Typeable k, Typeable a, Typeable (Artifact a), Monoid (BuilderWriter a)) => CanBuild (a :: k)  where
   -- | Contruction parameters required to create the artifact.
   -- You may wonder why on earth do I need a data family, why not just
   -- use 'a' directly?
-  -- That would force a to have kind '*' which rules out type level strings.
-  -- The recipe for using this is to define a phantom data type and a
+  -- That would force a to have kind '*' which rules out uninhabited types.
+  -- The recipe for using this is to define a phantom data type and an
   -- 'InitArgs' instance constructor with the same identifier, e.g.:
   --
   -- >
-  -- > data Foo
-  -- > instance IsBuilder m Foo where
-  -- >    data InitArgs m Foo = Foo
+  -- > data OutFile c
+  -- > instance (Put c) => CanBuild (OutFile c) where
+  -- >    data InitArgs (OutFile c) = OutFile FilePath
+  -- >
+  -- > outFile :: (Put c) => FilePath -> BuildStepMonad (Handle (OutFile c))
+  -- > outFile f = create (OutFile f)
+  -- >
   --
   -- The 'InitArgs' of an artifact describes the static parameters  i.e.
   -- those that identify an artifacts manifestation in the real world. In case
@@ -161,47 +169,51 @@ class (Show (InitArgs a),Typeable (BuilderT a),Typeable (Artifact a),Functor (Bu
   data InitArgs a
   -- | The functor that maintains the build state during the build phase. This
   -- could be a state monad.
-  data BuilderT a :: * -> *
+  type BuilderState a
+  type instance (BuilderState a) = ()
+  -- | The intermediate outputs during the build-phase.
+  type BuilderWriter a
+  type instance (BuilderWriter a) = ()
   -- | The output/result of the build-phase.
   type Artifact a
-  -- | Create/Initialise the artifact from using the given parameters and
-  -- return an artifact 'BuilderT'.
+  -- | Create/Initialise the artifact from using the given parameters and return
+  -- an action that contains the initial 'BuilderState'
   initialiseBuilder
-    :: InitArgs a -> BuilderT a ()
+    :: InitArgs a -> BuilderState a
   -- | Run the 'BuilderT' of an artifact in order to create the desired effect
   -- in 'm' that e.g. copies files, converts vm-images, launches missles, etc.
   buildArtifact
-    :: BuilderT a () -> B9IO (Artifact a)
+    :: BuilderT a (Artifact a)
 
--- * Build Actions
 -- | Artifacts can be modified during the build phase. Instances define *how* an
 -- @action@ is applied to the artifact builder @a@.
-class (IsBuilder a) => ApplicableTo a action  where
+class (CanBuild a) => ApplicableTo a action  where
   execAction :: action -> BuilderT a ()
 
--- | An action that appends to its target a pure value.
-data Append v =
-  Append v
+newtype BuilderT a b where
+  BuilderT :: RWST (InitArgs a) (BuilderWriter a) (BuilderState a) B9IO b -> BuilderT a b
+    deriving (Typeable,Functor)
 
--- * Implementation for pure value
--- | Pure values that are mutable.
-data ValueB v =
-  ValueB v
+instance (CanBuild a) => Applicative (BuilderT a) where
+  pure = BuilderT . pure
+  (BuilderT f) <*> (BuilderT x) = BuilderT (f <*> x)
 
--- | Builder for pure values that are monoids.
-instance (Monoid v,Typeable v) => IsBuilder (ValueB v) where
-  data InitArgs (ValueB v) = FromPureValue v
-                         | EmptyPureValue
-  newtype BuilderT (ValueB v) a = ValueWriter{evalValueB ::
-                                            Writer v a}
-                              deriving (Functor, Applicative, Monad)
-  type Artifact (ValueB v) = v
-  initialiseBuilder (FromPureValue v) = ValueWriter $ tell v
-  initialiseBuilder EmptyPureValue = pure ()
-  buildArtifact = pure . execWriter . evalValueB
+instance (CanBuild a) => Monad (BuilderT a) where
+  return = pure
+  (BuilderT a) >>= f = BuilderT (a >>= (\ a' -> let (BuilderT r) = f a' in r))
 
-instance (Typeable v) => Show (InitArgs (ValueB v)) where
-  show _ = "pure values of type " ++ show (typeRep (Proxy :: Proxy v))
+instance (CanBuild a) => MonadReader (InitArgs a) (BuilderT a) where
+  ask = BuilderT ask
+  local f (BuilderT m) = BuilderT (local f m)
 
-instance (Artifact (ValueB v) ~ v,Monoid v,IsBuilder (ValueB v)) => ApplicableTo (ValueB v) (Append v) where
-  execAction (Append v) = ValueWriter (tell v)
+instance (CanBuild a, w ~ BuilderWriter a) => MonadWriter w (BuilderT a) where
+  tell = BuilderT . tell
+  listen (BuilderT m) = BuilderT (listen m)
+  pass (BuilderT m) = BuilderT (pass m)
+
+instance (CanBuild a, w ~ BuilderState a) => MonadState w (BuilderT a) where
+  get = BuilderT get
+  put = BuilderT . put
+
+instance (CanBuild a) => MonadIO (BuilderT a) where
+  liftIO = BuilderT . liftIO

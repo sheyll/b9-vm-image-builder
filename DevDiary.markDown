@@ -47,7 +47,8 @@ hypervisors or execution containers.
                                                        of commands using the OS)            
             - Command                             (execution of system commands)
             - File                                    (using and creating files)
-            - Http                        (up- downloading via HTTP PUT and GET)          
+            - Http                        (up- downloading via HTTP PUT and GET)
+          - Mono                   (A builder for Monoids based on a Writer)
         - Interpreter                      (combine BuildSteps to a B9IO action)
         - Types.
           - BuildStep            (Monad and type classes for declarative builds.
@@ -60,8 +61,6 @@ hypervisors or execution containers.
         - Configuration  (parse/generate B9s configuration file and command line
                                                                            args)
         - Directory                          (finding files, paths, directories)
-        - Unique        (globally unique ids, monotonically increasing integers,
-                                             timestamps, random file names, etc)
     - Prelude (Re-export of very commonly used modules)
     - Util.
         - DynMap                                  (a type safe heterogenous Map)

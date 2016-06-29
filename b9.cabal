@@ -1,5 +1,5 @@
 name:                b9
-version:             0.6.0
+version:             0.7.0
 synopsis:            A tool and library for building virtual machine images.
 
 description:         Build virtual machine images for vm-deployments; resize,
@@ -70,13 +70,13 @@ library
                    , B9.Core.Dsl.Basic.System.Command
                    , B9.Core.Dsl.Basic.System.File
                    , B9.Core.Dsl.Basic.System.Http
+                   , B9.Core.Dsl.Basic.Mono
                    , B9.Core.Dsl.Types.BuildStep
                    , B9.Core.Dsl.Types.Handle
                    , B9.Core.Dsl.Interpreter
                    , B9.Core.System.B9IO
                    , B9.Core.System.Command
                    , B9.Core.System.Configuration
-                   , B9.Core.System.Unique
                    , B9.Core.System.Directory
                    , B9.Core.Util.DynMap
                    , B9.Core.Util.Logging
@@ -113,8 +113,6 @@ library
                    , pretty-show
                    , process
                    , random
-                   , semigroups
-                   , singletons
                    , syb
                    , tagged
                    , template
@@ -140,7 +138,6 @@ library
                     , GeneralizedNewtypeDeriving
                     , KindSignatures
                     , MultiParamTypeClasses
-                    , PolyKinds
                     , QuasiQuotes
                     , RecordWildCards
                     , RankNTypes
@@ -148,13 +145,14 @@ library
                     , StandaloneDeriving
                     , TemplateHaskell
                     , TupleSections
-                    , TypeOperators
+                    , TypeFamilyDependencies
                     , TypeFamilies
+                    , TypeInType
+                    , TypeOperators
                     , TypeSynonymInstances
   hs-source-dirs:    src/lib
   default-language:  Haskell2010
-  ghc-options:       -with-rtsopts=-N -Wall
-                     -fwarn-unused-binds -fno-warn-unused-do-bind
+  ghc-options:       -Wall -fwarn-unused-binds -fno-warn-unused-do-bind
 
 -- executable b9c
 --   main-is:           Main.hs
@@ -183,53 +181,48 @@ library
 --   ghc-options:       -threaded -with-rtsopts=-N -Wall
 --                      -fwarn-unused-binds -fno-warn-unused-do-bind
 --
--- test-suite spec
---   type:              exitcode-stdio-1.0
---   ghc-options:       -Wall
---   hs-source-dirs:    src/tests
---   default-language:  Haskell2010
---   main-is:           Spec.hs
---   other-modules:     B9.Content.ErlTermsSpec
---                    , B9.Content.ErlangPropListSpec
---                    , B9.Content.YamlObjectSpec
---                    , B9.Dsl.CoreSpec
---                    , B9.SpecExtra
---                    , B9.B9IOSpec
---                    , B9.B9IO.ImplSpec
---                    , B9.DslSpec
---                    , B9.BuilderSpec
---                    , B9.LoggingSpec
---   if flag(IntegrationTests)
---     CC-Options: "-DINTEGRATION_TESTS"
---     CPP-Options: -DINTEGRATION_TESTS
---
---   build-depends:     QuickCheck
---                    , aeson
---                    , b9
---                    , base >= 4.8 && < 5
---                    , bytestring
---                    , containers
---                    , data-default
---                    , directory
---                    , filepath
---                    , hspec
---                    , hspec-expectations
---                    , mtl
---                    , lens
---                    , semigroups
---                    , text
---                    , unordered-containers
---                    , vector
---                    , yaml
---   default-extensions: TupleSections
---                     , GeneralizedNewtypeDeriving
---                     , DeriveDataTypeable
---                     , RankNTypes
---                     , FlexibleContexts
---                     , GADTs
---                     , DataKinds
---                     , KindSignatures
---                     , TypeFamilies
---                     , DeriveFunctor
---                     , TemplateHaskell
---                     , CPP
+test-suite spec
+  type:              exitcode-stdio-1.0
+  ghc-options:       -Wall
+  hs-source-dirs:    src/spec
+  default-language:  Haskell2010
+  main-is:           Spec.hs
+  other-modules:     B9Spec.Prelude
+                   , B9Spec.Core.Dsl.Basic.BasicSpec
+                   , B9Spec.Core.Dsl.Basic.Document.Dictionaries.ErlangTermSpec
+                   , B9Spec.Core.Dsl.Basic.Document.Dictionaries.YamlSpec
+  if flag(IntegrationTests)
+    CC-Options: "-DINTEGRATION_TESTS"
+    CPP-Options: -DINTEGRATION_TESTS
+
+  build-depends:     QuickCheck
+                   , aeson
+                   , b9
+                   , base >= 4.8 && < 5
+                   , bytestring
+                   , containers
+                   , data-default
+                   , directory
+                   , filepath
+                   , hspec
+                   , hspec-expectations
+                   , mtl
+                   , lens
+                   , semigroups
+                   , text
+                   , unordered-containers
+                   , vector
+                   , yaml
+  default-extensions: TupleSections
+                    , GeneralizedNewtypeDeriving
+                    , DeriveDataTypeable
+                    , RankNTypes
+                    , FlexibleContexts
+                    , GADTs
+                    , DataKinds
+                    , KindSignatures
+                    , TypeFamilies
+                    , DeriveFunctor
+                    , TemplateHaskell
+                    , TypeInType
+                    , CPP

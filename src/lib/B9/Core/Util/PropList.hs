@@ -66,7 +66,7 @@ data Properties (section :: sym)
             (IsProperty key,
              CanAddProperty (Cardinality key section) key keys ~ 'True) =>
               Property key ->
-              Properties section  required                     keys ->
+              Properties section required              keys          ->
               Properties section (Remove key required) (key ': keys)
 
 type EmptyProperties (section :: sym) =
@@ -93,7 +93,7 @@ class IsProperty (k :: sym)  where
   type Cardinality k (u :: h) :: MaxCardinality
   type Cardinality k (u :: h) = 'ZeroOrMore
   -- | Values accepted for the property
-  type ValueType k :: *
+  type ValueType k :: Type
   type ValueType k = String
   -- | Render the property
   showProperty :: Property k -> String
@@ -175,8 +175,6 @@ getMembersAtPositions px pos props =
   case (pos, props) of
     (_, Begin) ->
       []
-    (NotHere, _) ->
-      []
     (AndNotHere nextPos, AddProperty _ nextProp) ->
       getMembersAtPositions px nextPos nextProp
     (Here nextPos, AddProperty r nextProp) ->
@@ -196,8 +194,7 @@ getMemberCount pe pes = natVal (getMemberCountProxy  pe pes)
 -- | Return a 'Nat' 'Proxy' matching the number of occurences of a 'Property'
 -- with a given 'k' are in a type level list 'ks'.
 getMemberCountProxy
-  :: KnownNat (MemberCount k ks)
-  => proxy1 (k :: t)
+  :: proxy1 (k :: t)
   -> proxy2 (ks :: [t])
   -> Proxy (MemberCount k ks)
 getMemberCountProxy _k _ks = Proxy
@@ -237,7 +234,6 @@ instance  {-# OVERLAPPING #-}
 
 instance {-# OVERLAPPING #-}
     (IsMember n a as
-    ,KnownNat n
     ,n ~ MemberCount a as
     ,KnownNat m
     ,m ~ MemberCount a (a ': as)

@@ -13,8 +13,7 @@
 
 module B9 (b9_version, module X) where
 
-import B9.Common as X
-import B9.Builder as X
+import B9.Core.Prelude as X
 import Paths_b9 (version) 
 
 -- | Return the cabal package version of the B9 library.

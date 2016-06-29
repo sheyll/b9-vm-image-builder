@@ -1,18 +1,11 @@
 -- | General logging API used throughout B9, with instances ranging from pure
 -- 'String's and 'IO' upto 'Program', 'B9IO' and 'B9'. This API uses the
 -- 'PrintfArgs' /trick/ for variadic functions.
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DefaultSignatures #-}
-
 module B9.Core.Util.Logging where
 
 import Control.Arrow
 import Data.Data
 import Data.Int
-import Data.Singletons
 import Data.Word
 import GHC.Generics (Generic)
 import Text.Show.Pretty (ppShow)
@@ -121,10 +114,6 @@ instance (Show a1,Show a2) => LogArg (a1,a2)
 instance (Show a1,Show a2,Show a3) => LogArg (a1,a2,a3)
 
 instance (Show a1,Show a2,Show a3,Show a4) => LogArg (a1,a2,a3,a4)
-
--- | Generic instance for all singleton types that have showable demoted types.
-instance (SingKind ('KProxy :: KProxy k),Show (Demote (a :: k))) => LogArg (Sing a) where
-  toLogMsgTxt px = show (fromSing px)
 
 -- | Class of types that can consume log messages into a value.
 class CanLog a  where
