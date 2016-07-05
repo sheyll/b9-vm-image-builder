@@ -347,7 +347,7 @@ convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
 
 conversionOptions :: ImageType -> String
 conversionOptions Vmdk  = " -o adapter_type=lsilogic "
-conversionOptions QCow2 = " -o compat=1.1,preallocation=metadata,lazy_refcounts=on "
+conversionOptions QCow2 = " -o compat=1.1,lazy_refcounts=on "
 conversionOptions _     = " "
 
 toQemuSizeOptVal :: ImageSize -> String
