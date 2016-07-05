@@ -213,16 +213,29 @@ test-suite spec
                    , unordered-containers
                    , vector
                    , yaml
-  default-extensions: TupleSections
-                    , GeneralizedNewtypeDeriving
-                    , DeriveDataTypeable
-                    , RankNTypes
-                    , FlexibleContexts
-                    , GADTs
-                    , DataKinds
-                    , KindSignatures
-                    , TypeFamilies
-                    , DeriveFunctor
-                    , TemplateHaskell
-                    , TypeInType
+  default-extensions: ConstraintKinds
                     , CPP
+                    , DataKinds
+                    , DefaultSignatures
+                    , DeriveDataTypeable
+                    , DeriveFunctor
+                    , DeriveGeneric
+                    , FlexibleInstances
+                    , FlexibleContexts
+                    , FunctionalDependencies
+                    , GADTs
+                    , GeneralizedNewtypeDeriving
+                    , KindSignatures
+                    , MultiParamTypeClasses
+                    , QuasiQuotes
+                    , RecordWildCards
+                    , RankNTypes
+                    , ScopedTypeVariables
+                    , StandaloneDeriving
+                    , TemplateHaskell
+                    , TupleSections
+                    , TypeFamilyDependencies
+                    , TypeFamilies
+                    , TypeInType
+                    , TypeOperators
+                    , TypeSynonymInstances

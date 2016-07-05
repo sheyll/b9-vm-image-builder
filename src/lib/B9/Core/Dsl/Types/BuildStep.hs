@@ -1,4 +1,5 @@
 {-# LANGUAGE UndecidableInstances #-}
+
 -- | The internal core definitions for the DSL of B9.
 -- At the core is the 'BuildStep' GADT that specifies the basic build steps.
 --
@@ -29,13 +30,14 @@ import Control.Monad.RWS
 -- 'ApplicableTo', and the respective interpreters.
 data BuildStep next where
         Create ::
-            (Typeable a, CanBuild a) => InitArgs a -> (Handle a -> next) -> BuildStep next
+            (Typeable a, CanBuild a) =>
+            InitArgs a -> (Handle a -> next) -> BuildStep next
         Apply ::
             (Typeable a, ApplicableTo a action) =>
             action -> Handle a -> next -> BuildStep next
         Bind ::
-            (CanBuild src, CanBuild dst, Artifact src ~ srcOut,
-             Typeable dst, ApplicableTo dst dstIn) =>
+            (CanBuild src, CanBuild dst, Artifact src ~ srcOut, Typeable dst,
+             ApplicableTo dst dstIn) =>
             Handle src ->
               (srcOut -> dstIn) -> Handle dst -> next -> BuildStep next
 
@@ -49,15 +51,13 @@ instance Functor BuildStep where
   fmap f (Bind a aToAction b next) = Bind a aToAction b (f next)
 
 -- | Create a builder and return the handle representing the build output.
-create
-  :: CanBuild a
-  => InitArgs a -> BuildStepMonad (Handle a)
+create :: CanBuild a
+       => InitArgs a -> BuildStepMonad (Handle a)
 create src = liftF $ Create src id
 
 -- | Apply an artifact using an /action/ and an action specific (pure) value.
-apply
-  :: (ApplicableTo a action)
-  => action -> Handle a -> BuildStepMonad ()
+apply :: (ApplicableTo a action)
+      => action -> Handle a -> BuildStepMonad ()
 apply action handle = liftF $ Apply action handle ()
 
 -- | Bind the 'Artifact' referred to by the second 'Handle' into the artifact
@@ -144,7 +144,7 @@ bind src toAction dst = liftF $ Bind src toAction dst ()
 -- used as input to other artifact builds. The output of an artifact build
 -- is not necessarily effectful, it isn't required for an 'ArtifactOutput'
 -- to be a functor/monad/applicative or even a monoid.
-class (Typeable k, Typeable a, Typeable (Artifact a), Monoid (BuilderWriter a)) => CanBuild (a :: k)  where
+class (Typeable k,Typeable a,Typeable (Artifact a),Typeable (BuilderState a),Monoid (BuilderWriter a),Typeable (BuilderWriter a)) => CanBuild (a :: k)  where
   -- | Contruction parameters required to create the artifact.
   -- You may wonder why on earth do I need a data family, why not just
   -- use 'a' directly?
@@ -170,50 +170,43 @@ class (Typeable k, Typeable a, Typeable (Artifact a), Monoid (BuilderWriter a)) 
   -- | The functor that maintains the build state during the build phase. This
   -- could be a state monad.
   type BuilderState a
-  type instance (BuilderState a) = ()
+  type (BuilderState a) = ()
   -- | The intermediate outputs during the build-phase.
   type BuilderWriter a
-  type instance (BuilderWriter a) = ()
+  type (BuilderWriter a) = ()
   -- | The output/result of the build-phase.
   type Artifact a
   -- | Create/Initialise the artifact from using the given parameters and return
   -- an action that contains the initial 'BuilderState'
   initialiseBuilder
     :: InitArgs a -> BuilderState a
-  -- | Run the 'BuilderT' of an artifact in order to create the desired effect
-  -- in 'm' that e.g. copies files, converts vm-images, launches missles, etc.
-  buildArtifact
-    :: BuilderT a (Artifact a)
+  -- | Run the 'BuilderRWST' of an artifact in order to create the desired effect
+  -- in 'B9IO' that e.g. copies files, converts vm-images, launches containers,
+  -- etc.
+  buildArtifact :: InitArgs a
+                -> BuilderState a
+                -> BuilderWriter a
+                -> B9IO (Artifact a)
 
 -- | Artifacts can be modified during the build phase. Instances define *how* an
 -- @action@ is applied to the artifact builder @a@.
 class (CanBuild a) => ApplicableTo a action  where
-  execAction :: action -> BuilderT a ()
+  execAction :: Monad m => action -> BuilderRWST m a ()
 
-newtype BuilderT a b where
-  BuilderT :: RWST (InitArgs a) (BuilderWriter a) (BuilderState a) B9IO b -> BuilderT a b
-    deriving (Typeable,Functor)
+type BuilderRWST m a b = RWST (InitArgs a) (BuilderWriter a) (BuilderState a) m b
 
-instance (CanBuild a) => Applicative (BuilderT a) where
-  pure = BuilderT . pure
-  (BuilderT f) <*> (BuilderT x) = BuilderT (f <*> x)
+runBuilderRWST
+  :: BuilderRWST m a b
+  -> InitArgs a
+  -> BuilderState a
+  -> m (b,BuilderState a,BuilderWriter a)
+runBuilderRWST = runRWST
 
-instance (CanBuild a) => Monad (BuilderT a) where
-  return = pure
-  (BuilderT a) >>= f = BuilderT (a >>= (\ a' -> let (BuilderT r) = f a' in r))
+type BuilderRWS a b = BuilderRWST Identity a b
 
-instance (CanBuild a) => MonadReader (InitArgs a) (BuilderT a) where
-  ask = BuilderT ask
-  local f (BuilderT m) = BuilderT (local f m)
-
-instance (CanBuild a, w ~ BuilderWriter a) => MonadWriter w (BuilderT a) where
-  tell = BuilderT . tell
-  listen (BuilderT m) = BuilderT (listen m)
-  pass (BuilderT m) = BuilderT (pass m)
-
-instance (CanBuild a, w ~ BuilderState a) => MonadState w (BuilderT a) where
-  get = BuilderT get
-  put = BuilderT . put
-
-instance (CanBuild a) => MonadIO (BuilderT a) where
-  liftIO = BuilderT . liftIO
+runBuilderRWS
+  :: BuilderRWS a b
+  -> InitArgs a
+  -> BuilderState a
+  -> (b,BuilderState a,BuilderWriter a)
+runBuilderRWS m i s = runIdentity (runBuilderRWST m i s)

@@ -32,6 +32,7 @@ import Data.Text.Encoding as ReExport (decodeUtf8, encodeUtf8)
 import Data.Binary as ReExport (Binary)
 import Data.Hashable as ReExport
 import Control.Monad.Free as ReExport (Free(..), liftF, foldFree)
+import Control.Monad.Identity as ReExport
 import Data.Foldable as ReExport
 import Data.Kind as ReExport (Type)
 import GHC.TypeLits as ReExport

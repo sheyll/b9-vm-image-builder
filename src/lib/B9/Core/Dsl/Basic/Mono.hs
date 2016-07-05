@@ -14,19 +14,18 @@ data Append v =
 
 -- | Builder for pure values that are monoids.
 instance (Monoid v,Typeable v) => CanBuild (Mono v) where
-  data InitArgs (Mono v) = InitialValue v
-                       | EmptyValue
+  data InitArgs (Mono v) = InitialValue v | EmptyValue
   type BuilderWriter (Mono v) = v
   type Artifact (Mono v) = v
-  initialiseBuilder (InitialValue v) = tell v
-  initialiseBuilder EmptyValue = pure ()
-  buildArtifact = pure . execWriter . runMonoW
+  initialiseBuilder _ = ()
+  buildArtifact (InitialValue v) () v' = return (v <> v')
+  buildArtifact EmptyValue       () v' = return v'
 
 instance (Typeable v) => Show (InitArgs (Mono v)) where
   show _ = show (typeRep (Proxy :: Proxy v))
 
 instance (Monoid v,CanBuild (Mono v)) => ApplicableTo (Mono v) (Append v) where
-  execAction (Append v) = MonoW (tell v)
+  execAction (Append v) = tell v
 
 -- | Get an artifact value. (If it is a 'Monoid')
 getArtifactValue

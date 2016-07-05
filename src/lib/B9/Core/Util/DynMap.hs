@@ -1,7 +1,7 @@
 -- | A (pseudo-)typesafe dynamic map.
 module B9.Core.Util.DynMap
-       (DynMap, SomeKey(..), Entry(..), empty, singleton, insert,
-        delete, insertWith, alter, lookup)
+       (DynMap, SomeKey(..), Entry(..), empty, singleton, insert, delete,
+        insertWith, alter, lookup, adjust)
        where
 
 import Prelude hiding (lookup)
@@ -16,7 +16,7 @@ import qualified Data.Map as Map
 -- associates the key type to the value type for a certain map type.
 data DynMap (map :: mapKind) =
   DynMap {unDynMap :: Map.Map SomeKey Dynamic}
-  deriving ((Show))
+  deriving (((Show)))
 
 -- | Hide a 'Key'.
 newtype SomeKey where
@@ -86,10 +86,18 @@ alter f k = DynMap . Map.alter f' (toSomeKey k) . unDynMap
              return $ toDyn new
 
 -- | Lookup a value for the key.
-lookup :: (Typeable (Value m k),Entry m k)
-       => Key m k -> DynMap m -> Maybe (Value m k)
+lookup
+  :: (Typeable (Value m k),Entry m k)
+  => Key m k -> DynMap m -> Maybe (Value m k)
 lookup k m =
   do dynValue <-
        Map.lookup (toSomeKey k)
                   (unDynMap m)
      fromDynamic dynValue
+
+-- | Update a value at a specific key with the result of the provided function.
+-- When the key is not a member of the map, the original map is returned.
+adjust
+  :: (Typeable (Value m k),Entry m k)
+  => (Value m k -> Value m k) -> Key m k -> DynMap m -> DynMap m
+adjust f = alter (fmap f)

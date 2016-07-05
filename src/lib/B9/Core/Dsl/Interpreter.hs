@@ -11,8 +11,8 @@ import Data.Graph as Graph
 import qualified Data.Map as Map hiding (null)
 import Data.Tree as Tree
 
--- | A monad to made from a 'BuildStepMonad' but with all dependencies worked
--- out, such that the build order is correct.
+-- | A monad to made from a 'BuildStepMonad' but with all dependencies worked out, such that the
+-- build order is correct.
 newtype BuildPlan a =
   BuildPlan {runBuildPlan :: State Ctx a}
   deriving (Functor,Applicative,Monad,MonadState Ctx)
@@ -23,34 +23,37 @@ data Ctx =
       ,_hToV :: Map.Map SomeHandle Vertex
       ,_vToH :: Map.Map Vertex SomeHandle
       ,_dependencies :: [Edge]
-      ,_builderMap :: BuilderMap
-      ,_generatorMap :: Map.Map SomeHandle Generator}
+      ,_builders :: Map.Map SomeHandle (ArtifactBuilder ())
+      ,_bindings :: Bindings}
 
 instance Default Ctx where
-  def = Ctx 0 def def [] DynMap.empty def
+  def = Ctx 0 def def [] Map.empty DynMap.empty
 
-type Generator = (ArtifactMap,BuilderMap) -> B9IO (ArtifactMap,BuilderMap)
+type Bindings = DynMap.DynMap Binding
 
-type BuilderMap = DynMap.DynMap BuildersEntry
+data Binding
+
+instance DynMap.Entry Binding k where
+  data Key Binding k = BindingKey (Handle k)
+  type Value Binding k = BuilderRWST (Reader ArtifactMap) k ()
+  toSomeKey (BindingKey h) = SomeKey (show h)
+
+type ArtifactBuilder = StateT ArtifactMap (ReaderT Bindings B9IO)
+
+runArtifactBuilder :: ArtifactBuilder a
+                   -> ArtifactMap
+                   -> Bindings
+                   -> B9IO (a,ArtifactMap)
+runArtifactBuilder b = runReaderT . runStateT b
 
 type ArtifactMap = DynMap.DynMap ArtifactsEntry
 
-instance DynMap.Entry BuildersEntry k where
-  data Key BuildersEntry k = BuildersKey (Handle k)
-  type Value BuildersEntry k = BuilderCtx k
-  toSomeKey (BuildersKey h) = SomeKey (show h)
-
-type BuilderCtx k = [ArtifactMap -> (BuilderT k ())]
-
-data BuildersEntry
-
+data ArtifactsEntry
 
 instance DynMap.Entry ArtifactsEntry k where
   data Key ArtifactsEntry k = ArtifactsKey (Handle k)
   type Value ArtifactsEntry k = Artifact k
   toSomeKey (ArtifactsKey h) = SomeKey (show h)
-
-data ArtifactsEntry
 
 makeLenses ''Ctx
 
@@ -60,58 +63,53 @@ interpret = foldFree go
   where go :: BuildStep x -> BuildPlan x
         go (Create initialParameter k) =
           do h <- allocHandle
-             putBuilderT h
-                         [const (initialiseBuilder initialParameter)]
-             generatorMap . at (SomeHandle h) ?= mkGenerator h
-             return $ k h
+             insertBuilder h initialParameter
+             return (k h)
         go (Apply action handle next) =
-          do addBuilderT handle
-                         [const (execAction action)]
+          do appendBinding handle
+                           (execAction action)
              return next
         go (Bind sourceHandle action destinationHandle next) =
           do sourceHandle --> destinationHandle
-             addBuilderT
-               destinationHandle
-               [execAction . action . fromJust .
-                DynMap.lookup (ArtifactsKey sourceHandle)]
+             appendBinding destinationHandle $
+               do Just a <-
+                    lift (asks (DynMap.lookup (ArtifactsKey sourceHandle)))
+                  execAction (action a)
              return next
 
--- | Create a 'Generator' for a 'Handle'.
-mkGenerator :: (CanBuild a)
-            => Handle a -> Generator
-mkGenerator handle (artifactMapIn,builderMapIn) =
-  do let bkey = BuildersKey handle
-         akey = ArtifactsKey handle
-         builder =
-           sequenceA_ $ map ($ artifactMapIn) $ join $ maybeToList $
-           DynMap.lookup bkey builderMapIn
-     artifact <- buildArtifact builder
-     let artifactMapOut = DynMap.insert akey artifact artifactMapIn
-         builderMapOut = DynMap.delete bkey builderMapIn
-     return (artifactMapOut,builderMapOut)
-
 -- | * Builder and Artifact accessors
-putBuilderT
-  :: (Typeable (BuilderCtx a))
-  => Handle a -> BuilderCtx a -> BuildPlan ()
-putBuilderT handle b =
-  builderMap %=
-  DynMap.insert (BuildersKey handle)
-                b
+insertBuilder
+  :: CanBuild a
+  => Handle a -> InitArgs a -> BuildPlan ()
+insertBuilder h i =
+  do builders . at (SomeHandle h) ?= builder
+     bindings %=
+       DynMap.insert (BindingKey h)
+                     (return ())
+  where builder =
+          do Just b <- lift (asks (DynMap.lookup (BindingKey h)))
+             as <- get
+             let ((),s,w) =
+                   runReader (runBuilderRWST b
+                                             i
+                                             (initialiseBuilder i))
+                             as
+             a <- lift (lift (buildArtifact i s w))
+             modify (DynMap.insert (ArtifactsKey h)
+                                   a)
 
-addBuilderT
-  :: (Typeable (BuilderCtx a))
-  => Handle a -> BuilderCtx a -> BuildPlan ()
-addBuilderT handle b =
-  builderMap %=
-  DynMap.insertWith (++)
-                    (BuildersKey handle)
-                    b
+appendBinding :: CanBuild a
+              => Handle a
+              -> BuilderRWST (Reader ArtifactMap) a ()
+              -> BuildPlan ()
+appendBinding h b =
+  bindings %=
+  DynMap.adjust (>> b)
+                (BindingKey h)
 
 -- | Create a new unique handle and store it in the state.
-allocHandle
-  :: (Typeable a)
-  => BuildPlan (Handle a)
+allocHandle :: (Typeable a)
+            => BuildPlan (Handle a)
 allocHandle =
   do v <- addVertex
      let h = mkHandle (printf "Handle #%0.10d" v)
@@ -161,18 +159,18 @@ lookupVertex h = use (hToV . at (SomeHandle h))
 -- | Execution of the 'BuildPlan'. Compose all build steps into an 'IoProgram', with all build
 -- actions executed in the order determined by the data-dependencies between buildsteps.
 execBuildPlan
-  :: BuildPlan a -> B9IO (a,ArtifactMap)
+  :: BuildPlan r -> B9IO (r,ArtifactMap)
 execBuildPlan di =
-  let ((a,depGraph),ctx) =
+  let ((r,g),ctx) =
         runState (runBuildPlan ((,) <$> di <*> dependencyGraph)) def
-      orderedVertices = maybe [0 .. _nextVertex ctx - 1] topSort depGraph
-      vToG =
-        Map.map (flip Map.lookup (_generatorMap ctx))
-                (_vToH ctx)
-      builders = catMaybes $ map (join . flip Map.lookup vToG) orderedVertices
-  in do (artifactsOut,_builderOut) <-
-          foldr (=<<) (return (DynMap.empty,_builderMap ctx)) builders
-        return (a,artifactsOut)
+      vs = maybe [0 .. _nextVertex ctx - 1] topSort g
+      go v =
+        fromMaybe (return ())
+                  (do h <- ctx ^. vToH . at v
+                      ctx ^. builders . at h)
+  in runArtifactBuilder (mapM_ go vs >> return r)
+                        DynMap.empty
+                        (ctx ^. bindings)
 
 -- | Generate a graph from the artifact dependencies in the compiler context.
 dependencyGraph :: BuildPlan (Maybe Graph)
@@ -207,8 +205,7 @@ printEdge handles (u,v) =
 -- | Convert a vertex to a formatted string
 printVertex
   :: Map.Map Vertex SomeHandle -> Vertex -> String
-printVertex handles v =
-  printf "%s" (printSomeHandle (Map.lookup v handles))
+printVertex handles v = printf "%s" (printSomeHandle (Map.lookup v handles))
 
 -- | Convert maybe a handle to a string
 printSomeHandle :: Maybe SomeHandle -> String
