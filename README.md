@@ -1,13 +1,6 @@
 # B9 - A Benign VM-Build Tool
 
-[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder)
-
-[![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
-
-[![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9)
-
-[![b9 LTS 5](http://stackage.org/package/b9/badge/lts-5)](http://stackage.org/lts-5/package/b9)
-[![b9 LTS 6](http://stackage.org/package/b9/badge/lts-6)](http://stackage.org/lts-6/package/b9)
+[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9) [![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9) [![b9 LTS 6](http://stackage.org/package/b9/badge/lts-6)](http://stackage.org/lts-6/package/b9) [![b9 LTS 5](http://stackage.org/package/b9/badge/lts-5)](http://stackage.org/lts-5/package/b9)
 
 Use B9 to compile your software into a deployable set of Linux-VM- or
 configuration images, from a set of scripts and input files and templates
