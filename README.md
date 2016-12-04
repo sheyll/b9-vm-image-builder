@@ -4,6 +4,11 @@
 
 [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
 
+[![b9 LTS](http://stackage.org/package/packagename/badge/lts-5)](http://stackage.org/lts/package/b9)
+
+[![b9 LTS 5](http://stackage.org/package/packagename/badge/lts-5)](http://stackage.org/lts-5/package/b9)
+[![b9 LTS 6](http://stackage.org/package/packagename/badge/lts-5)](http://stackage.org/lts-6/package/b9)
+
 Use B9 to compile your software into a deployable set of Linux-VM- or
 configuration images, from a set of scripts and input files and templates
 
