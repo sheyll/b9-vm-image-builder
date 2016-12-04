@@ -12,7 +12,7 @@ import B9.Repository
 import B9.B9Monad
 import B9.ConfigUtils
 
-import Control.Applicative
+
 import Data.List
 import Control.Monad.IO.Class
 import System.Directory

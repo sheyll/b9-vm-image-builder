@@ -26,7 +26,7 @@ import Control.Arrow
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Writer
-import Control.Monad.Error
+import Control.Monad.Except
 import System.FilePath
 import System.Directory
 import Text.Printf
@@ -167,7 +167,7 @@ data InstanceGenerator e = IG InstanceId e ArtifactAssembly
   deriving (Read, Show, Typeable, Data, Eq)
 
 newtype CGError = CGError String
-  deriving (Read, Show, Typeable, Data, Eq, Error)
+  deriving (Read, Show, Typeable, Data, Eq)
 
 cgError :: String -> CGParser a
 cgError msg = throwError (CGError msg)

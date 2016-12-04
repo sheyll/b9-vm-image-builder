@@ -162,7 +162,7 @@ readB9Config (Just cfgFile) = readIniFile cfgFile
 
 parseB9Config :: ConfigParser -> Either String B9Config
 parseB9Config cp =
-  let getr :: (Get_C a, Read a) => OptionSpec -> Either CPError a
+  let getr :: (Get_C a) => OptionSpec -> Either CPError a
       getr = get cp cfgFileSection
       getB9Config =
         B9Config <$> getr verbosityK

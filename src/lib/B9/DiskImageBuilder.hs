@@ -29,9 +29,9 @@ import System.Directory
 import System.FilePath
 import Text.Printf (printf)
 import Data.Maybe
-import Data.Monoid
+
 import Data.Function
-import Control.Applicative
+
 import Text.Show.Pretty (ppShow)
 import Data.List
 import Data.Data

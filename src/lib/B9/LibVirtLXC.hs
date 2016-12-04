@@ -180,7 +180,7 @@ readLibVirtConfig :: B9 LibVirtLXCConfig
 readLibVirtConfig =
   do
     cp <- getConfigParser
-    let geto :: (Get_C a, Read a)
+    let geto :: (Get_C a)
              => OptionSpec -> a -> a
         geto = getOptionOr cp cfgFileSection
     return

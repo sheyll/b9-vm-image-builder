@@ -123,10 +123,10 @@ readIniFile cfgFile' = do
 getOption :: (Get_C a, Monoid a) => ConfigParser -> SectionSpec -> OptionSpec -> a
 getOption cp sec key = either (const mempty) id $ get cp sec key
 
-getOptionM :: (Get_C a, Read a) => ConfigParser -> SectionSpec -> OptionSpec -> Maybe a
+getOptionM :: (Read a) => ConfigParser -> SectionSpec -> OptionSpec -> Maybe a
 getOptionM cp sec key = either (const Nothing) id $ get cp sec key
 
-getOptionOr :: (Get_C a, Read a) => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
+getOptionOr :: (Get_C a) => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
 getOptionOr cp sec key dv = either (const dv) id $ get cp sec key
 
 newtype UUID = UUID (Word32, Word16, Word16, Word16, Word32, Word16)
