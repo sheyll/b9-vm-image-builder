@@ -35,7 +35,10 @@ runInEnvironment env scriptIn =
           domainFile = buildBaseDir </> uuid' <.> domainConfig
           domain = createDomain cfg env buildId uuid' scriptDirHost scriptDirGuest
           uuid' = printf "%U" uuid
-          script = Begin [scriptIn, successMarkerCmd scriptDirGuest]
+          setupEnv = Begin [ Run "export" ["HOME=/root"]
+                           , Run "export" ["USER=root"]
+                           , Run "source" ["/etc/profile"]]
+          script = Begin [setupEnv, scriptIn, successMarkerCmd scriptDirGuest]
           buildDir = buildBaseDir </> uuid'
       liftIO $ do
         createDirectoryIfMissing True scriptDirHost
@@ -50,9 +53,6 @@ runInEnvironment env scriptIn =
       let virsh = virshCommand cfg
       cmd $ printf "%s create '%s' --console --autodestroy" virsh domainFile
       -- cmd $ printf "%s console %U" virsh uuid
-      checkSuccessMarker scriptDirHost
-
-    checkSuccessMarker scriptDirHost =
       liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
 
     successMarkerFile = "SUCCESS"
