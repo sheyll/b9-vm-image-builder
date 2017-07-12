@@ -67,10 +67,14 @@ prettyPrintErlTerm (ErlChar c) = PP.text ("$" ++ toErlAtomChar c)
 prettyPrintErlTerm (ErlAtom a) = PP.text quotedAtom
   where
     quotedAtom =
-      if all (`elem` (['a'..'z']++['A'..'Z']++['0'..'9']++"@_")) a'
-        then a'
-        else "'"++a'++"'"
-    a' = toErlAtomString a
+      case toErlAtomString a of
+        "" -> "''"
+        a'@(firstChar:rest)
+          | firstChar `elem` ['a' .. 'z'] &&
+              all (`elem` atomCharsThatDontNeedQuoting) rest -> a'
+        a' -> "'" ++ a' ++ "'"
+    atomCharsThatDontNeedQuoting =
+      ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9'] ++ "@_"
 
 prettyPrintErlTerm (ErlBinary []) = PP.text "<<>>"
 prettyPrintErlTerm (ErlBinary b) = PP.text ("<<\"" ++ toErlStringString b ++ "\">>")

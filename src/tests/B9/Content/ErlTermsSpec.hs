@@ -122,6 +122,14 @@ spec = do
        (renderErlTerm (ErlAtom " $s\"<\\.0_=@\ESC'")
        `shouldBe` "' $s\"<\\\\.0_=@\\x{1b}\\''.")
 
+    it "renders _ correctly as '_'"
+       (renderErlTerm (ErlAtom "_")
+       `shouldBe` "'_'.")
+
+    it "renders an empty string correctly as ''"
+       (renderErlTerm (ErlAtom "")
+       `shouldBe` "''.")
+
     it "renders a string and escapes special characters"
        (renderErlTerm (ErlString "' $s\"<\\.0_=@\ESC''")
        `shouldBe` "\"' $s\\\"<\\\\.0_=@\\x{1b}''\".")
