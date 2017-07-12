@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.31
+version:             0.5.32
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -191,7 +191,7 @@ test-suite spec
                    , b9
                    , hspec
                    , hspec-expectations
-                   , QuickCheck
+                   , QuickCheck >= 2.5
                    , aeson
                    , yaml
                    , vector
