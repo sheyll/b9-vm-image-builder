@@ -136,3 +136,33 @@ type TestLayer = Layer "test" "0.3"
        :> Reserve (UserName "app")
        :> Reserve (FileName "/app/test")
        :> Share (FileName "/app/test/modules")
+
+
+
+
+----------------------------------
+
+
+-- mrfBuildVm = do
+
+--   img <- input $
+--         pullVmImage "centos-7" >>=
+--         convertFileSystemTo Ext4 >>=
+--         resizeFileSystemTo 8 GB
+
+--   output img
+--          (do
+--              shrinkFileSystemSizeToMinimum
+--              writeQCow2 "OUT/img.qcow2")
+
+--   ci <- newCloudInit (RandomInstanceIdTemplate "mrf")
+--   prj <- hostDirectory "./config-files/"
+
+--   lxcLinuxInstallation <-
+--       temporaryCopyOf "./installer-linux.raw"
+--       >>= diskImageType RawImage Ext4 >>> resizeFileSystemTo 4 GB
+
+
+
+--   enterLinuxContainer
+--     (do mountRoot
