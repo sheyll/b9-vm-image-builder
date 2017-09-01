@@ -2,7 +2,7 @@ module B9Spec.Core.Dsl.Basic.BasicSpec (spec) where
 
 import B9Spec.Prelude
 import B9.Core.Dsl.Basic.Mono
-import B9.Core.Dsl.Interpreter
+import B9.Core.DslInterpreter
 import B9.Core.Dsl.Types.BuildStep
 import Control.Monad.Writer.Class
 import Data.IORef

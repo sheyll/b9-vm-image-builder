@@ -1,5 +1,5 @@
 {-# LANGUAGE UndecidableInstances #-}
--- | (Type-) Configurable PropList.
+-- | (Type-Safe) PropLists.
 --
 -- A PropList Contains key-value pairs and is associated to a /section/ identifier
 -- (a type level string).
