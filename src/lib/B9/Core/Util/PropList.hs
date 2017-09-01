@@ -1,8 +1,18 @@
 {-# LANGUAGE UndecidableInstances #-}
--- | (Type-) Configurable PropList
+-- | (Type-) Configurable PropList.
 --
--- A PropList Contains key-value pairs. See these examples: (TODO Documentation)
+-- A PropList Contains key-value pairs and is associated to a /section/ identifier
+-- (a type level string).
+-- The role model for this is a typical systemd unit file, or any other .ini file
+-- like key value structure; these .ini files tend to have key value pairs organized
+-- into sections.
 --
+-- The keys in such a prop-list are configured using type family instances.
+-- Configuration is comprised of specifying the value type and a cardinality.
+--
+-- Also the prop list can be configured to require the existance of some keys.
+--
+-- Simple example:
 -- >
 -- > testRender = unlines [renderProperties test1
 -- >                      ,""
@@ -54,7 +64,7 @@ import B9.Core.Prelude
 
 -- * Properties
 
--- | (Type-) Configurable PropList. The @section@ is used further mark a
+-- | (Type-) Configurable PropList. The @section@ is used to further mark a
 -- /proplist/ with a type that allows a description of what must, may and must
 -- not be added to proplists with that @section@.
 data Properties (section :: sym)
