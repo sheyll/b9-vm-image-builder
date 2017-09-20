@@ -2,5 +2,5 @@ flags: {}
 packages:
 - '.'
 extra-deps: []
-resolver: lts-8.22
+resolver: lts-9.4
 pvp-bounds: lower

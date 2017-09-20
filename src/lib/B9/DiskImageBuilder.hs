@@ -252,10 +252,14 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
                imgFile
                (toQemuSizeOptVal imgSize))
       case (imgFmt, imgFs) of
+          (Raw,Ext4_64) -> do
+              let fsCmd = "mkfs.ext4"
+              dbgL (printf "Creating file system %s" (show imgFs))
+              cmd (printf "%s -F -L '%s' -O 64bit -q '%s'" fsCmd fsLabel imgFile)
           (Raw,Ext4) -> do
               let fsCmd = "mkfs.ext4"
               dbgL (printf "Creating file system %s" (show imgFs))
-              cmd (printf "%s -F -L '%s' -q '%s'" fsCmd fsLabel imgFile)
+              cmd (printf "%s -F -L '%s' -O ^64bit -q '%s'" fsCmd fsLabel imgFile)
           (it,fs) ->
               error
                   (printf
@@ -277,21 +281,25 @@ createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
 -- | Resize an image, including the file system inside the image.
 resizeImage :: ImageResize -> Image -> B9 ()
 resizeImage KeepSize _ = return ()
-resizeImage (Resize newSize) (Image img Raw Ext4) = do
-  let sizeOpt = toQemuSizeOptVal newSize
-  dbgL (printf "Resizing ext4 filesystem on raw image to %s" sizeOpt)
-  cmd (printf "e2fsck -p '%s'" img)
-  cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
+resizeImage (Resize newSize) (Image img Raw fs)
+  | fs == Ext4 || fs == Ext4_64
+    = do
+        let sizeOpt = toQemuSizeOptVal newSize
+        dbgL (printf "Resizing ext4 filesystem on raw image to %s" sizeOpt)
+        cmd (printf "e2fsck -p '%s'" img)
+        cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
 
 resizeImage (ResizeImage newSize) (Image img _ _) = do
   let sizeOpt = toQemuSizeOptVal newSize
   dbgL (printf "Resizing image to %s" sizeOpt)
   cmd (printf "qemu-img resize -q '%s' %s" img sizeOpt)
 
-resizeImage ShrinkToMinimum (Image img Raw Ext4) = do
-  dbgL "Shrinking image to minimum size"
-  cmd (printf "e2fsck -p '%s'" img)
-  cmd (printf "resize2fs -f -M '%s'" img)
+resizeImage ShrinkToMinimum (Image img Raw fs)
+ | fs == Ext4 || fs == Ext4_64
+      = do
+          dbgL "Shrinking image to minimum size"
+          cmd (printf "e2fsck -p '%s'" img)
+          cmd (printf "resize2fs -f -M '%s'" img)
 
 resizeImage _ img =
   error (printf "Invalid image type or filesystem, cannot resize image: %s" (show img))

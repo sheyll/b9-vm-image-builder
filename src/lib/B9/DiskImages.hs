@@ -111,7 +111,7 @@ instance Binary ImageType
 instance NFData ImageType
 
 -- | The file systems that b9 can use and convert.
-data FileSystem = NoFileSystem | Ext4 | ISO9660 | VFAT
+data FileSystem = NoFileSystem | Ext4 | Ext4_64 | ISO9660 | VFAT
                 deriving (Eq,Show,Read,Typeable,Data,Generic)
 
 instance Hashable FileSystem

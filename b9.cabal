@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.32
+version:             0.5.33
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -45,7 +45,7 @@ author:              Sven Heyll <svh@posteo.de>
 maintainer:          svh@posteo.de
 homepage:            https://github.com/sheyll/b9-vm-image-builder
 bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
-copyright:           2015, 2016 Sven Heyll <svh@posteo.de>
+copyright:           2015, 2016, 2017 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
 extra-source-files:  README.md
