@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.34
+version:             0.5.35
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -111,7 +111,7 @@ library
                    , mtl >= 2.2
                    , time >= 1.6
                    , parallel >= 3.2
-                   , parsec >= 3.2
+                   , parsec >= 3.1
                    , pretty-show >= 1.6
                    , pretty >= 1.1
                    , process >= 1.4
