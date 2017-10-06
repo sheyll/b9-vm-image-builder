@@ -14,8 +14,47 @@
 module B9 (b9_version, module X) where
 
 import B9.Core.Prelude as X
-import Paths_b9 (version) 
+import Paths_b9 (version)
 
 -- | Return the cabal package version of the B9 library.
 b9_version :: Version
 b9_version = version
+
+
+{-
+# Architecture
+
+## Logical Hierachy
+
+    Site -> Subsite -> Host -> Service -> Stage
+
+### Site
+
+Outputs:
+* KVM deployments (local)
+* Directory with images exported
+
+### Service
+
+* service name and version
+* dependency to other services
+* Configuration Items
+
+#### Configuration Image
+
+* Contains configuration items
+
+#### Installation Image
+
+* Configuration Items
+
+-------------------------------------
+
+
+
+
+-}
+
+
+
+
