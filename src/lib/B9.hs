@@ -26,11 +26,17 @@ b9_version = version
 
 ## Logical Hierachy
 
-    Site -> Subsite -> Host -> Service -> Stage
+    Deployment Site -> Network Domain -> Host -> Service
 
 ### Site
 
+Combine services and assign them to hosts
+
+Input: 
+* A list of hosts 
+
 Outputs:
+* A communication matrix, maybe a firewall config
 * KVM deployments (local)
 * Directory with images exported
 
