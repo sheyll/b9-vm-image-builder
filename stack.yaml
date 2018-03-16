@@ -1,1 +1,7 @@
-stack-nightly-2018-03-16.yaml
+flags: {}
+packages:
+- '.'
+extra-deps: []
+resolver: lts-11.0
+allow-newer: true
+# pvp-bounds: lower

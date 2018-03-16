@@ -1,6 +1,6 @@
 # B9 - A Benign VM-Build Tool
 
-[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9) [![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9) [![b9 LTS 6](http://stackage.org/package/b9/badge/lts-6)](http://stackage.org/lts-6/package/b9) [![b9 LTS 5](http://stackage.org/package/b9/badge/lts-5)](http://stackage.org/lts-5/package/b9)
+[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9) [![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9)
 
 Use B9 to compile your software into a deployable set of Linux-VM- or
 configuration images, from a set of scripts and input files and templates
@@ -39,7 +39,7 @@ things up, it is possible to explicitly use copy-on-write images.
 B9 creates bootable virtual machine images, without necessarily using
 virtualization itself.
 
-In essence B9 is a tool for *creation*, *configuration* and *sharing* of VM images and
+In essence B9 is a tool for _creation_, _configuration_ and _sharing_ of VM images and
 all peripheral artifacts, it creates:
 
 * VMDK/QCOW2/Raw VM images
@@ -91,8 +91,8 @@ put along side with other build files (e.g. Makefiles, maven poms, ...).
 
 To build B9 first install:
 
-*  `ghc` version 7.6 or higher
-*  `cabal-install` version 1.16 or higher
+* `ghc` version 7.6 or higher
+* `cabal-install` version 1.16 or higher
 
 B9 uses stackage and cabal sandboxes. The build result can be found in
 `.cabal-sandbox/bin/`. To run a complete fresh build, execute:
@@ -111,7 +111,6 @@ To execute a ghci-repl run:
 To execute unit tests run:
 
     ./build_and_test.sh
-
 
 ## Installation
 
@@ -164,7 +163,6 @@ for a list of command line parameters and commands.
 `b9c` command line arguments always follow this pattern:
 
     b9c <global-options> <command> <command-options> -- <build-script-extra-args>
-
 
 To enable B9 to work correctly on your machine edit the config file and make
 necessary adaptions.
@@ -221,21 +219,20 @@ etc... you see flying around there.
 ## Creating artifacts
 
 To get any _real_ artifact out of an artifact generator use the `Artifact`
-constructor. It takes *2* parameters an arbitrary id and a describtion of what
+constructor. It takes _2_ parameters an arbitrary id and a describtion of what
 the artifact consists of:
 
      Artifact (IID "some_instance_id")
               (VmImages ... | CloudInit ...)
 
 An artifact can either be a (set of) VM-disk-image(s) likely in combination
-with some shell script to install software, etc *or* a static collection of
+with some shell script to install software, etc _or_ a static collection of
 files put on a cloud-init image(VFAT or ISO or directory).
 
 ### Defining artifact generators that produce vm image files
 
 To produce vm image files, e.g. with some software installed use the `VmImages`
-artifact generator. It has only *2* parameters:
-
+artifact generator. It has only _2_ parameters:
 
      VmImages
         [ ... disk image targets ... ]
@@ -265,6 +262,7 @@ a single VM-disk-image. The syntax is:
 
 B9 supports `$varnam` variable interpolation in all strings anywhere in an
 `ArtifactGenerator`:
+
 * All filenames and paths
 * All id strings and names
 * Template files included via e.g. `Template`
@@ -280,7 +278,7 @@ option `--` which ends the list of regular b9c arguments:
     b9c -v build -f file1.b9 .. -- arg_1 arg_2 ...
 
 The parameters are bound to `${arg_1}`, `${arg_2}`, that is variables indicating
-the corresponding *position* on the command line.
+the corresponding _position_ on the command line.
 
 To define variables using `Let`, write:
 
@@ -294,9 +292,9 @@ A key-value binding, e.g. `("hostname", "www.acme.org")`, consist of two strings
 on parens seperated by a `,` (comma). The left string is the key, and the right
 string is the value.
 
-This `("webserver", "www.${domainname}")` is an example to show that the *value*
+This `("webserver", "www.${domainname}")` is an example to show that the _value_
 may also contain a variable reference. (Of course, only to variabled defined
-*before*)
+_before_)
 
 ## Anger-Management
 
@@ -325,7 +323,6 @@ Obtain and build the sources of B9, start an interactive haskell shell with the
 B9 code loaded and try to paste the contents of the config file to see if ghci
 accepts it. Use the ghci macros `:{` and `:}` to begin and end a multi-line input
 and paste the raw contents of the config file in question in between.
-
 
     $ cabal install
     $ cabal repl
