@@ -1,0 +1,10 @@
+flags: {}
+packages:
+- '.'
+extra-deps:
+- ConfigFile-1.1.4
+- template-0.2.0.10
+
+resolver: nightly-2018-03-16
+allow-newer: true
+# pvp-bounds: lower

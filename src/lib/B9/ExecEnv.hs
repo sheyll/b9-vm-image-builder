@@ -18,8 +18,10 @@ import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Hashable
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
-
+#endif
+import Data.Semigroup as Sem
 import B9.DiskImages
 import GHC.Generics (Generic)
 
@@ -57,10 +59,12 @@ instance Hashable Resources
 instance Binary Resources
 instance NFData Resources
 
+instance Sem.Semigroup Resources where
+  (<>) (Resources m c a) (Resources m' c' a') = Resources (m <> m') (max c c') (a <> a')
+
 instance Monoid Resources where
     mempty = Resources mempty 1 mempty
-    mappend (Resources m c a) (Resources m' c' a') =
-        Resources (m <> m') (max c c') (a <> a')
+    mappend  = (Sem.<>)
 
 noResources :: Resources
 noResources = mempty
@@ -74,10 +78,13 @@ instance Hashable CPUArch
 instance Binary CPUArch
 instance NFData CPUArch
 
+instance Sem.Semigroup CPUArch where
+    I386 <> x = x
+    X86_64 <> _ = X86_64
+
 instance Monoid CPUArch where
     mempty = I386
-    I386 `mappend` x = x
-    X86_64 `mappend` _ = X86_64
+    mappend = (Sem.<>)
 
 data RamSize
     = RamSize Int
@@ -89,8 +96,11 @@ instance Hashable RamSize
 instance Binary RamSize
 instance NFData RamSize
 
+instance Sem.Semigroup RamSize where
+    AutomaticRamSize <> x = x
+    x <> AutomaticRamSize = x
+    r <> r' = max r r'
+
 instance Monoid RamSize where
     mempty = AutomaticRamSize
-    AutomaticRamSize `mappend` x = x
-    x `mappend` AutomaticRamSize = x
-    r `mappend` r' = max r r'
+    mappend = (Sem.<>)

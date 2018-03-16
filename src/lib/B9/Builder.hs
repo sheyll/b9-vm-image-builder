@@ -24,7 +24,10 @@ import B9.Content.ErlangPropList as X
 import B9.Content.YamlObject as X
 import B9.Content.Generator as X
 
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
+#endif
+import Data.Semigroup as Sem
 import Text.Printf ( printf )
 import Text.Show.Pretty (ppShow)
 import Control.Monad.IO.Class
@@ -51,5 +54,5 @@ withB9Config cfgParser cliCfg f = do
       putStrLn (printf "B9 Failed to start: %s" e)
       return False
     Right parsedCfg ->
-      let cfg = defaultB9Config <> parsedCfg <> cliCfg
+      let cfg = defaultB9Config Sem.<> parsedCfg Sem.<> cliCfg
           in f cfg

@@ -129,3 +129,4 @@ instance ASTish YamlObject where
 
 
 instance Arbitrary YamlObject where
+  arbitrary = pure (YamlObject Null)

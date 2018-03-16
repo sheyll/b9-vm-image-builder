@@ -9,7 +9,9 @@ import           Data.Data
 import           Data.Function
 import           Data.Hashable
 import           Data.List (partition,sortBy)
+#if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup
+#endif
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import           GHC.Generics (Generic)
@@ -39,7 +41,6 @@ instance Arbitrary ErlangPropList where
   arbitrary = ErlangPropList <$> arbitrary
 
 instance Semigroup ErlangPropList where
-
   (ErlangPropList v1) <> (ErlangPropList v2) = ErlangPropList (combine v1 v2)
     where
       combine (ErlList l1) (ErlList l2) =

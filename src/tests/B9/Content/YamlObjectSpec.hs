@@ -2,7 +2,9 @@
 module B9.Content.YamlObjectSpec (spec) where
 
 import Test.Hspec
+#if !MIN_VERSION_base(4,11,0)
 import Data.Semigroup
+#endif
 import Data.Text ()
 import Data.Yaml
 

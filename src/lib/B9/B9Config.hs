@@ -25,7 +25,9 @@ import System.Directory
 import Text.Printf
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+import Data.Monoid
 #endif
+import qualified Data.Semigroup as Sem
 import Data.Monoid
 
 import B9.ConfigUtils
@@ -50,23 +52,25 @@ data B9Config = B9Config { verbosity :: Maybe LogLevel
                          , interactive :: Bool
                          } deriving (Show)
 
+instance Sem.Semigroup B9Config where
+  c <> c' =
+      B9Config { verbosity = getLast $ on mappend (Last . verbosity) c c'
+      , logFile = getLast $ on mappend (Last . logFile) c c'
+      , buildDirRoot = getLast $ on mappend (Last . buildDirRoot) c c'
+      , keepTempDirs = getAny $ on mappend (Any . keepTempDirs) c c'
+      , execEnvType = LibVirtLXC
+      , profileFile = getLast $ on mappend (Last . profileFile) c c'
+      , envVars = on mappend envVars c c'
+      , uniqueBuildDirs = getAll ((mappend `on` (All . uniqueBuildDirs)) c c')
+      , repositoryCache = getLast $ on mappend (Last . repositoryCache) c c'
+      , repository = getLast ((mappend `on` (Last . repository)) c c')
+      , interactive = getAny ((mappend `on` (Any . interactive)) c c')
+      }
 
 instance Monoid B9Config where
+  mappend = (Sem.<>)
   mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True
                     Nothing Nothing False
-  mappend c c' =
-    B9Config { verbosity = getLast $ on mappend (Last . verbosity) c c'
-             , logFile = getLast $ on mappend (Last . logFile) c c'
-             , buildDirRoot = getLast $ on mappend (Last . buildDirRoot) c c'
-             , keepTempDirs = getAny $ on mappend (Any . keepTempDirs) c c'
-             , execEnvType = LibVirtLXC
-             , profileFile = getLast $ on mappend (Last . profileFile) c c'
-             , envVars = on mappend envVars c c'
-             , uniqueBuildDirs = getAll ((mappend `on` (All . uniqueBuildDirs)) c c')
-             , repositoryCache = getLast $ on mappend (Last . repositoryCache) c c'
-             , repository = getLast ((mappend `on` (Last . repository)) c c')
-             , interactive = getAny ((mappend `on` (Any . interactive)) c c')
-             }
 
 defaultB9Config :: B9Config
 defaultB9Config = B9Config { verbosity = Just LogInfo

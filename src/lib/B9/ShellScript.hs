@@ -15,6 +15,7 @@ import Data.Data
 import Control.Applicative
 import Data.Monoid
 #endif
+import Data.Semigroup as Sem
 import Control.Parallel.Strategies
 import Data.Binary
 import Data.Hashable
@@ -44,14 +45,17 @@ instance Hashable Script
 instance Binary Script
 instance NFData Script
 
+instance Sem.Semigroup Script where
+    NoOP <> s = s
+    s <> NoOP = s
+    (Begin ss) <> (Begin ss') = Begin (ss ++ ss')
+    (Begin ss) <> s' = Begin (ss ++ [s'])
+    s <> (Begin ss') = Begin (s : ss')
+    s <> s' = Begin [s, s']
+
 instance Monoid Script where
     mempty = NoOP
-    NoOP `mappend` s = s
-    s `mappend` NoOP = s
-    (Begin ss) `mappend` (Begin ss') = Begin (ss ++ ss')
-    (Begin ss) `mappend` s' = Begin (ss ++ [s'])
-    s `mappend` (Begin ss') = Begin (s : ss')
-    s `mappend` s' = Begin [s, s']
+    mappend = (Sem.<>)
 
 data Cmd =
     Cmd String

@@ -19,6 +19,7 @@ import GHC.Generics (Generic)
 import Data.Monoid
 import Control.Applicative
 #endif
+import Data.Semigroup as Sem
 import System.FilePath ((<.>), (</>))
 
 import B9.DiskImages
@@ -126,11 +127,14 @@ instance Hashable ArtifactGenerator
 instance Binary ArtifactGenerator
 instance NFData ArtifactGenerator
 
+instance Sem.Semigroup ArtifactGenerator where
+    (Let [] []) <> x = x
+    x <> (Let [] []) = x
+    x <> y = Let [] [x, y]
+
 instance Monoid ArtifactGenerator where
     mempty = Let [] []
-    (Let [] []) `mappend` x = x
-    x `mappend` (Let [] []) = x
-    x `mappend` y = Let [] [x, y]
+    mappend = (Sem.<>)
 
 -- | Describe how input files for artifacts to build are obtained.  The general
 --   structure of each constructor is __FromXXX__ /destination/ /source/

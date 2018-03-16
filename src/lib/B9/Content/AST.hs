@@ -27,23 +27,20 @@ import           Data.Binary
 import qualified Data.ByteString as B
 import           Data.Data
 import           Data.Hashable
-import           Data.Semigroup
+import           Data.Semigroup as Sem
 import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
 #endif
-
 import           Control.Monad.Reader
-
 import           B9.Content.StringTemplate
 import           B9.B9Monad(B9)
-
 import           Test.QuickCheck
 import           B9.QCUtil
 
 -- | Types of values that can be parsed/rendered from/to 'ByteString's. This
 -- class is used as basis for the 'ASTish' class.
-class (Semigroup a) => ConcatableSyntax a  where
+class (Sem.Semigroup a) => ConcatableSyntax a  where
     -- Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
     decodeSyntax
         :: FilePath -- ^ An arbitrary string for error messages that

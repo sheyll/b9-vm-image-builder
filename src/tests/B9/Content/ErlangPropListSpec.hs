@@ -7,7 +7,9 @@ import Control.Applicative
 import Data.List
 import Test.Hspec
 import Test.QuickCheck
+#if !MIN_VERSION_base(4,11,0)
 import Data.Semigroup
+#endif
 import Data.Text ()
 
 import B9.Content.ErlTerms

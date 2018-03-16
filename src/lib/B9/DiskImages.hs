@@ -6,13 +6,14 @@ import           B9.QCUtil
 import           GHC.Generics (Generic)
 #if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+import           Data.Monoid
 #endif
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
 import           Data.Hashable
 import           Data.Maybe
-import           Data.Semigroup
+import           Data.Semigroup as Sem
 import           System.FilePath
 import           Test.QuickCheck
 import qualified Text.PrettyPrint.Boxes as Boxes
@@ -200,7 +201,7 @@ newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Sho
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
   compare (SharedImage n d b _ _) (SharedImage n' d' b' _ _) =
-    compare n n' <> compare d d' <> compare b b'
+    compare n n' Sem.<> compare d d' Sem.<> compare b b'
 
 -- * Constroctor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'

@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module B9.Content.ErlTermsSpec (spec) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Data.List
 import Test.Hspec
 import Test.QuickCheck
