@@ -10,10 +10,6 @@ import Data.Version
 import Paths_b9
 import System.Directory
 import System.IO.Error                 hiding (isDoesNotExistErrorType)
-#if !MIN_VERSION_base(4,8,0)
-import System.IO.Error                 hiding (catch)
-import Prelude                         hiding (catch)
-#endif
 import B9
 
 main :: IO ()

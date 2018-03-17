@@ -4,10 +4,6 @@ module B9.DiskImages where
 
 import           B9.QCUtil
 import           GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-import           Data.Monoid
-#endif
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data

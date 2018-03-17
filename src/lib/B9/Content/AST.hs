@@ -29,9 +29,6 @@ import           Data.Data
 import           Data.Hashable
 import           Data.Semigroup as Sem
 import           GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import           Control.Applicative
-#endif
 import           Control.Monad.Reader
 import           B9.Content.StringTemplate
 import           B9.B9Monad(B9)

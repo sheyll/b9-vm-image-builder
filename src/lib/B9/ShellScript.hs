@@ -11,10 +11,6 @@ module B9.ShellScript ( writeSh
                       ) where
 
 import Data.Data
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Monoid
-#endif
 import Data.Semigroup as Sem
 import Control.Parallel.Strategies
 import Data.Binary

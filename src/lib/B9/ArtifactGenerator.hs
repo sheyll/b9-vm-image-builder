@@ -15,10 +15,6 @@ import Data.Binary
 import Data.Data
 import Data.Hashable
 import GHC.Generics (Generic)
-#if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
-import Control.Applicative
-#endif
 import Data.Semigroup as Sem
 import System.FilePath ((<.>), (</>))
 

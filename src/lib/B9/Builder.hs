@@ -24,9 +24,6 @@ import B9.Content.ErlangPropList as X
 import B9.Content.YamlObject as X
 import B9.Content.Generator as X
 
-#if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
-#endif
 import Data.Semigroup as Sem
 import Text.Printf ( printf )
 import Text.Show.Pretty (ppShow)

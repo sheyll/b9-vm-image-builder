@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.40
+version:             0.5.41
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -49,8 +49,6 @@ copyright:           2015, 2016, 2017, 2018 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
 extra-source-files:  README.md
-                   , build_and_test.sh
-                   , build_haddock.sh
                    , LICENSE
                    , TODO.org
                    , Setup.hs
@@ -149,8 +147,6 @@ library
   default-language:  Haskell2010
   ghc-options:       -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind
-  if impl(ghc >= 7.8.2) && impl(ghc <= 7.10)
-     ghc-options: -fno-warn-amp
 
 executable b9c
   main-is:           Main.hs
@@ -177,8 +173,6 @@ executable b9c
                     , CPP
   ghc-options:       -threaded -with-rtsopts=-N -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind
-  if impl(ghc >= 7.8.2) && impl(ghc <= 7.10)
-     ghc-options: -fno-warn-amp
 
 test-suite spec
   type:              exitcode-stdio-1.0
@@ -217,5 +211,3 @@ test-suite spec
                     , DeriveFunctor
                     , TemplateHaskell
                     , CPP
-  if impl(ghc >= 7.8.2) && impl(ghc <= 7.10)
-     ghc-options: -fno-warn-amp -fno-warn-unused-do-bind

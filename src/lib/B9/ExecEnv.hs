@@ -18,9 +18,6 @@ import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Hashable
-#if !MIN_VERSION_base(4,8,0)
-import Data.Monoid
-#endif
 import Data.Semigroup as Sem
 import B9.DiskImages
 import GHC.Generics (Generic)

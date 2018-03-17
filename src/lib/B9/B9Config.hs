@@ -23,10 +23,6 @@ import Data.Function (on)
 import Control.Monad.IO.Class
 import System.Directory
 import Text.Printf
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-import Data.Monoid
-#endif
 import qualified Data.Semigroup as Sem
 import Data.Monoid
 
