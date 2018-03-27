@@ -1,3 +1,9 @@
+# Code of Conduct TL,DR;
+
+**All creatures are welcome.**
+
+**Be excellent to each other!**
+
 # Contributor Covenant Code of Conduct
 
 ## Our Pledge
