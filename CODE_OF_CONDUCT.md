@@ -4,6 +4,10 @@
 
 **Be excellent to each other!**
 
+**Don't assume bad intention, there is always a part of the story you might not know...**
+
+**Behave as if children were reading everything, don't use bad language.**
+
 # Contributor Covenant Code of Conduct
 
 ## Our Pledge
