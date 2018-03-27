@@ -4,7 +4,7 @@ Let me make it clear: this project has no real community; I beleive in it's long
 
 So every contribution is welcome. 
 
-If you contribute, you may show of your best skills and I will praise you.
+If you contribute, you may show off your coding skills and I will praise you.
 
 If you want to take things into your own hands, I will step back and let you make it yours. 
 If I don't agree, I will make a pull request or fork.
