@@ -116,6 +116,7 @@ library
                    , pretty >= 1.1
                    , process >= 1.4
                    , random >= 1.1
+                   , shake >= 0.16 && < 0.17
                    , syb >= 0.6
                    , template >= 0.2
                    , text >= 1.2

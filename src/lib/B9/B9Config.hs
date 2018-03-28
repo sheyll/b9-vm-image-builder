@@ -11,6 +11,7 @@ module B9.B9Config ( B9Config(..)
                    , writeInitialB9Config
                    , readB9Config
                    , parseB9Config
+                   , appendPositionalArguments
                    , LogLevel(..)
                    , ExecEnvType (..)
                    , BuildVariables
@@ -25,7 +26,7 @@ import System.Directory
 import Text.Printf
 import qualified Data.Semigroup as Sem
 import Data.Monoid
-
+import Data.List(partition, sortBy)
 import B9.ConfigUtils
 
 type BuildVariables = [(String,String)]
@@ -181,3 +182,23 @@ parseB9Config cp =
          Left (printf "Failed to parse B9 configuration file: '%s'" (show err))
        Right x ->
          Right x
+
+-- | If environment variables @arg_1 .. arg_n@ are bound
+-- and a list of @k@ additional values are passed to this function,
+-- store them with keys @arg_(n+1) .. arg_(n+k)@.
+appendPositionalArguments :: [String] -> B9Config -> B9Config
+appendPositionalArguments extraPositional c =
+  c { envVars = appendVars (envVars c) }
+  where appendVars argsOld =
+          let (oldPositional, oldOther) =
+                  partition (("arg_" ==) . take 4 . fst) argsOld
+              oldPositionalSortedByPosition =
+                  map snd
+                      $ sortBy (compare `on` fst)
+                      $ map (\(x, y) -> ((read :: String -> Int) $ drop 4 $ x, y))
+                      $ oldPositional
+              newPositional =
+                  let xs = oldPositionalSortedByPosition ++ extraPositional
+                  in  [ ("arg_" ++ show i, a) | (i, a) <- zip [1 ..] xs ]
+          in  newPositional ++ oldOther
+

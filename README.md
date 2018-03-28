@@ -87,35 +87,19 @@ put along side with other build files (e.g. Makefiles, maven poms, ...).
 * Configurable remote (ssh with pubkey auth + rsync) image shareing
 * Local caching of shared images
 
-## Compilation from Source
-
-To build B9 first install:
-
-* `ghc` version 7.6 or higher
-* `cabal-install` version 1.16 or higher
-
-B9 uses stackage and cabal sandboxes. The build result can be found in
-`.cabal-sandbox/bin/`. To run a complete fresh build, execute:
-
-    ./installDeps.sh
-    cabal install
-
-To launch b9c run:
-
-    ./build_and_run.sh
-
-To execute a ghci-repl run:
-
-    cabal repl
-
-To execute unit tests run:
-
-    ./build_and_test.sh
-
 ## Installation
 
-To be able to use B9 install
+### b9 executable and library
 
+Install via `stack`:
+
+    $ stack install b9
+
+### Runtime dependencies
+
+To be able to use B9 install:
+
+* Linux
 * lxc
 * libvirt with lxc support (libvirt-driver-lxc, libvirt-daemon-lxc,...)
 * virsh
