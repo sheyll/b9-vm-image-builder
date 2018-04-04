@@ -152,7 +152,7 @@ defaultRepositoryCache = InB9UserDir "repo-cache"
 defaultB9ConfigFile :: SystemPath
 defaultB9ConfigFile = InB9UserDir "b9.conf"
 verbosityK :: String
-verbosityK = "_verbosity"
+verbosityK = "verbosity"
 logFileK :: String
 logFileK = "log_file"
 buildDirRootK :: String
@@ -170,19 +170,21 @@ uniqueBuildDirsK = "unique_build_dirs"
 repositoryCacheK :: String
 repositoryCacheK = "repository_cache"
 repositoryK :: String
-repositoryK = "_repository"
+repositoryK = "repository"
 cfgFileSection :: String
 cfgFileSection = "global"
 
 -- | Parse a 'B9Config', modify it, and merge it back to the given 'ConfigParser'.
-modifyConfigParser :: (B9Config -> B9Config)  -> ConfigParser -> Either CPError ConfigParser
-modifyConfigParser f cp =
-  do cfg <- parseB9Config cp
-     cp2 <- b9ConfigToConfigParser (f cfg) emptyCP
-     return (merge cp cp2)
+modifyConfigParser
+  :: (B9Config -> B9Config) -> ConfigParser -> Either CPError ConfigParser
+modifyConfigParser f cp = do
+  cfg <- parseB9Config cp
+  cp2 <- b9ConfigToConfigParser (f cfg) emptyCP
+  return (merge cp cp2)
 
 -- | Append a config file section for the 'B9Config' to a 'ConfigParser'.
-b9ConfigToConfigParser :: B9Config -> ConfigParser -> Either CPError ConfigParser
+b9ConfigToConfigParser
+  :: B9Config -> ConfigParser -> Either CPError ConfigParser
 b9ConfigToConfigParser c cp = do
   cp1 <- add_section cp cfgFileSection
   cp2 <- setshow cp1 cfgFileSection verbosityK (_verbosity c)
@@ -195,12 +197,12 @@ b9ConfigToConfigParser c cp = do
   cp9 <- setshow cp8 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
   cpA <- setshow cp9 cfgFileSection repositoryCacheK (_repositoryCache c)
   cpB <-
-    (foldr (>=>) return
-      (libVirtLXCConfigToConfigParser <$> (_libVirtLXCConfigs c)))
-    cpA
-  cpFinal <-
-    (foldr (>=>) return
-      (remoteRepoToConfigParser <$> _remoteRepos c))
+    ( foldr (>=>)
+            return
+            (libVirtLXCConfigToConfigParser <$> (_libVirtLXCConfigs c))
+      )
+      cpA
+  cpFinal <- (foldr (>=>) return (remoteRepoToConfigParser <$> _remoteRepos c))
     cpB
   setshow cpFinal cfgFileSection repositoryK (_repository c)
 
@@ -226,7 +228,7 @@ parseB9Config cp =
           <*> pure False
           <*> Right (either (const Nothing) Just (parseLibVirtLXCConfig cp))
           <*> parseRemoteRepos cp
-    in  getB9Config
+  in  getB9Config
 
 
 -- | If environment variables @arg_1 .. arg_n@ are bound

@@ -60,23 +60,23 @@ b9VersionString = showVersion version
 
 -- | A data structure that contains the `B9Invokation`
 -- as well as build parameters.
-data B9RunParameters =
+data B9RunParameters a =
   B9RunParameters
             B9ConfigOverride
-            (B9Invokation ())
+            (B9Invokation a)
             BuildVariables
 
 -- | Run a b9 build.
 -- Return `True` if the build was successful.
-runB9 :: B9RunParameters -> IO Bool
+runB9 :: B9RunParameters a -> IO (a, Bool)
 runB9 (B9RunParameters overrides action vars) = do
-  invokeB9_ $ do
+  invokeB9 $ do
     modifyInvokationConfig
       (over envVars (++ vars) . const (overrides ^. customB9Config))
     mapM_ overrideB9ConfigPath (overrides ^. customB9ConfigPath)
     action
 
-defaultB9RunParameters :: B9Invokation () -> B9RunParameters
+defaultB9RunParameters :: B9Invokation a -> B9RunParameters a
 defaultB9RunParameters ba =
   B9RunParameters (B9ConfigOverride Nothing mempty) ba mempty
 

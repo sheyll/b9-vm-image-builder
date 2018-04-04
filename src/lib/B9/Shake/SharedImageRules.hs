@@ -1,6 +1,6 @@
 -- | A crude, unsafe and preliminary solution to building B9 'SharedImage's
 -- from Shake.
-module B9.Shake.SharedImageRules (b9BuildFromB9File) where
+module B9.Shake.SharedImageRules (customSharedImageAction, needSharedImage) where
 
 import Development.Shake
 import Development.Shake.Classes
@@ -10,39 +10,45 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.Binary as Binary
 import B9
-import B9.Shake.Actions ()
+import B9.Shake.Actions (b9InvokationAction)
 
--- * Rules to build and depend on b9 shared images.
+-- | Add a dependency to the creation of a 'SharedImage'. The build action
+-- for the shared image must have been supplied by e.g. 'customSharedImageAction'.
+--
 needSharedImage :: SharedImageName -> Action SharedImageBuildId
 needSharedImage = apply1
 
--- | Specify an action to build a shared image identified by its name.
-sharedImageCustom :: SharedImageName -> Action a -> Rules ()
-sharedImageCustom b9img imgInfo f = sharedImageRuleFull b9img imgInfo f'
-  where f' = fromJust <$> (f >> runLookupLocalSharedImage b9img)
-
--- | Specify an action to build a B9 shared image.
-sharedImageRuleFull
-  :: SharedImageName -> Action SharedImageBuildId -> Rules ()
-sharedImageRuleFull sn@(SharedImageName n) imgInfo act =
-  addUserRule $ CreationRule sn act
+-- | Specify an arbitrary action that is supposed to build the given shared
+-- image identified by a 'SharedImageName'.
+customSharedImageAction :: SharedImageName -> Action () -> Rules ()
+customSharedImageAction b9img customAction =
+  addUserRule $ SharedImageCustomActionRule b9img $ do
+    customAction
+    (after, success) <- b9InvokationAction (runLookupLocalSharedImage b9img)
+    unless success
+      (internalErrorSharedImageNotFound b9img)
+    maybe
+      (errorSharedImageNotFound b9img)
+      return
+      after
 
 type instance RuleResult SharedImageName = SharedImageBuildId
 
-data CreationRule =
-  CreationRule SharedImageName (Action SharedImageBuildId)
+data SharedImageCustomActionRule =
+  SharedImageCustomActionRule SharedImageName (Action SharedImageBuildId)
   deriving Typeable
 
 addB9SharedImagesRule :: Rules ()
-addB9SharedImagesRule = addBuiltinRule noLint run
+addB9SharedImagesRule = addBuiltinRule noLint go
  where
-  run
-    :: SharedImageName
-    -> Maybe ByteString.ByteString
-    -> Bool
-    -> Action (RunResult SharedImageBuildId)
-  run nameQ mSerlializedBuildId dependenciesChanged = do
-    mCurrentBuildId <- runLookupLocalSharedImage nameQ
+  go :: SharedImageName
+     -> Maybe ByteString.ByteString
+     -> Bool
+     -> Action (RunResult SharedImageBuildId)
+  go nameQ mSerlializedBuildId dependenciesChanged = do
+    (mCurrentBuildId, success) <- b9InvokationAction (runLookupLocalSharedImage nameQ)
+    unless success
+      (internalErrorSharedImageNotFound nameQ)
 
     case (decodeBuildId <$> mSerlializedBuildId, mCurrentBuildId) of
 
@@ -53,31 +59,31 @@ addB9SharedImagesRule = addBuiltinRule noLint run
       (Nothing, Just currentBuildId) ->
         if dependenciesChanged then
           do newBuildId <- rebuild
-             let runChanged = if newBuildId == currentBuildId
+             let changed = if newBuildId == currentBuildId
                                  then ChangedStore
                                  else ChangedRecomputeDiff
-             return (RunResult runChanged (encodeBuildId newBuildId) newBuildId)
+             return (RunResult changed (encodeBuildId newBuildId) newBuildId)
         else
           return (RunResult ChangedStore (encodeBuildId currentBuildId) currentBuildId)
 
       (Just oldBuildId, Nothing) ->
           do newBuildId <- rebuild
-             let runChanged = if oldBuildId == newBuildId
+             let changed = if oldBuildId == newBuildId
                                  then ChangedRecomputeSame
                                  else ChangedRecomputeDiff
-             return (RunResult runChanged (encodeBuildId newBuildId) newBuildId)
+             return (RunResult changed (encodeBuildId newBuildId) newBuildId)
 
       (Just oldBuildId, Just currentBuildId) ->
         do newBuildId <- if dependenciesChanged
                             then rebuild
                             else return currentBuildId
-           let runChanged = if oldBuildId == newBuildId
+           let changed = if oldBuildId == newBuildId
                                then if dependenciesChanged
                                        then ChangedRecomputeSame
                                        else ChangedNothing
                                else ChangedRecomputeDiff
 
-           return (RunResult runChanged (encodeBuildId newBuildId) newBuildId)
+           return (RunResult changed (encodeBuildId newBuildId) newBuildId)
 
     where
       decodeBuildId :: ByteString.ByteString -> SharedImageBuildId
@@ -94,6 +100,18 @@ addB9SharedImagesRule = addBuiltinRule noLint run
           [act] -> act
           _rs  -> fail $ "Multiple rules for the B9 shared image " ++ show nameQ ++ " found"
         where
-          imgMatch (CreationRule name mkImage) =
+          imgMatch (SharedImageCustomActionRule name mkImage) =
               if name == nameQ then Just mkImage else Nothing
 
+
+internalErrorSharedImageNotFound :: Monad m => SharedImageName -> m a
+internalErrorSharedImageNotFound =
+  fail
+  . printf "Internal Error: SharedImage %s not found. Please report this."
+  . show
+
+errorSharedImageNotFound :: Monad m => SharedImageName -> m a
+errorSharedImageNotFound =
+  fail
+  . printf "Error: SharedImage %s not found."
+  . show

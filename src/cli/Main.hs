@@ -8,11 +8,11 @@ import Control.Lens ((.~), (&))
 main :: IO ()
 main = do
     b9Opts <- parseCommandLine
-    result <- runB9 b9Opts
+    (_, result) <- runB9 b9Opts
     exit result
     where exit success = when (not success) (exitWith (ExitFailure 128))
 
-parseCommandLine :: IO B9RunParameters
+parseCommandLine :: IO (B9RunParameters ())
 parseCommandLine = execParser
     ( info
         (helper <*> (B9RunParameters <$> globals <*> cmds <*> buildVars))
