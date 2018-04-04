@@ -1,10 +1,11 @@
 -- | A crude, unsafe and preliminary solution to building B9 'SharedImage's
 -- from Shake.
-module B9.Shake.SharedImageRules (customSharedImageAction, needSharedImage) where
+module B9.Shake.SharedImageRules ( customSharedImageAction
+                                 , needSharedImage
+                                 , enableSharedImageRules) where
 
 import Development.Shake
 import Development.Shake.Classes
-import Development.Shake.FilePath
 import Development.Shake.Rule
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
@@ -12,34 +13,10 @@ import qualified Data.Binary as Binary
 import B9
 import B9.Shake.Actions (b9InvokationAction)
 
--- | Add a dependency to the creation of a 'SharedImage'. The build action
--- for the shared image must have been supplied by e.g. 'customSharedImageAction'.
---
-needSharedImage :: SharedImageName -> Action SharedImageBuildId
-needSharedImage = apply1
-
--- | Specify an arbitrary action that is supposed to build the given shared
--- image identified by a 'SharedImageName'.
-customSharedImageAction :: SharedImageName -> Action () -> Rules ()
-customSharedImageAction b9img customAction =
-  addUserRule $ SharedImageCustomActionRule b9img $ do
-    customAction
-    (after, success) <- b9InvokationAction (runLookupLocalSharedImage b9img)
-    unless success
-      (internalErrorSharedImageNotFound b9img)
-    maybe
-      (errorSharedImageNotFound b9img)
-      return
-      after
-
-type instance RuleResult SharedImageName = SharedImageBuildId
-
-data SharedImageCustomActionRule =
-  SharedImageCustomActionRule SharedImageName (Action SharedImageBuildId)
-  deriving Typeable
-
-addB9SharedImagesRule :: Rules ()
-addB9SharedImagesRule = addBuiltinRule noLint go
+-- | In order to use 'needSharedImage' and 'customSharedImageAction' you need to
+-- call this action before using any of the afore mentioned.
+enableSharedImageRules :: Rules ()
+enableSharedImageRules = addBuiltinRule noLint go
  where
   go :: SharedImageName
      -> Maybe ByteString.ByteString
@@ -103,6 +80,32 @@ addB9SharedImagesRule = addBuiltinRule noLint go
           imgMatch (SharedImageCustomActionRule name mkImage) =
               if name == nameQ then Just mkImage else Nothing
 
+-- | Add a dependency to the creation of a 'SharedImage'. The build action
+-- for the shared image must have been supplied by e.g. 'customSharedImageAction'.
+-- NOTE: You must call 'enableSharedImageRules' before this action works.
+needSharedImage :: SharedImageName -> Action SharedImageBuildId
+needSharedImage = apply1
+
+-- | Specify an arbitrary action that is supposed to build the given shared
+-- image identified by a 'SharedImageName'.
+-- NOTE: You must call 'enableSharedImageRules' before this action works.
+customSharedImageAction :: SharedImageName -> Action () -> Rules ()
+customSharedImageAction b9img customAction =
+  addUserRule $ SharedImageCustomActionRule b9img $ do
+    customAction
+    (after, success) <- b9InvokationAction (runLookupLocalSharedImage b9img)
+    unless success
+      (internalErrorSharedImageNotFound b9img)
+    maybe
+      (errorSharedImageNotFound b9img)
+      return
+      after
+
+type instance RuleResult SharedImageName = SharedImageBuildId
+
+data SharedImageCustomActionRule =
+  SharedImageCustomActionRule SharedImageName (Action SharedImageBuildId)
+  deriving Typeable
 
 internalErrorSharedImageNotFound :: Monad m => SharedImageName -> m a
 internalErrorSharedImageNotFound =

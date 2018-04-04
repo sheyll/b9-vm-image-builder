@@ -181,6 +181,10 @@ instance NFData SharedImage
 --   wrapper around a string that identifies a 'SharedImage'
 newtype SharedImageName = SharedImageName String deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
 
+-- | Get the String representation of a 'SharedImageName'.
+fromSharedImageName :: SharedImageName -> String
+fromSharedImageName (SharedImageName b) = b
+
 -- | The exact time that build job __started__.
 --   This is a wrapper around a string contains the build date of a
 --   'SharedImage'; this is purely additional convenience and typesafety
@@ -193,6 +197,10 @@ newtype SharedImageDate = SharedImageDate String deriving (Eq,Ord,Read,Show,Type
 --   around a string contains the build id of a 'SharedImage'; this is purely
 --   additional convenience and typesafety
 newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Show,Typeable,Data,Hashable,Binary,NFData)
+
+-- | Get the String representation of a 'SharedImageBuildId'.
+fromSharedImageBuildId :: SharedImageBuildId -> String
+fromSharedImageBuildId (SharedImageBuildId b) = b
 
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
