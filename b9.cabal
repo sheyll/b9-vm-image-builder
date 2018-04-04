@@ -93,7 +93,9 @@ library
                    , B9.QCUtil
                    , B9.Repository
                    , B9.RepositoryIO
-                   , B9.ShakeRules
+                   , B9.Shake
+                   , B9.Shake.Actions
+                   , B9.Shake.SharedImageRules
                    , B9.ShellScript
                    , B9.Vm
                    , B9.VmBuilder

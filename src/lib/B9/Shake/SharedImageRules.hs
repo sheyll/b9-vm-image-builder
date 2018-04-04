@@ -1,4 +1,6 @@
-module B9.ShakeRules () where
+-- | A crude, unsafe and preliminary solution to building B9 'SharedImage's
+-- from Shake.
+module B9.Shake.SharedImageRules (b9BuildFromB9File) where
 
 import Development.Shake
 import Development.Shake.Classes
@@ -8,50 +10,37 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.Binary as Binary
 import B9
-
--- | Run 'b9c' build
-b9BuildFromB9File :: FilePath -> FilePath -> [String] -> Action ()
-b9BuildFromB9File b9Root b9File args = do
-  let f = b9Root </> b9File
-  need [f]
-  success <- liftIO $ runB9 $ defaultB9RunParameters $ do
-    modifyInvokationConfig (appendPositionalArguments args)
-    runBuildArtifacts [f]
-  if success then
-    return ()
-   else
-    fail $ "ERROR: Build failed: " ++ f
-  -- cmd Shell (Cwd b9Root) "b9c" "-v" "build" "-f" b9File "--" b9ExtraArgs
+import B9.Shake.Actions ()
 
 -- * Rules to build and depend on b9 shared images.
-needSharedImage :: B9.SharedImageName -> Action B9.SharedImageBuildId
+needSharedImage :: SharedImageName -> Action SharedImageBuildId
 needSharedImage = apply1
 
 -- | Specify an action to build a shared image identified by its name.
-sharedImageCustom :: B9.SharedImageName -> Action a -> Rules ()
+sharedImageCustom :: SharedImageName -> Action a -> Rules ()
 sharedImageCustom b9img imgInfo f = sharedImageRuleFull b9img imgInfo f'
   where f' = fromJust <$> (f >> runLookupLocalSharedImage b9img)
 
 -- | Specify an action to build a B9 shared image.
 sharedImageRuleFull
-  :: B9.SharedImageName -> Action B9.SharedImageBuildId -> Rules ()
-sharedImageRuleFull sn@(B9.SharedImageName n) imgInfo act =
+  :: SharedImageName -> Action SharedImageBuildId -> Rules ()
+sharedImageRuleFull sn@(SharedImageName n) imgInfo act =
   addUserRule $ CreationRule sn act
 
-type instance RuleResult B9.SharedImageName = B9.SharedImageBuildId
+type instance RuleResult SharedImageName = SharedImageBuildId
 
 data CreationRule =
-  CreationRule B9.SharedImageName (Action B9.SharedImageBuildId)
+  CreationRule SharedImageName (Action SharedImageBuildId)
   deriving Typeable
 
 addB9SharedImagesRule :: Rules ()
 addB9SharedImagesRule = addBuiltinRule noLint run
  where
   run
-    :: B9.SharedImageName
+    :: SharedImageName
     -> Maybe ByteString.ByteString
     -> Bool
-    -> Action (RunResult B9.SharedImageBuildId)
+    -> Action (RunResult SharedImageBuildId)
   run nameQ mSerlializedBuildId dependenciesChanged = do
     mCurrentBuildId <- runLookupLocalSharedImage nameQ
 
@@ -91,13 +80,13 @@ addB9SharedImagesRule = addBuiltinRule noLint run
            return (RunResult runChanged (encodeBuildId newBuildId) newBuildId)
 
     where
-      decodeBuildId :: ByteString.ByteString -> B9.SharedImageBuildId
+      decodeBuildId :: ByteString.ByteString -> SharedImageBuildId
       decodeBuildId = Binary.decode . LazyByteString.fromStrict
 
-      encodeBuildId :: B9.SharedImageBuildId -> ByteString.ByteString
+      encodeBuildId :: SharedImageBuildId -> ByteString.ByteString
       encodeBuildId = LazyByteString.toStrict . Binary.encode
 
-      rebuild :: Action B9.SharedImageBuildId
+      rebuild :: Action SharedImageBuildId
       rebuild = do
         rules <- getUserRules
         case userRuleMatch rules imgMatch of
