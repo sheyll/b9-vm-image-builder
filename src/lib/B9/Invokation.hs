@@ -1,76 +1,85 @@
-module B9.Invokation ( B9CustomConfig(..)
-                     , B9Invokation()
+module B9.Invokation ( B9Invokation()
                      , invokeB9
-                     , getInvokationConfig
+                     , invokeB9_
+                     , doAfterConfiguration
+                     , overrideB9ConfigPath
                      , modifyInvokationConfig
-                     , askInvokationConfigParser
-                     , askInvokationConfigPath) where
+                     , modifyPermanentConfig) where
 
 import B9.B9Config
-import B9.ConfigUtils
-import qualified B9.LibVirtLXC as LibVirtLXC
+import Data.ConfigFile.B9Extras
 import Control.Monad.IO.Class
-import Control.Monad.RWS
+import Control.Monad.State
+import Control.Monad.Reader
+import Control.Lens
 import Data.Semigroup as Sem
+import Data.Maybe (fromMaybe)
 import Text.Printf ( printf )
 
--- | Parameters controlling the execution of every build command.
-data B9CustomConfig = B9CustomConfig
-  { customB9ConfigPath :: Maybe SystemPath
-  , customB9Config     :: B9Config
-  }
+-- | A monad encapsulating all configuration adaptions happening before any actual
+-- build actions are performed. Use 'invokeB9' to execute these things.
+-- Inside the 'B9Invokation' monad you can influence and inspect the b9
+-- configuration, the permanent, as well as the transient.
+newtype B9Invokation a = B9Inv {runB9Invokation :: StateT InternalState IO a}
+  deriving (MonadState InternalState, Monad, Applicative, Functor, MonadIO)
 
-newtype B9Invokation a = B9Inv {runB9Invokation :: RWST (Maybe SystemPath, ConfigParser) () B9Config IO a}
-  deriving (MonadReader ConfigParser, MonadState B9Config
-            , MonadIO, Monad, Applicative, Functor)
+-- | Internal state of the 'B9Invokation'
+data InternalState = IS { _initialConfigOverride   :: B9ConfigOverride
+                        , _permanentB9ConfigUpdate :: Maybe (ConfigParser -> Either CPError ConfigParser)
+                        , _buildAction             :: ReaderT B9Config IO Bool
+                        }
 
--- | Merge 'B9CustomConfig' with the configuration from the main b9 config
--- file. If the file does not exists, a new config file with the given
--- configuration will be written. The return value is a parser for the config
--- file. Returning the raw config file parser allows modules unkown to
--- 'B9.B9Config' to add their own values to the shared config file.
-initConfigFile :: MonadIO m => B9CustomConfig -> m ConfigParser
-initConfigFile customConfig = do
-    writeInitialB9Config b9ConfigPath
-                         (customB9Config customConfig)
-                         LibVirtLXC.setDefaultConfig
-    readB9Config (customB9ConfigPath customConfig)
+makeLenses ''InternalState
 
-invokeB9 :: B9Invokation a -> B9CustomConfig -> IO a
-invokeB9 act customConfig = do
-    cp <- initConfigFile customConfig
-    let parsedCfg' = parseB9Config cp
-    case parsedCfg' of
-        Left e -> fail (printf "B9 Failed to start: %s" e)
-        Right parsedCfg ->
-            let
-                cfg =
-                    defaultB9Config
-                        Sem.<> parsedCfg
-                        Sem.<> customB9Config customConfig
-            in
-                do
-                    (res, _, _) <- runRWST
-                        (runB9Invokation act)
-                        (customB9ConfigPath customConfig, cp)
-                        cfg
-                    return res
+initialState :: InternalState
+initialState = IS (B9ConfigOverride Nothing mempty) Nothing (return True)
 
--- | Return the current 'B9Config'.
-getInvokationConfig :: B9Invokation B9Config
-getInvokationConfig = Control.Monad.RWS.get
+-- | Run a 'B9Invokation'.
+-- If the user has no B9 config file yet, a default config file will be created.
+invokeB9 :: B9Invokation a -> IO (a, Bool)
+invokeB9 act = do
+    (a, st) <- runStateT (runB9Invokation act)
+                                    initialState
+    let cfgPath = st ^. initialConfigOverride . customB9ConfigPath
+    cp0 <- openOrCreateB9Config cfgPath
+    let cpExtErr = fmap ($ cp0) (st ^. permanentB9ConfigUpdate)
+    cpExt <- maybe (return Nothing)
+                   (either (fail . printf "Internal configuration error! Please report this: %s\n" . show)
+                           (return . Just))
+                   cpExtErr
+    let cp = fromMaybe cp0 cpExt
+    mapM_ (writeB9ConfigParser cfgPath) cpExt
+    case parseB9Config cp of
+        Left e -> fail (printf "Configuration error: %s\n" (show e))
+        Right permanentConfig ->
+            let runtimeCfg = permanentConfig Sem.<>
+                                    st ^. initialConfigOverride . customB9Config
+            in  do res <- runReaderT (st ^. buildAction) runtimeCfg
+                   return (a, res)
+
+-- | Run a 'B9Invokation' and ignore the results of the invokation monad and
+-- instead return the results of the '_buildAction'.
+-- See: 'invokeB9'
+invokeB9_ :: B9Invokation a -> IO Bool
+invokeB9_ act = snd <$> invokeB9 act
+
+-- | Add an action to be executed once the configuration has been done.
+doAfterConfiguration :: ReaderT B9Config IO Bool -> B9Invokation ()
+doAfterConfiguration action = buildAction %= (>> action)
+
+-- | Override the B9 configuration path
+overrideB9ConfigPath :: SystemPath -> B9Invokation ()
+overrideB9ConfigPath p = initialConfigOverride . customB9ConfigPath .= Just p
 
 -- | Modify the current 'B9Config'. The modifications are not reflected in the
 -- config file or the 'ConfigParser' returned by 'askInvokationConfigParser'.
 modifyInvokationConfig :: (B9Config -> B9Config) -> B9Invokation ()
-modifyInvokationConfig = Control.Monad.RWS.modify
+modifyInvokationConfig f = initialConfigOverride . customB9Config %= f
 
--- | Return the 'ConfigParser' that contains represents the initial
--- configuration file contents as well as the custom configuration changes
--- from 'B9CustomConfig'.
-askInvokationConfigParser :: B9Invokation ConfigParser
-askInvokationConfigParser = Control.Monad.RWS.asks snd
-
--- | Return the path to the 'B9Config' file, ''
-askInvokationConfigPath :: B9Invokation (Maybe SystemPath)
-askInvokationConfigPath = Control.Monad.RWS.asks fst
+-- | Modify the current 'B9Config'. The modifications are not reflected in the
+-- config file or the 'ConfigParser' returned by 'askInvokationConfigParser'.
+modifyPermanentConfig :: (B9Config -> B9Config) -> B9Invokation ()
+modifyPermanentConfig g =
+    permanentB9ConfigUpdate %= go
+    where go Nothing = go (Just return)
+          go (Just f) = Just (\cp -> f cp >>= modifyConfigParser g)

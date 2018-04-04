@@ -10,7 +10,7 @@ module B9.RepositoryIO (repoSearch
 
 import B9.Repository
 import B9.B9Monad
-import B9.ConfigUtils
+import Data.ConfigFile.B9Extras
 
 
 import Data.List

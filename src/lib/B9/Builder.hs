@@ -4,7 +4,7 @@ Highest-level build functions and and B9-re-exports.
 -}
 module B9.Builder (buildArtifacts, module X) where
 import B9.B9Monad as X
-import B9.ConfigUtils as X
+import Data.ConfigFile.B9Extras as X
 import B9.B9Config as X
 import B9.ExecEnv as X
 import B9.DiskImages as X
@@ -30,10 +30,11 @@ import Text.Show.Pretty (ppShow)
 import Control.Monad.IO.Class
 import System.Directory
 
-buildArtifacts :: ArtifactGenerator -> B9Invokation Bool
+buildArtifacts :: ArtifactGenerator -> B9Invokation ()
 buildArtifacts artifactGenerator = run $ do
   traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
   infoL "BUILDING ARTIFACTS"
   getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
   assemble artifactGenerator
   return True
+

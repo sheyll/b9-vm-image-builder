@@ -2,15 +2,8 @@ module Main where
 
 import Options.Applicative             hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
-
-import Control.Exception
-import Data.Function                   (on)
-import Data.Maybe
-import Data.Version
-import Paths_b9
-import System.Directory
-import System.IO.Error                 hiding (isDoesNotExistErrorType)
 import B9
+import Control.Lens ((.~), (&))
 
 main :: IO ()
 main = do
@@ -26,15 +19,15 @@ parseCommandLine = execParser
         (  fullDesc
         <> progDesc
                "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'"
-        <> headerDoc (Just helpHeader)
+        <> headerDoc (Just b9HelpHeader)
         )
     )
   where
-    helpHeader =
-        linebreak <> text ("B9 - a benign VM-Image build tool v. " ++ b9Version)
+    b9HelpHeader =
+        linebreak <> text ("B9 - a benign VM-Image build tool v. " ++ b9VersionString)
 
 
-globals :: Parser B9CustomConfig
+globals :: Parser B9ConfigOverride
 globals =
     toGlobalOpts
         <$> optional
@@ -112,27 +105,26 @@ globals =
         -> Bool
         -> Maybe FilePath
         -> Maybe String
-        -> B9CustomConfig
+        -> B9ConfigOverride
     toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique mRepoCache repo
         = let minLogLevel = if verbose
                   then Just LogTrace
                   else if quiet then Just LogError else Nothing
-              b9cfg' =
-                  let b9cfg = mempty { verbosity       = minLogLevel
-                                     , logFile         = logF
-                                     , profileFile     = profF
-                                     , buildDirRoot    = buildRoot
-                                     , keepTempDirs    = keep
-                                     , uniqueBuildDirs = not notUnique
-                                     , repository      = repo
-                                     }
-                  in  b9cfg { repositoryCache = Path <$> mRepoCache }
-          in  B9CustomConfig
-                  { customB9ConfigPath  = (Path <$> cfg) <|> pure defaultB9ConfigFile
-                  , customB9Config = b9cfg'
+              b9cfg  = mempty & verbosity       .~ minLogLevel
+                              & logFile         .~ logF
+                              & profileFile     .~ profF
+                              & buildDirRoot    .~ buildRoot
+                              & keepTempDirs    .~ keep
+                              & uniqueBuildDirs .~ not notUnique
+                              & repository      .~ repo
+                              & repositoryCache .~ (Path <$> mRepoCache)
+
+          in  B9ConfigOverride
+                  { _customB9ConfigPath = Path <$> cfg
+                  , _customB9Config = b9cfg
                   }
 
-cmds :: Parser BuildAction
+cmds :: Parser (B9Invokation ())
 cmds = subparser
     (  command
           "version"

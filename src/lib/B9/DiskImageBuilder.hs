@@ -43,7 +43,7 @@ import B9.Repository
 import B9.RepositoryIO
 import B9.DiskImages
 import qualified B9.PartitionTable as P
-import B9.ConfigUtils
+import Data.ConfigFile.B9Extras
 import B9.Content.StringTemplate
 
 

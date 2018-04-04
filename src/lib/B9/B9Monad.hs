@@ -7,20 +7,22 @@ current build id, the current build directory and the artifact to build.
 This module is used by the _effectful_ functions in this library.
 -}
 module B9.B9Monad
-       (B9, run, traceL, dbgL, infoL, errorL, getConfigParser, getConfig,
+       (B9, run, traceL, dbgL, infoL, errorL, getConfig,
         getBuildId, getBuildDate, getBuildDir, getExecEnvType,
         getSelectedRemoteRepo, getRemoteRepos, getRepoCache, cmd)
        where
 
 import B9.B9Config
-import B9.ConfigUtils
-import B9.Repository
 import B9.Invokation
+import B9.Repository
+--import B9.Invokation
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Control.Monad.Reader(ask)
+import Control.Lens((&), (.~))
 import qualified Data.ByteString.Char8 as B
 import Data.Functor ()
 import Data.Maybe
@@ -41,12 +43,10 @@ import Data.Conduit.Process
 data BuildState =
   BuildState {bsBuildId :: String
              ,bsBuildDate :: String
-             ,bsCfgParser :: ConfigParser
              ,bsCfg :: B9Config
              ,bsBuildDir :: FilePath
              ,bsLogFileHandle :: Maybe SysIO.Handle
              ,bsSelectedRemoteRepo :: Maybe RemoteRepo
-             ,bsRemoteRepos :: [RemoteRepo]
              ,bsRepoCache :: RepoCache
              ,bsProf :: [ProfilingEntry]
              ,bsStartTime :: UTCTime
@@ -58,57 +58,53 @@ data ProfilingEntry
              String
   deriving (Eq,Show)
 
-run :: B9 a -> B9Invokation a
-run action = do
-  cfg       <- getInvokationConfig
-  cfgParser <- askInvokationConfigParser
+run :: B9 Bool -> B9Invokation ()
+run action = doAfterConfiguration $ do
+  cfg <- ask
   liftIO $ do
     buildId <- generateBuildId
     now     <- getCurrentTime
-    withBuildDir cfg buildId (withLogFile cfg . run' cfg cfgParser buildId now)
+    withBuildDir cfg buildId (withLogFile cfg . run' cfg buildId now)
  where
   withLogFile cfg f = maybe
     (f Nothing)
     (\logf -> SysIO.withFile logf SysIO.AppendMode (f . Just))
-    (logFile cfg)
+    (_logFile cfg)
   withBuildDir cfg buildId =
     bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
-  run' cfg cfgParser buildId now buildDir logFileHandle = do
-    maybe (return ()) setCurrentDirectory (buildDirRoot cfg)
+  run' cfg  buildId now buildDir logFileHandle = do
+    maybe (return ()) setCurrentDirectory (_buildDirRoot cfg)
     -- Check repositories
     repoCache <- initRepoCache
-      (fromMaybe defaultRepositoryCache (repositoryCache cfg))
-    let remoteRepos = getConfiguredRemoteRepos cfgParser
-        buildDate   = formatTime undefined "%F-%T" now
-    remoteRepos' <- mapM (initRemoteRepo repoCache) remoteRepos
+      (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
+    let buildDate   = formatTime undefined "%F-%T" now
+    remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
     let
       ctx = BuildState buildId
                        buildDate
-                       cfgParser
-                       cfg
+                       (cfg & remoteRepos .~ remoteRepos')
                        buildDir
                        logFileHandle
                        selectedRemoteRepo
-                       remoteRepos'
                        repoCache
                        []
                        now
-                       (interactive cfg)
+                       (_interactive cfg)
       selectedRemoteRepo = do
-        sel <- repository cfg
-        lookupRemoteRepo remoteRepos sel <|> error
+        sel <- _repository cfg
+        lookupRemoteRepo remoteRepos' sel <|> error
           ( printf
             "selected remote repo '%s' not configured, valid remote repos are: '%s'"
             sel
-            (show remoteRepos)
+            (show remoteRepos')
           )
     (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
     -- Write a profiling report
-    when (isJust (profileFile cfg)) $ writeFile
-      (fromJust (profileFile cfg))
+    when (isJust (_profileFile cfg)) $ writeFile
+      (fromJust (_profileFile cfg))
       (unlines $ show <$> reverse (bsProf ctxOut))
     return r
-  createBuildDir cfg buildId = if uniqueBuildDirs cfg
+  createBuildDir cfg buildId = if _uniqueBuildDirs cfg
     then do
       let subDir = "BUILD-" ++ buildId
       buildDir <- resolveBuildDir subDir
@@ -120,14 +116,14 @@ run action = do
       createDirectoryIfMissing True buildDir
       canonicalizePath buildDir
    where
-    resolveBuildDir f = case buildDirRoot cfg of
+    resolveBuildDir f = case _buildDirRoot cfg of
       Nothing    -> return f
       Just root' -> do
         createDirectoryIfMissing True root'
         root <- canonicalizePath root'
         return $ root </> f
   removeBuildDir cfg buildDir =
-    when (uniqueBuildDirs cfg && not (keepTempDirs cfg))
+    when (_uniqueBuildDirs cfg && not (_keepTempDirs cfg))
       $ removeDirectoryRecursive buildDir
   generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
   -- Run the action build action
@@ -148,20 +144,17 @@ getBuildDate = gets bsBuildDate
 getBuildDir :: B9 FilePath
 getBuildDir = gets bsBuildDir
 
-getConfigParser :: B9 ConfigParser
-getConfigParser = gets bsCfgParser
-
 getConfig :: B9 B9Config
 getConfig = gets bsCfg
 
 getExecEnvType :: B9 ExecEnvType
-getExecEnvType = gets (execEnvType . bsCfg)
+getExecEnvType = gets (_execEnvType . bsCfg)
 
 getSelectedRemoteRepo :: B9 (Maybe RemoteRepo)
 getSelectedRemoteRepo = gets bsSelectedRemoteRepo
 
 getRemoteRepos :: B9 [RemoteRepo]
-getRemoteRepos = gets bsRemoteRepos
+getRemoteRepos = gets (_remoteRepos . bsCfg)
 
 getRepoCache :: B9 RepoCache
 getRepoCache = gets bsRepoCache
@@ -212,7 +205,7 @@ cmdWithStdIn toStdOut cmdStr = do
   return cpIn
  where
   getCmdLogger = do
-    lv  <- gets $ verbosity . bsCfg
+    lv  <- gets $ _verbosity . bsCfg
     lfh <- gets bsLogFileHandle
     return $ \level -> CL.mapM_ (logImpl lv lfh level . B.unpack)
   checkExitCode ExitSuccess        = traceL "COMMAND SUCCESS"
@@ -234,7 +227,7 @@ errorL = b9Log LogError
 
 b9Log :: LogLevel -> String -> B9 ()
 b9Log level msg = do
-  lv  <- gets $ verbosity . bsCfg
+  lv  <- gets $ _verbosity . bsCfg
   lfh <- gets bsLogFileHandle
   modify $ \ctx -> ctx { bsProf = LogEvent level msg : bsProf ctx }
   B9 $ liftIO $ logImpl lv lfh level msg

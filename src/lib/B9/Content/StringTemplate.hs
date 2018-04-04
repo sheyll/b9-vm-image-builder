@@ -29,7 +29,7 @@ import           Test.QuickCheck
 import           Text.Printf
 import           Text.Show.Pretty (ppShow)
 
-import           B9.ConfigUtils
+import           Data.ConfigFile.B9Extras
 
 import           B9.QCUtil
 -- | A wrapper around a file path and a flag indicating if template variable

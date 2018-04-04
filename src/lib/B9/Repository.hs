@@ -3,56 +3,25 @@ pushed to/from remote locations via rsync+ssh. B9 also maintains a local cache;
 the whole thing is supposed to be build-server-safe, that means no two builds
 shall interfere with each other. This is accomplished by refraining from
 automatic cache updates from/to remote repositories.-}
-module B9.Repository (RemoteRepo(..)
-                     ,remoteRepoRepoId
-                     ,RepoCache(..)
-                     ,SshPrivKey(..)
-                     ,SshRemoteHost(..)
-                     ,SshRemoteUser(..)
-                     ,initRepoCache
+module B9.Repository (initRepoCache
                      ,initRemoteRepo
                      ,cleanRemoteRepo
                      ,remoteRepoCheckSshPrivKey
                      ,remoteRepoCacheDir
                      ,localRepoDir
-                     ,writeRemoteRepoConfig
-                     ,getConfiguredRemoteRepos
-                     ,lookupRemoteRepo) where
+                     ,lookupRemoteRepo
+                     ,module X) where
 
 import Control.Monad
 import Control.Monad.IO.Class
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Data.Data
-import Data.List
-import Data.ConfigFile
 import Text.Printf
 import System.FilePath
 import System.Directory
-import B9.ConfigUtils
-
-newtype RepoCache = RepoCache FilePath
-  deriving (Read, Show, Typeable, Data)
-
-data RemoteRepo = RemoteRepo String
-                             FilePath
-                             SshPrivKey
-                             SshRemoteHost
-                             SshRemoteUser
-  deriving (Read, Show, Typeable, Data)
-
-remoteRepoRepoId :: RemoteRepo -> String
-remoteRepoRepoId (RemoteRepo repoId _ _ _ _) = repoId
-
-newtype SshPrivKey = SshPrivKey FilePath
-  deriving (Read, Show, Typeable, Data)
-
-newtype SshRemoteHost = SshRemoteHost (String,Int)
-  deriving (Read, Show, Typeable, Data)
-
-newtype SshRemoteUser = SshRemoteUser String
-  deriving (Read, Show, Typeable, Data)
+import B9.B9Config.Repository as X
+import Data.ConfigFile.B9Extras
 
 -- | Initialize the local repository cache directory.
 initRepoCache :: MonadIO m => SystemPath -> m RepoCache
@@ -118,64 +87,8 @@ localRepoDir :: RepoCache  -- ^ The repository cache directory
 localRepoDir (RepoCache cacheDir) =
   cacheDir </> "local-repo"
 
--- | Persist a repo to a configuration file.
-writeRemoteRepoConfig :: RemoteRepo
-                      -> ConfigParser
-                      -> Either CPError ConfigParser
-writeRemoteRepoConfig repo cpIn = cpWithRepo
-  where section = repoId ++ repoSectionSuffix
-        (RemoteRepo repoId
-                    remoteRootDir
-                    (SshPrivKey keyFile)
-                    (SshRemoteHost (host,port))
-                    (SshRemoteUser user)) = repo
-        cpWithRepo = do cp1 <- add_section cpIn section
-                        cp2 <- set cp1 section repoRemotePathK remoteRootDir
-                        cp3 <- set cp2 section repoRemoteSshKeyK keyFile
-                        cp4 <- set cp3 section repoRemoteSshHostK host
-                        cp5 <- setshow cp4 section repoRemoteSshPortK port
-                        set cp5 section repoRemoteSshUserK user
-
--- | Load a repository from a configuration file that has been written by
--- 'writeRepositoryToB9Config'.
+-- | Select the first 'RemoteRepo' with a given @repoId@.
 lookupRemoteRepo :: [RemoteRepo] -> String -> Maybe RemoteRepo
 lookupRemoteRepo repos repoId = lookup repoId repoIdRepoPairs
   where repoIdRepoPairs = map (\r@(RemoteRepo rid _ _ _ _) -> (rid,r)) repos
 
-getConfiguredRemoteRepos :: ConfigParser -> [RemoteRepo]
-getConfiguredRemoteRepos cp = map parseRepoSection repoSections
-  where
-    repoSections =
-          filter (repoSectionSuffix `isSuffixOf`) (sections cp)
-    parseRepoSection section =
-      case parseResult of
-        Left e -> error ("Error while parsing repo section \""
-                         ++ section ++ "\": " ++ show e)
-        Right r -> r
-      where
-        getsec :: Get_C a =>  OptionSpec -> Either CPError a
-        getsec = get cp section
-        parseResult =
-          RemoteRepo repoId
-            <$> getsec repoRemotePathK
-            <*> (SshPrivKey <$> getsec repoRemoteSshKeyK)
-            <*> (SshRemoteHost <$> ((,) <$> getsec repoRemoteSshHostK
-                                        <*> getsec repoRemoteSshPortK))
-            <*> (SshRemoteUser <$> getsec repoRemoteSshUserK)
-          where
-            repoId = let prefixLen = length section - suffixLen
-                         suffixLen = length repoSectionSuffix
-                         in take prefixLen section
-
-repoSectionSuffix :: String
-repoSectionSuffix = "-repo"
-repoRemotePathK :: String
-repoRemotePathK = "remote_path"
-repoRemoteSshKeyK :: String
-repoRemoteSshKeyK = "ssh_priv_key_file"
-repoRemoteSshHostK :: String
-repoRemoteSshHostK = "ssh_remote_host"
-repoRemoteSshPortK :: String
-repoRemoteSshPortK = "ssh_remote_port"
-repoRemoteSshUserK :: String
-repoRemoteSshUserK = "ssh_remote_user"

@@ -1,4 +1,4 @@
-module B9.ShakeRule () where
+module B9.ShakeRules () where
 
 import Development.Shake
 import Development.Shake.Classes
@@ -7,18 +7,20 @@ import Development.Shake.Rule
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.Binary as Binary
-import qualified B9
+import B9
 
 -- | Run 'b9c' build
 b9BuildFromB9File :: FilePath -> FilePath -> [String] -> Action ()
 b9BuildFromB9File b9Root b9File args = do
-  need [b9Root </> b9File]
-  runB9
-    (defaultB9RunParameters $ do
-        modifyInvokationConfig
-                (appendPositionalArguments args)
-        modify
-        runBuildArtifacts)
+  let f = b9Root </> b9File
+  need [f]
+  success <- liftIO $ runB9 $ defaultB9RunParameters $ do
+    modifyInvokationConfig (appendPositionalArguments args)
+    runBuildArtifacts [f]
+  if success then
+    return ()
+   else
+    fail $ "ERROR: Build failed: " ++ f
   -- cmd Shell (Cwd b9Root) "b9c" "-v" "build" "-f" b9File "--" b9ExtraArgs
 
 -- * Rules to build and depend on b9 shared images.

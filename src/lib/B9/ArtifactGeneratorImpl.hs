@@ -9,7 +9,7 @@ import B9.B9Config
 import B9.VmBuilder
 import B9.Vm
 import B9.DiskImageBuilder
-import B9.ConfigUtils hiding (tell)
+import Data.ConfigFile.B9Extras hiding (tell)
 import B9.Content.StringTemplate
 import B9.Content.Generator
 import B9.Content.AST
@@ -17,6 +17,7 @@ import B9.Content.AST
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
+import Control.Lens (view)
 import Data.Data
 import Data.Generics.Schemes
 import Data.Generics.Aliases
@@ -50,7 +51,7 @@ getArtifactOutputFiles g =
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
 assemble artGen = do
-  b9cfgEnvVars <- envVars <$> getConfig
+  b9cfgEnvVars <- view envVars <$> getConfig
   buildId      <- getBuildId
   buildDate    <- getBuildDate
   case evalArtifactGenerator buildId buildDate b9cfgEnvVars artGen of
@@ -273,7 +274,6 @@ generateSourceTo instanceDir (SG env sgSource p to) = do
   liftIO (B.writeFile toAbs result)
   sgChangePerm toAbs p
 
-
 sgReadSourceFile :: [(String, String)] -> SourceFile -> B9 B.ByteString
 sgReadSourceFile env = withEnvironment env . readTemplateFile
 
@@ -298,7 +298,6 @@ data SGSource = SGFiles [SourceFile]
 data SGPerm = SGSetPerm (Int, Int, Int)
             | KeepPerm
   deriving (Read, Show, Typeable, Data, Eq)
-
 
 sgGetFroms :: SourceGenerator -> [SourceFile]
 sgGetFroms (SG _ (SGFiles fs) _ _) = fs

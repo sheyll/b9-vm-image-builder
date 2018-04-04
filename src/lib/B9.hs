@@ -11,14 +11,30 @@
 
 -}
 
-module B9 (configure, b9Version, b9VersionString
-          , B9RunParameters(..),runB9,defaultB9RunParameters
-
+module B9 ( b9Version, b9VersionString
+          , B9RunParameters(..)
+          , runB9
+          , defaultB9RunParameters
+          , runShowVersion
+          , runBuildArtifacts
+          , runFormatBuildFiles
+          , runPush
+          , runPull
+          , runRun
+          , runGcLocalRepoCache
+          , runGcRemoteRepoCache
+          , runListSharedImages
+          , runAddRepo
+          , runLookupLocalSharedImage
           , module X) where
 import Control.Applicative as X
 import Control.Monad as X
 import Control.Monad.IO.Class as X
+import Control.Exception(throwIO, catch)
+import System.IO.Error (isDoesNotExistError)
+import System.Directory (removeFile)
 import Data.Monoid as X
+import Data.IORef
 import Data.List as X
 import Data.Maybe as X
 import Text.Show.Pretty as X (ppShow)
@@ -30,8 +46,8 @@ import Data.Version as X
 import B9.Builder as X
 import B9.Invokation as X
 import Paths_b9 (version)
-import qualified B9.LibVirtLXC as LibVirtLXC
 import Data.Function (on)
+import Control.Lens as Lens ((^.), over, (.~), (%~), set)
 
 -- | Return the cabal package version of the B9 library.
 b9Version :: Version
@@ -42,93 +58,92 @@ b9Version = version
 b9VersionString :: String
 b9VersionString = showVersion version
 
--- | A data structure that contains the `B9Invokation Bool`
+-- | A data structure that contains the `B9Invokation`
 -- as well as build parameters.
 data B9RunParameters =
   B9RunParameters
-            B9CustomConfig
-            (B9Invokation Bool)
+            B9ConfigOverride
+            (B9Invokation ())
             BuildVariables
 
 -- | Run a b9 build.
 -- Return `True` if the build was successful.
 runB9 :: B9RunParameters -> IO Bool
-runB9 (B9RunParameters globalOpts action vars) = do
-  let cfgWithArgs = cfgCli { envVars = envVars cfgCli ++ vars }
-      cfgCli      = customB9Config globalOpts
-      cfgFile     = customB9ConfigPath globalOpts
-  cp <- configure cfgFile cfgCli
-  action cfgFile cp cfgWithArgs
+runB9 (B9RunParameters overrides action vars) = do
+  invokeB9_ $ do
+    modifyInvokationConfig
+      (over envVars (++ vars) . const (overrides ^. customB9Config))
+    mapM_ overrideB9ConfigPath (overrides ^. customB9ConfigPath)
+    action
 
-defaultB9RunParameters :: B9Invokation Bool -> B9RunParameters
+defaultB9RunParameters :: B9Invokation () -> B9RunParameters
 defaultB9RunParameters ba =
-  B9RunParameters (B9CustomConfig mempty mempty) ba mempty
+  B9RunParameters (B9ConfigOverride Nothing mempty) ba mempty
 
-runShowVersion :: MonadIO m => m Bool
-runShowVersion = do
-  liftIO $ putStrLn b9Version
+runShowVersion :: B9Invokation ()
+runShowVersion = doAfterConfiguration $ do
+  liftIO $ putStrLn b9VersionString
   return True
 
-runBuildArtifacts :: [FilePath] -> B9Invokation Bool
+runBuildArtifacts :: [FilePath] -> B9Invokation ()
 runBuildArtifacts buildFiles = do
   generators <- mapM consult buildFiles
   buildArtifacts (mconcat generators)
 
-runFormatBuildFiles :: MonadIO m => [FilePath] -> m Bool
-runFormatBuildFiles buildFiles = do
+runFormatBuildFiles :: [FilePath] -> B9Invokation ()
+runFormatBuildFiles buildFiles = doAfterConfiguration $ liftIO $ do
   generators <- mapM consult buildFiles
   let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
   putStrLn `mapM` (generatorsFormatted)
   (uncurry writeFile) `mapM` (buildFiles `zip` generatorsFormatted)
   return True
 
-runPush :: SharedImageName -> B9Invokation Bool
+runPush :: SharedImageName -> B9Invokation ()
 runPush name = do
-    modifyInvokationConfig (\conf -> conf {keepTempDirs = False})
-    conf <- getInvokationConfig
-    run
-      ( if not (isJust (repository conf))
-        then do
-          errorL
-            "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
-          return False
-        else do
-          pushSharedImageLatestVersion name
-          return True
-      )
+  modifyInvokationConfig (keepTempDirs .~ False)
+  run $ do
+    conf <- getConfig
+    if not (isJust (conf ^. repository))
+      then do
+        errorL
+          "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
+        return False
+      else do
+        pushSharedImageLatestVersion name
+        return True
 
-runPull :: Maybe SharedImageName -> B9Invokation Bool
+
+runPull :: Maybe SharedImageName -> B9Invokation ()
 runPull mName = do
-  modifyInvokationConfig (\conf -> conf {keepTempDirs = False})
+  modifyInvokationConfig (keepTempDirs .~ False)
   run (pullRemoteRepos >> maybePullImage)
- where
-  maybePullImage = maybe (return True) pullLatestImage mName
+  where maybePullImage = maybe (return True) pullLatestImage mName
 
-runRun :: SharedImageName -> [String] -> B9Invokation Bool
+runRun :: SharedImageName -> [String] -> B9Invokation ()
 runRun (SharedImageName name) cmdAndArgs = do
-  modifyInvokationConfig (\conf -> conf { keepTempDirs = False
-                                        , interactive = True })
+  modifyInvokationConfig
+    (Lens.set keepTempDirs False . Lens.set interactive True)
   buildArtifacts runCmdAndArgs
  where
-    runCmdAndArgs = Artifact
-      (IID ("run-" ++ name))
-      ( VmImages
-        [ImageTarget Transient (From name KeepSize) (MountPoint "/")]
-        ( VmScript X86_64
-                   [SharedDirectory "." (MountPoint "/mnt/CWD")]
-                   (Run (head cmdAndArgs') (tail cmdAndArgs'))
-        )
+  runCmdAndArgs = Artifact
+    (IID ("run-" ++ name))
+    ( VmImages
+      [ImageTarget Transient (From name KeepSize) (MountPoint "/")]
+      ( VmScript X86_64
+                 [SharedDirectory "." (MountPoint "/mnt/CWD")]
+                 (Run (head cmdAndArgs') (tail cmdAndArgs'))
       )
-      where
-        cmdAndArgs' = if null cmdAndArgs then ["/usr/bin/zsh"] else cmdAndArgs
+    )
+   where
+    cmdAndArgs' = if null cmdAndArgs then ["/usr/bin/zsh"] else cmdAndArgs
 
 
-runGcLocalRepoCache :: B9Invokation Bool
-runGcLocalRepoCache _cfgFile cp conf = do
-  modifyInvokationConfig (\conf -> conf {keepTempDirs = False})
+runGcLocalRepoCache :: B9Invokation ()
+runGcLocalRepoCache = do
+  modifyInvokationConfig (keepTempDirs .~ False)
   impl
  where
-  impl  = run $ do
+  impl = run $ do
     toDelete <- (obsoleteSharedmages . map snd)
       <$> lookupSharedImages (== Cache) (const True)
     imgDir <- getSharedImagesCacheDir
@@ -154,18 +169,18 @@ runGcLocalRepoCache _cfgFile cp conf = do
     handleExists e | isDoesNotExistError e = return ()
                    | otherwise             = throwIO e
 
-runGcRemoteRepoCache :: B9Invokation Bool
+runGcRemoteRepoCache :: B9Invokation ()
 runGcRemoteRepoCache = do
-  modifyInvokationConfig (\conf -> conf {keepTempDirs = False})
+  modifyInvokationConfig (keepTempDirs .~ False)
   run $ do
     repos <- getSelectedRepos
     cache <- getRepoCache
     mapM_ (cleanRemoteRepo cache) repos
     return True
 
-runListSharedImages :: B9Invokation Bool
-runListSharedImages _cfgFile = do
-  modifyInvokationConfig (\conf -> conf {keepTempDirs = False})
+runListSharedImages :: B9Invokation ()
+runListSharedImages = do
+  modifyInvokationConfig (keepTempDirs .~ False)
   run $ do
     remoteRepo <- getSelectedRemoteRepo
     let repoPred = maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
@@ -191,31 +206,33 @@ runListSharedImages _cfgFile = do
     return True
 
 
-runAddRepo :: RemoteRepo -> B9Invokation Bool
+runAddRepo :: RemoteRepo -> B9Invokation ()
 runAddRepo repo = do
   repo' <- remoteRepoCheckSshPrivKey repo
-  cp <- askInvokationConfigParser
-  case writeRemoteRepoConfig repo' cp of
-    Left er -> error
-      ( printf
-        "Failed to add remote repo '%s' to b9 configuration. The error was: \"%s\"."
-        (show repo)
-        (show er)
-      )
-    Right cpWithRepo -> writeB9Config cfgFile cpWithRepo
-  return True
+  modifyPermanentConfig
+    (  remoteRepos
+    %~ ( mappend [repo']
+       . filter ((== remoteRepoRepoId repo') . remoteRepoRepoId)
+       )
+    )
 
 runLookupLocalSharedImage
   :: SharedImageName -> B9Invokation (Maybe SharedImageBuildId)
-runLookupLocalSharedImage n = run go
+runLookupLocalSharedImage n = do
+  ref <- liftIO (newIORef Nothing)
+  run (go ref)
+  liftIO (readIORef ref)
  where
-  go =
-    extractNewestImageFromResults
-      <$> lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
+  go ref = do
+    res <-
+      extractNewestImageFromResults
+        <$> lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
+    liftIO $ writeIORef ref res
+    return True
    where
     extractNewestImageFromResults =
-      listToMaybe . map getBuildId . take 1 . reverse . map snd
-      where
-        getBuildId (SharedImage _ _ i _ _) = i
+      listToMaybe . map toBuildId . take 1 . reverse . map snd
+        where toBuildId (SharedImage _ _ i _ _) = i
     isAvailableOnLocalHost = (Cache ==)
     hasTheDesiredName (SharedImage n' _ _ _ _) = n == n'
+

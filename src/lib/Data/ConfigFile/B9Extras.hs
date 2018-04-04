@@ -1,25 +1,25 @@
 {-# Language DeriveDataTypeable #-}
 {-| Extensions to 'Data.ConfigFile' and utility functions for dealing with
     configuration in general and reading/writing files. -}
-module B9.ConfigUtils ( allOn
-                      , lastOn
-                      , SystemPath (..)
-                      , resolve
-                      , ensureDir
-                      , readIniFile
-                      , getOptionM
-                      , getOption
-                      , getOptionOr
-                      , IniFileException(..)
-                      , module Data.ConfigFile
-                      , UUID (..)
-                      , randomUUID
-                      , tell
-                      , consult
-                      , getDirectoryFiles
-                      , maybeConsult
-                      , maybeConsultSystemPath
-                      ) where
+module Data.ConfigFile.B9Extras ( allOn
+                                , lastOn
+                                , SystemPath (..)
+                                , resolve
+                                , ensureDir
+                                , readIniFile
+                                , getOptionM
+                                , getOption
+                                , getOptionOr
+                                , IniFileException(..)
+                                , module Data.ConfigFile
+                                , UUID (..)
+                                , randomUUID
+                                , tell
+                                , consult
+                                , getDirectoryFiles
+                                , maybeConsult
+                                , maybeConsultSystemPath
+                                ) where
 
 import Data.Monoid
 import Data.Function ( on )
@@ -114,11 +114,12 @@ instance Exception IniFileException
 
 readIniFile :: MonadIO m => SystemPath -> m ConfigParser
 readIniFile cfgFile' = do
-  cfgFile <- resolve cfgFile'
-  cp' <- liftIO $ readfile emptyCP cfgFile
-  case cp' of
-    Left e   -> liftIO $ throwIO (IniFileException cfgFile e)
-    Right cp -> return cp
+  cfgFilePath <- resolve cfgFile'
+  liftIO $ do
+    res <- readfile emptyCP cfgFilePath
+    case res of
+      Left e -> throwIO (IniFileException cfgFilePath e)
+      Right cp -> return cp
 
 getOption :: (Get_C a, Monoid a) => ConfigParser -> SectionSpec -> OptionSpec -> a
 getOption cp sec key = either (const mempty) id $ get cp sec key
