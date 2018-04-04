@@ -15,7 +15,6 @@ module B9.B9Monad
 import B9.B9Config
 import B9.Invokation
 import B9.Repository
---import B9.Invokation
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad
@@ -208,9 +207,10 @@ cmdWithStdIn toStdOut cmdStr = do
     lv  <- gets $ _verbosity . bsCfg
     lfh <- gets bsLogFileHandle
     return $ \level -> CL.mapM_ (logImpl lv lfh level . B.unpack)
-  checkExitCode ExitSuccess        = traceL "COMMAND SUCCESS"
+  checkExitCode ExitSuccess        =
+    traceL $ printf "COMMAND '%s' exited with exit code: 0" cmdStr
   checkExitCode ec@(ExitFailure e) = do
-    errorL $ printf "COMMAND '%s' FAILED: %i!" cmdStr e
+    errorL $ printf "COMMAND '%s' exited with exit code: %i" cmdStr e
     liftIO $ exitWith ec
 
 traceL :: String -> B9 ()
