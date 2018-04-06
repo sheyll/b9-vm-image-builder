@@ -8,7 +8,7 @@ import B9
 -- | Convert a 'B9Invokation' action into a Shake 'Action'.
 b9InvokationAction :: B9Invokation a () -> Action a
 b9InvokationAction invokationAction = do
-    mres <- liftIO (runB9 (defaultB9RunParameters invokationAction))
+    mres <- liftIO (invokeB9 invokationAction)
     maybe (fail "ERROR: Internal error while invoking a b9 action!") return mres
 
 -- | An action that does the equivalent of

@@ -1,16 +1,31 @@
-module Main where
+module Main(main) where
 
 import Options.Applicative             hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
 import B9
-import Control.Lens ((.~), (&))
+import Control.Lens ((.~), (&), over, (^.))
 
 main :: IO ()
 main = do
     b9Opts <- parseCommandLine
-    result <- runB9 b9Opts
+    result <- invokeB9 (applyB9RunParameters b9Opts)
     exit (maybe False (const True) result)
     where exit success = when (not success) (exitWith (ExitFailure 128))
+
+-- | A data structure that contains the `B9Invokation`
+-- as well as build parameters.
+data B9RunParameters a =
+  B9RunParameters
+            B9ConfigOverride
+            (B9Invokation a ())
+            BuildVariables
+
+applyB9RunParameters :: B9RunParameters a -> B9Invokation a ()
+applyB9RunParameters (B9RunParameters overrides action vars) = do
+    modifyInvokationConfig
+      (over envVars (++ vars) . const (overrides ^. customB9Config))
+    mapM_ overrideB9ConfigPath (overrides ^. customB9ConfigPath)
+    action
 
 parseCommandLine :: IO (B9RunParameters ())
 parseCommandLine = execParser
