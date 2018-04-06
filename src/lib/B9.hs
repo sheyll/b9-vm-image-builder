@@ -34,7 +34,6 @@ import Control.Exception(throwIO, catch)
 import System.IO.Error (isDoesNotExistError)
 import System.Directory (removeFile)
 import Data.Monoid as X
-import Data.IORef
 import Data.List as X
 import Data.Maybe as X
 import Text.Show.Pretty as X (ppShow)
@@ -63,12 +62,12 @@ b9VersionString = showVersion version
 data B9RunParameters a =
   B9RunParameters
             B9ConfigOverride
-            (B9Invokation a)
+            (B9Invokation a ())
             BuildVariables
 
 -- | Run a b9 build.
 -- Return `True` if the build was successful.
-runB9 :: B9RunParameters a -> IO (a, Bool)
+runB9 :: B9RunParameters a -> IO (Maybe a)
 runB9 (B9RunParameters overrides action vars) = do
   invokeB9 $ do
     modifyInvokationConfig
@@ -76,32 +75,32 @@ runB9 (B9RunParameters overrides action vars) = do
     mapM_ overrideB9ConfigPath (overrides ^. customB9ConfigPath)
     action
 
-defaultB9RunParameters :: B9Invokation a -> B9RunParameters a
+defaultB9RunParameters :: B9Invokation a () -> B9RunParameters a
 defaultB9RunParameters ba =
   B9RunParameters (B9ConfigOverride Nothing mempty) ba mempty
 
-runShowVersion :: B9Invokation ()
-runShowVersion = doAfterConfiguration $ do
+runShowVersion :: B9Invokation Bool ()
+runShowVersion = doAfterConfiguration $ const $ do
   liftIO $ putStrLn b9VersionString
   return True
 
-runBuildArtifacts :: [FilePath] -> B9Invokation ()
+runBuildArtifacts :: [FilePath] -> B9Invokation String ()
 runBuildArtifacts buildFiles = do
   generators <- mapM consult buildFiles
   buildArtifacts (mconcat generators)
 
-runFormatBuildFiles :: [FilePath] -> B9Invokation ()
-runFormatBuildFiles buildFiles = doAfterConfiguration $ liftIO $ do
+runFormatBuildFiles :: [FilePath] -> B9Invokation Bool ()
+runFormatBuildFiles buildFiles = doAfterConfiguration $ const $ liftIO $ do
   generators <- mapM consult buildFiles
   let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
   putStrLn `mapM` (generatorsFormatted)
   (uncurry writeFile) `mapM` (buildFiles `zip` generatorsFormatted)
   return True
 
-runPush :: SharedImageName -> B9Invokation ()
+runPush :: SharedImageName -> B9Invokation Bool ()
 runPush name = do
   modifyInvokationConfig (keepTempDirs .~ False)
-  run $ do
+  run $ const $ do
     conf <- getConfig
     if not (isJust (conf ^. repository))
       then do
@@ -113,13 +112,13 @@ runPush name = do
         return True
 
 
-runPull :: Maybe SharedImageName -> B9Invokation ()
+runPull :: Maybe SharedImageName -> B9Invokation Bool ()
 runPull mName = do
   modifyInvokationConfig (keepTempDirs .~ False)
-  run (pullRemoteRepos >> maybePullImage)
+  run (const (pullRemoteRepos >> maybePullImage))
   where maybePullImage = maybe (return True) pullLatestImage mName
 
-runRun :: SharedImageName -> [String] -> B9Invokation ()
+runRun :: SharedImageName -> [String] -> B9Invokation String ()
 runRun (SharedImageName name) cmdAndArgs = do
   modifyInvokationConfig
     (Lens.set keepTempDirs False . Lens.set interactive True)
@@ -138,12 +137,12 @@ runRun (SharedImageName name) cmdAndArgs = do
     cmdAndArgs' = if null cmdAndArgs then ["/usr/bin/zsh"] else cmdAndArgs
 
 
-runGcLocalRepoCache :: B9Invokation ()
+runGcLocalRepoCache :: B9Invokation Bool ()
 runGcLocalRepoCache = do
   modifyInvokationConfig (keepTempDirs .~ False)
   impl
  where
-  impl = run $ do
+  impl = run $ const $ do
     toDelete <- (obsoleteSharedmages . map snd)
       <$> lookupSharedImages (== Cache) (const True)
     imgDir <- getSharedImagesCacheDir
@@ -169,19 +168,19 @@ runGcLocalRepoCache = do
     handleExists e | isDoesNotExistError e = return ()
                    | otherwise             = throwIO e
 
-runGcRemoteRepoCache :: B9Invokation ()
+runGcRemoteRepoCache :: B9Invokation Bool ()
 runGcRemoteRepoCache = do
   modifyInvokationConfig (keepTempDirs .~ False)
-  run $ do
+  run $ const $ do
     repos <- getSelectedRepos
     cache <- getRepoCache
     mapM_ (cleanRemoteRepo cache) repos
     return True
 
-runListSharedImages :: B9Invokation ()
+runListSharedImages :: B9Invokation [SharedImage] ()
 runListSharedImages = do
   modifyInvokationConfig (keepTempDirs .~ False)
-  run $ do
+  run $ const $ do
     remoteRepo <- getSelectedRemoteRepo
     let repoPred = maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
     allRepos <- getRemoteRepos
@@ -203,10 +202,10 @@ runListSharedImages = do
       else liftIO $ do
         putStrLn ""
         putStrLn $ prettyPrintSharedImages $ map snd imgs
-    return True
+    return $ map snd imgs
 
 
-runAddRepo :: RemoteRepo -> B9Invokation ()
+runAddRepo :: RemoteRepo -> B9Invokation Bool ()
 runAddRepo repo = do
   repo' <- remoteRepoCheckSshPrivKey repo
   modifyPermanentConfig
@@ -217,22 +216,18 @@ runAddRepo repo = do
     )
 
 runLookupLocalSharedImage
-  :: SharedImageName -> B9Invokation (Maybe SharedImageBuildId)
-runLookupLocalSharedImage n = do
-  ref <- liftIO (newIORef Nothing)
-  run (go ref)
-  liftIO (readIORef ref)
+  :: SharedImageName -> B9Invokation (Maybe SharedImageBuildId) ()
+runLookupLocalSharedImage n = run $ const $ do
+  traceL (printf "Searching for cached image: %s" (show n))
+  imgs <- lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
+  traceL "Candidate images: "
+  traceL (printf "%s\n" (prettyPrintSharedImages (map snd imgs)))
+  let res = extractNewestImageFromResults imgs
+  traceL (printf "Returning result: %s" (show res))
+  return res
  where
-  go ref = do
-    res <-
-      extractNewestImageFromResults
-        <$> lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
-    liftIO $ writeIORef ref res
-    return True
-   where
-    extractNewestImageFromResults =
-      listToMaybe . map toBuildId . take 1 . reverse . map snd
-        where toBuildId (SharedImage _ _ i _ _) = i
-    isAvailableOnLocalHost = (Cache ==)
-    hasTheDesiredName (SharedImage n' _ _ _ _) = n == n'
-
+  extractNewestImageFromResults =
+    listToMaybe . map toBuildId . take 1 . reverse . map snd
+    where toBuildId (SharedImage _ _ i _ _) = i
+  isAvailableOnLocalHost = (Cache ==)
+  hasTheDesiredName (SharedImage n' _ _ _ _) = n == n'

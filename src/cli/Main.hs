@@ -8,8 +8,8 @@ import Control.Lens ((.~), (&))
 main :: IO ()
 main = do
     b9Opts <- parseCommandLine
-    (_, result) <- runB9 b9Opts
-    exit result
+    result <- runB9 b9Opts
+    exit (maybe False (const True) result)
     where exit success = when (not success) (exitWith (ExitFailure 128))
 
 parseCommandLine :: IO (B9RunParameters ())
@@ -124,23 +124,23 @@ globals =
                   , _customB9Config = b9cfg
                   }
 
-cmds :: Parser (B9Invokation ())
+cmds :: Parser (B9Invokation () ())
 cmds = subparser
     (  command
           "version"
-          ( info (pure runShowVersion)
+          ( info (pure (ignoreActionResults runShowVersion))
                  (progDesc "Show program version and exit.")
           )
     <> command
            "build"
            ( info
-               (runBuildArtifacts <$> buildFileParser)
+               (ignoreActionResults . runBuildArtifacts <$> buildFileParser)
                (progDesc "Merge all build file and generate all artifacts.")
            )
     <> command
            "run"
            ( info
-               (runRun <$> sharedImageNameParser <*> many (strArgument idm))
+               (ignoreActionResults <$> (runRun <$> sharedImageNameParser <*> many (strArgument idm)))
                ( progDesc
                    "Run a command on the lastest version of the specified shared image. All modifications are lost on exit."
                )
@@ -148,7 +148,7 @@ cmds = subparser
     <> command
            "push"
            ( info
-               (runPush <$> sharedImageNameParser)
+               (ignoreActionResults . runPush <$> sharedImageNameParser)
                ( progDesc
                    "Push the lastest shared image from cache to the selected  remote repository."
                )
@@ -156,7 +156,7 @@ cmds = subparser
     <> command
            "pull"
            ( info
-               (runPull <$> optional sharedImageNameParser)
+               (ignoreActionResults . runPull <$> optional sharedImageNameParser)
                ( progDesc
                    "Either pull shared image meta data from all repositories, or only from just a selected one. If additionally the name of a shared images was specified, pull the newest version from either the selected repo, or from the repo with the most recent version."
                )
@@ -164,7 +164,7 @@ cmds = subparser
     <> command
            "clean-local"
            ( info
-               (pure runGcLocalRepoCache)
+               (pure (ignoreActionResults runGcLocalRepoCache))
                ( progDesc
                    "Remove old versions of shared images from the local cache."
                )
@@ -172,22 +172,22 @@ cmds = subparser
     <> command
            "clean-remote"
            ( info
-               (pure runGcRemoteRepoCache)
+               (pure (ignoreActionResults runGcRemoteRepoCache))
                ( progDesc
                    "Remove cached meta-data of a remote repository. If no '-r' is given, clean the meta data of ALL remote repositories."
                )
            )
     <> command
            "list"
-           (info (pure runListSharedImages) (progDesc "List shared images."))
+           (info (pure (ignoreActionResults runListSharedImages)) (progDesc "List shared images."))
     <> command
            "add-repo"
-           ( info (runAddRepo <$> remoteRepoParser)
+           ( info (ignoreActionResults . runAddRepo <$> remoteRepoParser)
                   (progDesc "Add a remote repo.")
            )
     <> command
            "reformat"
-           ( info (runFormatBuildFiles <$> buildFileParser)
+           ( info (ignoreActionResults . runFormatBuildFiles <$> buildFileParser)
                   (progDesc "Re-Format all build files.")
            )
     )

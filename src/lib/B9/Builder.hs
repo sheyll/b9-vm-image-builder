@@ -30,11 +30,12 @@ import Text.Show.Pretty (ppShow)
 import Control.Monad.IO.Class
 import System.Directory
 
-buildArtifacts :: ArtifactGenerator -> B9Invokation ()
-buildArtifacts artifactGenerator = run $ do
+-- | Execute an 'ArtifactGenerator' and return a 'B9Invokation' that returns
+-- the build id obtained by 'getBuildId'.
+buildArtifacts :: ArtifactGenerator -> B9Invokation String ()
+buildArtifacts artifactGenerator = run $ const $ do
   traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
   infoL "BUILDING ARTIFACTS"
   getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
   assemble artifactGenerator
-  return True
-
+  getBuildId

@@ -57,13 +57,14 @@ data ProfilingEntry
              String
   deriving (Eq,Show)
 
-run :: B9 Bool -> B9Invokation ()
-run action = doAfterConfiguration $ do
+run :: (Maybe a -> B9 a) -> B9Invokation a ()
+run actionFunction = doAfterConfiguration $ \previousResult -> do
   cfg <- ask
   liftIO $ do
     buildId <- generateBuildId
     now     <- getCurrentTime
-    withBuildDir cfg buildId (withLogFile cfg . run' cfg buildId now)
+    let action = actionFunction previousResult
+    withBuildDir cfg buildId (withLogFile cfg . runImpl action cfg buildId now)
  where
   withLogFile cfg f = maybe
     (f Nothing)
@@ -71,12 +72,12 @@ run action = doAfterConfiguration $ do
     (_logFile cfg)
   withBuildDir cfg buildId =
     bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
-  run' cfg  buildId now buildDir logFileHandle = do
+  runImpl action cfg buildId now buildDir logFileHandle = do
     maybe (return ()) setCurrentDirectory (_buildDirRoot cfg)
     -- Check repositories
     repoCache <- initRepoCache
       (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
-    let buildDate   = formatTime undefined "%F-%T" now
+    let buildDate = formatTime undefined "%F-%T" now
     remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
     let
       ctx = BuildState buildId
@@ -97,7 +98,7 @@ run action = doAfterConfiguration $ do
             sel
             (show remoteRepos')
           )
-    (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
+    (r, ctxOut) <- runStateT (runB9 (wrappedAction action)) ctx
     -- Write a profiling report
     when (isJust (_profileFile cfg)) $ writeFile
       (fromJust (_profileFile cfg))
@@ -126,7 +127,7 @@ run action = doAfterConfiguration $ do
       $ removeDirectoryRecursive buildDir
   generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
   -- Run the action build action
-  wrappedAction   = do
+  wrappedAction action = do
     startTime <- gets bsStartTime
     r         <- action
     now       <- liftIO getCurrentTime
@@ -134,7 +135,7 @@ run action = doAfterConfiguration $ do
     infoL (printf "DURATION: %s" duration)
     return r
 
-getBuildId :: B9 FilePath
+getBuildId :: B9 String
 getBuildId = gets bsBuildId
 
 getBuildDate :: B9 String
@@ -207,7 +208,7 @@ cmdWithStdIn toStdOut cmdStr = do
     lv  <- gets $ _verbosity . bsCfg
     lfh <- gets bsLogFileHandle
     return $ \level -> CL.mapM_ (logImpl lv lfh level . B.unpack)
-  checkExitCode ExitSuccess        =
+  checkExitCode ExitSuccess =
     traceL $ printf "COMMAND '%s' exited with exit code: 0" cmdStr
   checkExitCode ec@(ExitFailure e) = do
     errorL $ printf "COMMAND '%s' exited with exit code: %i" cmdStr e
@@ -266,6 +267,12 @@ instance MonadIO B9 where
        let durMS = IoActionDuration (stop `diffUTCTime` start)
        modify $ \ctx -> ctx {bsProf = durMS : bsProf ctx}
        return res
+
+
+
+
+
+
 
 
 
