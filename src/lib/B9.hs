@@ -39,11 +39,30 @@ import System.FilePath as X
         (takeDirectory, takeFileName, replaceExtension, (</>), (<.>))
 import Text.Printf as X (printf)
 import Data.Version as X
-import B9.Builder as X
+import B9.B9Monad as X
+import Data.ConfigFile.B9Extras as X
+import B9.B9Config as X
+import B9.ExecEnv as X
+import B9.DiskImages as X
+import B9.DiskImageBuilder as X
 import B9.Invokation as X
+import B9.ShellScript as X
+import B9.Repository as X
+import B9.RepositoryIO as X
+import B9.ArtifactGenerator as X
+import B9.ArtifactGeneratorImpl as X
+import B9.Vm as X
+import B9.VmBuilder as X
+import B9.QCUtil as X
+import B9.Content.AST as X
+import B9.Content.StringTemplate as X
+import B9.Content.ErlTerms as X
+import B9.Content.ErlangPropList as X
+import B9.Content.YamlObject as X
+import B9.Content.Generator as X
 import Paths_b9 (version)
 import Data.Function (on)
-import Control.Lens as Lens ((^.), over, (.~), (%~), set)
+import Control.Lens as Lens ((^.), (.~), (%~), set)
 
 -- | Return the cabal package version of the B9 library.
 b9Version :: Version

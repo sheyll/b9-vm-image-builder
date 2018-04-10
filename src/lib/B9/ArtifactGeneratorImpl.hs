@@ -6,6 +6,7 @@ module B9.ArtifactGeneratorImpl where
 import B9.ArtifactGenerator
 import B9.B9Monad
 import B9.B9Config
+import B9.Invokation
 import B9.VmBuilder
 import B9.Vm
 import B9.DiskImageBuilder
@@ -32,6 +33,16 @@ import System.FilePath
 import System.Directory
 import Text.Printf
 import Text.Show.Pretty (ppShow)
+
+-- | Execute an 'ArtifactGenerator' and return a 'B9Invokation' that returns
+-- the build id obtained by 'getBuildId'.
+buildArtifacts :: ArtifactGenerator -> B9Invokation String ()
+buildArtifacts artifactGenerator = run $ const $ do
+  traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
+  infoL "BUILDING ARTIFACTS"
+  getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
+  assemble artifactGenerator
+  getBuildId
 
 -- | Return a list of relative paths for the /local/ files to be generated
 -- by the ArtifactGenerator. This excludes 'Shared' and Transient image targets.
