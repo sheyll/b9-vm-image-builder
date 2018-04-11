@@ -17,8 +17,20 @@ module B9.B9Config ( B9Config(..)
                    , libVirtLXCConfigs
                    , remoteRepos
                    , B9ConfigOverride(..)
+                   , noB9ConfigOverride
+                   , B9ConfigAction()
+                   , execB9ConfigAction
+                   , invokeB9
+                   , askRuntimeConfig
+                   , localRuntimeConfig
+                   , modifyPermanentConfig
                    , customB9Config
                    , customB9ConfigPath
+                   , overrideB9ConfigPath
+                   , overrideB9Config
+                   , overrideWorkingDirectory
+                   , overrideVerbosity
+                   , overrideKeepBuildDirs
                    , defaultB9ConfigFile
                    , defaultRepositoryCache
                    , defaultB9Config
@@ -38,16 +50,22 @@ module B9.B9Config ( B9Config(..)
 import Data.Maybe (fromMaybe)
 import Control.Exception
 import Data.Function (on)
+import Control.Lens as Lens (makeLenses, (^.), (.~), over, set)
+import Control.Monad ((>=>))
 import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Control.Monad.Writer
 import System.Directory
 import qualified Data.Semigroup as Sem
-import Data.Monoid
 import Data.List (partition, sortBy)
 import Data.ConfigFile.B9Extras
+          ( SystemPath(..), ConfigParser, CPError, Get_C
+          , OptionSpec, resolve, ensureDir, readIniFile
+          , IniFileException(..), merge, to_string
+          , add_section, emptyCP, setshow, get)
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Config.Repository as X
-import Control.Lens.TH
-import Control.Monad ((>=>))
+import Text.Printf (printf)
 
 type BuildVariables = [(String,String)]
 
@@ -98,10 +116,115 @@ instance Monoid B9Config where
 data B9ConfigOverride = B9ConfigOverride
   { _customB9ConfigPath :: Maybe SystemPath
   , _customB9Config     :: B9Config
-  }
+  } deriving Show
+
+-- | An empty default 'B9ConfigOverride' value, that will neither apply any
+-- additional 'B9Config' nor change the path of the configuration file.
+noB9ConfigOverride :: B9ConfigOverride
+noB9ConfigOverride = B9ConfigOverride Nothing mempty
 
 makeLenses ''B9Config
 makeLenses ''B9ConfigOverride
+
+-- | Convenience utility to override the B9 configuration file path.
+overrideB9ConfigPath :: SystemPath -> B9ConfigOverride -> B9ConfigOverride
+overrideB9ConfigPath p = customB9ConfigPath .~ Just p
+
+-- | Modify the runtime configuration.
+overrideB9Config
+  :: (B9Config -> B9Config) -> B9ConfigOverride -> B9ConfigOverride
+overrideB9Config = over customB9Config
+
+-- | Define the current working directory to be used when building.
+overrideWorkingDirectory :: FilePath -> B9ConfigOverride -> B9ConfigOverride
+overrideWorkingDirectory p = customB9Config . buildDirRoot .~ Just p
+
+
+-- | Overwrite the 'verbosity' settings in the configuration with those given.
+overrideVerbosity :: LogLevel -> B9ConfigOverride -> B9ConfigOverride
+overrideVerbosity = overrideB9Config . Lens.set verbosity . Just
+
+-- | Overwrite the 'keepTempDirs' flag in the configuration with those given.
+overrideKeepBuildDirs :: Bool -> B9ConfigOverride -> B9ConfigOverride
+overrideKeepBuildDirs = overrideB9Config . Lens.set keepTempDirs
+
+-- | A monad that gives access to the (transient) 'B9Config' to be used to
+-- _runtime_ with 'askRuntimeConfig' or 'localRuntimeConfig', and that allows
+-- to write permanent 'B9Config' changes back to the configuration file using
+-- 'modifyPermanentConfig'. Execute a 'B9ConfigAction' by invoking
+-- either 'invokeB9' (which is simple) or 'execB9ConfigAction'.
+newtype B9ConfigAction m a = B9ConfigAction
+  { runB9ConfigAction :: ReaderT B9Config (WriterT [Endo B9Config] m) a}
+  deriving ( Functor, Applicative, Monad, MonadIO )
+
+-- | Return the runtime configuration, that should be the configuration merged
+-- from all configuration sources. This is the configuration to be used during
+-- a VM image build.
+askRuntimeConfig :: Monad m => B9ConfigAction m B9Config
+askRuntimeConfig = B9ConfigAction ask
+
+-- | Run an action with an updated runtime configuration.
+localRuntimeConfig
+  :: Monad m
+  => (B9Config -> B9Config)
+  -> B9ConfigAction m a
+  -> B9ConfigAction m a
+localRuntimeConfig f = B9ConfigAction . local f . runB9ConfigAction
+
+-- | Add a modification to the permanent configuration file.
+modifyPermanentConfig :: Monad m => Endo B9Config -> B9ConfigAction m ()
+modifyPermanentConfig f = B9ConfigAction (tell [f])
+
+-- | Execute a 'B9ConfigAction'.
+-- It will take a 'B9ConfigOverride' as input. The 'B9Config' in that value is
+-- treated as the _runtime_ configuration, and the '_customConfigPath' is used
+-- as the alternative location of the configuration file.
+-- The configuration file is read from either the path in '_customB9ConfigPath'
+-- or from 'defaultB9ConfigFile'.
+-- Every modification done via 'modifyPermanentConfig' is applied to
+-- the **contents** of the configuration file
+-- and written back to that file, note that these changes are ONLY reflected
+-- in the configuration file and **not** in the _runtime configuration_.
+--
+-- See also 'invokeB9', which does not need the 'B9ConfigOverride' parameter.
+execB9ConfigAction :: MonadIO m => B9ConfigAction m a -> B9ConfigOverride -> m a
+execB9ConfigAction act cfg = do
+  let cfgPath = cfg ^. customB9ConfigPath
+  cp <- openOrCreateB9Config cfgPath
+
+  case parseB9Config cp of
+    Left e -> do
+      fail
+        ( printf "Internal configuration load error, please report this: %s\n"
+                 (show e)
+        )
+
+    Right permanentConfig -> do
+      let runtimeCfg = permanentConfig Sem.<> (cfg ^. customB9Config)
+      (res, permanentB9ConfigUpdates) <- runWriterT
+        (runReaderT (runB9ConfigAction act) runtimeCfg)
+
+      let cpExtErr = modifyConfigParser cp <$> permanentB9ConfigUpdate
+          permanentB9ConfigUpdate = if null permanentB9ConfigUpdates
+            then Nothing
+            else Just (mconcat permanentB9ConfigUpdates)
+      cpExt <- maybe
+        (return Nothing)
+        ( either
+          ( fail
+          . printf
+              "Internal configuration update error! Please report this: %s\n"
+          . show
+          )
+          (return . Just)
+        )
+        cpExtErr
+      mapM_ (writeB9ConfigParser (cfg ^. customB9ConfigPath)) cpExt
+      return res
+-- | Run a 'B9ConfigAction' using 'noB9ConfigOverride'.
+-- See 'execB9ConfigAction' for more details.
+invokeB9 :: MonadIO m => B9ConfigAction m a -> m a
+invokeB9 = flip execB9ConfigAction noB9ConfigOverride
 
 -- | Open the configuration file that contains the 'B9Config'.
 -- If the configuration does not exist, write a default configuration file,
@@ -115,7 +238,7 @@ openOrCreateB9Config cfgPath = do
     if exists
       then readIniFile (Path cfgFile)
       else
-        let res = b9ConfigToConfigParser defaultB9Config emptyCP
+        let res = b9ConfigToConfigParser defaultB9Config
         in  case res of
               Left  e  -> throwIO (IniFileException cfgFile e)
               Right cp -> writeFile cfgFile (to_string cp) >> return cp
@@ -176,17 +299,16 @@ cfgFileSection = "global"
 
 -- | Parse a 'B9Config', modify it, and merge it back to the given 'ConfigParser'.
 modifyConfigParser
-  :: (B9Config -> B9Config) -> ConfigParser -> Either CPError ConfigParser
-modifyConfigParser f cp = do
+  :: ConfigParser -> Endo B9Config -> Either CPError ConfigParser
+modifyConfigParser cp f = do
   cfg <- parseB9Config cp
-  cp2 <- b9ConfigToConfigParser (f cfg) emptyCP
+  cp2 <- b9ConfigToConfigParser (appEndo f cfg)
   return (merge cp cp2)
 
--- | Append a config file section for the 'B9Config' to a 'ConfigParser'.
-b9ConfigToConfigParser
-  :: B9Config -> ConfigParser -> Either CPError ConfigParser
-b9ConfigToConfigParser c cp = do
-  cp1 <- add_section cp cfgFileSection
+-- | Append a config file section for the 'B9Config' to an empty 'ConfigParser'.
+b9ConfigToConfigParser :: B9Config -> Either CPError ConfigParser
+b9ConfigToConfigParser c = do
+  cp1 <- add_section emptyCP cfgFileSection
   cp2 <- setshow cp1 cfgFileSection verbosityK (_verbosity c)
   cp3 <- setshow cp2 cfgFileSection logFileK (_logFile c)
   cp4 <- setshow cp3 cfgFileSection buildDirRootK (_buildDirRoot c)

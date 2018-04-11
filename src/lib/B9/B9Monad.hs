@@ -7,7 +7,7 @@ current build id, the current build directory and the artifact to build.
 This module is used by the _effectful_ functions in this library.
 -}
 module B9.B9Monad
-       (B9, run, traceL, dbgL, infoL, errorL, getConfig,
+       (B9, run, traceL, dbgL, infoL, errorL, errorExitL, getConfig,
         getBuildId, getBuildDate, getBuildDir, getExecEnvType,
         getSelectedRemoteRepo, getRemoteRepos, getRepoCache, cmd)
        where
@@ -19,7 +19,6 @@ import Control.Exception (bracket)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Monad.Reader(ReaderT, ask)
 import Control.Lens((&), (.~))
 import qualified Data.ByteString.Char8 as B
 import Data.Functor ()
@@ -57,9 +56,9 @@ data ProfilingEntry
   deriving (Eq,Show)
 
 
-run :: B9 a -> ReaderT B9Config IO a
+run :: MonadIO m => B9 a -> B9ConfigAction m a
 run action = do
-  cfg <- ask
+  cfg <- askRuntimeConfig
   liftIO $ do
     buildId <- generateBuildId
     now     <- getCurrentTime
@@ -225,6 +224,9 @@ infoL = b9Log LogInfo
 
 errorL :: String -> B9 ()
 errorL = b9Log LogError
+
+errorExitL :: String -> B9 ()
+errorExitL e = b9Log LogError e >> fail e
 
 b9Log :: LogLevel -> String -> B9 ()
 b9Log level msg = do

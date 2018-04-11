@@ -5,9 +5,10 @@ import Development.Shake
 import Development.Shake.FilePath
 import B9
 
--- | Convert a 'B9Invokation' action into a Shake 'Action'.
-b9InvokationAction :: B9Invokation -> ReaderT B9Config IO a -> Action a
-b9InvokationAction invokation act = liftIO (invokeB9 invokation act)
+-- | Convert a 'B9Invokation' action into a Shake 'Action'. This is just
+-- an alias for 'execB9ConfigAction'.
+b9InvokationAction :: B9ConfigAction Action a -> B9ConfigOverride -> Action a
+b9InvokationAction = execB9ConfigAction
 
 -- | An action that does the equivalent of
 -- @b9c build -f <b9file> -- (args !! 0) (args !! 1) ... (args !! (length args - 1))@
@@ -17,9 +18,8 @@ buildB9File :: FilePath -> FilePath -> [String] -> Action String
 buildB9File b9Root b9File args = do
     let f = b9Root </> b9File
     need [f]
-    b9InvokationAction
-        ( defaultB9Invokation
-        & runtimeInvokationConfig %~ appendPositionalArguments args
-        & overrideWorkingDirectory b9Root
+    invokeB9
+        ( localRuntimeConfig
+            (appendPositionalArguments args . (buildDirRoot .~ Just b9Root))
+            (runBuildArtifacts [f])
         )
-        (runBuildArtifacts [f])

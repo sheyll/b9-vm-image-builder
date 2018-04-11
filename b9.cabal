@@ -85,7 +85,6 @@ library
                    , B9.DiskImages
                    , B9.DSL
                    , B9.ExecEnv
-                   , B9.Invokation
                    , B9.LibVirtLXC
                    , B9.MBR
                    , B9.PartitionTable

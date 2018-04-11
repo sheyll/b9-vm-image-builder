@@ -7,33 +7,34 @@ import Control.Lens ((.~), (&), over, (^.))
 
 main :: IO ()
 main = do
-    b9Opts <- parseCommandLine
-    result <- applyB9RunParameters b9Opts
-    exit (maybe False (const True) result)
-    where exit success = when (not success) (exitWith (ExitFailure 128))
+    b9Opts  <- parseCommandLine
+    applyB9RunParameters b9Opts
+
 
 -- | A data structure that contains the `B9Invokation`
 -- as well as build parameters.
-data B9RunParameters a =
+data B9RunParameters =
   B9RunParameters
             B9ConfigOverride
-            (ReaderT B9Config IO a)
+            Cmd
             BuildVariables
 
-applyB9RunParameters :: B9RunParameters a -> IO a
+type Cmd = B9ConfigAction IO ()
+
+applyB9RunParameters :: B9RunParameters -> IO ()
 applyB9RunParameters (B9RunParameters overrides act vars) =
     let cfg =
-            defaultB9Invokation
-                &  runtimeInvokationConfig
+            noB9ConfigOverride
+                &  customB9Config
                 %~ ( over envVars (++ vars)
                    . const (overrides ^. customB9Config)
                    )
                 &  maybe id
                          overrideB9ConfigPath
                          (overrides ^. customB9ConfigPath)
-    in  invokeB9 cfg act
+    in  execB9ConfigAction act cfg
 
-parseCommandLine :: IO (B9RunParameters ())
+parseCommandLine :: IO B9RunParameters
 parseCommandLine = execParser
     ( info
         (helper <*> (B9RunParameters <$> globals <*> cmds <*> buildVars))
@@ -154,26 +155,26 @@ globals =
                   , _customB9Config     = b9cfg
                   }
 
-cmds :: Parser (ReaderT B9Config IO ())
+cmds :: Parser Cmd
 cmds = subparser
     (  command
           "version"
-          ( info (pure (runShowVersion))
+          ( info (pure runShowVersion)
                  (progDesc "Show program version and exit.")
           )
     <> command
            "build"
            ( info
-               (void (runBuildArtifacts <$> buildFileParser))
+               (void . runBuildArtifacts <$> buildFileParser)
+
                (progDesc "Merge all build file and generate all artifacts.")
            )
     <> command
            "run"
            ( info
-               ( void
-                   ( runRun <$> sharedImageNameParser <*> many
-                       (strArgument idm)
-                   )
+               (   (\x y -> void (runRun x y))
+               <$> sharedImageNameParser
+               <*> many (strArgument idm)
                )
                ( progDesc
                    "Run a command on the lastest version of the specified shared image. All modifications are lost on exit."
@@ -182,7 +183,7 @@ cmds = subparser
     <> command
            "push"
            ( info
-               (void (runPush <$> sharedImageNameParser))
+               (runPush <$> sharedImageNameParser)
                ( progDesc
                    "Push the lastest shared image from cache to the selected  remote repository."
                )
@@ -190,7 +191,7 @@ cmds = subparser
     <> command
            "pull"
            ( info
-               (void (runPull <$> optional sharedImageNameParser))
+               (runPull <$> optional sharedImageNameParser)
                ( progDesc
                    "Either pull shared image meta data from all repositories, or only from just a selected one. If additionally the name of a shared images was specified, pull the newest version from either the selected repo, or from the repo with the most recent version."
                )
@@ -206,16 +207,14 @@ cmds = subparser
     <> command
            "clean-remote"
            ( info
-               (pure (runGcRemoteRepoCache))
+               (pure runGcRemoteRepoCache)
                ( progDesc
                    "Remove cached meta-data of a remote repository. If no '-r' is given, clean the meta data of ALL remote repositories."
                )
            )
     <> command
            "list"
-           ( info (pure (runListSharedImages))
-                  (progDesc "List shared images.")
-           )
+           (info (pure (void runListSharedImages)) (progDesc "List shared images."))
     <> command
            "add-repo"
            ( info (runAddRepo <$> remoteRepoParser)
@@ -223,8 +222,9 @@ cmds = subparser
            )
     <> command
            "reformat"
-           ( info (runFormatBuildFiles <$> buildFileParser)
-                  (progDesc "Re-Format all build files.")
+           ( info
+               ( runFormatBuildFiles    <$> buildFileParser              )
+               (progDesc "Re-Format all build files.")
            )
     )
 
@@ -288,6 +288,3 @@ sharedImageNameParser =
         <*> (   SharedImageName
             <$> strArgument (help "Shared image name" <> metavar "NAME")
             )
-
-
-

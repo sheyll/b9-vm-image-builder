@@ -48,7 +48,6 @@ import B9.B9Config as X
 import B9.ExecEnv as X
 import B9.DiskImages as X
 import B9.DiskImageBuilder as X
-import B9.Invokation as X
 import B9.ShellScript as X
 import B9.Repository as X
 import B9.RepositoryIO as X
@@ -78,11 +77,17 @@ b9VersionString = showVersion version
 runShowVersion :: MonadIO m => m ()
 runShowVersion = liftIO $ putStrLn b9VersionString
 
-runBuildArtifacts :: [FilePath] -> ReaderT B9Config IO String
+-- | Execute the artifact generators defined in a list of text files.
+-- Read the text files in the list and parse them as 'ArtifactGenerator's
+-- then 'mappend' them and apply 'buildArtifacts' to them.
+runBuildArtifacts :: MonadIO m => [FilePath] -> B9ConfigAction m String
 runBuildArtifacts buildFiles = do
   generators <- mapM consult buildFiles
   run (buildArtifacts (mconcat generators))
 
+-- | Read all text files and parse them as 'ArtifactGenerator's.
+-- Then overwrite the files with their contents but _pretty printed_
+-- (i.e. formatted).
 runFormatBuildFiles :: MonadIO m => [FilePath] -> m ()
 runFormatBuildFiles buildFiles = liftIO $ do
   generators <- mapM consult buildFiles
@@ -90,25 +95,37 @@ runFormatBuildFiles buildFiles = liftIO $ do
   putStrLn `mapM` generatorsFormatted
   zipWithM_ writeFile buildFiles generatorsFormatted
 
-runPush :: SharedImageName -> ReaderT B9Config IO Bool
-runPush name = local (keepTempDirs .~ False) $ run $ do
+-- | Upload a 'SharedImageName' to the default remote repository.
+-- Note: The remote repository is specified in the 'B9Config'.
+runPush :: MonadIO m => SharedImageName -> B9ConfigAction m ()
+runPush name = localRuntimeConfig (keepTempDirs .~ False) $ run $ do
   conf <- getConfig
   if isNothing (conf ^. repository)
-    then do
-      errorL
+    then
+      errorExitL
         "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
-      return False
-    else do
+    else
       pushSharedImageLatestVersion name
-      return True
 
-runPull :: Maybe SharedImageName -> ReaderT B9Config IO Bool
-runPull mName = local (keepTempDirs .~ False)
-                      (run (pullRemoteRepos >> maybePullImage))
-  where maybePullImage = maybe (return True) pullLatestImage mName
+-- | Either pull a list of available 'SharedImageName's from the remote
+-- repository if 'Nothing' is passed as parameter, or pull the latest version
+-- of the image from the remote repository. Note: The remote repository is
+-- specified in the 'B9Config'.
+runPull :: MonadIO m => Maybe SharedImageName -> B9ConfigAction m ()
+runPull mName =
+  localRuntimeConfig (keepTempDirs .~ False)
+                     (run (pullRemoteRepos >> maybePullImage))
+  where maybePullImage =
+          mapM_ (\name -> pullLatestImage name >>= failIfFalse name) mName
+        failIfFalse _name True =
+          return ()
+        failIfFalse name False =
+          errorExitL (printf "failed to pull: %s" (show name))
 
-runRun :: SharedImageName -> [String] -> ReaderT B9Config IO String
-runRun (SharedImageName name) cmdAndArgs = local
+-- | Execute an interactive root shell in a running container from a
+-- 'SharedImageName'.
+runRun :: MonadIO m => SharedImageName -> [String] -> B9ConfigAction m String
+runRun (SharedImageName name) cmdAndArgs = localRuntimeConfig
   ((keepTempDirs .~ False) . (interactive .~ True))
   (run (buildArtifacts runCmdAndArgs))
  where
@@ -124,9 +141,9 @@ runRun (SharedImageName name) cmdAndArgs = local
    where
     cmdAndArgs' = if null cmdAndArgs then ["/usr/bin/zsh"] else cmdAndArgs
 
-
-runGcLocalRepoCache :: ReaderT B9Config IO Bool
-runGcLocalRepoCache = local (keepTempDirs .~ False) (run impl)
+-- | Delete all obsolete versions of all 'SharedImageName's.
+runGcLocalRepoCache :: MonadIO m => B9ConfigAction m ()
+runGcLocalRepoCache = localRuntimeConfig (keepTempDirs .~ False) (run impl)
  where
   impl = do
     toDelete <- obsoleteSharedmages . map snd <$> lookupSharedImages
@@ -137,14 +154,11 @@ runGcLocalRepoCache = local (keepTempDirs .~ False) (run impl)
         infoFiles     = sharedImageFileName <$> toDelete
         imgFiles      = imageFileName . sharedImageImage <$> toDelete
     if null filesToDelete
-      then liftIO $ do
-        putStrLn "\n\nNO IMAGES TO DELETE\n"
-        return True
+      then liftIO $ putStrLn "\n\nNO IMAGES TO DELETE\n"
       else liftIO $ do
         putStrLn "DELETING FILES:"
         putStrLn (unlines filesToDelete)
         mapM_ removeIfExists filesToDelete
-        return True
   obsoleteSharedmages :: [SharedImage] -> [SharedImage]
   obsoleteSharedmages =
     concatMap (tail . reverse) . filter ((> 1) . length) . groupBy
@@ -155,8 +169,10 @@ runGcLocalRepoCache = local (keepTempDirs .~ False) (run impl)
     handleExists e | isDoesNotExistError e = return ()
                    | otherwise             = throwIO e
 
-runGcRemoteRepoCache :: ReaderT B9Config IO ()
-runGcRemoteRepoCache = local
+-- | Clear the shared image cache for a remote. Note: The remote repository is
+-- specified in the 'B9Config'.
+runGcRemoteRepoCache :: MonadIO m => B9ConfigAction m ()
+runGcRemoteRepoCache = localRuntimeConfig
   (keepTempDirs .~ False)
   ( run
     ( do
@@ -166,8 +182,11 @@ runGcRemoteRepoCache = local
     )
   )
 
-runListSharedImages :: ReaderT B9Config IO [SharedImage]
-runListSharedImages = local
+-- | Print a list of shared images cached locally or remotely, if a remote
+-- repository was selected. Note: The remote repository is
+-- specified in the 'B9Config'.
+runListSharedImages :: MonadIO m => B9ConfigAction m [SharedImage]
+runListSharedImages = localRuntimeConfig
   (keepTempDirs .~ False)
   ( run
     ( do
@@ -198,21 +217,23 @@ runListSharedImages = local
     )
   )
 
-
-runAddRepo :: RemoteRepo -> ReaderT B9Config IO B9Config
+-- | Check the SSH settings for a remote repository and add it to the user wide
+-- B9 configuration file.
+runAddRepo :: MonadIO m => RemoteRepo -> B9ConfigAction m ()
 runAddRepo repo = do
   repo' <- remoteRepoCheckSshPrivKey repo
-  cfg   <- ask
-  return
-    (  cfg
-    &  remoteRepos
-    %~ ( mappend [repo']
-       . filter ((== remoteRepoRepoId repo') . remoteRepoRepoId)
-       )
+  modifyPermanentConfig
+    ( Endo
+      (  remoteRepos
+      %~ ( mappend [repo']
+         . filter ((== remoteRepoRepoId repo') . remoteRepoRepoId)
+         )
+      )
     )
 
+-- | Find the most recent version of a 'SharedImageName' in the local image cache.
 runLookupLocalSharedImage
-  :: SharedImageName -> ReaderT B9Config IO (Maybe SharedImageBuildId)
+  :: MonadIO m => SharedImageName -> B9ConfigAction m (Maybe SharedImageBuildId)
 runLookupLocalSharedImage n = run $ do
   traceL (printf "Searching for cached image: %s" (show n))
   imgs <- lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
@@ -227,6 +248,3 @@ runLookupLocalSharedImage n = run $ do
     where toBuildId (SharedImage _ _ i _ _) = i
   isAvailableOnLocalHost = (Cache ==)
   hasTheDesiredName (SharedImage n' _ _ _ _) = n == n'
-
-
-
