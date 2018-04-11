@@ -28,18 +28,17 @@ import           Test.QuickCheck
 -- | A wrapper type around yaml values with a Semigroup instance useful for
 -- combining yaml documents describing system configuration like e.g. user-data.
 data YamlObject =
-    YamlObject Data.Yaml.Value
+    YamlObject {_fromYamlObject :: Data.Yaml.Value}
     deriving (Eq,Data,Typeable,Generic)
 
 instance Hashable YamlObject
-instance Binary YamlObject
 instance NFData YamlObject
 
-instance Binary Data.Yaml.Value where
-  put = put . encode
+instance Binary YamlObject where
+  put = put . encode . _fromYamlObject
   get = do
     v <- get
-    return $ fromJust $ decode v
+    return $ YamlObject $ fromJust $ decode v
 
 instance Read YamlObject where
   readsPrec _ = readsYamlObject
