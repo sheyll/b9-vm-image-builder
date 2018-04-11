@@ -13,14 +13,13 @@ module B9.B9Monad
        where
 
 import B9.B9Config
-import B9.Invokation
 import B9.Repository
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Monad.Reader(ask)
+import Control.Monad.Reader(ReaderT, ask)
 import Control.Lens((&), (.~))
 import qualified Data.ByteString.Char8 as B
 import Data.Functor ()
@@ -57,14 +56,14 @@ data ProfilingEntry
              String
   deriving (Eq,Show)
 
-run :: (Maybe a -> B9 a) -> B9Invokation a ()
-run actionFunction = doAfterConfiguration $ \previousResult -> do
+
+run :: B9 a -> ReaderT B9Config IO a
+run action = do
   cfg <- ask
   liftIO $ do
     buildId <- generateBuildId
     now     <- getCurrentTime
-    let action = actionFunction previousResult
-    withBuildDir cfg buildId (withLogFile cfg . runImpl action cfg buildId now)
+    withBuildDir cfg buildId (withLogFile cfg . runImpl cfg buildId now)
  where
   withLogFile cfg f = maybe
     (f Nothing)
@@ -72,7 +71,7 @@ run actionFunction = doAfterConfiguration $ \previousResult -> do
     (_logFile cfg)
   withBuildDir cfg buildId =
     bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
-  runImpl action cfg buildId now buildDir logFileHandle =
+  runImpl cfg buildId now buildDir logFileHandle =
     bracket getCurrentDirectory setCurrentDirectory $ \_ -> do
       traverse setCurrentDirectory (_buildDirRoot cfg)
       -- Check repositories
@@ -99,7 +98,7 @@ run actionFunction = doAfterConfiguration $ \previousResult -> do
               sel
               (show remoteRepos')
             )
-      (r, ctxOut) <- runStateT (runB9 (wrappedAction action)) ctx
+      (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
       -- Write a profiling report
       when (isJust (_profileFile cfg)) $ writeFile
         (fromJust (_profileFile cfg))
@@ -128,7 +127,7 @@ run actionFunction = doAfterConfiguration $ \previousResult -> do
       $ removeDirectoryRecursive buildDir
   generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
   -- Run the action build action
-  wrappedAction action = do
+  wrappedAction = do
     startTime <- gets bsStartTime
     r         <- action
     now       <- liftIO getCurrentTime

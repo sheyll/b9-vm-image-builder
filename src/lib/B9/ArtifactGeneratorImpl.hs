@@ -6,7 +6,6 @@ module B9.ArtifactGeneratorImpl where
 import B9.ArtifactGenerator
 import B9.B9Monad
 import B9.B9Config
-import B9.Invokation
 import B9.VmBuilder
 import B9.Vm
 import B9.DiskImageBuilder
@@ -14,7 +13,6 @@ import Data.ConfigFile.B9Extras hiding (tell)
 import B9.Content.StringTemplate
 import B9.Content.Generator
 import B9.Content.AST
-
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -36,8 +34,8 @@ import Text.Show.Pretty (ppShow)
 
 -- | Execute an 'ArtifactGenerator' and return a 'B9Invokation' that returns
 -- the build id obtained by 'getBuildId'.
-buildArtifacts :: ArtifactGenerator -> B9Invokation String ()
-buildArtifacts artifactGenerator = run $ const $ do
+buildArtifacts :: ArtifactGenerator -> B9 String
+buildArtifacts artifactGenerator = do
   traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
   infoL "BUILDING ARTIFACTS"
   getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow

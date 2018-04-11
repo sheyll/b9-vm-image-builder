@@ -15,8 +15,8 @@ import B9.Shake.Actions (b9InvokationAction)
 
 -- | In order to use 'needSharedImage' and 'customSharedImageAction' you need to
 -- call this action before using any of the afore mentioned.
-enableSharedImageRules :: Rules ()
-enableSharedImageRules = addBuiltinRule noLint go
+enableSharedImageRules :: B9Invokation -> Rules ()
+enableSharedImageRules b9inv = addBuiltinRule noLint go
  where
   go :: SharedImageName
      -> Maybe ByteString.ByteString
@@ -49,7 +49,7 @@ enableSharedImageRules = addBuiltinRule noLint go
               result = RunResult change newBuildIdBin newBuildId
           return result
     where
-      getImgBuildId = b9InvokationAction (runLookupLocalSharedImage nameQ)
+      getImgBuildId = b9InvokationAction b9inv (runLookupLocalSharedImage nameQ)
 
       decodeBuildId :: ByteString.ByteString -> SharedImageBuildId
       decodeBuildId = Binary.decode . LazyByteString.fromStrict
@@ -62,7 +62,7 @@ enableSharedImageRules = addBuiltinRule noLint go
         rules <- getUserRules
         case userRuleMatch rules imgMatch of
           [] -> fail $ "No rules to build B9 shared image " ++ show nameQ ++ " found"
-          [act] -> act
+          [act] -> act b9inv
           _rs  -> fail $ "Multiple rules for the B9 shared image " ++ show nameQ ++ " found"
         where
           imgMatch (SharedImageCustomActionRule name mkImage) =
@@ -81,9 +81,9 @@ customSharedImageAction :: SharedImageName -> Action () -> Rules ()
 customSharedImageAction b9img customAction =
   addUserRule (SharedImageCustomActionRule b9img customAction')
   where
-    customAction' = do
+    customAction' b9inv = do
       customAction
-      mCurrentBuildId <- b9InvokationAction (runLookupLocalSharedImage b9img)
+      mCurrentBuildId <- b9InvokationAction b9inv (runLookupLocalSharedImage b9img)
       putLoud (printf "Finished custom action, for %s, build-id is: %s"
                       (show b9img) (show mCurrentBuildId))
       maybe (errorSharedImageNotFound b9img) return mCurrentBuildId
@@ -92,7 +92,7 @@ customSharedImageAction b9img customAction =
 type instance RuleResult SharedImageName = SharedImageBuildId
 
 data SharedImageCustomActionRule =
-  SharedImageCustomActionRule SharedImageName (Action SharedImageBuildId)
+  SharedImageCustomActionRule SharedImageName (B9Invokation -> Action SharedImageBuildId)
   deriving Typeable
 
 errorSharedImageNotFound :: Monad m => SharedImageName -> m a

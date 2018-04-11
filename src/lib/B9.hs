@@ -25,14 +25,17 @@ module B9 ( b9Version, b9VersionString
           , runLookupLocalSharedImage
           , module X) where
 import Control.Applicative as X
+import Control.Exception(throwIO, catch)
 import Control.Monad as X
 import Control.Monad.IO.Class as X
-import Control.Exception(throwIO, catch)
+import Control.Monad.Reader as X (ReaderT, local, ask)
+import Control.Lens as X (Lens, (^.), (.~), (%~), (&))
 import System.IO.Error (isDoesNotExistError)
 import System.Directory (removeFile)
-import Data.Monoid as X
+import Data.Function (on)
 import Data.List as X
 import Data.Maybe as X
+import Data.Monoid as X
 import Text.Show.Pretty as X (ppShow)
 import System.Exit as X (exitWith, ExitCode(..))
 import System.FilePath as X
@@ -61,8 +64,6 @@ import B9.Content.ErlangPropList as X
 import B9.Content.YamlObject as X
 import B9.Content.Generator as X
 import Paths_b9 (version)
-import Data.Function (on)
-import Control.Lens as Lens ((^.), (.~), (%~), set)
 
 -- | Return the cabal package version of the B9 library.
 b9Version :: Version
@@ -73,50 +74,43 @@ b9Version = version
 b9VersionString :: String
 b9VersionString = showVersion version
 
-runShowVersion :: B9Invokation Bool ()
-runShowVersion = doAfterConfiguration $ const $ do
-  liftIO $ putStrLn b9VersionString
-  return True
+-- | Just print the 'b9VersionString'
+runShowVersion :: MonadIO m => m ()
+runShowVersion = liftIO $ putStrLn b9VersionString
 
-runBuildArtifacts :: [FilePath] -> B9Invokation String ()
+runBuildArtifacts :: [FilePath] -> ReaderT B9Config IO String
 runBuildArtifacts buildFiles = do
   generators <- mapM consult buildFiles
-  buildArtifacts (mconcat generators)
+  run (buildArtifacts (mconcat generators))
 
-runFormatBuildFiles :: [FilePath] -> B9Invokation Bool ()
-runFormatBuildFiles buildFiles = doAfterConfiguration $ const $ liftIO $ do
+runFormatBuildFiles :: MonadIO m => [FilePath] -> m ()
+runFormatBuildFiles buildFiles = liftIO $ do
   generators <- mapM consult buildFiles
   let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
-  putStrLn `mapM` (generatorsFormatted)
-  (uncurry writeFile) `mapM` (buildFiles `zip` generatorsFormatted)
-  return True
+  putStrLn `mapM` generatorsFormatted
+  zipWithM_ writeFile buildFiles generatorsFormatted
 
-runPush :: SharedImageName -> B9Invokation Bool ()
-runPush name = do
-  modifyInvokationConfig (keepTempDirs .~ False)
-  run $ const $ do
-    conf <- getConfig
-    if not (isJust (conf ^. repository))
-      then do
-        errorL
-          "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
-        return False
-      else do
-        pushSharedImageLatestVersion name
-        return True
+runPush :: SharedImageName -> ReaderT B9Config IO Bool
+runPush name = local (keepTempDirs .~ False) $ run $ do
+  conf <- getConfig
+  if isNothing (conf ^. repository)
+    then do
+      errorL
+        "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
+      return False
+    else do
+      pushSharedImageLatestVersion name
+      return True
 
-
-runPull :: Maybe SharedImageName -> B9Invokation Bool ()
-runPull mName = do
-  modifyInvokationConfig (keepTempDirs .~ False)
-  run (const (pullRemoteRepos >> maybePullImage))
+runPull :: Maybe SharedImageName -> ReaderT B9Config IO Bool
+runPull mName = local (keepTempDirs .~ False)
+                      (run (pullRemoteRepos >> maybePullImage))
   where maybePullImage = maybe (return True) pullLatestImage mName
 
-runRun :: SharedImageName -> [String] -> B9Invokation String ()
-runRun (SharedImageName name) cmdAndArgs = do
-  modifyInvokationConfig
-    (Lens.set keepTempDirs False . Lens.set interactive True)
-  buildArtifacts runCmdAndArgs
+runRun :: SharedImageName -> [String] -> ReaderT B9Config IO String
+runRun (SharedImageName name) cmdAndArgs = local
+  ((keepTempDirs .~ False) . (interactive .~ True))
+  (run (buildArtifacts runCmdAndArgs))
  where
   runCmdAndArgs = Artifact
     (IID ("run-" ++ name))
@@ -131,18 +125,17 @@ runRun (SharedImageName name) cmdAndArgs = do
     cmdAndArgs' = if null cmdAndArgs then ["/usr/bin/zsh"] else cmdAndArgs
 
 
-runGcLocalRepoCache :: B9Invokation Bool ()
-runGcLocalRepoCache = do
-  modifyInvokationConfig (keepTempDirs .~ False)
-  impl
+runGcLocalRepoCache :: ReaderT B9Config IO Bool
+runGcLocalRepoCache = local (keepTempDirs .~ False) (run impl)
  where
-  impl = run $ const $ do
-    toDelete <- (obsoleteSharedmages . map snd)
-      <$> lookupSharedImages (== Cache) (const True)
+  impl = do
+    toDelete <- obsoleteSharedmages . map snd <$> lookupSharedImages
+      (== Cache)
+      (const True)
     imgDir <- getSharedImagesCacheDir
     let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
         infoFiles     = sharedImageFileName <$> toDelete
-        imgFiles      = (imageFileName . sharedImageImage) <$> toDelete
+        imgFiles      = imageFileName . sharedImageImage <$> toDelete
     if null filesToDelete
       then liftIO $ do
         putStrLn "\n\nNO IMAGES TO DELETE\n"
@@ -162,56 +155,65 @@ runGcLocalRepoCache = do
     handleExists e | isDoesNotExistError e = return ()
                    | otherwise             = throwIO e
 
-runGcRemoteRepoCache :: B9Invokation Bool ()
-runGcRemoteRepoCache = do
-  modifyInvokationConfig (keepTempDirs .~ False)
-  run $ const $ do
-    repos <- getSelectedRepos
-    cache <- getRepoCache
-    mapM_ (cleanRemoteRepo cache) repos
-    return True
+runGcRemoteRepoCache :: ReaderT B9Config IO ()
+runGcRemoteRepoCache = local
+  (keepTempDirs .~ False)
+  ( run
+    ( do
+      repos <- getSelectedRepos
+      cache <- getRepoCache
+      mapM_ (cleanRemoteRepo cache) repos
+    )
+  )
 
-runListSharedImages :: B9Invokation [SharedImage] ()
-runListSharedImages = do
-  modifyInvokationConfig (keepTempDirs .~ False)
-  run $ const $ do
-    remoteRepo <- getSelectedRemoteRepo
-    let repoPred = maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
-    allRepos <- getRemoteRepos
-    if isNothing remoteRepo
-      then liftIO $ do
-        putStrLn "Showing local shared images only."
-        putStrLn
-          $ "\nTo view the contents of a remote repo add \n\
+runListSharedImages :: ReaderT B9Config IO [SharedImage]
+runListSharedImages = local
+  (keepTempDirs .~ False)
+  ( run
+    ( do
+      remoteRepo <- getSelectedRemoteRepo
+      let repoPred = maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
+      allRepos <- getRemoteRepos
+      if isNothing remoteRepo
+        then liftIO $ do
+          putStrLn "Showing local shared images only."
+          putStrLn
+            "\nTo view the contents of a remote repo add \n\
                         \the '-r' switch with one of the remote \n\
                         \repository ids."
-      else liftIO $ putStrLn
-        ("Showing shared images on: " ++ remoteRepoRepoId (fromJust remoteRepo))
-    when (not (null allRepos)) $ liftIO $ do
-      putStrLn "\nAvailable remote repositories:"
-      mapM_ (putStrLn . (" * " ++) . remoteRepoRepoId) allRepos
-    imgs <- lookupSharedImages repoPred (const True)
-    if null imgs
-      then liftIO $ putStrLn "\n\nNO SHARED IMAGES\n"
-      else liftIO $ do
-        putStrLn ""
-        putStrLn $ prettyPrintSharedImages $ map snd imgs
-    return $ map snd imgs
+        else liftIO $ putStrLn
+          (  "Showing shared images on: "
+          ++ remoteRepoRepoId (fromJust remoteRepo)
+          )
+      unless (null allRepos) $ liftIO $ do
+        putStrLn "\nAvailable remote repositories:"
+        mapM_ (putStrLn . (" * " ++) . remoteRepoRepoId) allRepos
+      imgs <- lookupSharedImages repoPred (const True)
+      if null imgs
+        then liftIO $ putStrLn "\n\nNO SHARED IMAGES\n"
+        else liftIO $ do
+          putStrLn ""
+          putStrLn $ prettyPrintSharedImages $ map snd imgs
+      return (map snd imgs)
+    )
+  )
 
 
-runAddRepo :: RemoteRepo -> B9Invokation Bool ()
+runAddRepo :: RemoteRepo -> ReaderT B9Config IO B9Config
 runAddRepo repo = do
   repo' <- remoteRepoCheckSshPrivKey repo
-  modifyPermanentConfig
-    (  remoteRepos
+  cfg   <- ask
+  return
+    (  cfg
+    &  remoteRepos
     %~ ( mappend [repo']
        . filter ((== remoteRepoRepoId repo') . remoteRepoRepoId)
        )
     )
 
 runLookupLocalSharedImage
-  :: SharedImageName -> B9Invokation (Maybe SharedImageBuildId) ()
-runLookupLocalSharedImage n = run $ const $ do
+  :: SharedImageName -> ReaderT B9Config IO (Maybe SharedImageBuildId)
+runLookupLocalSharedImage n = run $ do
   traceL (printf "Searching for cached image: %s" (show n))
   imgs <- lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
   traceL "Candidate images: "
@@ -225,3 +227,6 @@ runLookupLocalSharedImage n = run $ const $ do
     where toBuildId (SharedImage _ _ i _ _) = i
   isAvailableOnLocalHost = (Cache ==)
   hasTheDesiredName (SharedImage n' _ _ _ _) = n == n'
+
+
+

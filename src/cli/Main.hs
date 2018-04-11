@@ -8,7 +8,7 @@ import Control.Lens ((.~), (&), over, (^.))
 main :: IO ()
 main = do
     b9Opts <- parseCommandLine
-    result <- invokeB9 (applyB9RunParameters b9Opts)
+    result <- applyB9RunParameters b9Opts
     exit (maybe False (const True) result)
     where exit success = when (not success) (exitWith (ExitFailure 128))
 
@@ -17,15 +17,21 @@ main = do
 data B9RunParameters a =
   B9RunParameters
             B9ConfigOverride
-            (B9Invokation a ())
+            (ReaderT B9Config IO a)
             BuildVariables
 
-applyB9RunParameters :: B9RunParameters a -> B9Invokation a ()
-applyB9RunParameters (B9RunParameters overrides action vars) = do
-    modifyInvokationConfig
-      (over envVars (++ vars) . const (overrides ^. customB9Config))
-    mapM_ overrideB9ConfigPath (overrides ^. customB9ConfigPath)
-    action
+applyB9RunParameters :: B9RunParameters a -> IO a
+applyB9RunParameters (B9RunParameters overrides act vars) =
+    let cfg =
+            defaultB9Invokation
+                &  runtimeInvokationConfig
+                %~ ( over envVars (++ vars)
+                   . const (overrides ^. customB9Config)
+                   )
+                &  maybe id
+                         overrideB9ConfigPath
+                         (overrides ^. customB9ConfigPath)
+    in  invokeB9 cfg act
 
 parseCommandLine :: IO (B9RunParameters ())
 parseCommandLine = execParser
@@ -38,8 +44,8 @@ parseCommandLine = execParser
         )
     )
   where
-    b9HelpHeader =
-        linebreak <> text ("B9 - a benign VM-Image build tool v. " ++ b9VersionString)
+    b9HelpHeader = linebreak
+        <> text ("B9 - a benign VM-Image build tool v. " ++ b9VersionString)
 
 
 globals :: Parser B9ConfigOverride
@@ -125,37 +131,50 @@ globals =
         = let minLogLevel = if verbose
                   then Just LogTrace
                   else if quiet then Just LogError else Nothing
-              b9cfg  = mempty & verbosity       .~ minLogLevel
-                              & logFile         .~ logF
-                              & profileFile     .~ profF
-                              & buildDirRoot    .~ buildRoot
-                              & keepTempDirs    .~ keep
-                              & uniqueBuildDirs .~ not notUnique
-                              & repository      .~ repo
-                              & repositoryCache .~ (Path <$> mRepoCache)
-
+              b9cfg =
+                  mempty
+                      &  verbosity
+                      .~ minLogLevel
+                      &  logFile
+                      .~ logF
+                      &  profileFile
+                      .~ profF
+                      &  buildDirRoot
+                      .~ buildRoot
+                      &  keepTempDirs
+                      .~ keep
+                      &  uniqueBuildDirs
+                      .~ not notUnique
+                      &  repository
+                      .~ repo
+                      &  repositoryCache
+                      .~ (Path <$> mRepoCache)
           in  B9ConfigOverride
                   { _customB9ConfigPath = Path <$> cfg
-                  , _customB9Config = b9cfg
+                  , _customB9Config     = b9cfg
                   }
 
-cmds :: Parser (B9Invokation () ())
+cmds :: Parser (ReaderT B9Config IO ())
 cmds = subparser
     (  command
           "version"
-          ( info (pure (ignoreActionResults runShowVersion))
+          ( info (pure (runShowVersion))
                  (progDesc "Show program version and exit.")
           )
     <> command
            "build"
            ( info
-               (ignoreActionResults . runBuildArtifacts <$> buildFileParser)
+               (void (runBuildArtifacts <$> buildFileParser))
                (progDesc "Merge all build file and generate all artifacts.")
            )
     <> command
            "run"
            ( info
-               (ignoreActionResults <$> (runRun <$> sharedImageNameParser <*> many (strArgument idm)))
+               ( void
+                   ( runRun <$> sharedImageNameParser <*> many
+                       (strArgument idm)
+                   )
+               )
                ( progDesc
                    "Run a command on the lastest version of the specified shared image. All modifications are lost on exit."
                )
@@ -163,7 +182,7 @@ cmds = subparser
     <> command
            "push"
            ( info
-               (ignoreActionResults . runPush <$> sharedImageNameParser)
+               (void (runPush <$> sharedImageNameParser))
                ( progDesc
                    "Push the lastest shared image from cache to the selected  remote repository."
                )
@@ -171,7 +190,7 @@ cmds = subparser
     <> command
            "pull"
            ( info
-               (ignoreActionResults . runPull <$> optional sharedImageNameParser)
+               (void (runPull <$> optional sharedImageNameParser))
                ( progDesc
                    "Either pull shared image meta data from all repositories, or only from just a selected one. If additionally the name of a shared images was specified, pull the newest version from either the selected repo, or from the repo with the most recent version."
                )
@@ -179,7 +198,7 @@ cmds = subparser
     <> command
            "clean-local"
            ( info
-               (pure (ignoreActionResults runGcLocalRepoCache))
+               (pure runGcLocalRepoCache)
                ( progDesc
                    "Remove old versions of shared images from the local cache."
                )
@@ -187,22 +206,24 @@ cmds = subparser
     <> command
            "clean-remote"
            ( info
-               (pure (ignoreActionResults runGcRemoteRepoCache))
+               (pure (runGcRemoteRepoCache))
                ( progDesc
                    "Remove cached meta-data of a remote repository. If no '-r' is given, clean the meta data of ALL remote repositories."
                )
            )
     <> command
            "list"
-           (info (pure (ignoreActionResults runListSharedImages)) (progDesc "List shared images."))
+           ( info (pure (runListSharedImages))
+                  (progDesc "List shared images.")
+           )
     <> command
            "add-repo"
-           ( info (ignoreActionResults . runAddRepo <$> remoteRepoParser)
+           ( info (runAddRepo <$> remoteRepoParser)
                   (progDesc "Add a remote repo.")
            )
     <> command
            "reformat"
-           ( info (ignoreActionResults . runFormatBuildFiles <$> buildFileParser)
+           ( info (runFormatBuildFiles <$> buildFileParser)
                   (progDesc "Re-Format all build files.")
            )
     )
@@ -267,4 +288,6 @@ sharedImageNameParser =
         <*> (   SharedImageName
             <$> strArgument (help "Shared image name" <> metavar "NAME")
             )
+
+
 
