@@ -6,7 +6,8 @@ import Development.Shake.FilePath
 import B9
 
 -- | Convert a 'B9Invokation' action into a Shake 'Action'. This is just
--- an alias for 'execB9ConfigAction'.
+-- an alias for 'execB9ConfigAction' since 'Action' is an instance of 'MonadIO'
+-- and 'execB9ConfigAction' work on any .
 b9InvokationAction :: B9ConfigAction Action a -> B9ConfigOverride -> Action a
 b9InvokationAction = execB9ConfigAction
 

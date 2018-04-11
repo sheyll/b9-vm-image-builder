@@ -11,7 +11,6 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.Binary as Binary
 import B9
-import B9.Shake.Actions (b9InvokationAction)
 
 -- | In order to use 'needSharedImage' and 'customSharedImageAction' you need to
 -- call this action before using any of the afore mentioned.
