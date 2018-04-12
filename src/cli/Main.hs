@@ -7,7 +7,7 @@ import Control.Lens ((.~), (&), over, (^.))
 
 main :: IO ()
 main = do
-    b9Opts  <- parseCommandLine
+    b9Opts <- parseCommandLine
     applyB9RunParameters b9Opts
 
 
@@ -40,7 +40,7 @@ parseCommandLine = execParser
         (helper <*> (B9RunParameters <$> globals <*> cmds <*> buildVars))
         (  fullDesc
         <> progDesc
-               "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'"
+               "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'. The current working directory is used as ${buildDirRoot} if not otherwise specified in the config file, or via the '-b' option."
         <> headerDoc (Just b9HelpHeader)
         )
     )
@@ -85,7 +85,8 @@ globals =
                 )
         <*> optional
                 ( strOption
-                    (  help "Root directory for build directories"
+                    (  help
+                          "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${buildDirRoot}."
                     <> short 'b'
                     <> long "build-root-dir"
                     <> metavar "DIRECTORY"
@@ -214,7 +215,9 @@ cmds = subparser
            )
     <> command
            "list"
-           (info (pure (void runListSharedImages)) (progDesc "List shared images."))
+           ( info (pure (void runListSharedImages))
+                  (progDesc "List shared images.")
+           )
     <> command
            "add-repo"
            ( info (runAddRepo <$> remoteRepoParser)
@@ -222,9 +225,8 @@ cmds = subparser
            )
     <> command
            "reformat"
-           ( info
-               ( runFormatBuildFiles    <$> buildFileParser              )
-               (progDesc "Re-Format all build files.")
+           ( info (runFormatBuildFiles <$> buildFileParser)
+                  (progDesc "Re-Format all build files.")
            )
     )
 

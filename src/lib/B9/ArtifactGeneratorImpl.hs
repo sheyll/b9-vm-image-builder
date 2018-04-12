@@ -65,33 +65,6 @@ assemble artGen = do
     Left  err -> error err
     Right is  -> createAssembledArtifacts is
 
-makePathsInArtifactGeneratorAbsolute :: ArtifactGenerator -> B9 ArtifactGenerator
-makePathsInArtifactGeneratorAbsolute artGen = do
-    b9cfg  <- getConfig
-    maybe (return artGen)
-          (flip makePathsInArtifactGeneratorAbsoluteTo artGen)
-          (_buildDirRoot b9cfg)
-
-makePathsInArtifactGeneratorAbsoluteTo :: MonadIO m => FilePath -> ArtifactGenerator -> m ArtifactGenerator
-makePathsInArtifactGeneratorAbsoluteTo rootDir =
-  everywhereM
-    (mkM absArtifactSource
-    `extM` absSourceFile
-    `extM` absArtifactAssembly
-    `extM` absImage)
-  where
-    mkAbs f = canonicalizePath (if isRelative f then rootDir </> f else f)
-    absSourceFile (Source c f) =
-      Source c <$> mkAbs f
-    absArtifactSource (FromDirectory to as) =
-      FromDirectory <$> mkAbs to <*> pure as
-    absArtifactSource x = pure x
-    absArtifactAssembly (CloudInit ts f) =
-      CloudInit ts <$> mkAbs f
-    absArtifactAssembly x = pure x
-    absImage (Image f t s) =
-      Image <$> mkAbs f <*> pure t <*> pure s
-
 -- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
 -- that can be built with 'createAssembledArtifacts'.
 evalArtifactGenerator

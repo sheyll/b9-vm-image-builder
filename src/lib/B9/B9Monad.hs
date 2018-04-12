@@ -19,7 +19,7 @@ import Control.Exception (bracket)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Lens((&), (.~), (^.))
+import Control.Lens((&), (.~), (^.), (%~))
 import qualified Data.ByteString.Char8 as B
 import Data.Functor ()
 import Data.Maybe
@@ -60,10 +60,16 @@ run :: MonadIO m => B9 a -> B9ConfigAction m a
 run action = do
   cfg <- askRuntimeConfig
   liftIO $ do
-    buildId <- generateBuildId
-    now     <- getCurrentTime
-    withBuildDir cfg buildId (withLogFile cfg . runImpl cfg buildId now)
+    buildId <- liftIO $ generateBuildId
+    now     <- liftIO $ getCurrentTime
+    liftIO
+      $ withBuildDir cfg buildId (withLogFile cfg . runImpl cfg buildId now)
  where
+  resolveBuildDirRoot cfg = case _buildDirRoot cfg of
+    Nothing    -> getCurrentDirectory >>= canonicalizePath
+    Just root' -> do
+      createDirectoryIfMissing True root'
+      canonicalizePath root'
   withLogFile cfg f = maybe
     (f Nothing)
     (\logf -> SysIO.withFile logf SysIO.AppendMode (f . Just))
@@ -76,19 +82,27 @@ run action = do
       (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
     let buildDate = formatTime undefined "%F-%T" now
     remoteRepos'    <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
-    buildDirRootAbs <- traverse canonicalizePath (cfg ^. buildDirRoot)
+    buildDirRootAbs <- resolveBuildDirRoot cfg
+    let finalCfg =
+          (  cfg
+          &  remoteRepos
+          .~ remoteRepos'
+          &  buildDirRoot
+          .~ Just buildDirRootAbs
+          &  envVars
+          %~ mappend [("buildDirRoot", buildDirRootAbs)]
+          )
     let
-      ctx = BuildState
-        buildId
-        buildDate
-        (cfg & remoteRepos .~ remoteRepos' & buildDirRoot .~ buildDirRootAbs)
-        buildDir
-        logFileHandle
-        selectedRemoteRepo
-        repoCache
-        []
-        now
-        (_interactive cfg)
+      ctx = BuildState buildId
+                       buildDate
+                       finalCfg
+                       buildDir
+                       logFileHandle
+                       selectedRemoteRepo
+                       repoCache
+                       []
+                       now
+                       (_interactive finalCfg)
       selectedRemoteRepo = do
         sel <- _repository cfg
         lookupRemoteRepo remoteRepos' sel <|> error
@@ -115,12 +129,9 @@ run action = do
       createDirectoryIfMissing True buildDir
       canonicalizePath buildDir
    where
-    resolveBuildDir f = case _buildDirRoot cfg of
-      Nothing    -> return f
-      Just root' -> do
-        createDirectoryIfMissing True root'
-        root <- canonicalizePath root'
-        return $ root </> f
+    resolveBuildDir f = do
+      root <- resolveBuildDirRoot cfg
+      return $ root </> f
   removeBuildDir cfg buildDir =
     when (_uniqueBuildDirs cfg && not (_keepTempDirs cfg))
       $ removeDirectoryRecursive buildDir
