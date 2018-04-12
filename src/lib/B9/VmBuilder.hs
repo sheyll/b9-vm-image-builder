@@ -58,7 +58,7 @@ createBuildImages imageTargets vmBuildSupportedImageTypes = do
       srcImg <- resolveImageSource imageSource
       let buildImg = changeImageFormat buildImgType
                                        (changeImageDirectory buildDir srcImg)
-      buildImgAbsolutePath <- liftIO (ensureAbsoluteImageDirExists buildImg)
+      buildImgAbsolutePath <- ensureAbsoluteImageDirExists buildImg
       materializeImageSource imageSource buildImg
       return buildImgAbsolutePath
 

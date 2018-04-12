@@ -47,15 +47,13 @@ buildArtifacts artifactGenerator = do
 getArtifactOutputFiles :: ArtifactGenerator -> Either String [FilePath]
 getArtifactOutputFiles g =
   concatMap getOutputs <$> evalArtifactGenerator undefined undefined [] g
-  where
-    getOutputs  (IG _ sgs a) =
-      let
-          toOutFile (AssemblyGeneratesOutputFiles fs) = fs
-          toOutFile (AssemblyCopiesSourcesToDirectory pd) =
-            let sourceFiles = sourceGeneratorOutputFile <$> sgs
-            in (pd </>) <$> sourceFiles
-
-      in getAssemblyOutput  a >>= toOutFile
+ where
+  getOutputs (IG _ sgs a) =
+    let toOutFile (AssemblyGeneratesOutputFiles fs) = fs
+        toOutFile (AssemblyCopiesSourcesToDirectory pd) =
+          let sourceFiles = sourceGeneratorOutputFile <$> sgs
+          in  (pd </>) <$> sourceFiles
+    in  getAssemblyOutput a >>= toOutFile
 
 -- | Run an artifact generator to produce the artifacts.
 assemble :: ArtifactGenerator -> B9 [AssembledArtifact]
@@ -66,6 +64,33 @@ assemble artGen = do
   case evalArtifactGenerator buildId buildDate b9cfgEnvVars artGen of
     Left  err -> error err
     Right is  -> createAssembledArtifacts is
+
+makePathsInArtifactGeneratorAbsolute :: ArtifactGenerator -> B9 ArtifactGenerator
+makePathsInArtifactGeneratorAbsolute artGen = do
+    b9cfg  <- getConfig
+    maybe (return artGen)
+          (flip makePathsInArtifactGeneratorAbsoluteTo artGen)
+          (_buildDirRoot b9cfg)
+
+makePathsInArtifactGeneratorAbsoluteTo :: MonadIO m => FilePath -> ArtifactGenerator -> m ArtifactGenerator
+makePathsInArtifactGeneratorAbsoluteTo rootDir =
+  everywhereM
+    (mkM absArtifactSource
+    `extM` absSourceFile
+    `extM` absArtifactAssembly
+    `extM` absImage)
+  where
+    mkAbs f = canonicalizePath (if isRelative f then rootDir </> f else f)
+    absSourceFile (Source c f) =
+      Source c <$> mkAbs f
+    absArtifactSource (FromDirectory to as) =
+      FromDirectory <$> mkAbs to <*> pure as
+    absArtifactSource x = pure x
+    absArtifactAssembly (CloudInit ts f) =
+      CloudInit ts <$> mkAbs f
+    absArtifactAssembly x = pure x
+    absImage (Image f t s) =
+      Image <$> mkAbs f <*> pure t <*> pure s
 
 -- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
 -- that can be built with 'createAssembledArtifacts'.
@@ -124,7 +149,7 @@ addBindings bs ce =
   in  ce { agEnv = newEnv }
 
 withXBindings :: [(String, [String])] -> CGParser () -> CGParser ()
-withXBindings bs cp = (`local`cp) `mapM_` (addBindings <$> allXBindings bs)
+withXBindings bs cp = (`local` cp) `mapM_` (addBindings <$> allXBindings bs)
  where
   allXBindings ((k, vs):rest) =
     [ (k, v) : c | v <- vs, c <- allXBindings rest ]
@@ -135,7 +160,7 @@ eachBindingSetT
   -> [String]
   -> [[String]]
   -> CGParser [[(String, String)]]
-eachBindingSetT g vars valueSets = if all ((==length vars) . length) valueSets
+eachBindingSetT g vars valueSets = if all ((== length vars) . length) valueSets
   then return (zip vars <$> valueSets)
   else cgError
     ( printf
@@ -143,7 +168,7 @@ eachBindingSetT g vars valueSets = if all ((==length vars) . length) valueSets
       (ppShow g)
       (ppShow vars)
       (length vars)
-      (ppShow (head (dropWhile ((==length vars) . length) valueSets)))
+      (ppShow (head (dropWhile ((== length vars) . length) valueSets)))
     )
 
 eachBindingSet
@@ -363,7 +388,7 @@ createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
           ensureDir t
           copyFile f t
         )
-        (((instanceDir</>) &&& (ciDir</>)) <$> files)
+        (((instanceDir </>) &&& (ciDir </>)) <$> files)
       )
     infoL (printf "CREATED CI_DIR: '%s'" (takeFileName ciDir))
     return (CloudInitTarget CI_DIR ciDir)
@@ -395,7 +420,7 @@ createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
     let vfatFile = outPath <.> "vfat"
         tmpFile  = buildDir </> takeFileName vfatFile
     ensureDir tmpFile
-    files <- map (instanceDir</>) <$> getDirectoryFiles instanceDir
+    files <- map (instanceDir </>) <$> getDirectoryFiles instanceDir
     dbgL (printf "creating cloud init vfat image '%s'" tmpFile)
     traceL (printf "adding '%s'" (show files))
     cmd (printf "truncate --size 2M '%s'" tmpFile)
@@ -409,6 +434,3 @@ createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
     liftIO (copyFile tmpFile vfatFile)
     infoL (printf "CREATED CI_VFAT IMAGE: '%s'" (takeFileName vfatFile))
     return (CloudInitTarget CI_ISO vfatFile)
-
-
-

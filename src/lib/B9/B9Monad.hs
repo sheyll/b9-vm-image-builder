@@ -19,7 +19,7 @@ import Control.Exception (bracket)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Lens((&), (.~))
+import Control.Lens((&), (.~), (^.))
 import qualified Data.ByteString.Char8 as B
 import Data.Functor ()
 import Data.Maybe
@@ -70,39 +70,39 @@ run action = do
     (_logFile cfg)
   withBuildDir cfg buildId =
     bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
-  runImpl cfg buildId now buildDir logFileHandle =
-    bracket getCurrentDirectory setCurrentDirectory $ \_ -> do
-      traverse setCurrentDirectory (_buildDirRoot cfg)
+  runImpl cfg buildId now buildDir logFileHandle = do
       -- Check repositories
-      repoCache <- initRepoCache
-        (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
-      let buildDate = formatTime undefined "%F-%T" now
-      remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
-      let
-        ctx = BuildState buildId
-                         buildDate
-                         (cfg & remoteRepos .~ remoteRepos')
-                         buildDir
-                         logFileHandle
-                         selectedRemoteRepo
-                         repoCache
-                         []
-                         now
-                         (_interactive cfg)
-        selectedRemoteRepo = do
-          sel <- _repository cfg
-          lookupRemoteRepo remoteRepos' sel <|> error
-            ( printf
-              "selected remote repo '%s' not configured, valid remote repos are: '%s'"
-              sel
-              (show remoteRepos')
-            )
-      (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
-      -- Write a profiling report
-      when (isJust (_profileFile cfg)) $ writeFile
-        (fromJust (_profileFile cfg))
-        (unlines $ show <$> reverse (bsProf ctxOut))
-      return r
+    repoCache <- initRepoCache
+      (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
+    let buildDate = formatTime undefined "%F-%T" now
+    remoteRepos'    <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
+    buildDirRootAbs <- traverse canonicalizePath (cfg ^. buildDirRoot)
+    let
+      ctx = BuildState
+        buildId
+        buildDate
+        (cfg & remoteRepos .~ remoteRepos' & buildDirRoot .~ buildDirRootAbs)
+        buildDir
+        logFileHandle
+        selectedRemoteRepo
+        repoCache
+        []
+        now
+        (_interactive cfg)
+      selectedRemoteRepo = do
+        sel <- _repository cfg
+        lookupRemoteRepo remoteRepos' sel <|> error
+          ( printf
+            "selected remote repo '%s' not configured, valid remote repos are: '%s'"
+            sel
+            (show remoteRepos')
+          )
+    (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
+    -- Write a profiling report
+    when (isJust (_profileFile cfg)) $ writeFile
+      (fromJust (_profileFile cfg))
+      (unlines $ show <$> reverse (bsProf ctxOut))
+    return r
   createBuildDir cfg buildId = if _uniqueBuildDirs cfg
     then do
       let subDir = "BUILD-" ++ buildId
@@ -127,6 +127,9 @@ run action = do
   generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
   -- Run the action build action
   wrappedAction   = do
+    b9cfg <- getConfig
+    traverse (traceL . printf "Root Build Directory: %s")
+             (b9cfg ^. buildDirRoot)
     startTime <- gets bsStartTime
     r         <- action
     now       <- liftIO getCurrentTime

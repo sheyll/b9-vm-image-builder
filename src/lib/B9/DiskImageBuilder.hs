@@ -47,6 +47,14 @@ import B9.DiskImages
 import qualified B9.PartitionTable as P
 import B9.Content.StringTemplate
 
+-- -- | Convert relative file paths of images, sources and mounted host directories
+-- -- to absolute paths relative to '_buildDirRoot'.
+-- makeImagePathsAbsoluteToBuildDirRoot :: ImageTarget -> B9 ImageTarget
+-- makeImagePathsAbsoluteToBuildDirRoot img =
+--   getConfig >>= maybe (return img) (return . go) . _buildDirRoot
+--   where
+--     go rootDir = everywhere mkAbs img
+--       where mkAbs = mkT
 
 -- | Replace $... variables inside an 'ImageTarget'
 substImageTarget :: [(String,String)] -> ImageTarget -> ImageTarget
@@ -83,14 +91,14 @@ resolveImageSource src =
       let img = Image fsLabel imgType fsType
       in return (changeImageFormat imgType img)
     (SourceImage srcImg _part _resize) ->
-      liftIO (ensureAbsoluteImageDirExists srcImg)
+      ensureAbsoluteImageDirExists srcImg
     (CopyOnWrite backingImg) ->
-      liftIO (ensureAbsoluteImageDirExists backingImg)
+      ensureAbsoluteImageDirExists backingImg
     (From name _resize) ->
       getLatestImageByName (SharedImageName name)
         >>= maybe (errorExitL (printf "Nothing found for %s."
                                       (show (SharedImageName name))))
-                  (liftIO . ensureAbsoluteImageDirExists)
+                  ensureAbsoluteImageDirExists
 
 -- | Return all valid image types sorted by preference.
 preferredDestImageTypes :: ImageSource -> B9 [ImageType]
@@ -137,12 +145,22 @@ allowedImageTypesForResize r =
     _ -> [Raw, QCow2, Vmdk]
 
 -- | Create the parent directories for the file that contains the 'Image'.
-ensureAbsoluteImageDirExists :: Image -> IO Image
+-- If the path to the image file is relative, prepend '_buildDirRoot' from
+-- the 'B9Config'.
+ensureAbsoluteImageDirExists :: Image -> B9 Image
 ensureAbsoluteImageDirExists img@(Image path _ _) = do
-  let dir = takeDirectory path
-  createDirectoryIfMissing True dir
-  dirAbs <- canonicalizePath dir
-  return $ changeImageDirectory dirAbs img
+  b9cfg <- getConfig
+  let dir =
+              let dirRel = takeDirectory path
+              in if isRelative dirRel then
+                    let prefix = fromMaybe "." (b9cfg ^. buildDirRoot)
+                    in prefix </> dirRel
+                  else dirRel
+
+  liftIO $ do
+    createDirectoryIfMissing True dir
+    dirAbs <- canonicalizePath dir
+    return $ changeImageDirectory dirAbs img
 
 -- | Create an image from an image source. The destination image must have a
 -- compatible image type and filesystem. The directory of the image MUST be

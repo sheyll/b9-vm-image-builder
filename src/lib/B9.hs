@@ -113,10 +113,11 @@ runPull :: MonadIO m => Maybe SharedImageName -> B9ConfigAction m ()
 runPull mName = localRuntimeConfig (keepTempDirs .~ False)
                                    (run (pullRemoteRepos >> maybePullImage))
  where
-  maybePullImage =
-    mapM_ (\name -> pullLatestImage name
-                    >>= maybe (failPull name) (const (return ())))
-          mName
+  maybePullImage = mapM_
+    ( \name ->
+      pullLatestImage name >>= maybe (failPull name) (const (return ()))
+    )
+    mName
   failPull name = errorExitL (printf "failed to pull: %s" (show name))
 
 -- | Execute an interactive root shell in a running container from a
@@ -193,11 +194,10 @@ runListSharedImages = localRuntimeConfig
       allRepos <- getRemoteRepos
       if isNothing remoteRepo
         then liftIO $ do
-          putStrLn "Showing local shared images only."
-          putStrLn
-            "\nTo view the contents of a remote repo add \n\
-                        \the '-r' switch with one of the remote \n\
-                        \repository ids."
+          putStrLn "Showing local shared images only.\n"
+          putStrLn "To view the contents of a remote repo add"
+          putStrLn "the '-r' switch with one of the remote"
+          putStrLn "repository ids."
         else liftIO $ putStrLn
           (  "Showing shared images on: "
           ++ remoteRepoRepoId (fromJust remoteRepo)
