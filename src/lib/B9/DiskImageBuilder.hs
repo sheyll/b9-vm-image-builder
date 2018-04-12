@@ -408,6 +408,7 @@ createSharedImageInCache img sname@(SharedImageName name) = do
   convertImage img (changeImageDirectory dir (sharedImageImage sharedImg))
   prettyPrintToFile (dir </> sharedImageFileName sharedImg) sharedImg
   dbgL (printf "CREATED SHARED IMAGE IN CACHE '%s'" (ppShow sharedImg))
+  cleanOldSharedImageRevisionsFromCache sname
   return sharedImg
 
 -- | Publish the latest version of a shared image identified by name to the
@@ -474,6 +475,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
       pullFromRepo repo repoImgFile cachedImgFile
       pullFromRepo repo repoInfoFile cachedInfoFile
       infoL (printf "PULLED '%s' FROM '%s'" dbgName repoId)
+      cleanOldSharedImageRevisionsFromCache name
       return (Just (sharedImageBuildId image))
 
 -- | Return the 'Image' of the latest version of a shared image named 'name'
