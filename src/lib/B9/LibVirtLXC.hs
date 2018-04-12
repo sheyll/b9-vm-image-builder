@@ -11,15 +11,13 @@ import System.FilePath
 import Text.Printf ( printf )
 import Data.Char (toLower)
 import Control.Lens (view)
-
 import B9.ShellScript
 import B9.B9Monad
 import B9.B9Config (libVirtLXCConfigs)
 import B9.DiskImages
 import B9.ExecEnv
 import B9.B9Config.LibVirtLXC as X
-import Data.ConfigFile.B9Extras
-
+import System.IO.B9Extras (UUID(), randomUUID)
 
 logLibVirtLXCConfig :: LibVirtLXCConfig -> B9 ()
 logLibVirtLXCConfig c = traceL $ printf "USING LibVirtLXCConfig: %s" (show c)
@@ -215,5 +213,3 @@ memoryAmount cfg = show . toAmount . maxMemory . envResources
 
 cpuCountStr :: ExecEnv -> String
 cpuCountStr = show . cpuCount . envResources
-
-

@@ -1,5 +1,5 @@
 module B9.B9Config.LibVirtLXC (
-                        libVirtLXCConfigToConfigParser
+                        libVirtLXCConfigToCPDocument
                         , defaultLibVirtLXCConfig
                         , parseLibVirtLXCConfig
                      , LibVirtLXCConfig(..)
@@ -98,22 +98,22 @@ guestCapabilitiesK = "guest_capabilities"
 guestRamSizeK :: String
 guestRamSizeK = "guest_ram_size"
 
-libVirtLXCConfigToConfigParser
-    :: LibVirtLXCConfig -> ConfigParser -> Either CPError ConfigParser
-libVirtLXCConfigToConfigParser c cp = do
-    cp1 <- add_section cp cfgFileSection
-    cp2 <- setshow cp1 cfgFileSection useSudoK $ useSudo c
-    cp3 <- set cp2 cfgFileSection virshPathK $ virshPath c
-    cp4 <- set cp3 cfgFileSection emulatorK $ emulator c
-    cp5 <- set cp4 cfgFileSection virshURIK $ virshURI c
-    cp6 <- setshow cp5 cfgFileSection networkIdK $ networkId c
-    cp7 <- setshow cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
-    setshow cp7 cfgFileSection guestRamSizeK $ guestRamSize c
+libVirtLXCConfigToCPDocument
+    :: LibVirtLXCConfig -> CPDocument -> Either CPError CPDocument
+libVirtLXCConfigToCPDocument c cp = do
+    cp1 <- addSectionCP cp cfgFileSection
+    cp2 <- setShowCP cp1 cfgFileSection useSudoK $ useSudo c
+    cp3 <- setCP cp2 cfgFileSection virshPathK $ virshPath c
+    cp4 <- setCP cp3 cfgFileSection emulatorK $ emulator c
+    cp5 <- setCP cp4 cfgFileSection virshURIK $ virshURI c
+    cp6 <- setShowCP cp5 cfgFileSection networkIdK $ networkId c
+    cp7 <- setShowCP cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
+    setShowCP cp7 cfgFileSection guestRamSizeK $ guestRamSize c
 
-parseLibVirtLXCConfig :: ConfigParser -> Either CPError LibVirtLXCConfig
+parseLibVirtLXCConfig :: CPDocument -> Either CPError LibVirtLXCConfig
 parseLibVirtLXCConfig cp =
-    let getr :: (Get_C a) => OptionSpec -> Either CPError a
-        getr = get cp cfgFileSection
+    let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
+        getr = readCP cp cfgFileSection
     in  LibVirtLXCConfig
         <$> (getr useSudoK)
         <*> (getr virshPathK)

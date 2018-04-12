@@ -9,7 +9,7 @@ import B9.B9Config
 import B9.VmBuilder
 import B9.Vm
 import B9.DiskImageBuilder
-import Data.ConfigFile.B9Extras hiding (tell)
+import System.IO.B9Extras (ensureDir, getDirectoryFiles)
 import B9.Content.StringTemplate
 import B9.Content.Generator
 import B9.Content.AST

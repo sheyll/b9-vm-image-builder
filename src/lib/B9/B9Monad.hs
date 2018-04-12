@@ -126,7 +126,7 @@ run action = do
       $ removeDirectoryRecursive buildDir
   generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
   -- Run the action build action
-  wrappedAction = do
+  wrappedAction   = do
     startTime <- gets bsStartTime
     r         <- action
     now       <- liftIO getCurrentTime
@@ -225,7 +225,7 @@ infoL = b9Log LogInfo
 errorL :: String -> B9 ()
 errorL = b9Log LogError
 
-errorExitL :: String -> B9 ()
+errorExitL :: String -> B9 a
 errorExitL e = b9Log LogError e >> fail e
 
 b9Log :: LogLevel -> String -> B9 ()

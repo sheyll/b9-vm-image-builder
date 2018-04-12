@@ -16,6 +16,7 @@ module B9.B9Config ( B9Config(..)
                    , interactive
                    , libVirtLXCConfigs
                    , remoteRepos
+                   , maxLocalSharedImageRevisions
                    , B9ConfigOverride(..)
                    , noB9ConfigOverride
                    , B9ConfigAction()
@@ -35,12 +36,12 @@ module B9.B9Config ( B9Config(..)
                    , defaultRepositoryCache
                    , defaultB9Config
                    , openOrCreateB9Config
-                   , writeB9ConfigParser
+                   , writeB9CPDocument
                    , readB9Config
                    , parseB9Config
                    , appendPositionalArguments
-                   , modifyConfigParser
-                   , b9ConfigToConfigParser
+                   , modifyCPDocument
+                   , b9ConfigToCPDocument
                    , LogLevel(..)
                    , ExecEnvType (..)
                    , BuildVariables
@@ -56,13 +57,14 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Writer
 import System.Directory
+import System.IO.B9Extras (SystemPath(..), resolve, ensureDir)
 import qualified Data.Semigroup as Sem
 import Data.List (partition, sortBy)
 import Data.ConfigFile.B9Extras
-          ( SystemPath(..), ConfigParser, CPError, Get_C
-          , OptionSpec, resolve, ensureDir, readIniFile
-          , IniFileException(..), merge, to_string
-          , add_section, emptyCP, setshow, get)
+          ( CPDocument, CPError, CPGet
+          , CPOptionSpec, readCPDocument
+          , CPReadException(..), mergeCP, toStringCP
+          , addSectionCP, emptyCP, setShowCP, readCP )
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Config.Repository as X
 import Text.Printf (printf)
@@ -85,6 +87,7 @@ data B9Config = B9Config { _verbosity :: Maybe LogLevel
                          , _repositoryCache :: Maybe SystemPath
                          , _repository :: Maybe String
                          , _interactive :: Bool
+                         , _maxLocalSharedImageRevisions :: Maybe Int
                          , _libVirtLXCConfigs :: Maybe LibVirtLXCConfig
                          , _remoteRepos :: [RemoteRepo]
                          } deriving (Show)
@@ -102,6 +105,7 @@ instance Sem.Semigroup B9Config where
       , _repositoryCache = getLast $ on mappend (Last . _repositoryCache) c c'
       , _repository = getLast ((mappend `on` (Last . _repository)) c c')
       , _interactive = getAny ((mappend `on` (Any . _interactive)) c c')
+      , _maxLocalSharedImageRevisions = getLast ((mappend `on` (Last . _maxLocalSharedImageRevisions)) c c')
       , _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c')
       , _remoteRepos = (mappend `on` _remoteRepos) c c'
       }
@@ -109,7 +113,7 @@ instance Sem.Semigroup B9Config where
 instance Monoid B9Config where
   mappend = (Sem.<>)
   mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True
-                    Nothing Nothing False Nothing []
+                    Nothing Nothing False Nothing Nothing []
 
 -- | Override b9 configuration items and/or the path of the b9 configuration file.
 -- This is useful, i.e. when dealing with command line parameters.
@@ -204,7 +208,7 @@ execB9ConfigAction act cfg = do
       (res, permanentB9ConfigUpdates) <- runWriterT
         (runReaderT (runB9ConfigAction act) runtimeCfg)
 
-      let cpExtErr = modifyConfigParser cp <$> permanentB9ConfigUpdate
+      let cpExtErr = modifyCPDocument cp <$> permanentB9ConfigUpdate
           permanentB9ConfigUpdate = if null permanentB9ConfigUpdates
             then Nothing
             else Just (mconcat permanentB9ConfigUpdates)
@@ -219,7 +223,7 @@ execB9ConfigAction act cfg = do
           (return . Just)
         )
         cpExtErr
-      mapM_ (writeB9ConfigParser (cfg ^. customB9ConfigPath)) cpExt
+      mapM_ (writeB9CPDocument (cfg ^. customB9ConfigPath)) cpExt
       return res
 -- | Run a 'B9ConfigAction' using 'noB9ConfigOverride'.
 -- See 'execB9ConfigAction' for more details.
@@ -229,45 +233,46 @@ invokeB9 = flip execB9ConfigAction noB9ConfigOverride
 -- | Open the configuration file that contains the 'B9Config'.
 -- If the configuration does not exist, write a default configuration file,
 -- and create a all missing directories.
-openOrCreateB9Config :: MonadIO m => Maybe SystemPath -> m ConfigParser
+openOrCreateB9Config :: MonadIO m => Maybe SystemPath -> m CPDocument
 openOrCreateB9Config cfgPath = do
   cfgFile <- resolve (fromMaybe defaultB9ConfigFile cfgPath)
   ensureDir cfgFile
   liftIO $ do
     exists <- doesFileExist cfgFile
     if exists
-      then readIniFile (Path cfgFile)
+      then readCPDocument (Path cfgFile)
       else
-        let res = b9ConfigToConfigParser defaultB9Config
+        let res = b9ConfigToCPDocument defaultB9Config
         in  case res of
-              Left  e  -> throwIO (IniFileException cfgFile e)
-              Right cp -> writeFile cfgFile (to_string cp) >> return cp
+              Left  e  -> throwIO (CPReadException cfgFile e)
+              Right cp -> writeFile cfgFile (toStringCP cp) >> return cp
 
--- | Write the configuration in the 'ConfigParser' to either the user supplied
+-- | Write the configuration in the 'CPDocument' to either the user supplied
 -- configuration file path or to 'defaultB9ConfigFile'.
 -- Create all missing (parent) directories.
-writeB9ConfigParser :: MonadIO m => Maybe SystemPath -> ConfigParser -> m ()
-writeB9ConfigParser cfgFileIn cp = do
+writeB9CPDocument :: MonadIO m => Maybe SystemPath -> CPDocument -> m ()
+writeB9CPDocument cfgFileIn cp = do
   cfgFile <- resolve (fromMaybe defaultB9ConfigFile cfgFileIn)
   ensureDir cfgFile
-  liftIO (writeFile cfgFile (to_string cp))
+  liftIO (writeFile cfgFile (toStringCP cp))
 
 
 defaultB9Config :: B9Config
 defaultB9Config = B9Config
-  { _verbosity         = Just LogInfo
-  , _logFile           = Nothing
-  , _buildDirRoot      = Nothing
-  , _keepTempDirs      = False
-  , _execEnvType       = LibVirtLXC
-  , _profileFile       = Nothing
-  , _envVars           = []
-  , _uniqueBuildDirs   = True
-  , _repository        = Nothing
-  , _repositoryCache   = Just defaultRepositoryCache
-  , _interactive       = False
-  , _libVirtLXCConfigs = Just defaultLibVirtLXCConfig
-  , _remoteRepos       = []
+  { _verbosity                    = Just LogInfo
+  , _logFile                      = Nothing
+  , _buildDirRoot                 = Nothing
+  , _keepTempDirs                 = False
+  , _execEnvType                  = LibVirtLXC
+  , _profileFile                  = Nothing
+  , _envVars                      = []
+  , _uniqueBuildDirs              = True
+  , _repository                   = Nothing
+  , _repositoryCache              = Just defaultRepositoryCache
+  , _interactive                  = False
+  , _maxLocalSharedImageRevisions = Just 2
+  , _libVirtLXCConfigs            = Just defaultLibVirtLXCConfig
+  , _remoteRepos                  = []
   }
 
 defaultRepositoryCache :: SystemPath
@@ -292,65 +297,74 @@ uniqueBuildDirsK :: String
 uniqueBuildDirsK = "unique_build_dirs"
 repositoryCacheK :: String
 repositoryCacheK = "repository_cache"
+maxLocalSharedImageRevisionsK :: String
+maxLocalSharedImageRevisionsK = "max_cached_shared_images"
 repositoryK :: String
 repositoryK = "repository"
 cfgFileSection :: String
 cfgFileSection = "global"
 
--- | Parse a 'B9Config', modify it, and merge it back to the given 'ConfigParser'.
-modifyConfigParser
-  :: ConfigParser -> Endo B9Config -> Either CPError ConfigParser
-modifyConfigParser cp f = do
+-- | Parse a 'B9Config', modify it, and merge it back to the given 'CPDocument'.
+modifyCPDocument :: CPDocument -> Endo B9Config -> Either CPError CPDocument
+modifyCPDocument cp f = do
   cfg <- parseB9Config cp
-  cp2 <- b9ConfigToConfigParser (appEndo f cfg)
-  return (merge cp cp2)
+  cp2 <- b9ConfigToCPDocument (appEndo f cfg)
+  return (mergeCP cp cp2)
 
--- | Append a config file section for the 'B9Config' to an empty 'ConfigParser'.
-b9ConfigToConfigParser :: B9Config -> Either CPError ConfigParser
-b9ConfigToConfigParser c = do
-  cp1 <- add_section emptyCP cfgFileSection
-  cp2 <- setshow cp1 cfgFileSection verbosityK (_verbosity c)
-  cp3 <- setshow cp2 cfgFileSection logFileK (_logFile c)
-  cp4 <- setshow cp3 cfgFileSection buildDirRootK (_buildDirRoot c)
-  cp5 <- setshow cp4 cfgFileSection keepTempDirsK (_keepTempDirs c)
-  cp6 <- setshow cp5 cfgFileSection execEnvTypeK (_execEnvType c)
-  cp7 <- setshow cp6 cfgFileSection profileFileK (_profileFile c)
-  cp8 <- setshow cp7 cfgFileSection envVarsK (_envVars c)
-  cp9 <- setshow cp8 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
-  cpA <- setshow cp9 cfgFileSection repositoryCacheK (_repositoryCache c)
-  cpB <-
+-- | Append a config file section for the 'B9Config' to an empty 'CPDocument'.
+b9ConfigToCPDocument :: B9Config -> Either CPError CPDocument
+b9ConfigToCPDocument c = do
+  cp1 <- addSectionCP emptyCP cfgFileSection
+  cp2 <- setShowCP cp1 cfgFileSection verbosityK (_verbosity c)
+  cp3 <- setShowCP cp2 cfgFileSection logFileK (_logFile c)
+  cp4 <- setShowCP cp3 cfgFileSection buildDirRootK (_buildDirRoot c)
+  cp5 <- setShowCP cp4 cfgFileSection keepTempDirsK (_keepTempDirs c)
+  cp6 <- setShowCP cp5 cfgFileSection execEnvTypeK (_execEnvType c)
+  cp7 <- setShowCP cp6 cfgFileSection profileFileK (_profileFile c)
+  cp8 <- setShowCP cp7 cfgFileSection envVarsK (_envVars c)
+  cp9 <- setShowCP cp8 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
+  cpA <- setShowCP cp9
+                   cfgFileSection
+                   maxLocalSharedImageRevisionsK
+                   (_maxLocalSharedImageRevisions c)
+  cpB <- setShowCP cpA cfgFileSection repositoryCacheK (_repositoryCache c)
+  cpC <-
     ( foldr (>=>)
             return
-            (libVirtLXCConfigToConfigParser <$> (_libVirtLXCConfigs c))
+            (libVirtLXCConfigToCPDocument <$> (_libVirtLXCConfigs c))
       )
-      cpA
-  cpFinal <- (foldr (>=>) return (remoteRepoToConfigParser <$> _remoteRepos c))
-    cpB
-  setshow cpFinal cfgFileSection repositoryK (_repository c)
+      cpB
+  cpFinal <- (foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c))
+    cpC
+  setShowCP cpFinal cfgFileSection repositoryK (_repository c)
 
-readB9Config :: MonadIO m => Maybe SystemPath -> m ConfigParser
-readB9Config cfgFile = readIniFile (fromMaybe defaultB9ConfigFile cfgFile)
+readB9Config :: MonadIO m => Maybe SystemPath -> m CPDocument
+readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
 
-parseB9Config :: ConfigParser -> Either CPError B9Config
+parseB9Config :: CPDocument -> Either CPError B9Config
 parseB9Config cp =
-  let getr :: (Get_C a) => OptionSpec -> Either CPError a
-      getr = get cp cfgFileSection
-      getB9Config =
-        B9Config
-          <$> getr verbosityK
-          <*> getr logFileK
-          <*> getr buildDirRootK
-          <*> getr keepTempDirsK
-          <*> getr execEnvTypeK
-          <*> getr profileFileK
-          <*> getr envVarsK
-          <*> getr uniqueBuildDirsK
-          <*> getr repositoryCacheK
-          <*> getr repositoryK
-          <*> pure False
-          <*> Right (either (const Nothing) Just (parseLibVirtLXCConfig cp))
-          <*> parseRemoteRepos cp
-  in  getB9Config
+  let
+    getr :: (CPGet a) => CPOptionSpec -> Either CPError a
+    getr = readCP cp cfgFileSection
+    getB9Config =
+      B9Config
+        <$> getr verbosityK
+        <*> getr logFileK
+        <*> getr buildDirRootK
+        <*> getr keepTempDirsK
+        <*> getr execEnvTypeK
+        <*> getr profileFileK
+        <*> getr envVarsK
+        <*> getr uniqueBuildDirsK
+        <*> getr repositoryCacheK
+        <*> getr repositoryK
+        <*> pure False
+        <*> pure
+              (either (const Nothing) id (getr maxLocalSharedImageRevisionsK))
+        <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
+        <*> parseRemoteRepos cp
+  in
+    getB9Config
 
 
 -- | If environment variables @arg_1 .. arg_n@ are bound

@@ -21,7 +21,7 @@ import Text.Printf
 import System.FilePath
 import System.Directory
 import B9.B9Config.Repository as X
-import Data.ConfigFile.B9Extras
+import System.IO.B9Extras
 
 -- | Initialize the local repository cache directory.
 initRepoCache :: MonadIO m => SystemPath -> m RepoCache

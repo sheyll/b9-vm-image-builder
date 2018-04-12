@@ -4,13 +4,13 @@ module B9.B9Config.Repository ( RemoteRepo(..)
                               , SshPrivKey(..)
                               , SshRemoteHost(..)
                               , SshRemoteUser(..)
-                              , remoteRepoToConfigParser
+                              , remoteRepoToCPDocument
                               , parseRemoteRepos
                               ) where
 
 import Data.Data
 import Data.List (isSuffixOf)
-import Data.ConfigFile
+import Data.ConfigFile.B9Extras
 
 newtype RepoCache = RepoCache FilePath
   deriving (Read, Show, Typeable, Data)
@@ -36,45 +36,46 @@ newtype SshRemoteUser = SshRemoteUser String
 
 
 -- | Persist a repo to a configuration file.
-remoteRepoToConfigParser :: RemoteRepo
-                      -> ConfigParser
-                      -> Either CPError ConfigParser
-remoteRepoToConfigParser repo cpIn = cpWithRepo
-  where section = repoId ++ repoSectionSuffix
-        (RemoteRepo repoId
-                    remoteRootDir
-                    (SshPrivKey keyFile)
-                    (SshRemoteHost (host,port))
-                    (SshRemoteUser user)) = repo
-        cpWithRepo = do cp1 <- add_section cpIn section
-                        cp2 <- set cp1 section repoRemotePathK remoteRootDir
-                        cp3 <- set cp2 section repoRemoteSshKeyK keyFile
-                        cp4 <- set cp3 section repoRemoteSshHostK host
-                        cp5 <- setshow cp4 section repoRemoteSshPortK port
-                        set cp5 section repoRemoteSshUserK user
+remoteRepoToCPDocument :: RemoteRepo -> CPDocument -> Either CPError CPDocument
+remoteRepoToCPDocument repo cpIn = cpWithRepo
+ where
+  section = repoId ++ repoSectionSuffix
+  (RemoteRepo repoId remoteRootDir (SshPrivKey keyFile) (SshRemoteHost (host, port)) (SshRemoteUser user))
+    = repo
+  cpWithRepo = do
+    cp1 <- addSectionCP cpIn section
+    cp2 <- setCP cp1 section repoRemotePathK remoteRootDir
+    cp3 <- setCP cp2 section repoRemoteSshKeyK keyFile
+    cp4 <- setCP cp3 section repoRemoteSshHostK host
+    cp5 <- setShowCP cp4 section repoRemoteSshPortK port
+    setCP cp5 section repoRemoteSshUserK user
 
 -- | Load a repository from a configuration file that has been written by
 -- 'writeRepositoryToB9Config'.
-parseRemoteRepos :: ConfigParser -> Either CPError [RemoteRepo]
+parseRemoteRepos :: CPDocument -> Either CPError [RemoteRepo]
 parseRemoteRepos cp = traverse parseRepoSection repoSections
-  where
-    repoSections =
-          filter (repoSectionSuffix `isSuffixOf`) (sections cp)
-    parseRepoSection section = parseResult
-      where
-        getsec :: Get_C a =>  OptionSpec -> Either CPError a
-        getsec = get cp section
-        parseResult =
-          RemoteRepo repoId
-            <$> getsec repoRemotePathK
-            <*> (SshPrivKey <$> getsec repoRemoteSshKeyK)
-            <*> (SshRemoteHost <$> ((,) <$> getsec repoRemoteSshHostK
-                                        <*> getsec repoRemoteSshPortK))
-            <*> (SshRemoteUser <$> getsec repoRemoteSshUserK)
-          where
-            repoId = let prefixLen = length section - suffixLen
-                         suffixLen = length repoSectionSuffix
-                         in take prefixLen section
+ where
+  repoSections = filter (repoSectionSuffix `isSuffixOf`) (sectionsCP cp)
+  parseRepoSection section = parseResult
+   where
+    getsec :: CPGet a => CPOptionSpec -> Either CPError a
+    getsec = readCP cp section
+    parseResult =
+      RemoteRepo repoId
+        <$> getsec repoRemotePathK
+        <*> (SshPrivKey <$> getsec repoRemoteSshKeyK)
+        <*> (   SshRemoteHost
+            <$> (   (,)
+                <$> getsec repoRemoteSshHostK
+                <*> getsec repoRemoteSshPortK
+                )
+            )
+        <*> (SshRemoteUser <$> getsec repoRemoteSshUserK)
+     where
+      repoId =
+        let prefixLen = length section - suffixLen
+            suffixLen = length repoSectionSuffix
+        in  take prefixLen section
 
 repoSectionSuffix :: String
 repoSectionSuffix = "-repo"

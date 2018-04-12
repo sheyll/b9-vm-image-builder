@@ -25,12 +25,10 @@ import qualified Data.Text as T
 import           Data.Text.Encoding as E
 import           Data.Text.Lazy.Encoding as LE
 import           Data.Text.Template (render,templateSafe,renderA)
+import           System.IO.B9Extras
 import           Test.QuickCheck
 import           Text.Printf
 import           Text.Show.Pretty (ppShow)
-
-import           Data.ConfigFile.B9Extras
-
 import           B9.QCUtil
 -- | A wrapper around a file path and a flag indicating if template variable
 -- expansion should be performed when reading the file contents.

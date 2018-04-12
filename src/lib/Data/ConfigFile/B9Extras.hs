@@ -1,151 +1,91 @@
-{-# Language DeriveDataTypeable #-}
+{-# Language DeriveDataTypeable, ConstraintKinds #-}
 {-| Extensions to 'Data.ConfigFile' and utility functions for dealing with
     configuration in general and reading/writing files. -}
-module Data.ConfigFile.B9Extras ( allOn
-                                , lastOn
-                                , SystemPath (..)
-                                , resolve
-                                , ensureDir
-                                , readIniFile
-                                , getOptionM
-                                , getOption
-                                , getOptionOr
-                                , IniFileException(..)
-                                , module Data.ConfigFile
-                                , UUID (..)
-                                , randomUUID
-                                , tell
-                                , consult
-                                , getDirectoryFiles
-                                , maybeConsult
-                                , maybeConsultSystemPath
+module Data.ConfigFile.B9Extras ( addSectionCP
+                                , setShowCP
+                                , setCP
+                                , readCP
+                                , mergeCP
+                                , toStringCP
+                                , sectionsCP
+                                , emptyCP
+                                , type CPGet
+                                , type CPOptionSpec
+                                , type CPSectionSpec
+                                , type CPDocument
+                                , CPError()
+                                , readCPDocument
+                                , CPReadException(..)
                                 ) where
 
+#if !MIN_VERSION_base(4,10,0)
 import Data.Monoid
-import Data.Function ( on )
+#endif
 import Data.Typeable
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Exception
-import Control.Monad.IO.Class
-import System.Directory
-import Text.Read ( readEither )
-import System.Random ( randomIO )
-import Data.Word ( Word16, Word32 )
-import System.FilePath
-import Text.Printf
 import Data.ConfigFile
-import Data.Data
-import Text.Show.Pretty (ppShow)
+import Control.Exception
+import Control.Monad.Except
+import System.IO.B9Extras
 
-allOn :: (a -> Maybe Bool) -> a -> a -> Maybe Bool
-allOn getter x y = getAll <$> on mappend (fmap All . getter) x y
+-- * Aliases for functions and types from 'ConfigParser' in 'Data.ConfigFile'
 
-lastOn :: (a -> Maybe b) -> a -> a -> Maybe b
-lastOn getter x y = getLast $ on mappend (Last . getter) x y
+-- | An alias for  'ConfigParser'
+type CPDocument = ConfigParser
 
-data SystemPath = Path FilePath
-                | InHomeDir FilePath
-                | InB9UserDir FilePath
-                | InTempDir FilePath
-  deriving (Eq, Read, Show, Typeable, Data)
+-- | An alias for 'SectionSpec'.
+type CPSectionSpec = SectionSpec
 
-resolve :: MonadIO m => SystemPath -> m FilePath
-resolve (Path p) = return p
-resolve (InHomeDir p) = liftIO $ do
-  d <- getHomeDirectory
-  return $ d </> p
-resolve (InB9UserDir p) = liftIO $ do
-  d <- getAppUserDataDirectory "b9"
-  return $ d </> p
-resolve (InTempDir p) = liftIO $ do
-  d <- getTemporaryDirectory
-  return $ d </> p
+-- | An alias for 'OptionSpec'
+type CPOptionSpec = OptionSpec
 
--- | Get all files from 'dir' that is get ONLY files not directories
-getDirectoryFiles :: MonadIO m => FilePath -> m [FilePath]
-getDirectoryFiles dir = do
-  entries <- liftIO (getDirectoryContents dir)
-  fileEntries <- mapM (liftIO . doesFileExist . (dir </>)) entries
-  return (snd <$> filter fst (fileEntries `zip` entries))
+-- | An alias for 'setshow'.
+setShowCP :: (Show a, MonadError CPError m) => CPDocument -> CPSectionSpec -> CPOptionSpec -> a -> m CPDocument
+setShowCP = setshow
 
-ensureDir :: MonadIO m => FilePath -> m ()
-ensureDir p = liftIO (createDirectoryIfMissing True $ takeDirectory p)
+-- | An alias for 'set'.
+setCP :: (MonadError CPError m) => CPDocument -> CPSectionSpec -> CPOptionSpec -> String -> m CPDocument
+setCP = set
 
-data ReaderException = ReaderException FilePath String
-  deriving (Show, Typeable)
-instance Exception ReaderException
+-- | An alias for 'get'.
+readCP :: (CPGet a, MonadError CPError m) => CPDocument -> CPSectionSpec -> CPOptionSpec -> m a
+readCP = get
 
-tell :: (MonadIO m, Show a) => FilePath -> a -> m ()
-tell f x = do
-  ensureDir f
-  liftIO (writeFile f (ppShow x))
+-- | An alias for 'Get_C'
+type CPGet a = Get_C a
 
-consult :: (MonadIO m, Read a) => FilePath -> m a
-consult f = liftIO $ do
-  c <- readFile f
-  case readEither c of
-    Left e ->
-      throwIO $ ReaderException f e
-    Right a ->
-      return a
+-- | An alias for 'add_section'.
+addSectionCP :: MonadError CPError m => CPDocument -> CPSectionSpec -> m CPDocument
+addSectionCP = add_section
 
-maybeConsult :: (MonadIO m, Read a) => Maybe FilePath -> a -> m a
-maybeConsult Nothing defaultArg = return defaultArg
-maybeConsult (Just f) defaultArg = liftIO $ do
-  exists <- doesFileExist f
-  if exists
-    then consult f
-    else return defaultArg
+-- | An alias for 'merge'.
+mergeCP :: CPDocument -> CPDocument -> CPDocument
+mergeCP = merge
 
-maybeConsultSystemPath :: (MonadIO m, Read a) => Maybe SystemPath -> a -> m a
-maybeConsultSystemPath Nothing defaultArg = return defaultArg
-maybeConsultSystemPath (Just f) defaultArg = liftIO $ do
-  f' <- resolve f
-  exists <- doesFileExist f'
-  if exists
-    then consult f'
-    else return defaultArg
+-- | An alias for 'to_string'
+toStringCP :: CPDocument -> String
+toStringCP = to_string
 
-data IniFileException = IniFileException FilePath CPError
-                      deriving (Show, Typeable)
-instance Exception IniFileException
+-- | An alias for 'sections'.
+sectionsCP :: CPDocument -> [SectionSpec]
+sectionsCP = sections
 
-readIniFile :: MonadIO m => SystemPath -> m ConfigParser
-readIniFile cfgFile' = do
+-- * Reading a 'CPDocument' from a 'SystemPath'
+
+-- | Read a file and try to parse the contents as a 'CPDocument', if something
+-- goes wrong throw a 'CPReadException'
+readCPDocument :: MonadIO m => SystemPath -> m CPDocument
+readCPDocument cfgFile' = do
   cfgFilePath <- resolve cfgFile'
   liftIO $ do
     res <- readfile emptyCP cfgFilePath
     case res of
-      Left e -> throwIO (IniFileException cfgFilePath e)
+      Left e -> throwIO (CPReadException cfgFilePath e)
       Right cp -> return cp
 
-getOption :: (Get_C a, Monoid a) => ConfigParser -> SectionSpec -> OptionSpec -> a
-getOption cp sec key = either (const mempty) id $ get cp sec key
-
-getOptionM :: (Read a) => ConfigParser -> SectionSpec -> OptionSpec -> Maybe a
-getOptionM cp sec key = either (const Nothing) id $ get cp sec key
-
-getOptionOr :: (Get_C a) => ConfigParser -> SectionSpec -> OptionSpec -> a -> a
-getOptionOr cp sec key dv = either (const dv) id $ get cp sec key
-
-newtype UUID = UUID (Word32, Word16, Word16, Word16, Word32, Word16)
-             deriving (Read, Show, Eq, Ord)
-
-instance PrintfArg UUID where
-  formatArg (UUID (a, b, c, d, e, f)) fmt
-    | fmtChar (vFmt 'U' fmt) == 'U' =
-        let str = (printf "%08x-%04x-%04x-%04x-%08x%04x" a b c d e f :: String)
-        in formatString str (fmt { fmtChar = 's', fmtPrecision = Nothing })
-    | otherwise = errorBadFormat $ fmtChar fmt
-
-
-randomUUID :: MonadIO m => m UUID
-randomUUID = liftIO
-               (UUID <$> ((,,,,,) <$> randomIO
-                                  <*> randomIO
-                                  <*> randomIO
-                                  <*> randomIO
-                                  <*> randomIO
-                                  <*> randomIO))
+-- | An exception thrown by 'readCPDocument'.
+data CPReadException = CPReadException FilePath CPError
+                      deriving (Show, Typeable)
+instance Exception CPReadException

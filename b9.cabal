@@ -98,6 +98,7 @@ library
                    , B9.Vm
                    , B9.VmBuilder
                    , Data.ConfigFile.B9Extras
+                   , System.IO.B9Extras
   other-modules:   Paths_b9
   -- other-extensions:
   build-depends:     ConfigFile >= 1.1.4

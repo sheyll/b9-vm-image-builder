@@ -295,16 +295,16 @@ getImageSourceImageType (From _ _) = Nothing
 -- * Constructors and accessors for 'SharedImage's
 
 -- | Return the name of a shared image.
-siName :: SharedImage -> SharedImageName
-siName (SharedImage n _ _ _ _) = n
+sharedImageName :: SharedImage -> SharedImageName
+sharedImageName (SharedImage n _ _ _ _) = n
 
--- | Return the date of a shared image.
-siDate :: SharedImage -> SharedImageDate
-siDate (SharedImage _ n _ _ _) = n
+-- | Return the build date of a shared image.
+sharedImageDate :: SharedImage -> SharedImageDate
+sharedImageDate (SharedImage _ n _ _ _) = n
 
 -- | Return the build id of a shared image.
-siBuildId :: SharedImage -> SharedImageBuildId
-siBuildId (SharedImage _ _ n _ _) = n
+sharedImageBuildId :: SharedImage -> SharedImageBuildId
+sharedImageBuildId (SharedImage _ _ n _ _) = n
 
 -- | Print the contents of the shared image in one line
 prettyPrintSharedImages :: [SharedImage] -> String
@@ -314,9 +314,9 @@ prettyPrintSharedImages imgs = Boxes.render table
       where
         cols = [nameC, dateC, idC]
           where
-            nameC = col "Name" ((\(SharedImageName n) -> n) . siName)
-            dateC = col "Date" ((\(SharedImageDate n) -> n) . siDate)
-            idC = col "ID" ((\(SharedImageBuildId n) -> n) . siBuildId)
+            nameC = col "Name" ((\(SharedImageName n) -> n) . sharedImageName)
+            dateC = col "Date" ((\(SharedImageDate n) -> n) . sharedImageDate)
+            idC = col "ID" ((\(SharedImageBuildId n) -> n) . sharedImageBuildId)
             col title accessor =
               (Boxes.text title) Boxes.// (Boxes.vcat Boxes.left cells)
               where

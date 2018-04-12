@@ -43,7 +43,7 @@ import System.FilePath as X
 import Text.Printf as X (printf)
 import Data.Version as X
 import B9.B9Monad as X
-import Data.ConfigFile.B9Extras as X
+import System.IO.B9Extras as X
 import B9.B9Config as X
 import B9.ExecEnv as X
 import B9.DiskImages as X
@@ -101,26 +101,23 @@ runPush :: MonadIO m => SharedImageName -> B9ConfigAction m ()
 runPush name = localRuntimeConfig (keepTempDirs .~ False) $ run $ do
   conf <- getConfig
   if isNothing (conf ^. repository)
-    then
-      errorExitL
-        "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
-    else
-      pushSharedImageLatestVersion name
+    then errorExitL
+      "No repository specified! Use '-r' to specify a repo BEFORE 'push'."
+    else pushSharedImageLatestVersion name
 
 -- | Either pull a list of available 'SharedImageName's from the remote
 -- repository if 'Nothing' is passed as parameter, or pull the latest version
 -- of the image from the remote repository. Note: The remote repository is
 -- specified in the 'B9Config'.
 runPull :: MonadIO m => Maybe SharedImageName -> B9ConfigAction m ()
-runPull mName =
-  localRuntimeConfig (keepTempDirs .~ False)
-                     (run (pullRemoteRepos >> maybePullImage))
-  where maybePullImage =
-          mapM_ (\name -> pullLatestImage name >>= failIfFalse name) mName
-        failIfFalse _name True =
-          return ()
-        failIfFalse name False =
-          errorExitL (printf "failed to pull: %s" (show name))
+runPull mName = localRuntimeConfig (keepTempDirs .~ False)
+                                   (run (pullRemoteRepos >> maybePullImage))
+ where
+  maybePullImage =
+    mapM_ (\name -> pullLatestImage name
+                    >>= maybe (failPull name) (const (return ())))
+          mName
+  failPull name = errorExitL (printf "failed to pull: %s" (show name))
 
 -- | Execute an interactive root shell in a running container from a
 -- 'SharedImageName'.
@@ -159,15 +156,16 @@ runGcLocalRepoCache = localRuntimeConfig (keepTempDirs .~ False) (run impl)
         putStrLn "DELETING FILES:"
         putStrLn (unlines filesToDelete)
         mapM_ removeIfExists filesToDelete
-  obsoleteSharedmages :: [SharedImage] -> [SharedImage]
-  obsoleteSharedmages =
-    concatMap (tail . reverse) . filter ((> 1) . length) . groupBy
-      ((==) `on` siName)
-  removeIfExists :: FilePath -> IO ()
-  removeIfExists fileName = removeFile fileName `catch` handleExists
    where
-    handleExists e | isDoesNotExistError e = return ()
-                   | otherwise             = throwIO e
+    obsoleteSharedmages :: [SharedImage] -> [SharedImage]
+    obsoleteSharedmages =
+      concatMap (tail . reverse) . filter ((> 1) . length) . groupBy
+        ((==) `on` sharedImageName)
+    removeIfExists :: FilePath -> IO ()
+    removeIfExists fileName = removeFile fileName `catch` handleExists
+     where
+      handleExists e | isDoesNotExistError e = return ()
+                     | otherwise             = throwIO e
 
 -- | Clear the shared image cache for a remote. Note: The remote repository is
 -- specified in the 'B9Config'.

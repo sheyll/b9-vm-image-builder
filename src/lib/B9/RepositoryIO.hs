@@ -10,9 +10,7 @@ module B9.RepositoryIO (repoSearch
 
 import B9.Repository
 import B9.B9Monad
-import Data.ConfigFile.B9Extras
-
-
+import System.IO.B9Extras (ensureDir)
 import Data.List
 import Control.Monad.IO.Class
 import System.Directory

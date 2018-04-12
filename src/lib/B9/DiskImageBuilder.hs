@@ -22,6 +22,10 @@ module B9.DiskImageBuilder (materializeImageSource
                            ,pullLatestImage
                            ,) where
 
+import System.IO.Error (isDoesNotExistError)
+import System.Directory (removeFile)
+import System.IO.B9Extras (ensureDir, prettyPrintToFile, consult)
+import Control.Lens ((^.))
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
@@ -29,21 +33,18 @@ import System.Directory
 import System.FilePath
 import Text.Printf (printf)
 import Data.Maybe
-
 import Data.Function
-
 import Text.Show.Pretty (ppShow)
 import Data.List
 import Data.Data
 import Data.Generics.Schemes
 import Data.Generics.Aliases
-
 import B9.B9Monad
+import B9.B9Config
 import B9.Repository
 import B9.RepositoryIO
 import B9.DiskImages
 import qualified B9.PartitionTable as P
-import Data.ConfigFile.B9Extras
 import B9.Content.StringTemplate
 
 
@@ -73,8 +74,8 @@ substImageTarget env = everywhere gsubst
 
     sub = subst env
 
--- | Resolve an ImageSource to an 'Image'. Note however that this source will
--- may not exist as is the case for 'EmptyImage'.
+-- | Resolve an ImageSource to an 'Image'. The ImageSource might
+-- not exist, as is the case for 'EmptyImage'.
 resolveImageSource :: ImageSource -> B9 Image
 resolveImageSource src =
   case src of
@@ -85,9 +86,11 @@ resolveImageSource src =
       liftIO (ensureAbsoluteImageDirExists srcImg)
     (CopyOnWrite backingImg) ->
       liftIO (ensureAbsoluteImageDirExists backingImg)
-    (From name _resize) -> do
-      latestImage <- getLatestImageByName (SharedImageName name)
-      liftIO (ensureAbsoluteImageDirExists latestImage)
+    (From name _resize) ->
+      getLatestImageByName (SharedImageName name)
+        >>= maybe (errorExitL (printf "Nothing found for %s."
+                                      (show (SharedImageName name))))
+                  (liftIO . ensureAbsoluteImageDirExists)
 
 -- | Return all valid image types sorted by preference.
 preferredDestImageTypes :: ImageSource -> B9 [ImageType]
@@ -103,10 +106,15 @@ preferredDestImageTypes src =
         (nub [fmt, Raw, QCow2, Vmdk]
          `intersect`
          allowedImageTypesForResize resize)
-    (From name resize) -> do
-      sharedImg <- getLatestImageByName (SharedImageName name)
-      preferredDestImageTypes (SourceImage sharedImg NoPT resize)
+    (From name resize) ->
+      getLatestImageByName (SharedImageName name)
+        >>= maybe (errorExitL (printf "Nothing found for %s."
+                                       (show (SharedImageName name))))
+                  (\sharedImg ->
+                    preferredDestImageTypes (SourceImage sharedImg NoPT resize))
 
+-- | Return all supported source 'ImageType's compatible to a 'ImageDestinaion'
+-- in the preferred order.
 preferredSourceImageTypes :: ImageDestination -> [ImageType]
 preferredSourceImageTypes dest =
   case dest of
@@ -128,6 +136,7 @@ allowedImageTypesForResize r =
     ShrinkToMinimum -> [Raw]
     _ -> [Raw, QCow2, Vmdk]
 
+-- | Create the parent directories for the file that contains the 'Image'.
 ensureAbsoluteImageDirExists :: Image -> IO Image
 ensureAbsoluteImageDirExists img@(Image path _ _) = do
   let dir = takeDirectory path
@@ -149,8 +158,12 @@ materializeImageSource src dest =
     (CopyOnWrite backingImg) ->
       createCOWImage backingImg dest
     (From name resize) -> do
-      sharedImg <- getLatestImageByName (SharedImageName name)
-      materializeImageSource (SourceImage sharedImg NoPT resize) dest
+      getLatestImageByName (SharedImageName name)
+        >>= maybe (errorExitL (printf "Nothing found for %s."
+                                       (show (SharedImageName name))))
+                  (\sharedImg ->
+                        materializeImageSource
+                          (SourceImage sharedImg NoPT resize) dest)
 
 createImageFromImage :: Image -> Partition -> ImageResize -> Image -> B9 ()
 createImageFromImage src part size out = do
@@ -181,6 +194,8 @@ createImageFromImage src part size out = do
                  outFile
                  (imageFileExtension fmt))
 
+-- | Convert some 'Image', e.g. a temporary image used during the build phase
+-- to the final destination.
 createDestinationImage :: Image -> ImageDestination -> B9 ()
 createDestinationImage buildImg dest =
     case dest of
@@ -383,25 +398,28 @@ getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
   return (SharedImage name (SharedImageDate date) (SharedImageBuildId buildId) imgType imgFS)
 
 -- | Convert the disk image and serialize the base image data structure.
+-- If the 'maxLocalSharedImageRevisions' configuration is set to @Just n@
+-- also delete all but the @n - 1@ newest images from the local cache.
 createSharedImageInCache :: Image -> SharedImageName -> B9 SharedImage
 createSharedImageInCache img sname@(SharedImageName name) = do
   dbgL (printf "CREATING SHARED IMAGE: '%s' '%s'" (ppShow img) name)
   sharedImg <- getSharedImageFromImageInfo sname img
   dir <- getSharedImagesCacheDir
   convertImage img (changeImageDirectory dir (sharedImageImage sharedImg))
-  tell (dir </> sharedImageFileName sharedImg) sharedImg
-  dbgL (printf "CREATED SHARED IMAGE IN CAHCE '%s'" (ppShow sharedImg))
+  prettyPrintToFile (dir </> sharedImageFileName sharedImg) sharedImg
+  dbgL (printf "CREATED SHARED IMAGE IN CACHE '%s'" (ppShow sharedImg))
   return sharedImg
-
 
 -- | Publish the latest version of a shared image identified by name to the
 -- selected repository from the cache.
 pushSharedImageLatestVersion :: SharedImageName -> B9 ()
-pushSharedImageLatestVersion name@(SharedImageName imgName) = do
-  sharedImage <- getLatestSharedImageByNameFromCache name
-  dbgL (printf "PUSHING '%s'" (ppShow sharedImage))
-  pushToSelectedRepo sharedImage
-  infoL (printf "PUSHED '%s'" imgName)
+pushSharedImageLatestVersion name@(SharedImageName imgName) =
+  getLatestSharedImageByNameFromCache name
+    >>= maybe (errorExitL (printf "Nothing found for %s." (show imgName)))
+              (\sharedImage -> do
+                    dbgL (printf "PUSHING '%s'" (ppShow sharedImage))
+                    pushToSelectedRepo sharedImage
+                    infoL (printf "PUSHED '%s'" imgName))
 
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo :: SharedImage -> B9 ()
@@ -428,13 +446,13 @@ pullRemoteRepos = do
 
 -- | Pull the latest version of an image, either from the selected remote
 -- repo or from the repo that has the latest version.
-pullLatestImage :: SharedImageName -> B9 Bool
+pullLatestImage :: SharedImageName -> B9 (Maybe SharedImageBuildId)
 pullLatestImage name@(SharedImageName dbgName) = do
   repos <- getSelectedRepos
   let repoPredicate Cache = False
       repoPredicate (Remote repoId) = repoId `elem` repoIds
       repoIds = map remoteRepoRepoId repos
-      hasName sharedImage = name == siName sharedImage
+      hasName sharedImage = name == sharedImageName sharedImage
   candidates <- lookupSharedImages repoPredicate hasName
   let (Remote repoId, image) = last candidates
   if null candidates
@@ -442,7 +460,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
       errorL
         (printf "No shared image named '%s' on these remote repositories: '%s'" dbgName
            (ppShow repoIds))
-      return False
+      return Nothing
     else do
       dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
       cacheDir <- getSharedImagesCacheDir
@@ -456,28 +474,32 @@ pullLatestImage name@(SharedImageName dbgName) = do
       pullFromRepo repo repoImgFile cachedImgFile
       pullFromRepo repo repoInfoFile cachedInfoFile
       infoL (printf "PULLED '%s' FROM '%s'" dbgName repoId)
-      return True
-
+      return (Just (sharedImageBuildId image))
 
 -- | Return the 'Image' of the latest version of a shared image named 'name'
 -- from the local cache.
-getLatestImageByName :: SharedImageName -> B9 Image
+getLatestImageByName :: SharedImageName -> B9 (Maybe Image)
 getLatestImageByName name = do
   sharedImage <- getLatestSharedImageByNameFromCache name
   cacheDir <- getSharedImagesCacheDir
-  let image = changeImageDirectory cacheDir (sharedImageImage sharedImage)
-  dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show image))
+  let image = changeImageDirectory cacheDir . sharedImageImage <$> sharedImage
+  case image of
+    Just i ->
+      dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show i))
+    Nothing ->
+      errorL (printf "SOURCE IMAGE '%s' NOT FOUND" (show name))
   return image
 
 -- | Return the latest version of a shared image named 'name' from the local cache.
-getLatestSharedImageByNameFromCache :: SharedImageName -> B9 SharedImage
+getLatestSharedImageByNameFromCache :: SharedImageName -> B9 (Maybe SharedImage)
 getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
-  imgs <- lookupSharedImages (== Cache) ((== name) . siName)
+  imgs <- lookupSharedImages (== Cache) ((== name) . sharedImageName)
   case reverse imgs of
     (Cache, sharedImage):_rest ->
-      return sharedImage
-    _ ->
-      error (printf "No image(s) named '%s' found." dbgName)
+      return (Just sharedImage)
+    _ -> do
+      errorL (printf "No image(s) named '%s' found." dbgName)
+      return Nothing
 
 -- | Return a list of all existing sharedImages from cached repositories.
 getSharedImages :: B9 [(Repository, [SharedImage])]
@@ -530,3 +552,30 @@ getSharedImagesCacheDir :: B9 FilePath
 getSharedImagesCacheDir = do
   cacheDir <- localRepoDir <$> getRepoCache
   return (cacheDir </> sharedImagesRootDirectory)
+
+-- | Depending on the 'maxLocalSharedImageRevisions' 'B9Config' settings either
+-- do nothing or delete all but the configured number of most recent shared
+-- images with the given name from the local cache.
+cleanOldSharedImageRevisionsFromCache :: SharedImageName -> B9 ()
+cleanOldSharedImageRevisionsFromCache sn = do
+    b9Cfg <- getConfig
+    forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
+      toDelete <- take maxRevisions <$> newestSharedImages
+      imgDir <- getSharedImagesCacheDir
+      let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
+          infoFiles     = sharedImageFileName <$> toDelete
+          imgFiles      = imageFileName . sharedImageImage <$> toDelete
+      unless (null filesToDelete) $ do
+          traceL (printf "DELETING %d OBSOLETE REVISIONS OF: %s"
+                        (length filesToDelete) (show sn))
+          mapM_ traceL filesToDelete
+          mapM_ removeIfExists filesToDelete
+   where
+    newestSharedImages :: B9 [SharedImage]
+    newestSharedImages =
+      reverse . map snd <$> lookupSharedImages (== Cache) ((sn ==) . sharedImageName)
+
+    removeIfExists fileName = liftIO $ removeFile fileName `catch` handleExists
+     where
+      handleExists e | isDoesNotExistError e = return ()
+                     | otherwise             = throwIO e
