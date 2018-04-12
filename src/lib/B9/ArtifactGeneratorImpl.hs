@@ -7,6 +7,7 @@ import B9.ArtifactGenerator
 import B9.B9Monad
 import B9.B9Config
 import B9.VmBuilder
+import B9.DiskImages
 import B9.Vm
 import B9.DiskImageBuilder
 import System.IO.B9Extras (ensureDir, getDirectoryFiles)
@@ -80,7 +81,7 @@ makePathsInArtifactGeneratorAbsoluteTo rootDir =
     `extM` absArtifactAssembly
     `extM` absImage)
   where
-    mkAbs f = canonicalizePath (if isRelative f then rootDir </> f else f)
+    mkAbs f = liftIO (canonicalizePath (if isRelative f then rootDir </> f else f))
     absSourceFile (Source c f) =
       Source c <$> mkAbs f
     absArtifactSource (FromDirectory to as) =

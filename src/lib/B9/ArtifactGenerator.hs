@@ -117,6 +117,7 @@ data ArtifactGenerator
       -- that is a unique, human readable string describing the
       -- artifact to assemble.
       EmptyArtifact
+      -- ^ _Neutral_ generator
     deriving (Read,Show,Eq,Data,Typeable,Generic)
 
 instance Hashable ArtifactGenerator
@@ -183,8 +184,6 @@ getArtifactSourceFiles (IntoDirectory pd as) =
 getArtifactSourceFiles (FromDirectory _ as) = as >>= getArtifactSourceFiles
 getArtifactSourceFiles (SetPermissions _ _ _ as) =
     as >>= getArtifactSourceFiles
-
-
 
 -- | Identify an artifact. __Deprecated__ TODO: B9 does not check if all
 -- instances IDs are unique.
