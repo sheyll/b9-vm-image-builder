@@ -11,6 +11,21 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "label": "stack test",
+      "type": "shell",
+      "command": "stack test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "stack hoogle",
+      "type": "shell",
+      "command": "stack hoogle",
+      "group": "none"
     }
   ]
 }
