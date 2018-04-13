@@ -8,7 +8,6 @@ module B9.B9Config ( B9Config(..)
                    , buildDirRoot
                    , keepTempDirs
                    , execEnvType
-                   , profileFile
                    , envVars
                    , uniqueBuildDirs
                    , repositoryCache
@@ -81,7 +80,6 @@ data B9Config = B9Config { _verbosity :: Maybe LogLevel
                          , _buildDirRoot :: Maybe FilePath
                          , _keepTempDirs :: Bool
                          , _execEnvType :: ExecEnvType
-                         , _profileFile :: Maybe FilePath
                          , _envVars :: BuildVariables
                          , _uniqueBuildDirs :: Bool
                          , _repositoryCache :: Maybe SystemPath
@@ -99,7 +97,6 @@ instance Sem.Semigroup B9Config where
       , _buildDirRoot = getLast $ on mappend (Last . _buildDirRoot) c c'
       , _keepTempDirs = getAny $ on mappend (Any . _keepTempDirs) c c'
       , _execEnvType = LibVirtLXC
-      , _profileFile = getLast $ on mappend (Last . _profileFile) c c'
       , _envVars = on mappend _envVars c c'
       , _uniqueBuildDirs = getAll ((mappend `on` (All . _uniqueBuildDirs)) c c')
       , _repositoryCache = getLast $ on mappend (Last . _repositoryCache) c c'
@@ -112,7 +109,7 @@ instance Sem.Semigroup B9Config where
 
 instance Monoid B9Config where
   mappend = (Sem.<>)
-  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True
+  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC [] True
                     Nothing Nothing False Nothing Nothing []
 
 -- | Override b9 configuration items and/or the path of the b9 configuration file.
@@ -264,7 +261,6 @@ defaultB9Config = B9Config
   , _buildDirRoot                 = Nothing
   , _keepTempDirs                 = False
   , _execEnvType                  = LibVirtLXC
-  , _profileFile                  = Nothing
   , _envVars                      = []
   , _uniqueBuildDirs              = True
   , _repository                   = Nothing
@@ -289,8 +285,6 @@ keepTempDirsK :: String
 keepTempDirsK = "keep_temp_dirs"
 execEnvTypeK :: String
 execEnvTypeK = "exec_env"
-profileFileK :: String
-profileFileK = "profile_file"
 envVarsK :: String
 envVarsK = "environment_vars"
 uniqueBuildDirsK :: String
@@ -320,22 +314,21 @@ b9ConfigToCPDocument c = do
   cp4 <- setShowCP cp3 cfgFileSection buildDirRootK (_buildDirRoot c)
   cp5 <- setShowCP cp4 cfgFileSection keepTempDirsK (_keepTempDirs c)
   cp6 <- setShowCP cp5 cfgFileSection execEnvTypeK (_execEnvType c)
-  cp7 <- setShowCP cp6 cfgFileSection profileFileK (_profileFile c)
-  cp8 <- setShowCP cp7 cfgFileSection envVarsK (_envVars c)
-  cp9 <- setShowCP cp8 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
-  cpA <- setShowCP cp9
+  cp7 <- setShowCP cp6 cfgFileSection envVarsK (_envVars c)
+  cp8 <- setShowCP cp7 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
+  cp9 <- setShowCP cp8
                    cfgFileSection
                    maxLocalSharedImageRevisionsK
                    (_maxLocalSharedImageRevisions c)
-  cpB <- setShowCP cpA cfgFileSection repositoryCacheK (_repositoryCache c)
-  cpC <-
+  cpA <- setShowCP cp9 cfgFileSection repositoryCacheK (_repositoryCache c)
+  cpB <-
     ( foldr (>=>)
             return
             (libVirtLXCConfigToCPDocument <$> (_libVirtLXCConfigs c))
       )
-      cpB
+      cpA
   cpFinal <- (foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c))
-    cpC
+    cpB
   setShowCP cpFinal cfgFileSection repositoryK (_repository c)
 
 readB9Config :: MonadIO m => Maybe SystemPath -> m CPDocument
@@ -353,7 +346,6 @@ parseB9Config cp =
         <*> getr buildDirRootK
         <*> getr keepTempDirsK
         <*> getr execEnvTypeK
-        <*> getr profileFileK
         <*> getr envVarsK
         <*> getr uniqueBuildDirsK
         <*> getr repositoryCacheK

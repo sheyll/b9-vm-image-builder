@@ -179,7 +179,7 @@ getArtifactSourceFiles (Concatenation f _) = [f]
 getArtifactSourceFiles (FromContent   f _) = [f]
 getArtifactSourceFiles (FromFile      f _) = [f]
 getArtifactSourceFiles (IntoDirectory pd as) =
-    (pd</>) <$> (as >>= getArtifactSourceFiles)
+    (pd </>) <$> (as >>= getArtifactSourceFiles)
 getArtifactSourceFiles (FromDirectory _ as) = as >>= getArtifactSourceFiles
 getArtifactSourceFiles (SetPermissions _ _ _ as) =
     as >>= getArtifactSourceFiles
@@ -275,11 +275,11 @@ getAssemblyOutput :: ArtifactAssembly -> [AssemblyOutput]
 getAssemblyOutput (VmImages ts _) =
     AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
 getAssemblyOutput (CloudInit ts o) = getCloudInitOutputFiles o <$> ts
- where
-  getCloudInitOutputFiles baseName t = case t of
-      CI_ISO  -> AssemblyGeneratesOutputFiles [baseName <.> "iso"]
-      CI_VFAT -> AssemblyGeneratesOutputFiles [baseName <.> "vfat"]
-      CI_DIR  -> AssemblyCopiesSourcesToDirectory baseName
+  where
+    getCloudInitOutputFiles baseName t = case t of
+        CI_ISO  -> AssemblyGeneratesOutputFiles [baseName <.> "iso"]
+        CI_VFAT -> AssemblyGeneratesOutputFiles [baseName <.> "vfat"]
+        CI_DIR  -> AssemblyCopiesSourcesToDirectory baseName
 
 
 -- * QuickCheck instances
@@ -297,21 +297,21 @@ instance Arbitrary ArtifactGenerator where
 
 arbitraryEachT :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEachT =
-    sized $
-    \n ->
-         EachT <$> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))) <*>
-         oneof
-             [ listOf (vectorOf n (halfSize arbitrary))
-             , listOf1 (listOf (halfSize arbitrary))]
+    sized
+        $ \n ->
+              EachT
+                  <$> vectorOf n (halfSize (listOf1 (choose ('a', 'z'))))
+                  <*> oneof
+                          [ listOf (vectorOf n (halfSize arbitrary))
+                          , listOf1 (listOf (halfSize arbitrary))
+                          ]
 
 arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
-arbitraryEach =
-    sized $
-    \n ->
-         Each <$>
-         listOf
-             ((,) <$> listOf1 (choose ('a', 'z')) <*>
-              vectorOf n (halfSize (listOf1 (choose ('a', 'z')))))
+arbitraryEach = sized $ \n -> Each <$> listOf
+    ( (,) <$> listOf1 (choose ('a', 'z')) <*> vectorOf
+        n
+        (halfSize (listOf1 (choose ('a', 'z'))))
+    )
 
 
 instance Arbitrary ArtifactSource where
@@ -336,3 +336,4 @@ instance Arbitrary ArtifactAssembly where
 
 instance Arbitrary CloudInitType where
     arbitrary = elements [CI_ISO, CI_VFAT, CI_DIR]
+

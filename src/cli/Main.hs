@@ -78,13 +78,6 @@ globals =
                 )
         <*> optional
                 ( strOption
-                    (  help "Output file for a command/timing profile"
-                    <> long "profile-file"
-                    <> metavar "FILENAME"
-                    )
-                )
-        <*> optional
-                ( strOption
                     (  help
                           "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${buildDirRoot}."
                     <> short 'b'
@@ -123,13 +116,12 @@ globals =
         -> Bool
         -> Maybe FilePath
         -> Maybe FilePath
-        -> Maybe FilePath
         -> Bool
         -> Bool
         -> Maybe FilePath
         -> Maybe String
         -> B9ConfigOverride
-    toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique mRepoCache repo
+    toGlobalOpts cfg verbose quiet logF buildRoot keep notUnique mRepoCache repo
         = let minLogLevel = if verbose
                   then Just LogTrace
                   else if quiet then Just LogError else Nothing
@@ -139,8 +131,6 @@ globals =
                       .~ minLogLevel
                       &  logFile
                       .~ logF
-                      &  profileFile
-                      .~ profF
                       &  buildDirRoot
                       .~ buildRoot
                       &  keepTempDirs

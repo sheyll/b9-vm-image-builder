@@ -45,16 +45,8 @@ data BuildState =
              ,bsLogFileHandle :: Maybe SysIO.Handle
              ,bsSelectedRemoteRepo :: Maybe RemoteRepo
              ,bsRepoCache :: RepoCache
-             ,bsProf :: [ProfilingEntry]
              ,bsStartTime :: UTCTime
              ,bsInheritStdIn :: Bool}
-
-data ProfilingEntry
-  = IoActionDuration NominalDiffTime
-  | LogEvent LogLevel
-             String
-  deriving (Eq,Show)
-
 
 run :: MonadIO m => B9 a -> B9ConfigAction m a
 run action = do
@@ -100,7 +92,6 @@ run action = do
                        logFileHandle
                        selectedRemoteRepo
                        repoCache
-                       []
                        now
                        (_interactive finalCfg)
       selectedRemoteRepo = do
@@ -112,10 +103,6 @@ run action = do
             (show remoteRepos')
           )
     (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
-    -- Write a profiling report
-    when (isJust (_profileFile cfg)) $ writeFile
-      (fromJust (_profileFile cfg))
-      (unlines $ show <$> reverse (bsProf ctxOut))
     return r
   createBuildDir cfg buildId = if _uniqueBuildDirs cfg
     then do
@@ -171,22 +158,6 @@ getRemoteRepos = gets (_remoteRepos . bsCfg)
 
 getRepoCache :: B9 RepoCache
 getRepoCache = gets bsRepoCache
-
--- getDownloader :: B9 Downloader
--- getDownloader = gets bsDownloader
---
--- -- | Configuration for a tool that retreives arbitrary URL and returns them to
--- -- @stdout@.
--- data Downloader =
---   Downloader {downloaderCmd :: FilePath
---              ,downloaderArgsBeforeUrl :: [String]
---              ,downloaderUrlArgPrintfFormatString :: [String]
---              ,downloaderArgsAfterUrl :: [String]}
---   deriving (Read,Show,Eq,Ord,Typeable,Generic)
---
--- readContentFromUrl :: String -> B9 B.ByteString
--- readContentFromUrl url = do
---   return expression
 
 cmd :: String -> B9 ()
 cmd str = do
@@ -246,7 +217,6 @@ b9Log :: LogLevel -> String -> B9 ()
 b9Log level msg = do
   lv  <- gets $ _verbosity . bsCfg
   lfh <- gets bsLogFileHandle
-  modify $ \ctx -> ctx { bsProf = LogEvent level msg : bsProf ctx }
   B9 $ liftIO $ logImpl lv lfh level msg
 
 logImpl :: Maybe LogLevel -> Maybe SysIO.Handle -> LogLevel -> String -> IO ()
@@ -276,10 +246,4 @@ newtype B9 a =
   deriving (Functor,Applicative,Monad,MonadState BuildState)
 
 instance MonadIO B9 where
-  liftIO m =
-    do start <- B9 $ liftIO getCurrentTime
-       res <- B9 $ liftIO m
-       stop <- B9 $ liftIO getCurrentTime
-       let durMS = IoActionDuration (stop `diffUTCTime` start)
-       modify $ \ctx -> ctx {bsProf = durMS : bsProf ctx}
-       return res
+  liftIO m = B9 $ liftIO m
