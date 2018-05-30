@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.48
+version:             0.5.49
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -106,6 +106,7 @@ library
                    , aeson >= 1.0
                    , async >= 2.1
                    , base >= 4.8 && < 5
+                   , base64-bytestring
                    , binary >= 0.8.3
                    , bytestring >= 0.10.8
                    , conduit >= 1.2
