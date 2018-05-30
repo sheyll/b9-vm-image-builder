@@ -20,6 +20,7 @@ import           B9.Content.ErlangPropList
 import           B9.Content.StringTemplate
 import           B9.Content.YamlObject
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString as BStrict
 
 import           Test.QuickCheck
 import           B9.QCUtil
@@ -32,7 +33,12 @@ data Content
     | FromString String
     | FromTextFile SourceFile
     | FromURL String
+    | FromStrictBinary BStrict.ByteString
     deriving (Read,Show,Typeable,Eq,Data,Generic)
+
+-- | Pack bytes into a 'Content' such that a binary file will generated.
+packBinaryContent :: [Word8] -> Content
+packBinaryContent = FromStrictBinary . BStrict.pack
 
 instance Hashable Content
 instance Binary Content
@@ -50,6 +56,7 @@ instance CanRender Content where
   render (RenderYaml ast) = encodeSyntax <$> fromAST ast
   render (FromTextFile s) = readTemplateFile s
   render (FromString str) = return (B.pack str)
+  render (FromStrictBinary b) = return b
   render (FromURL url) = lift $ do
      dbgL $ "Downloading: " ++ url
      (exitcode,out,err) <- liftIO $ readProcessWithExitCode "curl" [url] ""
