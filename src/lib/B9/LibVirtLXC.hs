@@ -205,6 +205,7 @@ memoryUnit cfg = toUnit . maxMemory . envResources
     MB -> "MiB"
     KB -> "KiB"
     B  -> "B"
+
 memoryAmount :: LibVirtLXCConfig -> ExecEnv -> String
 memoryAmount cfg = show . toAmount . maxMemory . envResources
  where

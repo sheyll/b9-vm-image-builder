@@ -1,7 +1,0 @@
-flags: {}
-packages:
-- '.'
-extra-deps:
-- shake-0.16.3
-resolver: lts-9.4
-# pvp-bounds: lower

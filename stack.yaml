@@ -1,8 +1,8 @@
 flags: {}
 packages:
-- '.'
+  - "."
 extra-deps: []
-resolver: lts-11.3
+resolver: lts-12.6
 allow-newer: true
 # pvp-bounds: lower
-require-stack-version: ">=1.6.5"
+require-stack-version: ">=1.7.0"
