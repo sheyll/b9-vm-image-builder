@@ -16,3 +16,5 @@ TAGS
 *.iml
 
 .stack-work
+/result
+*~
