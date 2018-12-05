@@ -103,6 +103,7 @@ instance ASTish ErlangPropList where
                      return x')
             xs
     fromAST (ASTString s) = pure $ ErlangPropList $ ErlString s
+    fromAST (ASTInt i) = pure $ ErlangPropList $ ErlString (show i)
     fromAST (ASTEmbed c) =
         ErlangPropList . ErlString . T.unpack . E.decodeUtf8 <$> render c
     fromAST (ASTMerge []) =
