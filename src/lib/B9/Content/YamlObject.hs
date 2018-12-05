@@ -109,6 +109,7 @@ instance ASTish YamlObject where
             ASTEmbed c ->
                 YamlObject . toJSON . T.unpack . E.decodeUtf8 <$> render c
             ASTString str -> return (YamlObject (toJSON str))
+            ASTInt int -> return (YamlObject (toJSON int))
             ASTParse src@(Source _ srcPath) -> do
                 c <- readTemplateFile src
                 case decodeSyntax srcPath c of

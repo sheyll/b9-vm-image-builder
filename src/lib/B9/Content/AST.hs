@@ -68,6 +68,7 @@ data AST c a
       -- fields in yaml objects.
       ASTEmbed c -- Embed some pure content.
     | ASTString String -- A string literal.
+    | ASTInt Int -- A string literal.
     | ASTParse SourceFile -- An 'AST' obtained from parsing a source
                           -- file that contains a string corresponding
     |
