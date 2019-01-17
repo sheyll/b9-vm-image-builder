@@ -1,9 +1,17 @@
-module Main(main) where
+module Main
+    ( main
+    )
+where
 
-import Options.Applicative             hiding (action)
-import Options.Applicative.Help.Pretty hiding ((</>))
-import B9
-import Control.Lens ((.~), (&), over, (^.))
+import           Options.Applicative     hiding ( action )
+import           Options.Applicative.Help.Pretty
+                                         hiding ( (</>) )
+import           B9
+import           Control.Lens                   ( (.~)
+                                                , (&)
+                                                , over
+                                                , (^.)
+                                                )
 
 main :: IO ()
 main = do
@@ -21,13 +29,15 @@ data B9RunParameters =
 
 type Cmd = B9ConfigAction IO ()
 
+hostNetworkMagicValue :: String
+hostNetworkMagicValue = "host"
+
 applyB9RunParameters :: B9RunParameters -> IO ()
 applyB9RunParameters (B9RunParameters overrides act vars) =
     let cfg =
             noB9ConfigOverride
                 &  customB9Config
-                %~ ( over envVars (++ vars)
-                   . const (overrides ^. customB9Config)
+                %~ (over envVars (++ vars) . const (overrides ^. customB9Config)
                    )
                 &  maybe id
                          overrideB9ConfigPath
@@ -36,7 +46,7 @@ applyB9RunParameters (B9RunParameters overrides act vars) =
 
 parseCommandLine :: IO B9RunParameters
 parseCommandLine = execParser
-    ( info
+    (info
         (helper <*> (B9RunParameters <$> globals <*> cmds <*> buildVars))
         (  fullDesc
         <> progDesc
@@ -53,7 +63,7 @@ globals :: Parser B9ConfigOverride
 globals =
     toGlobalOpts
         <$> optional
-                ( strOption
+                (strOption
                     (  help
                           "Path to user's b9-configuration (default: ~/.b9/b9.conf)"
                     <> short 'c'
@@ -69,7 +79,7 @@ globals =
         <*> switch
                 (help "Suppress non-error output" <> short 'q' <> long "quiet")
         <*> optional
-                ( strOption
+                (strOption
                     (  help "Path to a logfile"
                     <> short 'l'
                     <> long "log-file"
@@ -77,14 +87,14 @@ globals =
                     )
                 )
         <*> optional
-                ( strOption
+                (strOption
                     (  help "Output file for a command/timing profile"
                     <> long "profile-file"
                     <> metavar "FILENAME"
                     )
                 )
         <*> optional
-                ( strOption
+                (strOption
                     (  help
                           "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${buildDirRoot}."
                     <> short 'b'
@@ -93,15 +103,15 @@ globals =
                     )
                 )
         <*> switch
-                ( help "Keep build directories after exit" <> short 'k' <> long
+                (help "Keep build directories after exit" <> short 'k' <> long
                     "keep-build-dir"
                 )
         <*> switch
-                ( help "Predictable build directory names" <> short 'u' <> long
+                (help "Predictable build directory names" <> short 'u' <> long
                     "predictable-build-dir"
                 )
         <*> optional
-                ( strOption
+                (strOption
                     (  help
                           "Cache directory for shared images, default: '~/.b9/repo-cache'"
                     <> long "repo-cache"
@@ -109,11 +119,22 @@ globals =
                     )
                 )
         <*> optional
-                ( strOption
+                (strOption
                     (  help "Remote repository to share image to"
                     <> short 'r'
                     <> long "repo"
                     <> metavar "REPOSITORY_ID"
+                    )
+                )
+        <*> optional
+                (strOption
+                    (  help
+                          ("Override the libvirt-lxc network setting.\nThe special value '"
+                          ++ hostNetworkMagicValue
+                          ++ "' disables restricted container networking."
+                          )
+                    <> long "network"
+                    <> metavar "NETWORK_ID"
                     )
                 )
   where
@@ -128,9 +149,11 @@ globals =
         -> Bool
         -> Maybe FilePath
         -> Maybe String
+        -> Maybe String
         -> B9ConfigOverride
-    toGlobalOpts cfg verbose quiet logF profF buildRoot keep notUnique mRepoCache repo
-        = let minLogLevel = if verbose
+    toGlobalOpts cfg verbose quiet logF profF buildRoot keep predictableBuildDir mRepoCache repo libvirtNet
+        = let
+              minLogLevel = if verbose
                   then Just LogTrace
                   else if quiet then Just LogError else Nothing
               b9cfg =
@@ -146,93 +169,99 @@ globals =
                       &  keepTempDirs
                       .~ keep
                       &  uniqueBuildDirs
-                      .~ not notUnique
+                      .~ not predictableBuildDir
                       &  repository
                       .~ repo
                       &  repositoryCache
                       .~ (Path <$> mRepoCache)
-          in  B9ConfigOverride
-                  { _customB9ConfigPath = Path <$> cfg
-                  , _customB9Config     = b9cfg
+          in
+              B9ConfigOverride
+                  { _customB9ConfigPath   = Path <$> cfg
+                  , _customB9Config       = b9cfg
+                  , _customLibVirtNetwork =
+                      (\n -> if n == hostNetworkMagicValue
+                              then Just n
+                              else Nothing
+                          )
+                          <$> libvirtNet
                   }
 
 cmds :: Parser Cmd
 cmds = subparser
     (  command
           "version"
-          ( info (pure runShowVersion)
-                 (progDesc "Show program version and exit.")
+          (info (pure runShowVersion)
+                (progDesc "Show program version and exit.")
           )
     <> command
            "build"
-           ( info
+           (info
                (void . runBuildArtifacts <$> buildFileParser)
 
                (progDesc "Merge all build file and generate all artifacts.")
            )
     <> command
            "run"
-           ( info
-               (   (\x y -> void (runRun x y))
-               <$> sharedImageNameParser
-               <*> many (strArgument idm)
+           (info
+               ((\x y -> void (runRun x y)) <$> sharedImageNameParser <*> many
+                   (strArgument idm)
                )
-               ( progDesc
+               (progDesc
                    "Run a command on the lastest version of the specified shared image. All modifications are lost on exit."
                )
            )
     <> command
            "push"
-           ( info
+           (info
                (runPush <$> sharedImageNameParser)
-               ( progDesc
+               (progDesc
                    "Push the lastest shared image from cache to the selected  remote repository."
                )
            )
     <> command
            "pull"
-           ( info
+           (info
                (runPull <$> optional sharedImageNameParser)
-               ( progDesc
+               (progDesc
                    "Either pull shared image meta data from all repositories, or only from just a selected one. If additionally the name of a shared images was specified, pull the newest version from either the selected repo, or from the repo with the most recent version."
                )
            )
     <> command
            "clean-local"
-           ( info
+           (info
                (pure runGcLocalRepoCache)
-               ( progDesc
+               (progDesc
                    "Remove old versions of shared images from the local cache."
                )
            )
     <> command
            "clean-remote"
-           ( info
+           (info
                (pure runGcRemoteRepoCache)
-               ( progDesc
+               (progDesc
                    "Remove cached meta-data of a remote repository. If no '-r' is given, clean the meta data of ALL remote repositories."
                )
            )
     <> command
            "list"
-           ( info (pure (void runListSharedImages))
-                  (progDesc "List shared images.")
+           (info (pure (void runListSharedImages))
+                 (progDesc "List shared images.")
            )
     <> command
            "add-repo"
-           ( info (runAddRepo <$> remoteRepoParser)
-                  (progDesc "Add a remote repo.")
+           (info (runAddRepo <$> remoteRepoParser)
+                 (progDesc "Add a remote repo.")
            )
     <> command
            "reformat"
-           ( info (runFormatBuildFiles <$> buildFileParser)
-                  (progDesc "Re-Format all build files.")
+           (info (runFormatBuildFiles <$> buildFileParser)
+                 (progDesc "Re-Format all build files.")
            )
     )
 
 buildFileParser :: Parser [FilePath]
 buildFileParser = helper <*> some
-    ( strOption
+    (strOption
         (  help
               "Build file to load, specify multiple build files (each witch '-f') to build them all in a single run."
         <> short 'f'
@@ -258,7 +287,7 @@ remoteRepoParser =
                     (  help "The (remote) repository root path."
                     <> metavar "REMOTE_DIRECTORY"
                     )
-            <*> ( SshPrivKey <$> strArgument
+            <*> (SshPrivKey <$> strArgument
                     (  help
                             "Path to the SSH private key file used for  authorization."
                     <> metavar "SSH_PRIV_KEY_FILE"
@@ -279,7 +308,7 @@ remoteRepoParser =
                             )
                     )
                 )
-            <*> ( SshRemoteUser <$> strArgument
+            <*> (SshRemoteUser <$> strArgument
                     (help "SSH-User to login" <> metavar "USER")
                 )
             )

@@ -7,35 +7,58 @@ current build id, the current build directory and the artifact to build.
 This module is used by the _effectful_ functions in this library.
 -}
 module B9.B9Monad
-       (B9, run, traceL, dbgL, infoL, errorL, errorExitL, getConfig,
-        getBuildId, getBuildDate, getBuildDir, getExecEnvType,
-        getSelectedRemoteRepo, getRemoteRepos, getRepoCache, cmd)
-       where
+  ( B9
+  , run
+  , traceL
+  , dbgL
+  , infoL
+  , errorL
+  , errorExitL
+  , getConfig
+  , getBuildId
+  , getBuildDate
+  , getBuildDir
+  , getExecEnvType
+  , getSelectedRemoteRepo
+  , getRemoteRepos
+  , getRepoCache
+  , cmd
+  )
+where
 
-import B9.B9Config
-import B9.Repository
-import Control.Applicative
-import Control.Exception (bracket)
-import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.State
-import Control.Lens((&), (.~), (^.), (%~))
-import qualified Data.ByteString.Char8 as B
-import Data.Functor ()
-import Data.Maybe
-import Data.Time.Clock
-import Data.Time.Format
-import Data.Word (Word32)
-import System.Directory
-import System.Exit
-import System.FilePath
-import System.Random (randomIO)
-import qualified System.IO as SysIO
-import Text.Printf
-import Control.Concurrent.Async (Concurrently(..))
-import Data.Conduit (($$))
-import qualified Data.Conduit.List as CL
-import Data.Conduit.Process
+import           B9.B9Config
+import           B9.Repository
+import           Control.Applicative
+import           Control.Exception              ( bracket )
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.State
+import           Control.Lens                   ( (&)
+                                                , (.~)
+                                                , (^.)
+                                                , (%~)
+                                                , (?~)
+                                                )
+import qualified Data.ByteString.Char8         as B
+import           Data.Functor                   ( )
+import           Data.Hashable
+import           Data.Maybe
+import           Data.Time.Clock
+import           Data.Time.Format
+import           Data.Word                      ( Word32 )
+import           System.Directory
+import           System.Exit
+import           System.FilePath
+import           System.Random                  ( randomIO )
+import qualified System.IO                     as SysIO
+import           Text.Printf
+import           Control.Concurrent.Async       ( Concurrently(..) )
+import           Data.Conduit                   ( (.|)
+                                                , runConduit
+                                                )
+import qualified Data.Conduit.List             as CL
+import           Data.Foldable
+import           Data.Conduit.Process
 
 data BuildState =
   BuildState {bsBuildId :: String
@@ -60,7 +83,7 @@ run :: MonadIO m => B9 a -> B9ConfigAction m a
 run action = do
   cfg <- askRuntimeConfig
   liftIO $ do
-    buildId <- liftIO $ generateBuildId
+    buildId <- liftIO $ generateBuildId cfg
     now     <- liftIO $ getCurrentTime
     liftIO
       $ withBuildDir cfg buildId (withLogFile cfg . runImpl cfg buildId now)
@@ -87,8 +110,7 @@ run action = do
           (  cfg
           &  remoteRepos
           .~ remoteRepos'
-          &  buildDirRoot
-          .~ Just buildDirRootAbs
+          &  (buildDirRoot ?~ buildDirRootAbs)
           &  envVars
           %~ mappend [("buildDirRoot", buildDirRootAbs)]
           )
@@ -106,7 +128,7 @@ run action = do
       selectedRemoteRepo = do
         sel <- _repository cfg
         lookupRemoteRepo remoteRepos' sel <|> error
-          ( printf
+          (printf
             "selected remote repo '%s' not configured, valid remote repos are: '%s'"
             sel
             (show remoteRepos')
@@ -117,13 +139,7 @@ run action = do
       (fromJust (_profileFile cfg))
       (unlines $ show <$> reverse (bsProf ctxOut))
     return r
-  createBuildDir cfg buildId = if _uniqueBuildDirs cfg
-    then do
-      let subDir = "BUILD-" ++ buildId
-      buildDir <- resolveBuildDir subDir
-      createDirectory buildDir
-      canonicalizePath buildDir
-    else do
+  createBuildDir cfg buildId = do
       let subDir = "BUILD-" ++ buildId
       buildDir <- resolveBuildDir subDir
       createDirectoryIfMissing True buildDir
@@ -135,12 +151,18 @@ run action = do
   removeBuildDir cfg buildDir =
     when (_uniqueBuildDirs cfg && not (_keepTempDirs cfg))
       $ removeDirectoryRecursive buildDir
-  generateBuildId = printf "%08X" <$> (randomIO :: IO Word32)
+  generateBuildId cfg =
+    let cfgHash = hash (show cfg) in
+       if _uniqueBuildDirs cfg then
+        do salt <- randomIO :: IO Word32
+           return (printf "%08X-%08X" cfgHash salt)
+        else
+           return (printf "%08X" cfgHash)
   -- Run the action build action
   wrappedAction   = do
     b9cfg <- getConfig
-    traverse (traceL . printf "Root Build Directory: %s")
-             (b9cfg ^. buildDirRoot)
+    traverse_ (traceL . printf "Root Build Directory: %s")
+              (b9cfg ^. buildDirRoot)
     startTime <- gets bsStartTime
     r         <- action
     now       <- liftIO getCurrentTime
@@ -211,8 +233,8 @@ cmdWithStdIn toStdOut cmdStr = do
   e                         <-
     liftIO
     $  runConcurrently
-    $  Concurrently (cpOut $$ outPipe)
-    *> Concurrently (cpErr $$ cmdLogger LogInfo)
+    $  Concurrently (runConduit (cpOut .| outPipe))
+    *> Concurrently (runConduit (cpErr .| cmdLogger LogInfo))
     *> Concurrently (waitForStreamingProcess cph)
   checkExitCode e
   return cpIn
@@ -276,10 +298,10 @@ newtype B9 a =
   deriving (Functor,Applicative,Monad,MonadState BuildState)
 
 instance MonadIO B9 where
-  liftIO m =
-    do start <- B9 $ liftIO getCurrentTime
-       res <- B9 $ liftIO m
-       stop <- B9 $ liftIO getCurrentTime
-       let durMS = IoActionDuration (stop `diffUTCTime` start)
-       modify $ \ctx -> ctx {bsProf = durMS : bsProf ctx}
-       return res
+  liftIO m = do
+    start <- B9 $ liftIO getCurrentTime
+    res   <- B9 $ liftIO m
+    stop  <- B9 $ liftIO getCurrentTime
+    let durMS = IoActionDuration (stop `diffUTCTime` start)
+    modify $ \ctx -> ctx { bsProf = durMS : bsProf ctx }
+    return res

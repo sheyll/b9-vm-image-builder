@@ -38,7 +38,7 @@ instance Binary YamlObject where
   put = put . encode . _fromYamlObject
   get = do
     v <- get
-    return $ YamlObject $ fromJust $ decode v
+    return $ YamlObject $ fromJust $ decodeThrow v
 
 instance Read YamlObject where
   readsPrec _ = readsYamlObject

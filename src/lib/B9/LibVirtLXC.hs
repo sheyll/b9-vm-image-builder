@@ -1,23 +1,27 @@
 {-| Implementation of an execution environment that uses "libvirt-lxc". -}
-module B9.LibVirtLXC ( runInEnvironment
-                     , supportedImageTypes
-                     , logLibVirtLXCConfig
-                     , module X
-                     ) where
+module B9.LibVirtLXC
+  ( runInEnvironment
+  , supportedImageTypes
+  , logLibVirtLXCConfig
+  , module X
+  )
+where
 
-import Control.Monad.IO.Class ( liftIO )
-import System.Directory
-import System.FilePath
-import Text.Printf ( printf )
-import Data.Char (toLower)
-import Control.Lens (view)
-import B9.ShellScript
-import B9.B9Monad
-import B9.B9Config (libVirtLXCConfigs)
-import B9.DiskImages
-import B9.ExecEnv
-import B9.B9Config.LibVirtLXC as X
-import System.IO.B9Extras (UUID(), randomUUID)
+import           Control.Monad.IO.Class         ( liftIO )
+import           System.Directory
+import           System.FilePath
+import           Text.Printf                    ( printf )
+import           Data.Char                      ( toLower )
+import           Control.Lens                   ( view )
+import           B9.ShellScript
+import           B9.B9Monad
+import           B9.B9Config                    ( libVirtLXCConfigs )
+import           B9.DiskImages
+import           B9.ExecEnv
+import           B9.B9Config.LibVirtLXC        as X
+import           System.IO.B9Extras             ( UUID()
+                                                , randomUUID
+                                                )
 
 logLibVirtLXCConfig :: LibVirtLXCConfig -> B9 ()
 logLibVirtLXCConfig c = traceL $ printf "USING LibVirtLXCConfig: %s" (show c)
@@ -50,9 +54,9 @@ runInEnvironment env scriptIn = if emptyScript scriptIn
       script   = Begin [setupEnv, scriptIn, successMarkerCmd scriptDirGuest]
       buildDir = buildBaseDir </> uuid'
     liftIO $ do
-      createDirectoryIfMissing True                           scriptDirHost
-      writeSh                  (scriptDirHost </> initScript) script
-      writeFile                domainFile                     domain
+      createDirectoryIfMissing True scriptDirHost
+      writeSh (scriptDirHost </> initScript) script
+      writeFile domainFile domain
     return $ Context scriptDirHost uuid domainFile cfg
 
   successMarkerCmd scriptDirGuest =
@@ -116,7 +120,7 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest =
     ++  emulator cfg
     ++  "</emulator>\n"
     ++  unlines
-          (  libVirtNetwork (networkId cfg)
+          (  libVirtNetwork (_networkId cfg)
           ++ (fsImage <$> envImageMounts e)
           ++ (fsSharedDir <$> envSharedDirectories e)
           )

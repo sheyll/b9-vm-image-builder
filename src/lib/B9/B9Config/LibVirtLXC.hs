@@ -1,21 +1,24 @@
-module B9.B9Config.LibVirtLXC (
-                        libVirtLXCConfigToCPDocument
-                        , defaultLibVirtLXCConfig
-                        , parseLibVirtLXCConfig
-                     , LibVirtLXCConfig(..)
-                     , LXCGuestCapability(..)
-        ) where
+module B9.B9Config.LibVirtLXC
+    ( libVirtLXCConfigToCPDocument
+    , defaultLibVirtLXCConfig
+    , parseLibVirtLXCConfig
+    , LibVirtLXCConfig(..)
+    , networkId
+    , LXCGuestCapability(..)
+    )
+where
 
-import B9.DiskImages
-import B9.ExecEnv
-import Data.ConfigFile.B9Extras
+import           B9.DiskImages
+import           B9.ExecEnv
+import           Data.ConfigFile.B9Extras
+import           Control.Lens                   ( makeLenses )
 
 
 data LibVirtLXCConfig = LibVirtLXCConfig { useSudo :: Bool
                                          , virshPath :: FilePath
                                          , emulator :: FilePath
                                          , virshURI :: FilePath
-                                         , networkId :: Maybe String
+                                         , _networkId :: Maybe String
                                          , guestCapabilities :: [LXCGuestCapability]
                                          , guestRamSize :: RamSize
                                          } deriving (Read, Show)
@@ -62,6 +65,8 @@ data LXCGuestCapability = CAP_MKNOD
                         | CAP_WAKE_ALARM
   deriving (Read, Show)
 
+makeLenses ''LibVirtLXCConfig
+
 defaultLibVirtLXCConfig :: LibVirtLXCConfig
 defaultLibVirtLXCConfig = LibVirtLXCConfig
     True
@@ -106,7 +111,7 @@ libVirtLXCConfigToCPDocument c cp = do
     cp3 <- setCP cp2 cfgFileSection virshPathK $ virshPath c
     cp4 <- setCP cp3 cfgFileSection emulatorK $ emulator c
     cp5 <- setCP cp4 cfgFileSection virshURIK $ virshURI c
-    cp6 <- setShowCP cp5 cfgFileSection networkIdK $ networkId c
+    cp6 <- setShowCP cp5 cfgFileSection networkIdK $ _networkId c
     cp7 <- setShowCP cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
     setShowCP cp7 cfgFileSection guestRamSizeK $ guestRamSize c
 
@@ -122,7 +127,3 @@ parseLibVirtLXCConfig cp =
         <*> (getr networkIdK)
         <*> (getr guestCapabilitiesK)
         <*> (getr guestRamSizeK)
-
-
-
-
