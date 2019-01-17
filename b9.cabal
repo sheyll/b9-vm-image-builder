@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.52
+version:             0.5.60
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -123,7 +123,7 @@ library
                    , pretty >= 1.1
                    , process >= 1.4
                    , random >= 1.1
-                   , shake >= 0.16 && < 0.17
+                   , shake >= 0.17 && < 0.18
                    , syb >= 0.6
                    , template >= 0.2
                    , text >= 1.2

@@ -11,43 +11,46 @@ import           Development.Shake
 import           Development.Shake.Classes
 import           Development.Shake.Rule
 import qualified Data.ByteString               as ByteString
+import qualified Data.ByteString.Builder       as Builder
+import           Data.ByteString.Builder        ( stringUtf8 )
 import qualified Data.ByteString.Lazy          as LazyByteString
 import qualified Data.Binary                   as Binary
+import           Data.Function
 import           B9
 
 -- | In order to use 'needSharedImage' and 'customSharedImageAction' you need to
 -- call this action before using any of the afore mentioned.
 enableSharedImageRules :: B9ConfigOverride -> Rules ()
-enableSharedImageRules b9inv = addBuiltinRule noLint go
+enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
  where
-  go
-    :: SharedImageName
-    -> Maybe ByteString.ByteString
-    -> Bool
-    -> Action (RunResult SharedImageBuildId)
+  sharedImageIdentity :: BuiltinIdentity SharedImageName SharedImageBuildId
+  sharedImageIdentity (SharedImageName k) (SharedImageBuildId v) =
+    LazyByteString.toStrict
+      (Builder.toLazyByteString (stringUtf8 k <> stringUtf8 v))
+
+  go :: BuiltinRun SharedImageName SharedImageBuildId
   go nameQ mSerlializedBuildId dependenciesChanged =
     let mOld = decodeBuildId <$> mSerlializedBuildId
     in  do
-          (rebuilt, newBuildId) <- if dependenciesChanged
-            then (True, ) <$> rebuild
-            else do
-              mNewBuildId <- getImgBuildId
-              maybe ((\i -> (True, i)) <$> rebuild)
-                    (\i -> return (False, i))
-                    mNewBuildId
+          (rebuilt, newBuildId) <-
+            if dependenciesChanged == RunDependenciesChanged
+              then (True, ) <$> rebuild
+              else do
+                mNewBuildId <- getImgBuildId
+                maybe ((True, ) <$> rebuild) (return . (False, )) mNewBuildId
           let newBuildIdBin = encodeBuildId newBuildId
               change        = if rebuilt
                 then maybe
                   ChangedRecomputeDiff
                   (\buildIdChanged -> if buildIdChanged
-                    then ChangedRecomputeSame
+                    then ChangedRecomputeDiff
                     else ChangedRecomputeSame
                   )
                   ((/= newBuildId) <$> mOld)
                 else maybe
                   ChangedStore
                   (\buildIdChanged -> if buildIdChanged
-                    then ChangedRecomputeSame
+                    then ChangedRecomputeDiff
                     else ChangedRecomputeSame
                   )
                   ((/= newBuildId) <$> mOld)
@@ -64,11 +67,11 @@ enableSharedImageRules b9inv = addBuiltinRule noLint go
 
     rebuild :: Action SharedImageBuildId
     rebuild = do
-      rules <- getUserRules
-      case userRuleMatch rules imgMatch of
+      rules <- getUserRuleList imgMatch
+      case sortBy (compare `on` fst) rules of
         [] ->
           fail $ "No rules to build B9 shared image " ++ show nameQ ++ " found"
-        [act] -> act b9inv
+        [(_, act)] -> act b9inv
         _rs ->
           fail
             $  "Multiple rules for the B9 shared image "

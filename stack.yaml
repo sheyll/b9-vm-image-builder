@@ -1,11 +1,9 @@
 flags: {}
 packages:
 - '.'
-extra-deps: 
+extra-deps:
 - ConfigFile-1.1.4
 - template-0.2.0.10
 
-resolver: lts-12.21
-allow-newer: true
-# pvp-bounds: lower
+resolver: lts-13.3
 require-stack-version: ">=1.6.5"

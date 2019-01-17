@@ -1,5 +1,4 @@
-{ q ? import <nixos> {  }
-, compiler ? "ghc843" }:
+{ q ? import <nixpkgs> {  } }:
 let
   nonHaskellBuildInputs =
     with q.pkgs;
@@ -10,16 +9,16 @@ let
     filter = (path: type:
       let base = baseNameOf (toString path);
       in !(q.pkgs.lib.hasPrefix ".ghc.environment." base) &&
-         !(q.pkgs.lib.hasSuffix ".nix" base)
+         !(q.pkgs.lib.hasSuffix ".nix" base) &&
+         !(q.pkgs.lib.hasPrefix "BUILD_" base)
     );
     src = q.pkgs.lib.cleanSource ./.;
   };
-
-  pkg = q.pkgs.haskell.packages.${compiler}.callCabal2nix
-            "b9" cleanSrc {};
+  hpkgs = q.pkgs.haskellPackages;
+  pkg = hpkgs.callCabal2nix "b9" cleanSrc {};
 in
   pkg.overrideAttrs(attrs: {
-      propagatedBuildInputs =
-           attrs.propagatedBuildInputs
+      buildInputs =
+           attrs.buildInputs
         ++ nonHaskellBuildInputs;
   })
