@@ -247,8 +247,13 @@ execB9ConfigAction act cfg = do
             let rc = permanentConfig Sem.<> (cfg ^. customB9Config)
             in  case cfg ^. customLibVirtNetwork of
                   Just overridenNetwork ->
-                    rc & libVirtLXCConfigs . _Just . networkId .~ overridenNetwork
+                    rc
+                      &  libVirtLXCConfigs
+                      .  _Just
+                      .  networkId
+                      .~ overridenNetwork
                   Nothing -> rc
+
       (res, permanentB9ConfigUpdates) <- runWriterT
         (runReaderT (runB9ConfigAction act) runtimeCfg)
 

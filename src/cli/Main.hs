@@ -39,6 +39,8 @@ applyB9RunParameters (B9RunParameters overrides act vars) =
                 &  customB9Config
                 %~ (over envVars (++ vars) . const (overrides ^. customB9Config)
                    )
+                &  customLibVirtNetwork
+                .~ (overrides ^. customLibVirtNetwork)
                 &  maybe id
                          overrideB9ConfigPath
                          (overrides ^. customB9ConfigPath)
@@ -180,8 +182,8 @@ globals =
                   , _customB9Config       = b9cfg
                   , _customLibVirtNetwork =
                       (\n -> if n == hostNetworkMagicValue
-                              then Just n
-                              else Nothing
+                              then Nothing
+                              else Just n
                           )
                           <$> libvirtNet
                   }
@@ -207,7 +209,7 @@ cmds = subparser
                    (strArgument idm)
                )
                (progDesc
-                   "Run a command on the lastest version of the specified shared image. All modifications are lost on exit."
+                   "Run a command on the lastest version of the specified shared image."
                )
            )
     <> command
