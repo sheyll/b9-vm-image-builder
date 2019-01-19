@@ -29,33 +29,18 @@ enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
       (Builder.toLazyByteString (stringUtf8 k <> stringUtf8 v))
 
   go :: BuiltinRun SharedImageName SharedImageBuildId
-  go nameQ mSerlializedBuildId dependenciesChanged =
-    let mOld = decodeBuildId <$> mSerlializedBuildId
-    in  do
-          (rebuilt, newBuildId) <-
-            if dependenciesChanged == RunDependenciesChanged
-              then (True, ) <$> rebuild
-              else do
-                mNewBuildId <- getImgBuildId
-                maybe ((True, ) <$> rebuild) (return . (False, )) mNewBuildId
-          let newBuildIdBin = encodeBuildId newBuildId
-              change        = if rebuilt
-                then maybe
-                  ChangedRecomputeDiff
-                  (\buildIdChanged -> if buildIdChanged
-                    then ChangedRecomputeDiff
-                    else ChangedRecomputeSame
-                  )
-                  ((/= newBuildId) <$> mOld)
-                else maybe
-                  ChangedStore
-                  (\buildIdChanged -> if buildIdChanged
-                    then ChangedRecomputeDiff
-                    else ChangedRecomputeSame
-                  )
-                  ((/= newBuildId) <$> mOld)
-              result = RunResult change newBuildIdBin newBuildId
-          return result
+  go nameQ mOldBIdBinary dependenciesChanged = do
+    mCurrentBId <- getImgBuildId
+    case mCurrentBId of
+      Just currentBId ->
+        let currentBIdBinary = encodeBuildId currentBId
+        in  if dependenciesChanged
+                 == RunDependenciesChanged
+                 && mOldBIdBinary
+                 == Just currentBIdBinary
+              then return $ RunResult ChangedNothing currentBIdBinary newBId
+              else rebuild (Just currentBIdBinary)
+      _ -> rebuild Nothing
    where
     getImgBuildId = execB9ConfigAction (runLookupLocalSharedImage nameQ) b9inv
 
@@ -65,18 +50,27 @@ enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
     encodeBuildId :: SharedImageBuildId -> ByteString.ByteString
     encodeBuildId = LazyByteString.toStrict . Binary.encode
 
-    rebuild :: Action SharedImageBuildId
-    rebuild = do
-      rules <- getUserRuleList imgMatch
-      case sortBy (compare `on` fst) rules of
-        [] ->
-          fail $ "No rules to build B9 shared image " ++ show nameQ ++ " found"
-        [(_, act)] -> act b9inv
-        _rs ->
-          fail
-            $  "Multiple rules for the B9 shared image "
-            ++ show nameQ
-            ++ " found"
+    rebuild
+      :: Maybe ByteString.ByteString -> Action (RunResult SharedImageBuildId)
+    rebuild mCurrentBIdBinary = do
+      (_, act) <- getUserRuleOne key (const Nothing) imgMatch
+      act
+      mNewBId <- getImgBuildId
+      newBId  <- maybe
+        (error
+          (  "failed to get SharedImageBuildId for "
+          ++ show nameQ
+          ++ " in context of "
+          ++ show b9inv
+          )
+        )
+        return
+        mNewBId
+      let newBIdBinary = encodeBuildId newBId
+      let change = if Just newBIdBinary == mCurrentBIdBinary
+            then ChangedRecomputeSame
+            else ChangedRecomputeDiff
+      return $ RunResult change newBIdBinary newBId
      where
       imgMatch (SharedImageCustomActionRule name mkImage) =
         if name == nameQ then Just mkImage else Nothing

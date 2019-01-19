@@ -3,34 +3,36 @@ Mostly effectful functions to assemble artifacts.
 -}
 module B9.ArtifactGeneratorImpl where
 
-import B9.ArtifactGenerator
-import B9.B9Monad
-import B9.B9Config
-import B9.VmBuilder
-import B9.Vm
-import B9.DiskImageBuilder
-import System.IO.B9Extras (ensureDir, getDirectoryFiles)
-import B9.Content.StringTemplate
-import B9.Content.Generator
-import B9.Content.AST
-import qualified Data.ByteString as B
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as E
-import Control.Lens (view)
-import Data.Data
-import Data.Generics.Schemes
-import Data.Generics.Aliases
-import Data.List
-import Data.Function
-import Control.Arrow
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Control.Monad.Writer
-import Control.Monad.Except
-import System.FilePath
-import System.Directory
-import Text.Printf
-import Text.Show.Pretty (ppShow)
+import           B9.ArtifactGenerator
+import           B9.B9Monad
+import           B9.B9Config
+import           B9.VmBuilder
+import           B9.Vm
+import           B9.DiskImageBuilder
+import           System.IO.B9Extras             ( ensureDir
+                                                , getDirectoryFiles
+                                                )
+import           B9.Content.StringTemplate
+import           B9.Content.Generator
+import           B9.Content.AST
+import qualified Data.ByteString               as B
+import qualified Data.Text                     as T
+import qualified Data.Text.Encoding            as E
+import           Control.Lens                   ( view )
+import           Data.Data
+import           Data.Generics.Schemes
+import           Data.Generics.Aliases
+import           Data.List
+import           Data.Function
+import           Control.Arrow
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import           Control.Monad.Writer
+import           Control.Monad.Except
+import           System.FilePath
+import           System.Directory
+import           Text.Printf
+import           Text.Show.Pretty               ( ppShow )
 
 -- | Execute an 'ArtifactGenerator' and return a 'B9Invokation' that returns
 -- the build id obtained by 'getBuildId'.
@@ -124,7 +126,7 @@ addBindings bs ce =
 withXBindings :: [(String, [String])] -> CGParser () -> CGParser ()
 withXBindings bs cp = (`local` cp) `mapM_` (addBindings <$> allXBindings bs)
  where
-  allXBindings ((k, vs):rest) =
+  allXBindings ((k, vs) : rest) =
     [ (k, v) : c | v <- vs, c <- allXBindings rest ]
   allXBindings [] = [[]]
 
@@ -136,7 +138,7 @@ eachBindingSetT
 eachBindingSetT g vars valueSets = if all ((== length vars) . length) valueSets
   then return (zip vars <$> valueSets)
   else cgError
-    ( printf
+    (printf
       "Error in 'Each' binding during artifact generation in:\n '%s'.\n\nThe variable list\n%s\n has %i entries, but this binding set\n%s\n\nhas a different number of entries!\n"
       (ppShow g)
       (ppShow vars)
@@ -153,8 +155,8 @@ eachBindingSet g kvs = do
   bindingSets = transpose [ repeat k `zip` vs | (k, vs) <- kvs ]
   checkInput  = when
     (1 /= length (nub $ length . snd <$> kvs))
-    ( cgError
-      ( printf
+    (cgError
+      (printf
         "Error in 'Each' binding: \n%s\nAll value lists must have the same length!"
         (ppShow g)
       )
@@ -356,8 +358,8 @@ createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
     files <- getDirectoryFiles instanceDir
     traceL (printf "copying files: %s" (show files))
     liftIO
-      ( mapM_
-        ( \(f, t) -> do
+      (mapM_
+        (\(f, t) -> do
           ensureDir t
           copyFile f t
         )
@@ -372,15 +374,14 @@ createTarget _ instanceDir (CloudInit types outPath) = mapM create_ types
         tmpFile = buildDir </> takeFileName isoFile
     ensureDir tmpFile
     dbgL
-      ( printf
-        "creating cloud init iso temp image '%s', destination file: '%s"
-        tmpFile
-        isoFile
+      (printf "creating cloud init iso temp image '%s', destination file: '%s"
+              tmpFile
+              isoFile
       )
     cmd
-      ( printf "genisoimage -output '%s' -volid cidata -rock -d '%s' 2>&1"
-               tmpFile
-               instanceDir
+      (printf "genisoimage -output '%s' -volid cidata -rock -d '%s' 2>&1"
+              tmpFile
+              instanceDir
       )
     dbgL (printf "moving iso image '%s' to '%s'" tmpFile isoFile)
     ensureDir isoFile

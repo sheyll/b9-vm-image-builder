@@ -1,5 +1,5 @@
 name:                b9
-version:             0.5.61
+version:             0.5.62
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -45,7 +45,7 @@ author:              Sven Heyll <svh@posteo.de>
 maintainer:          svh@posteo.de
 homepage:            https://github.com/sheyll/b9-vm-image-builder
 bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
-copyright:           2015, 2016, 2017, 2018 Sven Heyll <svh@posteo.de>
+copyright:           2015, 2016, 2017, 2018, 2019 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
 extra-source-files:  README.md
@@ -56,9 +56,6 @@ extra-source-files:  README.md
                    , .gitignore
                    , prepare_release.sh
                    , stack.yaml
-                   , stack-lts-9.4.yaml
-                   , stack-lts-11.0.yaml
-                   , stack-nightly-2018-03-16.yaml
                    , .travis.yml
                    , CONTRIBUTORS
 cabal-version:       >=1.22
@@ -83,7 +80,6 @@ library
                    , B9.Content.YamlObject
                    , B9.DiskImageBuilder
                    , B9.DiskImages
-                   , B9.DSL
                    , B9.ExecEnv
                    , B9.LibVirtLXC
                    , B9.MBR

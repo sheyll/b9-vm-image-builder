@@ -192,7 +192,7 @@ overrideVerbosity = overrideB9Config . Lens.set verbosity . Just
 overrideKeepBuildDirs :: Bool -> B9ConfigOverride -> B9ConfigOverride
 overrideKeepBuildDirs = overrideB9Config . Lens.set keepTempDirs
 
--- | A monad that gives access to the (transient) 'B9Config' to be used to
+-- | A monad that gives access to the (transient) 'B9Config' to be used at
 -- _runtime_ with 'askRuntimeConfig' or 'localRuntimeConfig', and that allows
 -- to write permanent 'B9Config' changes back to the configuration file using
 -- 'modifyPermanentConfig'. Execute a 'B9ConfigAction' by invoking
