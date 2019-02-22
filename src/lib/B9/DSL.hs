@@ -12,7 +12,7 @@ module B9.DSL
 
 import B9.ArtifactGenerator (ArtifactSource(..), CloudInitType(..))
 import B9.B9Config (ExecEnvType(..))
-import B9.Content.Generator(Content)
+import B9.Content.Builtin(Content)
 import B9.Content.StringTemplate
        (SourceFile(..), SourceFileConversion(..))
 import B9.DiskImages
@@ -49,8 +49,7 @@ instance Functor BuildStep where
 
 type B9DSL a = Free BuildStep a
 
-data Tagged a b =
-    Tagged b
+newtype Tagged a b = Tagged b
 
 instance Show b => Show (Tagged a b) where
     show (Tagged s) = show s

@@ -1,10 +1,11 @@
-{-| A wrapper around erlang and yaml syntax with a proplist-like behaviour in the
-    ConcatableSyntax instances -}
+{-| Allow reading, merging and writing Erlang terms. -}
 module B9.Content.ErlangPropList ( ErlangPropList (..)
                                  ) where
 
 import           Control.Parallel.Strategies
-import           Data.Binary
+import           Data.Binary.Get as Binary
+import           Data.Binary as Binary
+import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Data
 import           Data.Function
 import           Data.Hashable
@@ -22,16 +23,15 @@ import           B9.Content.AST
 import           B9.Content.StringTemplate
 
 import           Test.QuickCheck
+import Data.Binary.Put (putByteString)
 
 -- | A wrapper type around erlang terms with a Semigroup instance useful for
 -- combining sys.config files with OTP-application configurations in a list of
 -- the form of a proplist.
-data ErlangPropList =
-    ErlangPropList SimpleErlangTerm
-    deriving (Read,Eq,Show,Data,Typeable,Generic)
+newtype ErlangPropList = ErlangPropList SimpleErlangTerm
+                           deriving (Read, Eq, Show, Data, Typeable, Generic)
 
 instance Hashable ErlangPropList
-instance Binary ErlangPropList
 instance NFData ErlangPropList
 
 instance Arbitrary ErlangPropList where
@@ -81,12 +81,16 @@ instance Semigroup ErlangPropList where
       combine t1 (ErlList pl2) = ErlList ([t1] <> pl2)
       combine t1 t2 = ErlList [t1,t2]
 
-instance ConcatableSyntax ErlangPropList where
-  decodeSyntax src str = do
-    t <- parseErlTerm src str
-    return (ErlangPropList t)
+instance Binary ErlangPropList where
+  get = do
+    str <- Binary.getRemainingLazyByteString
+    case parseErlTerm "" (B.toStrict str) of
+      Right t ->
+        return (ErlangPropList t)
+      Left e ->
+        fail e
 
-  encodeSyntax (ErlangPropList t)  = renderErlTerm t
+  put (ErlangPropList t)  = putByteString (renderErlTerm t)
 
 instance ASTish ErlangPropList where
     fromAST (AST a) = pure a

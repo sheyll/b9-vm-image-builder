@@ -5,56 +5,62 @@ files required by virtual machines. This module is about creating and merging
 files containing parsable syntactic structures, such as most configuration files
 do.
 
-Imagine you would want to create a cloud-init 'user-data' file from a set of
-'user-data' snippets which each are valid 'user-data' files in yaml syntax and
-e.g. a 'write_files' section. Now the goal is, for b9 to be able to merge these
-snippets into one, such that all writefiles sections are combined into a single
-writefile section. Another example is OTP/Erlang sys.config files.  This type
-class is the greatest commonon denominator of types describing a syntax that can
-be parsed, concatenated e.g. like in the above example and rendered. The actual
-concatenation operation is the append from Monoid, i.e. like monoid but without
-the need for an empty element.
+B9 can be used to create configuration files by assembling structured documents,
+for example Yaml, JSON, Erlang Terms.
+
+One example is creating a single cloud-init 'user-data' file from a set of
+'user-data' snippets - all of which using yaml syntax to declare the same
+object (e.g @"user-data"@).
+
+The goal is, that b9 is able to merge these snippets into one, intelligently
+merging fields as one would expect, e.g. when merging multiple snippets with
+@writefiles@ fields, the output object's @writefiles@ field contains all the
+@write_file@ objects.
+
+Another example is the OTP/Erlang sys.config for configuring OTP/Erlang releases.
 -}
 
-module B9.Content.AST ( ConcatableSyntax (..)
-                      , ASTish(..)
+module B9.Content.AST ( ASTish(..)
                       , AST(..)
-                      , CanRender(..)
+                      , encodeSyntax
+                      , decodeSyntax
                       ) where
 
+import           B9.B9Monad(B9)
+import           B9.Content.StringTemplate
+import           B9.Content.Generator (CanRender(..))
+import           B9.Content.Environment
+import           B9.QCUtil
+import           Control.Monad.Reader
 import           Control.Parallel.Strategies
-import           Data.Binary
+import           Data.Binary (Binary)
+import qualified Data.Binary as Binary
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy.Char8 as LB
 import           Data.Data
 import           Data.Hashable
-import           Data.Semigroup as Sem
 import           GHC.Generics (Generic)
-import           Control.Monad.Reader
-import           B9.Content.StringTemplate
-import           B9.B9Monad(B9)
 import           Test.QuickCheck
-import           B9.QCUtil
 
--- | Types of values that can be parsed/rendered from/to 'ByteString's. This
--- class is used as basis for the 'ASTish' class.
-class (Sem.Semigroup a) => ConcatableSyntax a  where
-    -- Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
-    decodeSyntax
-        :: FilePath -- ^ An arbitrary string for error messages that
-        -> B.ByteString -- ^ The raw input to parse
-        -> Either String a
-    -- Generate a string representation of @a@
-    encodeSyntax
-        :: a -> B.ByteString
+-- | Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
+decodeSyntax
+    :: Binary a
+    => FilePath -- ^ An arbitrary string for error messages
+    -> B.ByteString -- ^ The raw input to parse
+    -> Either String a
+decodeSyntax src b =
+  case Binary.decodeOrFail (LB.fromStrict b) of
+    Left (_,_,e) -> Left (if null src then e else "In file: " ++ src ++ ": " ++ e)
+    Right (_,_,a) -> Right a
 
-instance ConcatableSyntax B.ByteString where
-    decodeSyntax _ = Right
-    encodeSyntax = id
+-- / Generate a string representation of @a@
+encodeSyntax :: Binary a => a -> B.ByteString
+encodeSyntax = LB.toStrict . Binary.encode
 
 -- | Describe how to create structured content that has a tree-like syntactic
 -- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines
--- a /context/ into which the 'AST' is embeded,
--- e.g. B9.Content.Generator.Content'. The second parameter defines a specifix
+-- a /context/ into which the 'AST' is embedded,
+-- e.g. B9.Content.Builtin.Content'. The second parameter defines a specifix
 -- syntax, e.g 'B9.Content.ErlangPropList' that the 'AST' value generates.
 data AST c a
     = ASTObj [(String, AST c a)] -- ^ Create an object similar to a
@@ -66,7 +72,7 @@ data AST c a
       -- several inputs in a smart and safe way,
       -- e.g. by merging the values of the same
       -- fields in yaml objects.
-      ASTEmbed c -- Embed some pure content.
+      ASTEmbed c -- Embed more impure content.
     | ASTString String -- A string literal.
     | ASTInt Int -- An Int literal.
     | ASTParse SourceFile -- An 'AST' obtained from parsing a source
@@ -76,21 +82,25 @@ data AST c a
       AST a -- Embed a literal @a@.
     deriving (Read,Show,Typeable,Data,Eq,Generic)
 
+instance Functor (AST c) where
+  fmap f (AST a)          = AST (f a)
+  fmap f (ASTObj x)       = ASTObj ((fmap . fmap . fmap) f x)
+  fmap f (ASTArr x)       = ASTArr ((fmap . fmap) f x)
+  fmap f (ASTMerge x)     = ASTMerge ((fmap . fmap) f x)
+  fmap _ (ASTEmbed x)     = ASTEmbed x
+  fmap _ (ASTString x)    = ASTString x
+  fmap _ (ASTInt x)       = ASTInt x
+  fmap _ (ASTParse x)     = ASTParse x
+
 instance (Hashable c, Hashable a) => Hashable (AST c a)
 instance (Binary c, Binary a) => Binary (AST c a)
 instance (NFData c, NFData a) => NFData (AST c a)
 
-
 -- | Types of values that describe content, that can be created from an 'AST'.
-class (ConcatableSyntax a) => ASTish a  where
+class ASTish a  where
     fromAST
         :: (CanRender c)
-        => AST c a -> ReaderT Environment B9  a
-
--- | Types of values that can be /rendered/ into a 'ByteString'
-class CanRender c  where
-    render
-        :: c -> ReaderT Environment B9 B.ByteString
+        => AST c a -> EnvironmentReaderT B9  a
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where
     arbitrary =

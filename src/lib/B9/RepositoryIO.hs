@@ -97,7 +97,7 @@ pullGlob subDir glob repo@(RemoteRepo repoId rootDir _key (SshRemoteHost (host,_
     cmd c
 
 -- | Express a pattern for file paths, used when searching repositories.
-data FilePathGlob = FileExtension String
+newtype FilePathGlob = FileExtension String
 
 -- * Internals
 

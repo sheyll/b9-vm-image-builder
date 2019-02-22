@@ -31,9 +31,7 @@ buildWithVm iid imageTargets instanceDir vmScript = do
 getVmScriptSupportedImageTypes :: VmScript -> B9 [ImageType]
 getVmScriptSupportedImageTypes NoVmScript =
   return [QCow2, Raw, Vmdk]
-getVmScriptSupportedImageTypes _ = do
-  envType <- getExecEnvType
-  return (supportedImageTypes envType)
+getVmScriptSupportedImageTypes _ = supportedImageTypes <$> getExecEnvType
 
 supportedImageTypes :: ExecEnvType -> [ImageType]
 supportedImageTypes LibVirtLXC = LXC.supportedImageTypes

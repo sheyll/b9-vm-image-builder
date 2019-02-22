@@ -317,8 +317,7 @@ prettyPrintSharedImages imgs = Boxes.render table
             nameC = col "Name" ((\(SharedImageName n) -> n) . sharedImageName)
             dateC = col "Date" ((\(SharedImageDate n) -> n) . sharedImageDate)
             idC = col "ID" ((\(SharedImageBuildId n) -> n) . sharedImageBuildId)
-            col title accessor =
-              (Boxes.text title) Boxes.// (Boxes.vcat Boxes.left cells)
+            col title accessor = Boxes.text title Boxes.// Boxes.vcat Boxes.left cells
               where
                 cells = Boxes.text <$> accessor <$> imgs
 

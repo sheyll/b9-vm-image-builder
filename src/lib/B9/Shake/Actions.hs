@@ -17,10 +17,6 @@ b9InvokationAction = execB9ConfigAction
 -- The return value is the buildid, see 'getBuildId'
 buildB9File :: FilePath -> FilePath -> [String] -> Action String
 buildB9File b9Root b9File args = do
-    let f = b9Root </> b9File
-    need [f]
-    invokeB9
-        ( localRuntimeConfig
-            (appendPositionalArguments args . (buildDirRoot .~ Just b9Root))
-            (runBuildArtifacts [f])
-        )
+  let f = b9Root </> b9File
+  need [f]
+  invokeB9 (localRuntimeConfig (appendPositionalArguments args . (buildDirRoot .~ Just b9Root)) (runBuildArtifacts [f]))

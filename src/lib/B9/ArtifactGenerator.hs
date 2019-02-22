@@ -21,7 +21,7 @@ import System.FilePath ((<.>), (</>))
 import B9.DiskImages
 import B9.Vm
 import B9.Content.StringTemplate
-import B9.Content.Generator
+import B9.Content.Builtin
 import B9.QCUtil
 
 import Test.QuickCheck

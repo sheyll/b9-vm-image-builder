@@ -15,11 +15,10 @@ import qualified Data.ByteString.Builder       as Builder
 import           Data.ByteString.Builder        ( stringUtf8 )
 import qualified Data.ByteString.Lazy          as LazyByteString
 import qualified Data.Binary                   as Binary
-import           Data.Function
 import           B9
 
 -- | In order to use 'needSharedImage' and 'customSharedImageAction' you need to
--- call this action before using any of the afore mentioned.
+-- call this action before using any of the aforementioned 'Rules'.
 enableSharedImageRules :: B9ConfigOverride -> Rules ()
 enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
  where
@@ -34,18 +33,16 @@ enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
     case mCurrentBId of
       Just currentBId ->
         let currentBIdBinary = encodeBuildId currentBId
+
         in  if dependenciesChanged
                  == RunDependenciesChanged
                  && mOldBIdBinary
                  == Just currentBIdBinary
-              then return $ RunResult ChangedNothing currentBIdBinary newBId
+              then return $ RunResult ChangedNothing currentBIdBinary currentBId
               else rebuild (Just currentBIdBinary)
       _ -> rebuild Nothing
    where
     getImgBuildId = execB9ConfigAction (runLookupLocalSharedImage nameQ) b9inv
-
-    decodeBuildId :: ByteString.ByteString -> SharedImageBuildId
-    decodeBuildId = Binary.decode . LazyByteString.fromStrict
 
     encodeBuildId :: SharedImageBuildId -> ByteString.ByteString
     encodeBuildId = LazyByteString.toStrict . Binary.encode
@@ -53,8 +50,8 @@ enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
     rebuild
       :: Maybe ByteString.ByteString -> Action (RunResult SharedImageBuildId)
     rebuild mCurrentBIdBinary = do
-      (_, act) <- getUserRuleOne key (const Nothing) imgMatch
-      act
+      (_, act) <- getUserRuleOne nameQ (const Nothing) imgMatch
+      act b9inv
       mNewBId <- getImgBuildId
       newBId  <- maybe
         (error
@@ -98,7 +95,6 @@ customSharedImageAction b9img customAction = addUserRule
               (show mCurrentBuildId)
       )
     maybe (errorSharedImageNotFound b9img) return mCurrentBuildId
-
 
 type instance RuleResult SharedImageName = SharedImageBuildId
 

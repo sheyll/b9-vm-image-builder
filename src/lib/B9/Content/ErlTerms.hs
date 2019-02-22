@@ -1,5 +1,6 @@
 {-| Erlang term parser and pretty printer. -}
 module B9.Content.ErlTerms (parseErlTerm
+                           ,erlTermParser
                            ,renderErlTerm
                            ,SimpleErlangTerm(..)
                            ,arbitraryErlSimpleAtom
@@ -89,12 +90,12 @@ toErlStringString = join . map toErlStringChar
 toErlStringChar :: Char -> String
 toErlStringChar = (table !!) . fromEnum
   where
-    table = [printf "\\x{%x}" c | c <- [0..(31::Int)]] ++
-            (pure <$> toEnum <$> [32 .. 33]) ++
-            ["\\\""] ++
-            (pure <$> toEnum <$> [35 .. 91]) ++
-            ["\\\\"] ++(pure <$> toEnum <$> [93 .. 126]) ++
-            [printf "\\x{%x}" c | c <- [(127::Int)..]]
+    table =
+      [printf "\\x{%x}" c | c <- [0 .. (31 :: Int)]] ++
+      (pure . toEnum <$> [32 .. 33]) ++
+      ["\\\""] ++
+      (pure . toEnum <$> [35 .. 91]) ++
+      ["\\\\"] ++ (pure . toEnum <$> [93 .. 126]) ++ [printf "\\x{%x}" c | c <- [(127 :: Int) ..]]
 
 toErlAtomString :: String -> String
 toErlAtomString = join . map toErlAtomChar
@@ -102,12 +103,12 @@ toErlAtomString = join . map toErlAtomChar
 toErlAtomChar :: Char -> String
 toErlAtomChar = (table !!) . fromEnum
   where
-    table = [printf "\\x{%x}" c | c <- [0..(31::Int)]] ++
-            (pure <$> toEnum <$> [32 .. 38]) ++
-            ["\\'"] ++
-            (pure <$> toEnum <$> [40 .. 91]) ++
-            ["\\\\"] ++(pure <$> toEnum <$> [93 .. 126]) ++
-            [printf "\\x{%x}" c | c <- [(127::Int)..]]
+    table =
+      [printf "\\x{%x}" c | c <- [0 .. (31 :: Int)]] ++
+      (pure . toEnum <$> [32 .. 38]) ++
+      ["\\'"] ++
+      (pure . toEnum <$> [40 .. 91]) ++
+      ["\\\\"] ++ (pure . toEnum <$> [93 .. 126]) ++ [printf "\\x{%x}" c | c <- [(127 :: Int) ..]]
 
 
 instance Arbitrary SimpleErlangTerm where
@@ -173,10 +174,10 @@ instance Arbitrary SimpleErlangTerm where
 
 
 erlTermParser :: Parser SimpleErlangTerm
-erlTermParser = between spaces (char '.') erlTermParser_
+erlTermParser = between spaces (char '.') erlExpressionParser
 
-erlTermParser_ :: Parser SimpleErlangTerm
-erlTermParser_ = erlAtomParser
+erlExpressionParser :: Parser SimpleErlangTerm
+erlExpressionParser = erlAtomParser
                  <|> erlCharParser
                  <|> erlStringParser
                  <|> erlBinaryParser
@@ -315,7 +316,7 @@ erlNestedParser open close =
   between
     (open >> spaces)
     (close >> spaces)
-    (commaSep erlTermParser_)
+    (commaSep erlExpressionParser)
 
 commaSep :: Parser a -> Parser [a]
 commaSep p = do r <- p

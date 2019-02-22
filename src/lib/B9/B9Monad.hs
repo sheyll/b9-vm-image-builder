@@ -84,91 +84,76 @@ run action = do
   cfg <- askRuntimeConfig
   liftIO $ do
     buildId <- liftIO $ generateBuildId cfg
-    now     <- liftIO $ getCurrentTime
-    liftIO
-      $ withBuildDir cfg buildId (withLogFile cfg . runImpl cfg buildId now)
- where
-  resolveBuildDirRoot cfg = case _buildDirRoot cfg of
-    Nothing    -> getCurrentDirectory >>= canonicalizePath
-    Just root' -> do
-      createDirectoryIfMissing True root'
-      canonicalizePath root'
-  withLogFile cfg f = maybe
-    (f Nothing)
-    (\logf -> SysIO.withFile logf SysIO.AppendMode (f . Just))
-    (_logFile cfg)
-  withBuildDir cfg buildId =
-    bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
-  runImpl cfg buildId now buildDir logFileHandle = do
+    now <- liftIO getCurrentTime
+    liftIO $ withBuildDir cfg buildId (withLogFile cfg . runImpl cfg buildId now)
+  where
+    resolveBuildDirRoot cfg =
+      case _buildDirRoot cfg of
+        Nothing -> getCurrentDirectory >>= canonicalizePath
+        Just root' -> do
+          createDirectoryIfMissing True root'
+          canonicalizePath root'
+    withLogFile cfg f = maybe (f Nothing) (\logf -> SysIO.withFile logf SysIO.AppendMode (f . Just)) (_logFile cfg)
+    withBuildDir cfg buildId = bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
+    runImpl cfg buildId now buildDir logFileHandle
       -- Check repositories
-    repoCache <- initRepoCache
-      (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
-    let buildDate = formatTime undefined "%F-%T" now
-    remoteRepos'    <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
-    buildDirRootAbs <- resolveBuildDirRoot cfg
-    let finalCfg =
-          (  cfg
-          &  remoteRepos
-          .~ remoteRepos'
-          &  (buildDirRoot ?~ buildDirRootAbs)
-          &  envVars
-          %~ mappend [("buildDirRoot", buildDirRootAbs)]
-          )
-    let
-      ctx = BuildState buildId
-                       buildDate
-                       finalCfg
-                       buildDir
-                       logFileHandle
-                       selectedRemoteRepo
-                       repoCache
-                       []
-                       now
-                       (_interactive finalCfg)
-      selectedRemoteRepo = do
-        sel <- _repository cfg
-        lookupRemoteRepo remoteRepos' sel <|> error
-          (printf
-            "selected remote repo '%s' not configured, valid remote repos are: '%s'"
-            sel
-            (show remoteRepos')
-          )
-    (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
-    -- Write a profiling report
-    when (isJust (_profileFile cfg)) $ writeFile
-      (fromJust (_profileFile cfg))
-      (unlines $ show <$> reverse (bsProf ctxOut))
-    return r
-  createBuildDir cfg buildId = do
+     = do
+      repoCache <- initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
+      let buildDate = formatTime undefined "%F-%T" now
+      remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
+      buildDirRootAbs <- resolveBuildDirRoot cfg
+      let finalCfg =
+            cfg & remoteRepos .~ remoteRepos' & (buildDirRoot ?~ buildDirRootAbs) &
+            envVars %~ mappend [("buildDirRoot", buildDirRootAbs)]
+      let ctx =
+            BuildState
+              buildId
+              buildDate
+              finalCfg
+              buildDir
+              logFileHandle
+              selectedRemoteRepo
+              repoCache
+              []
+              now
+              (_interactive finalCfg)
+          selectedRemoteRepo = do
+            sel <- _repository cfg
+            lookupRemoteRepo remoteRepos' sel <|>
+              error
+                (printf "selected remote repo '%s' not configured, valid remote repos are: '%s'" sel (show remoteRepos'))
+      (r, ctxOut) <- runStateT (runB9 wrappedAction) ctx
+      when (isJust (_profileFile cfg)) $
+        writeFile (fromJust (_profileFile cfg)) (unlines $ show <$> reverse (bsProf ctxOut))
+      return r
+    createBuildDir cfg buildId = do
       let subDir = "BUILD-" ++ buildId
       buildDir <- resolveBuildDir subDir
       createDirectoryIfMissing True buildDir
       canonicalizePath buildDir
-   where
-    resolveBuildDir f = do
-      root <- resolveBuildDirRoot cfg
-      return $ root </> f
-  removeBuildDir cfg buildDir =
-    when (_uniqueBuildDirs cfg && not (_keepTempDirs cfg))
-      $ removeDirectoryRecursive buildDir
-  generateBuildId cfg =
-    let cfgHash = hash (show cfg) in
-       if _uniqueBuildDirs cfg then
-        do salt <- randomIO :: IO Word32
-           return (printf "%08X-%08X" cfgHash salt)
-        else
-           return (printf "%08X" cfgHash)
+      where
+        resolveBuildDir f = do
+          root <- resolveBuildDirRoot cfg
+          return $ root </> f
+    removeBuildDir cfg buildDir =
+      when (_uniqueBuildDirs cfg && not (_keepTempDirs cfg)) $ removeDirectoryRecursive buildDir
+    generateBuildId cfg =
+      let cfgHash = hash (show cfg)
+       in if _uniqueBuildDirs cfg
+            then do
+              salt <- randomIO :: IO Word32
+              return (printf "%08X-%08X" cfgHash salt)
+            else return (printf "%08X" cfgHash)
   -- Run the action build action
-  wrappedAction   = do
-    b9cfg <- getConfig
-    traverse_ (traceL . printf "Root Build Directory: %s")
-              (b9cfg ^. buildDirRoot)
-    startTime <- gets bsStartTime
-    r         <- action
-    now       <- liftIO getCurrentTime
-    let duration = show (now `diffUTCTime` startTime)
-    infoL (printf "DURATION: %s" duration)
-    return r
+    wrappedAction = do
+      b9cfg <- getConfig
+      traverse_ (traceL . printf "Root Build Directory: %s") (b9cfg ^. buildDirRoot)
+      startTime <- gets bsStartTime
+      r <- action
+      now <- liftIO getCurrentTime
+      let duration = show (now `diffUTCTime` startTime)
+      infoL (printf "DURATION: %s" duration)
+      return r
 
 getBuildId :: B9 String
 getBuildId = gets bsBuildId
@@ -295,7 +280,7 @@ printLevel l = case l of
 
 newtype B9 a =
   B9 {runB9 :: StateT BuildState IO a}
-  deriving (Functor,Applicative,Monad,MonadState BuildState)
+  deriving (Functor,Applicative,Monad,MonadState BuildState,Alternative)
 
 instance MonadIO B9 where
   liftIO m = do
