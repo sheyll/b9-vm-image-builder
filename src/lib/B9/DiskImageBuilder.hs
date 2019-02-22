@@ -42,7 +42,6 @@ import Data.Generics.Aliases
 import Data.Generics.Schemes
 import Data.List
 import Data.Maybe
-import System.Directory (removeFile)
 import System.Directory
 import System.FilePath
 import System.IO.B9Extras (consult, ensureDir, prettyPrintToFile)

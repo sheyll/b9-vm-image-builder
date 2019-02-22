@@ -1,15 +1,15 @@
 -- | Convenient Shake 'Action's for 'B9' rules.
-module B9.Shake.Actions (b9InvokationAction, buildB9File) where
+module B9.Shake.Actions (b9InvocationAction, buildB9File) where
 
 import Development.Shake
 import Development.Shake.FilePath
 import B9
 
--- | Convert a 'B9Invokation' action into a Shake 'Action'. This is just
+-- | Convert a 'B9Invocation' action into a Shake 'Action'. This is just
 -- an alias for 'execB9ConfigAction' since 'Action' is an instance of 'MonadIO'
 -- and 'execB9ConfigAction' work on any .
-b9InvokationAction :: B9ConfigAction Action a -> B9ConfigOverride -> Action a
-b9InvokationAction = execB9ConfigAction
+b9InvocationAction :: B9ConfigAction Action a -> B9ConfigOverride -> Action a
+b9InvocationAction = execB9ConfigAction
 
 -- | An action that does the equivalent of
 -- @b9c build -f <b9file> -- (args !! 0) (args !! 1) ... (args !! (length args - 1))@

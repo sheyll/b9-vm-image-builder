@@ -52,7 +52,7 @@ The reasons why 'Sources' takes a list of 'ArtifactGenerator's is that
 
 To bind such variables use 'Let', 'Each', 'LetX' or 'EachT'.
 
-String subtitution of these variables is done by "B9.Content.StringTemplate".
+String substitution of these variables is done by "B9.Content.StringTemplate".
 These variables can be used as value in nested 'Let's, in most file names/paths
 and in source files added with 'B9.Content.StringTemplate.SourceFile'
 
@@ -66,7 +66,7 @@ data ArtifactGenerator
       Let [(String, String)]
           [ArtifactGenerator]
     |
-      -- ^ Bind variables, variables are avaible in nested
+      -- ^ Bind variables, variables are available in nested
       -- generators.
       LetX [(String, [String])]
            [ArtifactGenerator]
@@ -103,7 +103,7 @@ data ArtifactGenerator
             [[String]]
             [ArtifactGenerator]
     |
-      -- ^ The transposed verison of 'Each': Bind the variables
+      -- ^ The transposed version of 'Each': Bind the variables
       -- in the first list to each a set of values from the
       -- second argument; execute the nested generators for
       -- each binding
@@ -139,7 +139,7 @@ data ArtifactSource
                SourceFile
     |
       -- ^ Copy a 'B9.Content.StringTemplate.SourceFile'
-      -- potentially replacing variabled defined in 'Let'-like
+      -- potentially replacing variable defined in 'Let'-like
       -- parent elements.
       FromContent FilePath
                   Content
@@ -232,7 +232,7 @@ instance NFData ArtifactAssembly
 
 -- | A type representing the targets assembled by
 -- 'B9.ArtifactGeneratorImpl.assemble' from an 'ArtifactAssembly'. There is a
--- list of 'ArtifactTarget's because e.g. a single 'CloudInit' can produce upto
+-- list of 'ArtifactTarget's because e.g. a single 'CloudInit' can produce up to
 -- three output files, a directory, an ISO image and a VFAT image.
 data AssembledArtifact =
     AssembledArtifact InstanceId

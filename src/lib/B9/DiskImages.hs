@@ -319,7 +319,7 @@ prettyPrintSharedImages imgs = Boxes.render table
             idC = col "ID" ((\(SharedImageBuildId n) -> n) . sharedImageBuildId)
             col title accessor = Boxes.text title Boxes.// Boxes.vcat Boxes.left cells
               where
-                cells = Boxes.text <$> accessor <$> imgs
+                cells = Boxes.text . accessor <$> imgs
 
 -- | Return the disk image of an sharedImage
 sharedImageImage :: SharedImage -> Image

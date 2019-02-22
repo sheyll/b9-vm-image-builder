@@ -19,7 +19,7 @@ main = do
     applyB9RunParameters b9Opts
 
 
--- | A data structure that contains the `B9Invokation`
+-- | A data structure that contains the `B9Invocation`
 -- as well as build parameters.
 data B9RunParameters =
   B9RunParameters

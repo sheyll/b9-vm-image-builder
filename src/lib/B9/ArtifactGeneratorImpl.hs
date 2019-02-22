@@ -36,7 +36,7 @@ import           B9.Vm
 import           B9.VmBuilder
 
 
--- | Execute an 'ArtifactGenerator' and return a 'B9Invokation' that returns
+-- | Execute an 'ArtifactGenerator' and return a 'B9Invocation' that returns
 -- the build id obtained by 'getBuildId'.
 buildArtifacts :: ArtifactGenerator -> B9 String
 buildArtifacts artifactGenerator = do
@@ -115,7 +115,7 @@ addBindings bs ce = do
   return ce {agEnv = newEnv}
 
 withXBindings :: [(String, [String])] -> CGParser () -> CGParser ()
-withXBindings bs cp = (`local` cp) `mapM_` ((((.) . (.)) fromJust addBindings) <$> allXBindings bs)
+withXBindings bs cp = (`local` cp) `mapM_` (((.) . (.)) fromJust addBindings <$> allXBindings bs)
   where
     allXBindings ((k, vs):rest) = [(k, v) : c | v <- vs, c <- allXBindings rest]
     allXBindings [] = [[]]

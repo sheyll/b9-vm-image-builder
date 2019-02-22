@@ -103,7 +103,7 @@ lookupOrThrow key = do
 lookupEither :: MonadEnvironment m => Text -> m (Either KeyNotFound Text)
 lookupEither key = do
   env <- askEnvironment
-  maybe (return (Left (MkKeyNotFound key env))) (return . Right) (HashMap.lookup key (fromEnvironment env))
+  (return . maybe (Left (MkKeyNotFound key env)) Right) (HashMap.lookup key (fromEnvironment env))
 
 -- | An 'Exception' thrown by 'addBinding' indicating that a key already exists.
 --

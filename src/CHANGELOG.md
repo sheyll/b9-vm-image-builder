@@ -38,4 +38,9 @@
 * Switch to lazy `Text`s and `ByteString`s where possible, since B9 might
   read/generate large files. 
   
+* Rename `CanRender` to `ToContentGenerator` 
+  and change the method signatur to return the new `ContentGenerator` type  
+
+* Fix spelling: Rename B9Invokation to B9Invocation
+  
   
