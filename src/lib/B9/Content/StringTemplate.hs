@@ -24,13 +24,14 @@ import Control.Monad.Trans.Identity ()
 import Control.Parallel.Strategies
 import Data.Bifunctor
 import Data.Binary
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString as Strict
+import qualified Data.ByteString.Lazy as Lazy
 import Data.Data
 import Data.Hashable
-import qualified Data.Text as T
-import Data.Text.Encoding as E
-import Data.Text.Lazy.Encoding as LE
+import qualified Data.Text.Lazy as LazyT
+import qualified Data.Text      as StrictT
+import qualified Data.Text.Encoding       as StrictE
+import qualified Data.Text.Lazy.Encoding  as LazyE
 import Data.Text.Template (render, renderA, templateSafe)
 import GHC.Generics (Generic)
 import System.IO.B9Extras
@@ -61,7 +62,7 @@ instance Binary SourceFileConversion
 
 instance NFData SourceFileConversion
 
-readTemplateFile :: (MonadIO m, MonadEnvironment m) => SourceFile -> m B.ByteString
+readTemplateFile :: (MonadIO m, MonadEnvironment m) => SourceFile -> m Lazy.ByteString
 readTemplateFile (Source conv f') = do
   env <- askEnvironment
   case substE env f' of
@@ -73,7 +74,7 @@ readTemplateFile (Source conv f') = do
            f'
            e)
     Right f -> do
-      c <- liftIO (B.readFile f)
+      c <- liftIO (Lazy.readFile f)
       convert f c
   where
     convert f c =
@@ -94,21 +95,21 @@ subst env templateStr =
 
 -- String template substitution via dollar
 substE :: Environment -> String -> Either String String
-substE env templateStr = second (T.unpack . E.decodeUtf8) (substEB env (E.encodeUtf8 (T.pack templateStr)))
+substE env templateStr = second (LazyT.unpack . LazyE.decodeUtf8) (substEB env (LazyE.encodeUtf8 (LazyT.pack templateStr)))
 
 -- String template substitution via dollar
-substEB :: Environment -> B.ByteString -> Either String B.ByteString
+substEB :: Environment -> Lazy.ByteString -> Either String Lazy.ByteString
 substEB env templateStr = do
   t <- template'
   res <- renderA t env'
-  return (LB.toStrict (LE.encodeUtf8 res))
+  return (LazyE.encodeUtf8 res)
   where
     env' t =
-      case lookupEither t env of
-        Right v -> Right v
+      case lookupEither (LazyT.fromStrict t) env of
+        Right v -> Right (LazyT.toStrict v)
         Left e -> Left (show e ++ "\nIn template: \"" ++ show templateStr ++ "\"\n")
     template' =
-      case templateSafe (E.decodeUtf8 templateStr) of
+      case templateSafe (LazyT.toStrict (LazyE.decodeUtf8 templateStr)) of
         Left (row, col) ->
           Left
             ("Invalid template, error at row: " ++ show row ++ ", col: " ++ show col ++ " in: \"" ++ show templateStr)
@@ -116,20 +117,20 @@ substEB env templateStr = do
 
 substFile :: MonadIO m => Environment -> FilePath -> FilePath -> m ()
 substFile env src dest = do
-  templateBs <- liftIO (B.readFile src)
-  let t = templateSafe (E.decodeUtf8 templateBs)
+  templateBs <- liftIO (Strict.readFile src)
+  let t = templateSafe (StrictE.decodeUtf8 templateBs)
   case t of
     Left (r, c) ->
-      let badLine = unlines (take r (lines (T.unpack (E.decodeUtf8 templateBs))))
+      let badLine = unlines (take r (lines (StrictT.unpack (StrictE.decodeUtf8 templateBs))))
           colMarker = replicate (c - 1) '-' ++ "^"
        in error (printf "Template error in file '%s' line %i:\n\n%s\n%s\n" src r badLine colMarker)
     Right template' -> do
-      let out = LE.encodeUtf8 (render template' envLookup)
-      liftIO (LB.writeFile dest out)
+      let out = LazyE.encodeUtf8 (render template' envLookup)
+      liftIO (Lazy.writeFile dest out)
       return ()
   where
-    envLookup :: T.Text -> T.Text
-    envLookup x = either err id (runReaderT (lookupOrThrow x) env)
+    envLookup :: StrictT.Text -> StrictT.Text
+    envLookup x = either err LazyT.toStrict (runReaderT (lookupOrThrow (LazyT.fromStrict x)) env)
       where
         err :: SomeException -> a
         err e = error (show e ++ "\nIn file: \'" ++ src ++ "\'\n")

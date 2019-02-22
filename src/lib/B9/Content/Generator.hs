@@ -27,7 +27,7 @@ instance Monoid a => Monoid (ContentGenerator a) where
 -- | Types of values that can be /rendered/ into a 'ByteString'
 class CanRender c  where
     render
-        :: c -> EnvironmentReaderT B9 B.ByteString
+        :: c -> EnvironmentReaderT B9 Lazy.ByteString
 
 renderContentGenerator :: Environment -> ContentGenerator a -> B9 a
 renderContentGenerator e = runEnvironmentReaderT e . getContentGenerator

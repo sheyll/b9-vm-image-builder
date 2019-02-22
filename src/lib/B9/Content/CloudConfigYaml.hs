@@ -23,7 +23,7 @@ import           Control.Parallel.Strategies (NFData)
 import           Data.Binary                 (Binary)
 import qualified Data.Binary                 as Binary
 import qualified Data.Binary.Get             as Binary
-import qualified Data.ByteString.Lazy.Char8  as B
+import qualified Data.ByteString.Lazy.Char8  as Lazy
 import           Data.Data                   (Data, Typeable)
 import           Data.Hashable               (Hashable)
 import           GHC.Generics                (Generic)
@@ -43,7 +43,7 @@ newtype CloudConfigYaml = MkCloudConfigYaml
 -- text file containing the cloud-config Yaml document.
 --
 -- @Since 0.5.62
-cloudConfigFileHeader :: B.ByteString
+cloudConfigFileHeader :: Lazy.ByteString
 cloudConfigFileHeader = "#cloud-config\n"
 
 instance ASTish CloudConfigYaml where
@@ -55,9 +55,9 @@ instance Binary CloudConfigYaml where
    = do
     Binary.lookAheadM
       (do completeDocument <- Binary.lookAhead Binary.getRemainingLazyByteString
-          if B.length completeDocument >= B.length cloudConfigFileHeader &&
-                B.take (B.length cloudConfigFileHeader) completeDocument == cloudConfigFileHeader
-               then do Binary.skip (fromIntegral (B.length cloudConfigFileHeader))
+          if Lazy.length completeDocument >= Lazy.length cloudConfigFileHeader &&
+                Lazy.take (Lazy.length cloudConfigFileHeader) completeDocument == cloudConfigFileHeader
+               then do Binary.skip (fromIntegral (Lazy.length cloudConfigFileHeader))
                        return (Just ())
                else return Nothing)
     MkCloudConfigYaml <$> Binary.get

@@ -4,6 +4,7 @@ import Data.Text ()
 
 import B9.ArtifactGenerator
 import B9.ArtifactGeneratorImpl
+import B9.Content.Environment as Env
 import B9.DiskImages
 import B9.ExecEnv
 import B9.Vm
@@ -14,7 +15,7 @@ spec =
   describe "assemble" $ do
 
      it "replaces '$...' variables in SourceImage Image file paths" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [transientCOW "${variable}" ""] NoVmScript
            expected = transientCOW "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -22,7 +23,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in SourceImage 'From' names" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [transientShared "${variable}" ""] NoVmScript
            expected = transientShared "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -30,7 +31,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in the name of a shared image" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [shareCOW "${variable}" ""] NoVmScript
            expected = shareCOW "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -38,7 +39,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in the name and path of a live installer image" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [liveInstallerCOWImage "${variable}" ""] NoVmScript
            expected = liveInstallerCOWImage "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -46,7 +47,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in the file name of an image exported as LocalFile" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [localCOWImage "${variable}" ""] NoVmScript
            expected = localCOWImage "value" ""
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -54,7 +55,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in mount point of an image" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [localCOWImage "" "${variable}"] NoVmScript
            expected = localCOWImage "" "value"
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -62,7 +63,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in shared directory source and mount point (RO)" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [] (emptyScriptWithSharedDirRO "${variable}")
            expected = emptyScriptWithSharedDirRO "value"
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -70,7 +71,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in shared directory source and mount point (RW)" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [] (emptyScriptWithSharedDirRW "${variable}")
            expected = emptyScriptWithSharedDirRW "value"
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e
@@ -78,7 +79,7 @@ spec =
        in actual `shouldBe` expected
 
      it "replaces '$...' variables in VmImages build script instructions" $
-       let e = CGEnv [("variable","value")] []
+       let e = CGEnv (Env.fromStringPairs [("variable","value")]) []
            src = vmImagesArtifact "" [] (buildScript "${variable}")
            expected = buildScript "value"
            (Right [igEnv]) = execCGParser (parseArtifactGenerator src) e

@@ -31,12 +31,10 @@ import           B9.Content.StringTemplate
 import           B9.Content.Generator (CanRender(..))
 import           B9.Content.Environment
 import           B9.QCUtil
-import           Control.Monad.Reader
 import           Control.Parallel.Strategies
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy.Char8 as LB
+import qualified Data.ByteString.Lazy.Char8 as Lazy
 import           Data.Data
 import           Data.Hashable
 import           GHC.Generics (Generic)
@@ -46,16 +44,16 @@ import           Test.QuickCheck
 decodeSyntax
     :: Binary a
     => FilePath -- ^ An arbitrary string for error messages
-    -> B.ByteString -- ^ The raw input to parse
+    -> Lazy.ByteString -- ^ The raw input to parse
     -> Either String a
 decodeSyntax src b =
-  case Binary.decodeOrFail (LB.fromStrict b) of
+  case Binary.decodeOrFail b of
     Left (_,_,e) -> Left (if null src then e else "In file: " ++ src ++ ": " ++ e)
     Right (_,_,a) -> Right a
 
 -- / Generate a string representation of @a@
-encodeSyntax :: Binary a => a -> B.ByteString
-encodeSyntax = LB.toStrict . Binary.encode
+encodeSyntax :: Binary a => a -> Lazy.ByteString
+encodeSyntax = Binary.encode
 
 -- | Describe how to create structured content that has a tree-like syntactic
 -- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines

@@ -23,3 +23,19 @@
 
 * Rename `RenderYaml` to `RenderYamlObject` In order to prevent unexpected 
   runtime behaviour in code that uses this library.
+  
+* Introduce the type `Environment` that replaces the ubiquotus `[(String, String)]`
+  by a lazy `Text` based `HashMap`.
+  
+* Rename the previous `B9.Content.Generator` to `B9.Content.Builtin`
+
+* Introduce `ContentGenerator` as an open, extensible alternative
+  to `Content`, `AST` and `CanRender` in the module
+  `B9.Content.Generator`
+
+* Move `CanRender` from `B9.Content.AST` to `B9.Content.Generator`    
+
+* Switch to lazy `Text`s and `ByteString`s where possible, since B9 might
+  read/generate large files. 
+  
+  

@@ -30,8 +30,8 @@ import           Data.Data
 import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HashMap
 import           Data.Maybe                  (maybe)
-import           Data.Text                   (Text)
-import qualified Data.Text                   as Text
+import           Data.Text.Lazy              (Text)
+import qualified Data.Text.Lazy              as Text
 
 -- | A map of textual keys to textual values.
 --

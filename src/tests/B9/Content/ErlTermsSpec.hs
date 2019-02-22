@@ -6,7 +6,7 @@ import Test.Hspec
 import Test.QuickCheck
 import Data.Maybe
 import B9.Content.ErlTerms
-import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as Lazy
 
 spec :: Spec
 spec = do
@@ -54,7 +54,7 @@ spec = do
     it "parses decimal literals"
        (property
           (do decimal <- arbitrary `suchThat` (>= 0)
-              let decimalStr = B.pack (show (decimal :: Integer) ++ ".")
+              let decimalStr = Lazy.pack (show (decimal :: Integer) ++ ".")
               parsedTerm <- case parseErlTerm "test" decimalStr of
                                  (Left e) -> fail e
                                  (Right parsedTerm) -> return parsedTerm
@@ -71,7 +71,7 @@ spec = do
           (do radix <- choose (2, 36)
               digitsInRadix <- listOf1 (choose (0, radix - 1))
               let (Right parsedTerm) = parseErlTerm "test" erlNumber
-                  erlNumber = B.pack (show radix ++ "#" ++ digitChars ++ ".")
+                  erlNumber = Lazy.pack (show radix ++ "#" ++ digitChars ++ ".")
                   expected = convertStrToDecimal radix digitChars
                   digitChars = (naturals !!) <$> digitsInRadix
               return (ErlNatural expected == parsedTerm)))

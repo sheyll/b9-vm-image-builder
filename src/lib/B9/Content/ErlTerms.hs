@@ -12,7 +12,7 @@ module B9.Content.ErlTerms (parseErlTerm
 
 import           Control.Parallel.Strategies
 import           Data.Binary
-import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as Lazy
 import           Data.Data
 import           Data.Function
 import           Data.Hashable
@@ -22,7 +22,7 @@ import           Text.Parsec
        ((<|>), many, spaces, char, option, between, string, choice,
         octDigit, hexDigit, many1, noneOf, try, digit, anyChar, alphaNum,
         lower, parse)
-import           Text.Parsec.ByteString
+import           Text.Parsec.ByteString.Lazy
 import           Text.Show.Pretty
 import           Control.Monad
 import           Text.Printf
@@ -51,14 +51,14 @@ instance NFData SimpleErlangTerm
 -- restricted to either empty binaries or binaries with a string. The input
 -- encoding must be restricted to ascii compatible 8-bit characters
 -- (e.g. latin-1 or UTF8).
-parseErlTerm :: String -> B.ByteString -> Either String SimpleErlangTerm
+parseErlTerm :: String -> Lazy.ByteString -> Either String SimpleErlangTerm
 parseErlTerm src content =
   either (Left . ppShow) Right (parse erlTermParser src content)
 
 -- | Convert an abstract Erlang term to a pretty byte string preserving the
 -- encoding.
-renderErlTerm :: SimpleErlangTerm -> B.ByteString
-renderErlTerm s = B.pack (PP.render (prettyPrintErlTerm s PP.<> PP.char '.'))
+renderErlTerm :: SimpleErlangTerm -> Lazy.ByteString
+renderErlTerm s = Lazy.pack (PP.render (prettyPrintErlTerm s PP.<> PP.char '.'))
 
 prettyPrintErlTerm :: SimpleErlangTerm -> PP.Doc
 prettyPrintErlTerm (ErlString str) = PP.doubleQuotes (PP.text (toErlStringString str))

@@ -3,39 +3,38 @@ Mostly effectful functions to assemble artifacts.
 -}
 module B9.ArtifactGeneratorImpl where
 
-import           B9.ArtifactGenerator
-import           B9.B9Config
-import           B9.B9Monad
-import           B9.Content.AST
-import           B9.Content.Environment
-import           B9.Content.Builtin
-import           B9.Content.Generator
-import           B9.Content.StringTemplate
-import           B9.DiskImageBuilder
-import           B9.Vm
-import           B9.VmBuilder
 import           Control.Arrow
 import           Control.Exception         (Exception, SomeException)
 import           Control.Lens              (view)
 import           Control.Monad.Catch
 import           Control.Monad.Except
-import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.Writer
-import qualified Data.ByteString           as B
+import qualified Data.ByteString.Lazy      as Lazy
 import           Data.Data
-import           Data.Function
 import           Data.Generics.Aliases
 import           Data.Generics.Schemes
 import           Data.List
 import           Data.Maybe
-import qualified Data.Text                 as T
-import qualified Data.Text.Encoding        as E
+import qualified Data.Text.Lazy                 as LazyT
+import qualified Data.Text.Lazy.Encoding        as LazyE
 import           System.Directory
 import           System.FilePath
 import           System.IO.B9Extras        (ensureDir, getDirectoryFiles)
 import           Text.Printf
 import           Text.Show.Pretty          (ppShow)
+
+import           B9.ArtifactGenerator
+import           B9.B9Config
+import           B9.B9Monad
+import           B9.Content.Builtin
+import           B9.Content.Environment
+import           B9.Content.Generator
+import           B9.Content.StringTemplate
+import           B9.DiskImageBuilder
+import           B9.Vm
+import           B9.VmBuilder
+
 
 -- | Execute an 'ArtifactGenerator' and return a 'B9Invokation' that returns
 -- the build id obtained by 'getBuildId'.
@@ -147,7 +146,7 @@ eachBindingSet g kvs = do
 writeInstanceGenerator :: InstanceId -> ArtifactAssembly -> CGParser ()
 writeInstanceGenerator (IID iidStrT) assembly = do
   env@(CGEnv bindings _) <- ask
-  iid <- either (throwError . CGError) (return . IID) (substE bindings iidStrT)
+  iid <- either (throwM . CGError) (return . IID) (substE bindings iidStrT)
   let IID iidStr = iid
   env' <- addBindings [(instanceIdKey, iidStr)] env
   tell [IG iid env' assembly]
@@ -182,7 +181,7 @@ newtype CGError =
 instance Exception CGError
 
 cgError :: String -> CGParser a
-cgError msg = throwError (CGError msg)
+cgError msg = throwM (CGError msg)
 
 execCGParser :: CGParser () -> CGEnv -> Either SomeException [InstanceGenerator CGEnv]
 execCGParser = runReaderT . execWriterT . runCGParser
@@ -263,12 +262,12 @@ generateSourceTo instanceDir (SG env sgSource p to) = do
       SGFiles froms -> do
         sources <- mapM (sgReadSourceFile env) froms
         return (mconcat sources)
-      SGContent c -> renderContentGenerator env (render c)
-  traceL (printf "rendered: \n%s\n" (T.unpack (E.decodeUtf8 result)))
-  liftIO (B.writeFile toAbs result)
+      SGContent c -> renderContentGenerator env (MkContentGenerator (render c)) -- TODO 
+  traceL (printf "rendered: \n%s\n" (LazyT.unpack (LazyE.decodeUtf8 result)))
+  liftIO (Lazy.writeFile toAbs result)
   sgChangePerm toAbs p
 
-sgReadSourceFile :: Environment -> SourceFile -> B9 B.ByteString
+sgReadSourceFile :: Environment -> SourceFile -> B9 Lazy.ByteString
 sgReadSourceFile env = renderContentGenerator env . readTemplateFile
 
 sgChangePerm :: FilePath -> SGPerm -> B9 ()

@@ -39,7 +39,7 @@ import           Control.Lens                   ( (&)
                                                 , (%~)
                                                 , (?~)
                                                 )
-import qualified Data.ByteString.Char8         as B
+import qualified Data.ByteString.Char8         as Strict
 import           Data.Functor                   ( )
 import           Data.Hashable
 import           Data.Maybe
@@ -191,7 +191,7 @@ getRepoCache = gets bsRepoCache
 --              ,downloaderArgsAfterUrl :: [String]}
 --   deriving (Read,Show,Eq,Ord,Typeable,Generic)
 --
--- readContentFromUrl :: String -> B9 B.ByteString
+-- readContentFromUrl :: String -> B9 Strict.ByteString
 -- readContentFromUrl url = do
 --   return expression
 
@@ -213,7 +213,7 @@ cmdWithStdIn :: (InputSource stdin) => Bool -> String -> B9 stdin
 cmdWithStdIn toStdOut cmdStr = do
   traceL $ "COMMAND: " ++ cmdStr
   cmdLogger <- getCmdLogger
-  let outPipe = if toStdOut then CL.mapM_ B.putStr else cmdLogger LogTrace
+  let outPipe = if toStdOut then CL.mapM_ Strict.putStr else cmdLogger LogTrace
   (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
   e                         <-
     liftIO
@@ -227,7 +227,7 @@ cmdWithStdIn toStdOut cmdStr = do
   getCmdLogger = do
     lv  <- gets $ _verbosity . bsCfg
     lfh <- gets bsLogFileHandle
-    return $ \level -> CL.mapM_ (logImpl lv lfh level . B.unpack)
+    return $ \level -> CL.mapM_ (logImpl lv lfh level . Strict.unpack)
   checkExitCode ExitSuccess =
     traceL $ printf "COMMAND '%s' exited with exit code: 0" cmdStr
   checkExitCode ec@(ExitFailure e) = do
