@@ -20,17 +20,12 @@ merging fields as one would expect, e.g. when merging multiple snippets with
 Another example is the OTP/Erlang sys.config for configuring OTP/Erlang releases.
 -}
 
-module B9.Content.AST ( ASTish(..)
+module B9.Content.AST ( FromAST(..)
                       , AST(..)
                       , encodeSyntax
                       , decodeSyntax
                       ) where
 
-import           B9.B9Monad(B9)
-import           B9.Content.StringTemplate
-import           B9.Content.Generator (CanRender(..))
-import           B9.Content.Environment
-import           B9.QCUtil
 import           Control.Parallel.Strategies
 import           Data.Binary (Binary)
 import qualified Data.Binary as Binary
@@ -39,6 +34,10 @@ import           Data.Data
 import           Data.Hashable
 import           GHC.Generics (Generic)
 import           Test.QuickCheck
+
+import           B9.Content.StringTemplate
+import           B9.Content.Generator
+import           B9.QCUtil
 
 -- | Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
 decodeSyntax
@@ -95,10 +94,10 @@ instance (Binary c, Binary a) => Binary (AST c a)
 instance (NFData c, NFData a) => NFData (AST c a)
 
 -- | Types of values that describe content, that can be created from an 'AST'.
-class ASTish a  where
+class FromAST a  where
     fromAST
-        :: (CanRender c)
-        => AST c a -> EnvironmentReaderT B9  a
+        :: (ToContentGenerator c)
+        => AST c a -> ContentGenerator a
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where
     arbitrary =

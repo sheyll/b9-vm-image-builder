@@ -82,7 +82,7 @@ instance Binary ErlangPropList where
       Left e -> fail e
   put (ErlangPropList t) = putLazyByteString (renderErlTerm t)
 
-instance ASTish ErlangPropList where
+instance FromAST ErlangPropList where
   fromAST (AST a) = pure a
   fromAST (ASTObj pairs) = ErlangPropList . ErlList <$> mapM makePair pairs
     where
@@ -98,7 +98,7 @@ instance ASTish ErlangPropList where
       xs
   fromAST (ASTString s) = pure $ ErlangPropList $ ErlString s
   fromAST (ASTInt i) = pure $ ErlangPropList $ ErlString (show i)
-  fromAST (ASTEmbed c) = ErlangPropList . ErlString . T.unpack . E.decodeUtf8 <$> render c
+  fromAST (ASTEmbed c) = ErlangPropList . ErlString . T.unpack . E.decodeUtf8 <$> toContentGenerator c
   fromAST (ASTMerge []) = error "ASTMerge MUST NOT be used with an empty list!"
   fromAST (ASTMerge asts) = foldl1 (<>) <$> mapM fromAST asts
   fromAST (ASTParse src@(Source _ srcPath)) = do

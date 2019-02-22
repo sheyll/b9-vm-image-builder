@@ -63,7 +63,7 @@ instance Semigroup YamlObject where
       combine (String s1) (String s2) = String (s1 <> s2)
       combine t1 t2                   = array [t1, t2]
 
-instance ASTish YamlObject where
+instance FromAST YamlObject where
   fromAST ast =
     case ast of
       ASTObj pairs -> do
@@ -77,7 +77,7 @@ instance ASTish YamlObject where
       ASTMerge asts -> do
         ys <- mapM fromAST asts
         return (foldl1 (<>) ys)
-      ASTEmbed c -> YamlObject . toJSON . StrictT.unpack . StrictE.decodeUtf8 . Lazy.toStrict <$> render c
+      ASTEmbed c -> YamlObject . toJSON . StrictT.unpack . StrictE.decodeUtf8 . Lazy.toStrict <$> toContentGenerator c
       ASTString str -> return (YamlObject (toJSON str))
       ASTInt int -> return (YamlObject (toJSON int))
       ASTParse src@(Source _ srcPath) -> do

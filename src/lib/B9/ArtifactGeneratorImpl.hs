@@ -262,7 +262,7 @@ generateSourceTo instanceDir (SG env sgSource p to) = do
       SGFiles froms -> do
         sources <- mapM (sgReadSourceFile env) froms
         return (mconcat sources)
-      SGContent c -> renderContentGenerator env (MkContentGenerator (render c)) -- TODO 
+      SGContent c -> renderContentGenerator env (toContentGenerator c)
   traceL (printf "rendered: \n%s\n" (LazyT.unpack (LazyE.decodeUtf8 result)))
   liftIO (Lazy.writeFile toAbs result)
   sgChangePerm toAbs p

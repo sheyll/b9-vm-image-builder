@@ -46,7 +46,7 @@ newtype CloudConfigYaml = MkCloudConfigYaml
 cloudConfigFileHeader :: Lazy.ByteString
 cloudConfigFileHeader = "#cloud-config\n"
 
-instance ASTish CloudConfigYaml where
+instance FromAST CloudConfigYaml where
   fromAST ast = MkCloudConfigYaml <$> fromAST (fromCloudConfigYaml <$> ast)
 
 instance Binary CloudConfigYaml where

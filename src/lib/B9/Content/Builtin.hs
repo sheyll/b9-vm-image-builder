@@ -60,19 +60,19 @@ instance Arbitrary Content where
       , FromURL <$> smaller arbitrary
       ]
 
-instance CanRender Content where
-  render (RenderErlang ast) = encodeSyntax <$> fromAST ast
-  render (RenderYamlObject ast) = encodeSyntax <$> fromAST ast
-  render (RenderCloudConfig ast) = encodeSyntax <$> fromAST ast
-  render (FromTextFile s) = readTemplateFile s
-  render (RenderBase64BinaryFile s) = readBinaryFileAsBase64 s
+instance ToContentGenerator Content where
+  toContentGenerator (RenderErlang ast) = encodeSyntax <$> fromAST ast
+  toContentGenerator (RenderYamlObject ast) = encodeSyntax <$> fromAST ast
+  toContentGenerator (RenderCloudConfig ast) = encodeSyntax <$> fromAST ast
+  toContentGenerator (FromTextFile s) = readTemplateFile s
+  toContentGenerator (RenderBase64BinaryFile s) = readBinaryFileAsBase64 s
       -- | Read a binary file and encode it as base64
     where
       readBinaryFileAsBase64 :: MonadIO m => FilePath -> m Lazy.ByteString
       readBinaryFileAsBase64 f = Lazy.fromStrict . B64.encode <$> liftIO (Strict.readFile f)
-  render (RenderBase64Binary b) = return (Lazy.fromStrict $ B64.encode $ Lazy.toStrict b)
-  render (FromString str) = return (Lazy.pack str)
-  render (FromURL url) =
+  toContentGenerator (RenderBase64Binary b) = return (Lazy.fromStrict $ B64.encode $ Lazy.toStrict b)
+  toContentGenerator (FromString str) = return (Lazy.pack str)
+  toContentGenerator (FromURL url) =
     lift $ do
       dbgL $ "Downloading: " ++ url
       (exitCode, out, err) <- liftIO $ readProcessWithExitCode "curl" [url] ""
