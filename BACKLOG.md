@@ -13,7 +13,7 @@ inputs. All input must be instances of Hashable.
 
 ### Increase User Experience
 
-* Switch to yaml configuration; get rid of the ArtifactGenerator
+* Switch to HOCON(initially thought of yaml, so examples below need rewriting) configuration; get rid of the ArtifactGenerator
 
 * Add dummy modes where possible, dummy mode should go down into every module and component
 

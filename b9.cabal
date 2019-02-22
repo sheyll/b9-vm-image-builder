@@ -73,9 +73,12 @@ library
                    , B9.B9Config.Repository
                    , B9.B9Monad
                    , B9.Content.AST
+                   , B9.Content.CloudConfigYaml
+                   , B9.Content.Generator
+                   , B9.Content.Environment
                    , B9.Content.ErlangPropList
                    , B9.Content.ErlTerms
-                   , B9.Content.Generator
+                   , B9.Content.Builtin
                    , B9.Content.StringTemplate
                    , B9.Content.YamlObject
                    , B9.DiskImageBuilder
@@ -108,6 +111,7 @@ library
                    , conduit >= 1.2
                    , conduit-extra >= 1.1
                    , directory >= 1.3
+                   , exceptions >= 0.10
                    , filepath >= 1.4
                    , hashable >= 1.2
                    , lens >= 4
@@ -135,6 +139,7 @@ library
 
   default-extensions: TupleSections
                     , GeneralizedNewtypeDeriving
+                    , ConstraintKinds
                     , DeriveDataTypeable
                     , DeriveGeneric
                     , RankNTypes

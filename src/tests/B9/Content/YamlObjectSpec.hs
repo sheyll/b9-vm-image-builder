@@ -9,10 +9,11 @@ import Data.Text ()
 import Data.Yaml
 
 import B9.Content.YamlObject
+import B9.Content.CloudConfigYaml
 import B9.Content.AST
 
 spec :: Spec
-spec =
+spec = do
   describe "YamlObject" $ do
 
     it "combines primitives by putting them in an array" $
@@ -48,12 +49,13 @@ spec =
                                               ,Number 4]])
        in (o1 <> o2) `shouldBe` combined
 
-    it "combines 'write_files' and 'runcmd' from typical 'user-data' files by merging each" $
-     let (Right ud1) = decodeSyntax "" "#user-data\n\nwrite_files:\n  - contents: |\n      hello world!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - x y z\n"
+  describe "CloudConfigYaml" $ do
+   it "combines 'write_files' and 'runcmd' from typical 'user-data' files by merging each" $
+     let ud1, ud2 :: CloudConfigYaml
+         (Right ud1) = decodeSyntax "" "#cloud-config\n\nwrite_files:\n  - contents: |\n      hello world!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - x y z\n"
+         (Right ud2) = decodeSyntax "" "#cloud-config\n\nwrite_files:\n  - contents: |\n      hello world2!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - a b c\n"
 
-         (Right ud2) = decodeSyntax "" "#user-data\n\nwrite_files:\n  - contents: |\n      hello world2!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - a b c\n"
-
-         ud = YamlObject
+         ud = MkCloudConfigYaml $ YamlObject
                 (object
                    ["runcmd" .=
                     array [toJSON ("x y z"::String)
@@ -74,11 +76,12 @@ spec =
                             ,"owner" .=
                              toJSON ("root:root"::String)]]])
       in ud1 <> ud2 `shouldBe` ud
-    it "combines strings by appending them" $
-       let o1 = YamlObject (object ["k" .= toJSON ("Hello"::String)])
-           o2 = YamlObject (object ["k" .= toJSON ("World"::String)])
+
+   it "combines strings by appending them" $
+       let o1 = MkCloudConfigYaml $ YamlObject (object ["k" .= toJSON ("Hello"::String)])
+           o2 = MkCloudConfigYaml $ YamlObject (object ["k" .= toJSON ("World"::String)])
            combined =
-             YamlObject (object ["k" .= toJSON ("HelloWorld"::String)])
+             MkCloudConfigYaml $ YamlObject (object ["k" .= toJSON ("HelloWorld"::String)])
        in (o1 <> o2) `shouldBe` combined
 
 

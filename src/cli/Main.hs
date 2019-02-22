@@ -63,130 +63,72 @@ parseCommandLine = execParser
 
 globals :: Parser B9ConfigOverride
 globals =
-    toGlobalOpts
-        <$> optional
-                (strOption
-                    (  help
-                          "Path to user's b9-configuration (default: ~/.b9/b9.conf)"
-                    <> short 'c'
-                    <> long "configuration-file"
-                    <> metavar "FILENAME"
-                    )
-                )
-        <*> switch
-                (  help "Log everything that happens to stdout"
-                <> short 'v'
-                <> long "verbose"
-                )
-        <*> switch
-                (help "Suppress non-error output" <> short 'q' <> long "quiet")
-        <*> optional
-                (strOption
-                    (  help "Path to a logfile"
-                    <> short 'l'
-                    <> long "log-file"
-                    <> metavar "FILENAME"
-                    )
-                )
-        <*> optional
-                (strOption
-                    (  help "Output file for a command/timing profile"
-                    <> long "profile-file"
-                    <> metavar "FILENAME"
-                    )
-                )
-        <*> optional
-                (strOption
-                    (  help
-                          "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${buildDirRoot}."
-                    <> short 'b'
-                    <> long "build-root-dir"
-                    <> metavar "DIRECTORY"
-                    )
-                )
-        <*> switch
-                (help "Keep build directories after exit" <> short 'k' <> long
-                    "keep-build-dir"
-                )
-        <*> switch
-                (help "Predictable build directory names" <> short 'u' <> long
-                    "predictable-build-dir"
-                )
-        <*> optional
-                (strOption
-                    (  help
-                          "Cache directory for shared images, default: '~/.b9/repo-cache'"
-                    <> long "repo-cache"
-                    <> metavar "DIRECTORY"
-                    )
-                )
-        <*> optional
-                (strOption
-                    (  help "Remote repository to share image to"
-                    <> short 'r'
-                    <> long "repo"
-                    <> metavar "REPOSITORY_ID"
-                    )
-                )
-        <*> optional
-                (strOption
-                    (  help
-                          ("Override the libvirt-lxc network setting.\nThe special value '"
-                          ++ hostNetworkMagicValue
-                          ++ "' disables restricted container networking."
-                          )
-                    <> long "network"
-                    <> metavar "NETWORK_ID"
-                    )
-                )
+  toGlobalOpts <$>
+  optional
+    (strOption
+       (help "Path to user's b9-configuration (default: ~/.b9/b9.conf)" <> short 'c' <> long "configuration-file" <>
+        metavar "FILENAME")) <*>
+  switch (help "Log everything that happens to stdout" <> short 'v' <> long "verbose") <*>
+  switch (help "Suppress non-error output" <> short 'q' <> long "quiet") <*>
+  optional (strOption (help "Path to a logfile" <> short 'l' <> long "log-file" <> metavar "FILENAME")) <*>
+  optional (strOption (help "Output file for a command/timing profile" <> long "profile-file" <> metavar "FILENAME")) <*>
+  optional
+    (strOption
+       (help
+          "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${buildDirRoot}." <>
+        short 'b' <>
+        long "build-root-dir" <>
+        metavar "DIRECTORY")) <*>
+  switch (help "Keep build directories after exit" <> short 'k' <> long "keep-build-dir") <*>
+  switch (help "Predictable build directory names" <> short 'u' <> long "predictable-build-dir") <*>
+  optional
+    (strOption
+       (help "Cache directory for shared images, default: '~/.b9/repo-cache'" <> long "repo-cache" <>
+        metavar "DIRECTORY")) <*>
+  optional
+    (strOption (help "Remote repository to share image to" <> short 'r' <> long "repo" <> metavar "REPOSITORY_ID")) <*>
+  optional
+    (strOption
+       (help
+          ("Override the libvirt-lxc network setting.\nThe special value '" ++
+           hostNetworkMagicValue ++ "' disables restricted container networking.") <>
+        long "network" <>
+        metavar "NETWORK_ID"))
   where
-    toGlobalOpts
-        :: Maybe FilePath
-        -> Bool
-        -> Bool
-        -> Maybe FilePath
-        -> Maybe FilePath
-        -> Maybe FilePath
-        -> Bool
-        -> Bool
-        -> Maybe FilePath
-        -> Maybe String
-        -> Maybe String
-        -> B9ConfigOverride
-    toGlobalOpts cfg verbose quiet logF profF buildRoot keep predictableBuildDir mRepoCache repo libvirtNet
-        = let
-              minLogLevel = if verbose
-                  then Just LogTrace
-                  else if quiet then Just LogError else Nothing
-              b9cfg =
-                  mempty
-                      &  verbosity
-                      .~ minLogLevel
-                      &  logFile
-                      .~ logF
-                      &  profileFile
-                      .~ profF
-                      &  buildDirRoot
-                      .~ buildRoot
-                      &  keepTempDirs
-                      .~ keep
-                      &  uniqueBuildDirs
-                      .~ not predictableBuildDir
-                      &  repository
-                      .~ repo
-                      &  repositoryCache
-                      .~ (Path <$> mRepoCache)
-          in
-              B9ConfigOverride
-                  { _customB9ConfigPath   = Path <$> cfg
-                  , _customB9Config       = b9cfg
-                  , _customLibVirtNetwork =
-                      (\n -> if n == hostNetworkMagicValue
-                              then Nothing
-                              else Just n
-                          )
-                          <$> libvirtNet
-                  }
+    toGlobalOpts ::
+         Maybe FilePath
+      -> Bool
+      -> Bool
+      -> Maybe FilePath
+      -> Maybe FilePath
+      -> Maybe FilePath
+      -> Bool
+      -> Bool
+      -> Maybe FilePath
+      -> Maybe String
+      -> Maybe String
+      -> B9ConfigOverride
+    toGlobalOpts cfg verbose quiet logF profF buildRoot keep predictableBuildDir mRepoCache repo libvirtNet =
+      let minLogLevel
+            | verbose = Just LogTrace
+            | quiet = Just LogError
+            | otherwise = Nothing
+          b9cfg =
+            mempty & verbosity .~ minLogLevel & logFile .~ logF & profileFile .~ profF & buildDirRoot .~ buildRoot &
+            keepTempDirs .~ keep &
+            uniqueBuildDirs .~ not predictableBuildDir &
+            repository .~ repo &
+            repositoryCache .~ (Path <$> mRepoCache)
+       in B9ConfigOverride
+            { _customB9ConfigPath = Path <$> cfg
+            , _customB9Config = b9cfg
+            , _customLibVirtNetwork =
+                (\n ->
+                   if n == hostNetworkMagicValue
+                     then Nothing
+                     else Just n) <$>
+                libvirtNet
+            }
 
 cmds :: Parser Cmd
 cmds = subparser

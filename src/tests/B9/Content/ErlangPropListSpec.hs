@@ -17,11 +17,11 @@ spec :: Spec
 spec =
   describe "ErlangPropList" $ do
 
-    it "implements ConcatableSyntax method decodeSyntax" $
+    it "decodeSyntax" $
        let v = decodeSyntax "" "ok."
        in v `shouldBe` Right (ErlangPropList (ErlAtom "ok"))
 
-    it "implements ConcatableSyntax method encodeSyntax" $
+    it "encodeSyntax" $
        let v = encodeSyntax (ErlangPropList (ErlAtom "ok"))
        in v `shouldBe` "ok."
 
