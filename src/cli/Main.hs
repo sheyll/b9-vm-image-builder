@@ -25,7 +25,7 @@ data B9RunParameters =
   B9RunParameters
             B9ConfigOverride
             Cmd
-            BuildVariables
+            Environment
 
 type Cmd = B9ConfigAction IO ()
 
@@ -215,7 +215,7 @@ buildFileParser = helper <*> some
         )
     )
 
-buildVars :: Parser BuildVariables
+buildVars :: Parser Environment
 buildVars =
     zip (("arg_" ++) . show <$> ([1 ..] :: [Int])) <$> many (strArgument idm)
 

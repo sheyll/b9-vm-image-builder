@@ -57,12 +57,14 @@ import B9.Vm as X
 import B9.VmBuilder as X
 import B9.QCUtil as X
 import B9.Content.AST as X
-import B9.Content.StringTemplate as X
+import B9.Content.Builtin as X
+import B9.Content.CloudConfigYaml as X
+import B9.Content.Environment as X
 import B9.Content.ErlTerms as X
 import B9.Content.ErlangPropList as X
-import B9.Content.CloudConfigYaml as X
+import B9.Content.Generator as X
+import B9.Content.StringTemplate as X
 import B9.Content.YamlObject as X
-import B9.Content.Builtin as X
 import Paths_b9 (version)
 
 -- | Return the cabal package version of the B9 library.

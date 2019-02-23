@@ -71,7 +71,7 @@ assemble artGen = do
 -- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
 -- that can be built with 'createAssembledArtifacts'.
 evalArtifactGenerator ::
-     String -> String -> BuildVariables -> ArtifactGenerator -> Either String [InstanceGenerator [SourceGenerator]]
+     String -> String -> Environment -> ArtifactGenerator -> Either String [InstanceGenerator [SourceGenerator]]
 evalArtifactGenerator buildId buildDate b9cfgEnvVars artGen =
   let ag = parseArtifactGenerator artGen
       e = CGEnv (fromStringPairs ((buildDateKey, buildDate) : (buildIdKey, buildId) : b9cfgEnvVars)) []
@@ -160,7 +160,6 @@ newtype CGParser a = CGParser
              , Monad
              , MonadReader CGEnv
              , MonadWriter [InstanceGenerator CGEnv]
-             -- , MonadError CGError
              )
 
 data CGEnv = CGEnv
@@ -210,11 +209,6 @@ toSourceGen env src =
     FromContent t c -> do
       t' <- substE env t
       return [SG env (SGContent c) KeepPerm t']
-    Concatenation t src' -> do
-      sgs <- join <$> mapM (toSourceGen env) src'
-      t' <- substE env t
-      let froms = sgGetFroms =<< sgs
-      return [SG env (SGFiles froms) KeepPerm t']
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM (toSourceGen env) src'
       mapM (setSGPerm o g a) sgs

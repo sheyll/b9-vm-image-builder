@@ -17,12 +17,12 @@ spec :: Spec
 spec =
   describe "ErlangPropList" $ do
 
-    it "decodeSyntax" $
-       let v = decodeSyntax "" "ok."
+    it "decodeOrFail'" $
+       let v = decodeOrFail' "" "ok."
        in v `shouldBe` Right (ErlangPropList (ErlAtom "ok"))
 
-    it "encodeSyntax" $
-       let v = encodeSyntax (ErlangPropList (ErlAtom "ok"))
+    it "Binary.encode" $
+       let v = Binary.encode (ErlangPropList (ErlAtom "ok"))
        in v `shouldBe` "ok."
 
     it "combines primitives by putting them in a list" $
@@ -34,15 +34,15 @@ spec =
        in (p1 <> p2) `shouldBe` combined
 
     it "combines a list and a primitve by extending the list" $
-       let (Right l) = decodeSyntax "" "[a,b,c]." :: Either String ErlangPropList
-           (Right p) = decodeSyntax "" "{ok,value}."
-           (Right combined) = decodeSyntax "" "[a,b,c,{ok,value}]."
+       let (Right l) = decodeOrFail' "" "[a,b,c]." :: Either String ErlangPropList
+           (Right p) = decodeOrFail' "" "{ok,value}."
+           (Right combined) = decodeOrFail' "" "[a,b,c,{ok,value}]."
        in l <> p `shouldBe` combined
 
     it "combines a primitve and a list by extending the list" $
-       let (Right l) = decodeSyntax "" "[a,b,c]." :: Either String ErlangPropList
-           (Right p) = decodeSyntax "" "{ok,value}."
-           (Right combined) = decodeSyntax "" "[{ok,value},a,b,c]."
+       let (Right l) = decodeOrFail' "" "[a,b,c]." :: Either String ErlangPropList
+           (Right p) = decodeOrFail' "" "{ok,value}."
+           (Right combined) = decodeOrFail' "" "[{ok,value},a,b,c]."
        in p <> l `shouldBe` combined
 
     it "merges lists with distinct elements to lists containing the elements of both lists" $

@@ -46,7 +46,7 @@ module B9.B9Config
   , b9ConfigToCPDocument
   , LogLevel(..)
   , ExecEnvType(..)
-  , BuildVariables
+  , Environment
   , module X
   ) where
 
@@ -80,7 +80,7 @@ import System.Directory
 import System.IO.B9Extras (SystemPath(..), ensureDir, resolve)
 import Text.Printf (printf)
 
-type BuildVariables = [(String, String)]
+import B9.Content.Environment
 
 data ExecEnvType =
   LibVirtLXC
@@ -101,7 +101,7 @@ data B9Config = B9Config
   , _keepTempDirs :: Bool
   , _execEnvType :: ExecEnvType
   , _profileFile :: Maybe FilePath
-  , _envVars :: BuildVariables
+  , _envVars :: Environment
   , _uniqueBuildDirs :: Bool
   , _repositoryCache :: Maybe SystemPath
   , _repository :: Maybe String
@@ -375,11 +375,4 @@ parseB9Config cp =
 appendPositionalArguments :: [String] -> B9Config -> B9Config
 appendPositionalArguments extraPositional c = c {_envVars = appendVars (_envVars c)}
   where
-    appendVars argsOld =
-      let (oldPositional, oldOther) = partition (("arg_" ==) . take 4 . fst) argsOld
-          oldPositionalSortedByPosition =
-            map snd $ sortBy (compare `on` fst) $ map (\(x, y) -> ((read :: String -> Int) $ drop 4 x, y)) oldPositional
-          newPositional =
-            let xs = oldPositionalSortedByPosition ++ extraPositional
-             in [("arg_" ++ show i, a) | (i, a) <- zip [1 :: Int ..] xs]
-       in newPositional ++ oldOther
+    appendVars = insertPositionalArguments (T.pack <$> extraPositional)

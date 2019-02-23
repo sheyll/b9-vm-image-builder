@@ -5,7 +5,13 @@
 * Rewrite `B9.Shake.SharedImageRules` in line with 
   Shake's example for custom rules  
 
-* Replace `ConcatableSyntax` by using `Binary` instances
+* Replace `ConcatableSyntax` by using `Binary` instances, and also
+
+    * Remove/Inline `encodeSyntax` by using `Binary.encode`
+    
+    * Rename `decodeSyntax` to `decodeOrFail'` and delegate
+      to `Binary.decodeOrFail`. 
+    
 
 * Add a newtype wrapper around `YamlObject` for **cloud-init** yaml documents
   `CloudConfigYaml`
@@ -27,6 +33,8 @@
 * Introduce the type `Environment` that replaces the ubiquotus `[(String, String)]`
   by a lazy `Text` based `HashMap`.
   
+     * Add `appendPositionalArguments`
+  
 * Rename the previous `B9.Content.Generator` to `B9.Content.Builtin`
 
 * Introduce `ContentGenerator` as an open, extensible alternative
@@ -44,3 +52,10 @@
 * Fix spelling: Rename B9Invokation to B9Invocation
   
 * Rename `FromAST` to `FromAST`
+
+* Rearrange modules for content generation:
+   - Introduce `Content.FromByteString` 
+
+* Remove deprecated `Concatenation`
+   
+ 

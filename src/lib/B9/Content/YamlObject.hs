@@ -47,7 +47,7 @@ instance Read YamlObject where
       readsYamlObject s = [(yamlFromString y, r2) | ("YamlObject", r1) <- lex s, (y, r2) <- reads r1]
         where
           yamlFromString :: String -> YamlObject
-          yamlFromString = either error id . decodeSyntax "HERE-DOC" . LazyE.encodeUtf8 . LazyT.pack
+          yamlFromString = either error id . decodeOrFail' "HERE-DOC" . LazyE.encodeUtf8 . LazyT.pack
 
 instance Show YamlObject where
   show (YamlObject o) = "YamlObject " <> show (StrictT.unpack $ StrictE.decodeUtf8 $ encode o)
@@ -82,7 +82,7 @@ instance FromAST YamlObject where
       ASTInt int -> return (YamlObject (toJSON int))
       ASTParse src@(Source _ srcPath) -> do
         c <- readTemplateFile src
-        case decodeSyntax srcPath c of
+        case decodeOrFail' srcPath c of
           Right s -> return s
           Left e -> error (printf "could not parse yaml source file: '%s'\n%s\n" srcPath e)
       AST a -> pure a

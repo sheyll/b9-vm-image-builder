@@ -22,8 +22,7 @@ Another example is the OTP/Erlang sys.config for configuring OTP/Erlang releases
 
 module B9.Content.AST ( FromAST(..)
                       , AST(..)
-                      , encodeSyntax
-                      , decodeSyntax
+                      , decodeOrFail'
                       ) where
 
 import           Control.Parallel.Strategies
@@ -40,19 +39,17 @@ import           B9.Content.Generator
 import           B9.QCUtil
 
 -- | Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
-decodeSyntax
+-- This is like 'Binary.decodeOrFail' exception that it allows to add and extra
+-- error message
+decodeOrFail'
     :: Binary a
-    => FilePath -- ^ An arbitrary string for error messages
-    -> Lazy.ByteString -- ^ The raw input to parse
+    => String -- ^ An arbitrary string for error messages
+    -> Lazy.ByteString
     -> Either String a
-decodeSyntax src b =
+decodeOrFail' errorMessage b =
   case Binary.decodeOrFail b of
-    Left (_,_,e) -> Left (if null src then e else "In file: " ++ src ++ ": " ++ e)
+    Left (_,_,e) -> Left (unwords [errorMessage, e])
     Right (_,_,a) -> Right a
-
--- / Generate a string representation of @a@
-encodeSyntax :: Binary a => a -> Lazy.ByteString
-encodeSyntax = Binary.encode
 
 -- | Describe how to create structured content that has a tree-like syntactic
 -- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines

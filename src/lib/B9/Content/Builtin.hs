@@ -8,12 +8,11 @@ import Control.Parallel.Strategies
 import Control.Applicative
 #endif
 import Control.Monad.IO.Class
-import Data.Binary
+import Data.Binary as Binary
 import qualified Data.ByteString as Strict
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Lazy.Char8 as Lazy
 import Data.Data
-import Data.Hashable
 import GHC.Generics (Generic)
 import System.Exit
 import System.Process
@@ -28,22 +27,28 @@ import B9.Content.StringTemplate
 import B9.Content.YamlObject
 import B9.QCUtil
 
+-- | This is content that can be 'read' via the generated 'Read' instance.
 data Content
   = RenderErlang (AST Content ErlangPropList)
   | RenderYamlObject (AST Content YamlObject)
   | RenderCloudConfig (AST Content CloudConfigYaml)
+    -- | This data will be passed through unaltered.
+    -- This is used during the transition phase from having B9 stuff read from
+    -- files via 'Read' instances towards programatic use or the use of HOCON.
+    --
+    -- @since 0.5.62
+  | FromByteString Lazy.ByteString
+    -- | Embed a literal string
   | FromString String
+    -- | Embed the contents of the 'SourceFile' with template parameter substitution.
   | FromTextFile SourceFile
     -- | The data in the given file will be base64 encoded.
   | RenderBase64BinaryFile FilePath
     -- | This data will be base64 encoded.
   | RenderBase64Binary Lazy.ByteString
+    -- | Download the contents of the URL
   | FromURL String
   deriving (Read, Show, Typeable, Eq, Data, Generic)
-
-instance Hashable Content
-
-instance Binary Content
 
 instance NFData Content
 
@@ -56,22 +61,24 @@ instance Arbitrary Content where
       , RenderYamlObject <$> smaller arbitrary
       , RenderCloudConfig <$> smaller arbitrary
       , FromString <$> smaller arbitrary
+      , FromByteString . Lazy.pack <$> smaller arbitrary
       , RenderBase64Binary . Lazy.pack <$> smaller arbitrary
       , FromURL <$> smaller arbitrary
       ]
 
 instance ToContentGenerator Content where
-  toContentGenerator (RenderErlang ast) = encodeSyntax <$> fromAST ast
-  toContentGenerator (RenderYamlObject ast) = encodeSyntax <$> fromAST ast
-  toContentGenerator (RenderCloudConfig ast) = encodeSyntax <$> fromAST ast
+  toContentGenerator (RenderErlang ast) = Binary.encode <$> fromAST ast
+  toContentGenerator (RenderYamlObject ast) = Binary.encode <$> fromAST ast
+  toContentGenerator (RenderCloudConfig ast) = Binary.encode <$> fromAST ast
   toContentGenerator (FromTextFile s) = readTemplateFile s
   toContentGenerator (RenderBase64BinaryFile s) = readBinaryFileAsBase64 s
       -- | Read a binary file and encode it as base64
     where
       readBinaryFileAsBase64 :: MonadIO m => FilePath -> m Lazy.ByteString
       readBinaryFileAsBase64 f = Lazy.fromStrict . B64.encode <$> liftIO (Strict.readFile f)
-  toContentGenerator (RenderBase64Binary b) = return (Lazy.fromStrict $ B64.encode $ Lazy.toStrict b)
-  toContentGenerator (FromString str) = return (Lazy.pack str)
+  toContentGenerator (RenderBase64Binary b) = pure (Lazy.fromStrict $ B64.encode $ Lazy.toStrict b)
+  toContentGenerator (FromString str) = pure (Lazy.pack str)
+  toContentGenerator (FromByteString str) = pure str
   toContentGenerator (FromURL url) =
     lift $ do
       dbgL $ "Downloading: " ++ url
@@ -80,7 +87,7 @@ instance ToContentGenerator Content where
         then do
           dbgL $ "Download finished. Bytes read: " ++ show (length out)
           traceL $ "Downloaded (truncated to first 4K): \n\n" ++ take 4096 out ++ "\n\n"
-          return $ Lazy.pack out
+          pure $ Lazy.pack out
         else do
           errorL $ "Download failed: " ++ err
           liftIO $ exitWith exitCode

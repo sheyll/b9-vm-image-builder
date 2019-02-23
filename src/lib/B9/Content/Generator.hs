@@ -1,3 +1,7 @@
+-- | Monadic actions that generate the content that
+-- is written to the generated artifacts.
+--
+-- @since 0.5.62
 module B9.Content.Generator
   ( ContentGeneratorT(MkContentGeneratorT)
   , ContentGenerator
@@ -12,12 +16,26 @@ import Control.Applicative (Alternative)
 import Control.Monad.Reader
 import Data.ByteString.Lazy as Lazy
 
+-- | A monadic action that generates content by using the 'Environment'
+-- as additional input, e.g. when interpolating string templates.
+--
+-- Most intersting is the fact the 'Semigroup' and 'Monoid' instances
+-- are available.
+--
+-- @since 0.5.62
 newtype ContentGeneratorT m a = MkContentGeneratorT
   { getContentGenerator :: EnvironmentReaderT m a
   } deriving (MonadTrans, Alternative, MonadReader Environment, MonadIO, Monad, Applicative, Functor)
 
+-- | A 'B9' action that generates content by using the 'Environment'
+-- as additional input, e.g. when interpolating string templates.
+--
+-- @since 0.5.62
 type ContentGenerator a = ContentGeneratorT B9 a
 
+-- | A 'B9' action that procuces a 'Lazy.ByteString'.
+--
+-- @since 0.5.62
 type ByteStringGenerator = ContentGenerator Lazy.ByteString
 
 instance (Monad m, Semigroup a) => Semigroup (ContentGeneratorT m a) where

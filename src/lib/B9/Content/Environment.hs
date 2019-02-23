@@ -10,6 +10,7 @@ module B9.Content.Environment
   ( Environment()
   , fromStringPairs
   , addStringBinding
+  , insertPositionalArguments
   , EnvironmentReaderT
   , MonadEnvironment
   , runEnvironmentReaderT
@@ -23,6 +24,7 @@ module B9.Content.Environment
 
 import           Control.Arrow               ((***))
 import           Control.Exception           (Exception)
+import           Control.Lens.Prism
 import           Control.Monad.Catch         (MonadThrow, throwM)
 import           Control.Monad.Reader
 import           Control.Parallel.Strategies
@@ -36,15 +38,44 @@ import qualified Data.Text.Lazy              as Text
 -- | A map of textual keys to textual values.
 --
 -- @since 0.5.62
-newtype Environment = MkEnvironment
-  { fromEnvironment :: HashMap Text Text
-  } deriving (Show, Typeable, Data, Eq, NFData)
+data Environment = MkEnvironment
+  { nextPosition    :: Int
+  , fromEnvironment :: HashMap Text Text
+  } deriving (Show, Typeable, Data, Eq)
+
+instance Semigroup Environment where
+  e1 <> e2 =
+    MkEnvironment
+      { nextPosition =
+          case (nextPosition e1, nextPosition e2) of
+            (0, p2) -> p2
+            (p1, 0) -> p1
+            (p1, p2)
+              | p1 /= 0 && p2 /= 0 ->
+                error ("Overlapping positional arguments (<>): (" ++ show e1 ++ ") <> (" ++ show e2 ++ ")")
+      , fromEnvironment =
+          let i = HashMap.intersection (fromEnvironment e1) (fromEnvironment e2)
+           in if HashMap.null i
+                then fromEnvironment e1 <> fromEnvironment e2
+                else error ("Overlapping entries (<>): (" ++ show e1 ++ ") <> (" ++ show e2 ++ "): (" ++ show i ++ ")")
+      }
+
+-- | If environment variables @arg_1 .. arg_n@ are bound
+-- and a list of @k@ additional values are passed to this function,
+-- store them with keys @arg_(n+1) .. arg_(n+k)@.
+--
+-- Note that the Environment contains an index of the next position.
+--
+-- @since 0.5.62
+insertPositionalArguments :: [Text] -> Environment -> Environment
+insertPositionalArguments =
+  flip (foldr (\arg (MkEnvironment i e) -> (MkEnvironment (i + 1) (HashMap.insert (Text.pack ("arg_" ++ show i)) arg e))))
 
 -- | Create an 'Environment' from a list of pairs ('String's)
 --
 -- @since 0.5.62
 fromStringPairs :: [(String, String)] -> Environment
-fromStringPairs = MkEnvironment . HashMap.fromList . fmap (Text.pack *** Text.pack)
+fromStringPairs = MkEnvironment 0 . HashMap.fromList . fmap (Text.pack *** Text.pack)
 
 -- | Insert a value into an 'Environment'.
 --
@@ -53,7 +84,8 @@ addStringBinding :: MonadThrow m => (String, String) -> Environment -> m Environ
 addStringBinding (k, vNew) env =
   case HashMap.lookup (Text.pack k) (fromEnvironment env) of
     Just vOld -> throwM (MkDuplicateKey (Text.pack k) vOld (Text.pack vNew))
-    Nothing -> pure (MkEnvironment (HashMap.insert (Text.pack k) (Text.pack vNew) (fromEnvironment env)))
+    Nothing ->
+      pure (MkEnvironment (nextPosition env) (HashMap.insert (Text.pack k) (Text.pack vNew) (fromEnvironment env)))
 
 -- | A monad transformer providing a 'MonadReader' instance for 'Environment'
 --

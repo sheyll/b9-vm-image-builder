@@ -103,6 +103,6 @@ instance FromAST ErlangPropList where
   fromAST (ASTMerge asts) = foldl1 (<>) <$> mapM fromAST asts
   fromAST (ASTParse src@(Source _ srcPath)) = do
     c <- readTemplateFile src
-    case decodeSyntax srcPath c of
+    case decodeOrFail' srcPath c of
       Right s -> return s
       Left e -> error (printf "could not parse erlang source file: '%s'\n%s\n" srcPath e)

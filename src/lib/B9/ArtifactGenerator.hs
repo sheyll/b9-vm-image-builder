@@ -1,30 +1,40 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies     #-}
+
 {-|
 Top-Level data types for B9 build artifacts.
 -}
 module B9.ArtifactGenerator
-       (ArtifactGenerator(..), ArtifactSource(..), InstanceId(..),
-        ArtifactTarget(..), CloudInitType(..), ArtifactAssembly(..),
-        AssembledArtifact(..), AssemblyOutput(..), instanceIdKey, buildIdKey, buildDateKey,
-        getAssemblyOutput, getArtifactSourceFiles)
-       where
+  ( ArtifactGenerator(..)
+  , ArtifactSource(..)
+  , InstanceId(..)
+  , ArtifactTarget(..)
+  , CloudInitType(..)
+  , ArtifactAssembly(..)
+  , AssembledArtifact(..)
+  , AssemblyOutput(..)
+  , instanceIdKey
+  , buildIdKey
+  , buildDateKey
+  , getAssemblyOutput
+  , getArtifactSourceFiles
+  ) where
 
-import Control.Parallel.Strategies
-import Data.Binary
-import Data.Data
-import Data.Hashable
-import GHC.Generics (Generic)
-import Data.Semigroup as Sem
-import System.FilePath ((<.>), (</>))
+import           Control.Parallel.Strategies
+import           Data.Binary
+import           Data.Data
+import           Data.Hashable
+import           Data.Semigroup              as Sem
+import           GHC.Generics                (Generic)
+import           System.FilePath             ((<.>), (</>))
 
-import B9.DiskImages
-import B9.Vm
-import B9.Content.StringTemplate
-import B9.Content.Builtin
-import B9.QCUtil
+import           B9.Content.Builtin
+import           B9.Content.StringTemplate
+import           B9.DiskImages
+import           B9.QCUtil
+import           B9.Vm
 
-import Test.QuickCheck
+import           Test.QuickCheck
 
 {-| Artifacts represent the things B9 can build. A generator specifies howto
 generate parameterized, multiple artifacts. The general structure is:
@@ -58,19 +68,16 @@ and in source files added with 'B9.Content.StringTemplate.SourceFile'
 
 -}
 data ArtifactGenerator
-    = Sources [ArtifactSource]
-              [ArtifactGenerator]
-    |
+  = Sources [ArtifactSource]
+            [ArtifactGenerator]
       -- ^ Add sources available to 'ArtifactAssembly's in
       -- nested artifact generators.
-      Let [(String, String)]
-          [ArtifactGenerator]
-    |
+  | Let [(String, String)]
+        [ArtifactGenerator]
       -- ^ Bind variables, variables are available in nested
       -- generators.
-      LetX [(String, [String])]
-           [ArtifactGenerator]
-    |
+  | LetX [(String, [String])]
+         [ArtifactGenerator]
       -- ^ A 'Let' where each variable is assigned to each
       -- value; the nested generator is executed for each
       -- permutation.
@@ -90,107 +97,89 @@ data ArtifactGenerator
       --       Let [("x", "3"), ("y", "b")] [..]
       --     ]
       -- @
-      Each [(String, [String])]
-           [ArtifactGenerator]
-    |
+  | Each [(String, [String])]
+         [ArtifactGenerator]
       -- ^ Bind each variable to their first value, then each
       -- variable to the second value, etc ... and execute the
       -- nested generator in every step. 'LetX' represents a
       -- product of all variables, whereas 'Each' represents a
       -- sum of variable bindings - 'Each' is more like a /zip/
       -- whereas 'LetX' is more like a list comprehension.
-      EachT [String]
-            [[String]]
-            [ArtifactGenerator]
-    |
+  | EachT [String]
+          [[String]]
+          [ArtifactGenerator]
       -- ^ The transposed version of 'Each': Bind the variables
       -- in the first list to each a set of values from the
       -- second argument; execute the nested generators for
       -- each binding
-      Artifact InstanceId
-               ArtifactAssembly
-    |
+  | Artifact InstanceId
+             ArtifactAssembly
       -- ^ Generate an artifact defined by an
       -- 'ArtifactAssembly'; the assembly can access the files
       -- created from the 'Sources' and variables bound by
       -- 'Let'ish elements. An artifact has an instance id,
       -- that is a unique, human readable string describing the
       -- artifact to assemble.
-      EmptyArtifact
-    deriving (Read,Show,Eq,Data,Typeable,Generic)
+  | EmptyArtifact
+  deriving (Read, Show, Eq, Data, Typeable, Generic)
 
-instance Hashable ArtifactGenerator
-instance Binary ArtifactGenerator
+--instance Hashable ArtifactGenerator
+--instance Binary ArtifactGenerator
 instance NFData ArtifactGenerator
 
 instance Sem.Semigroup ArtifactGenerator where
-    (Let [] []) <> x = x
-    x <> (Let [] []) = x
-    x <> y = Let [] [x, y]
+  (Let [] []) <> x = x
+  x <> (Let [] []) = x
+  x <> y = Let [] [x, y]
 
 instance Monoid ArtifactGenerator where
-    mempty = Let [] []
-    mappend = (Sem.<>)
+  mempty = Let [] []
+  mappend = (Sem.<>)
 
 -- | Describe how input files for artifacts to build are obtained.  The general
 --   structure of each constructor is __FromXXX__ /destination/ /source/
 data ArtifactSource
-    = FromFile FilePath
-               SourceFile
-    |
+  = FromFile FilePath
+             SourceFile
       -- ^ Copy a 'B9.Content.StringTemplate.SourceFile'
       -- potentially replacing variable defined in 'Let'-like
       -- parent elements.
-      FromContent FilePath
-                  Content
-    |
+  | FromContent FilePath
+                Content
       -- ^ Create a file from some 'Content'
-      SetPermissions Int
-                     Int
-                     Int
-                     [ArtifactSource]
-    |
+  | SetPermissions Int
+                   Int
+                   Int
+                   [ArtifactSource]
       -- ^ Set the unix /file permissions/ to all files generated
       -- by the nested list of 'ArtifactSource's.
-      FromDirectory FilePath
-                    [ArtifactSource]
-    |
+  | FromDirectory FilePath
+                  [ArtifactSource]
       -- ^ Assume a local directory as starting point for all
       -- relative source files in the nested 'ArtifactSource's.
-      IntoDirectory FilePath
-                    [ArtifactSource]
-    |
+  | IntoDirectory FilePath
+                  [ArtifactSource]
       -- ^ Specify an output directory for all the files
       -- generated by the nested 'ArtifactSource's
-      Concatenation FilePath
-                    [ArtifactSource]
-    -- ^ __Deprecated__ Concatenate the files generated by the
-    -- nested 'ArtifactSource's. The nested, generated files
-    -- are not written when they are concatenated.
-    deriving (Read,Show,Eq,Data,Typeable,Generic)
+  deriving (Read, Show, Eq, Data, Typeable, Generic)
 
-instance Hashable ArtifactSource
-instance Binary ArtifactSource
+--instance Hashable ArtifactSource TODO
+--instance Binary ArtifactSource
 instance NFData ArtifactSource
 
 -- | Return all source files generated by an 'ArtifactSource'.
 getArtifactSourceFiles :: ArtifactSource -> [FilePath]
-getArtifactSourceFiles (Concatenation f _) = [f]
-getArtifactSourceFiles (FromContent   f _) = [f]
-getArtifactSourceFiles (FromFile      f _) = [f]
-getArtifactSourceFiles (IntoDirectory pd as) =
-    (pd</>) <$> (as >>= getArtifactSourceFiles)
+getArtifactSourceFiles (FromContent f _) = [f]
+getArtifactSourceFiles (FromFile f _) = [f]
+getArtifactSourceFiles (IntoDirectory pd as) = (pd </>) <$> (as >>= getArtifactSourceFiles)
 getArtifactSourceFiles (FromDirectory _ as) = as >>= getArtifactSourceFiles
-getArtifactSourceFiles (SetPermissions _ _ _ as) =
-    as >>= getArtifactSourceFiles
-
-
+getArtifactSourceFiles (SetPermissions _ _ _ as) = as >>= getArtifactSourceFiles
 
 -- | Identify an artifact. __Deprecated__ TODO: B9 does not check if all
 -- instances IDs are unique.
 newtype InstanceId =
-    IID String
-    deriving (Read,Show,Typeable,Data,Eq,NFData,Binary,Hashable)
+  IID String
+  deriving (Read, Show, Typeable, Data, Eq, NFData, Binary, Hashable)
 
 -- | The variable containing the instance id. __Deprecated__
 instanceIdKey :: String
@@ -212,22 +201,23 @@ buildDateKey = "build_date"
 -- 'ArtifactGenerator's. They contain all the files defined by the 'Sources'
 -- they are nested into.
 data ArtifactAssembly
-    = CloudInit [CloudInitType]
-                FilePath
-    |
+  = CloudInit [CloudInitType]
+              FilePath
       -- ^ Generate a __cloud-init__ compatible directory, ISO-
       -- or VFAT image, as specified by the list of
       -- 'CloudInitType's. Every item will use the second
       -- argument to create an appropriate /file name/,
       -- e.g. for the 'CI_ISO' type the output is @second_param.iso@.
-      VmImages [ImageTarget]
-               VmScript
+  | VmImages [ImageTarget]
+             VmScript
     -- ^ a set of VM-images that were created by executing a
     -- build script on them.
-    deriving (Read,Show,Typeable,Data,Eq,Generic)
+  deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 instance Hashable ArtifactAssembly
+
 instance Binary ArtifactAssembly
+
 instance NFData ArtifactAssembly
 
 -- | A type representing the targets assembled by
@@ -235,104 +225,96 @@ instance NFData ArtifactAssembly
 -- list of 'ArtifactTarget's because e.g. a single 'CloudInit' can produce up to
 -- three output files, a directory, an ISO image and a VFAT image.
 data AssembledArtifact =
-    AssembledArtifact InstanceId
-                      [ArtifactTarget]
-    deriving (Read,Show,Typeable,Data,Eq,Generic)
+  AssembledArtifact InstanceId
+                    [ArtifactTarget]
+  deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 instance Hashable AssembledArtifact
+
 instance Binary AssembledArtifact
+
 instance NFData AssembledArtifact
 
 data ArtifactTarget
-    = CloudInitTarget CloudInitType
-                      FilePath
-    | VmImagesTarget
-    deriving (Read,Show,Typeable,Data,Eq,Generic)
+  = CloudInitTarget CloudInitType
+                    FilePath
+  | VmImagesTarget
+  deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 instance Hashable ArtifactTarget
+
 instance Binary ArtifactTarget
+
 instance NFData ArtifactTarget
 
 data CloudInitType
-    = CI_ISO
-    | CI_VFAT
-    | CI_DIR
-    deriving (Read,Show,Typeable,Data,Eq,Generic)
+  = CI_ISO
+  | CI_VFAT
+  | CI_DIR
+  deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 instance Hashable CloudInitType
+
 instance Binary CloudInitType
+
 instance NFData CloudInitType
 
 -- | The output of an 'ArtifactAssembly' is either a set of generated files,
 --  or it might be a directory that contains the artifacts sources.
-data AssemblyOutput =
-    AssemblyGeneratesOutputFiles [FilePath]
-   | AssemblyCopiesSourcesToDirectory FilePath
-   deriving (Read,Show,Typeable,Data,Eq,Generic)
+data AssemblyOutput
+  = AssemblyGeneratesOutputFiles [FilePath]
+  | AssemblyCopiesSourcesToDirectory FilePath
+  deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 -- | Return the files that the artifact assembly consist of.
 getAssemblyOutput :: ArtifactAssembly -> [AssemblyOutput]
-getAssemblyOutput (VmImages ts _) =
-    AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
+getAssemblyOutput (VmImages ts _) = AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
 getAssemblyOutput (CloudInit ts o) = getCloudInitOutputFiles o <$> ts
- where
-  getCloudInitOutputFiles baseName t = case t of
-      CI_ISO  -> AssemblyGeneratesOutputFiles [baseName <.> "iso"]
-      CI_VFAT -> AssemblyGeneratesOutputFiles [baseName <.> "vfat"]
-      CI_DIR  -> AssemblyCopiesSourcesToDirectory baseName
-
+  where
+    getCloudInitOutputFiles baseName t =
+      case t of
+        CI_ISO  -> AssemblyGeneratesOutputFiles [baseName <.> "iso"]
+        CI_VFAT -> AssemblyGeneratesOutputFiles [baseName <.> "vfat"]
+        CI_DIR  -> AssemblyCopiesSourcesToDirectory baseName
 
 -- * QuickCheck instances
-
 instance Arbitrary ArtifactGenerator where
-    arbitrary =
-        oneof
-            [ Sources <$> halfSize arbitrary <*> halfSize arbitrary
-            , Let <$> halfSize arbitraryEnv <*> halfSize arbitrary
-            , halfSize arbitraryEachT <*> halfSize arbitrary
-            , halfSize arbitraryEach <*> halfSize arbitrary
-            , Artifact <$> smaller arbitrary <*> smaller arbitrary
-            , pure EmptyArtifact]
-
+  arbitrary =
+    oneof
+      [ Sources <$> halfSize arbitrary <*> halfSize arbitrary
+      , Let <$> halfSize arbitraryEnv <*> halfSize arbitrary
+      , halfSize arbitraryEachT <*> halfSize arbitrary
+      , halfSize arbitraryEach <*> halfSize arbitrary
+      , Artifact <$> smaller arbitrary <*> smaller arbitrary
+      , pure EmptyArtifact
+      ]
 
 arbitraryEachT :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEachT =
-    sized $
-    \n ->
-         EachT <$> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))) <*>
-         oneof
-             [ listOf (vectorOf n (halfSize arbitrary))
-             , listOf1 (listOf (halfSize arbitrary))]
+  sized $ \n ->
+    EachT <$> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))) <*>
+    oneof [listOf (vectorOf n (halfSize arbitrary)), listOf1 (listOf (halfSize arbitrary))]
 
 arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
 arbitraryEach =
-    sized $
-    \n ->
-         Each <$>
-         listOf
-             ((,) <$> listOf1 (choose ('a', 'z')) <*>
-              vectorOf n (halfSize (listOf1 (choose ('a', 'z')))))
-
+  sized $ \n ->
+    Each <$> listOf ((,) <$> listOf1 (choose ('a', 'z')) <*> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))))
 
 instance Arbitrary ArtifactSource where
-    arbitrary =
-        oneof
-            [ FromFile <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , FromContent <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , SetPermissions <$> choose (0, 7) <*> choose (0, 7) <*>
-              choose (0, 7) <*>
-              smaller arbitrary
-            , FromDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
-            , IntoDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary]
+  arbitrary =
+    oneof
+      [ FromFile <$> smaller arbitraryFilePath <*> smaller arbitrary
+      , FromContent <$> smaller arbitraryFilePath <*> smaller arbitrary
+      , SetPermissions <$> choose (0, 7) <*> choose (0, 7) <*> choose (0, 7) <*> smaller arbitrary
+      , FromDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
+      , IntoDirectory <$> smaller arbitraryFilePath <*> smaller arbitrary
+      ]
 
 instance Arbitrary InstanceId where
-    arbitrary = IID <$> arbitraryFilePath
+  arbitrary = IID <$> arbitraryFilePath
 
 instance Arbitrary ArtifactAssembly where
-    arbitrary =
-        oneof
-            [ CloudInit <$> arbitrary <*> arbitraryFilePath
-            , VmImages <$> smaller arbitrary <*> pure NoVmScript]
+  arbitrary = oneof [CloudInit <$> arbitrary <*> arbitraryFilePath, VmImages <$> smaller arbitrary <*> pure NoVmScript]
 
 instance Arbitrary CloudInitType where
-    arbitrary = elements [CI_ISO, CI_VFAT, CI_DIR]
+  arbitrary = elements [CI_ISO, CI_VFAT, CI_DIR]

@@ -52,8 +52,8 @@ spec = do
   describe "CloudConfigYaml" $ do
    it "combines 'write_files' and 'runcmd' from typical 'user-data' files by merging each" $
      let ud1, ud2 :: CloudConfigYaml
-         (Right ud1) = decodeSyntax "" "#cloud-config\n\nwrite_files:\n  - contents: |\n      hello world!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - x y z\n"
-         (Right ud2) = decodeSyntax "" "#cloud-config\n\nwrite_files:\n  - contents: |\n      hello world2!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - a b c\n"
+         (Right ud1) = decodeOrFail' "" "#cloud-config\n\nwrite_files:\n  - contents: |\n      hello world!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - x y z\n"
+         (Right ud2) = decodeOrFail' "" "#cloud-config\n\nwrite_files:\n  - contents: |\n      hello world2!\n\n    path: /sdf/xyz/filename.cfg\n    owner: root:root\n\nruncmd:\n - a b c\n"
 
          ud = MkCloudConfigYaml $ YamlObject
                 (object
