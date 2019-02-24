@@ -6,7 +6,7 @@ variables or configuration file.
 
 @since 0.5.62
  -}
-module B9.Content.Environment
+module B9.Environment
   ( Environment()
   , fromStringPairs
   , addStringBinding
@@ -48,6 +48,7 @@ instance Semigroup Environment where
     MkEnvironment
       { nextPosition =
           case (nextPosition e1, nextPosition e2) of
+            (0, 0) -> 0
             (0, p2) -> p2
             (p1, 0) -> p1
             (p1, p2)
@@ -60,6 +61,9 @@ instance Semigroup Environment where
                 else error ("Overlapping entries (<>): (" ++ show e1 ++ ") <> (" ++ show e2 ++ "): (" ++ show i ++ ")")
       }
 
+instance Monoid Environment where
+  mempty = MkEnvironment 0 HashMap.empty
+
 -- | If environment variables @arg_1 .. arg_n@ are bound
 -- and a list of @k@ additional values are passed to this function,
 -- store them with keys @arg_(n+1) .. arg_(n+k)@.
@@ -69,7 +73,7 @@ instance Semigroup Environment where
 -- @since 0.5.62
 insertPositionalArguments :: [Text] -> Environment -> Environment
 insertPositionalArguments =
-  flip (foldr (\arg (MkEnvironment i e) -> (MkEnvironment (i + 1) (HashMap.insert (Text.pack ("arg_" ++ show i)) arg e))))
+  flip (foldr (\arg (MkEnvironment i e) -> MkEnvironment (i + 1) (HashMap.insert (Text.pack ("arg_" ++ show i)) arg e)))
 
 -- | Create an 'Environment' from a list of pairs ('String's)
 --

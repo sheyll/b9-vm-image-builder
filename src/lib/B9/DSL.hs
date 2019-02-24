@@ -251,8 +251,6 @@ exec script e = liftF $ Exec e script ()
 sh :: String -> ExecEnv -> B9DSL ()
 sh s = exec (Run s [])
 
--- TODO generalize exec to work with 'includedFiles'
-
 -- * Some utility vm builder lego
 
 rootImage :: String -> String -> ExecEnv -> B9DSL ()
@@ -266,8 +264,8 @@ dataImage nameExport env =
 mountAndShareSharedImage :: String -> String -> String -> ExecEnv -> B9DSL (Imported 'VmImage)
 mountAndShareSharedImage nameFrom nameExport mountPoint env = do
     img <- from nameFrom
-    share img nameExport
     mount env img mountPoint
+    share img nameExport
     return img
 
 mountAndShareNewImage :: String -> Int -> String -> FilePath -> ExecEnv -> B9DSL (Imported 'VmImage)

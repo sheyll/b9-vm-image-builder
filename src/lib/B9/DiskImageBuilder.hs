@@ -26,7 +26,7 @@ module B9.DiskImageBuilder
 
 import B9.B9Config
 import B9.B9Monad
-import B9.Content.Environment
+import B9.Environment
 import B9.Content.StringTemplate
 import B9.DiskImages
 import qualified B9.PartitionTable as P

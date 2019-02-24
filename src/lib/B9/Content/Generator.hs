@@ -11,7 +11,7 @@ module B9.Content.Generator
   ) where
 
 import B9.B9Monad (B9)
-import B9.Content.Environment
+import B9.Environment
 import Control.Applicative (Alternative)
 import Control.Monad.Reader
 import Data.ByteString.Lazy as Lazy

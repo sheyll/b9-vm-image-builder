@@ -15,7 +15,7 @@ import           Data.Generics.Schemes
 import           Data.Hashable
 import           GHC.Generics                (Generic)
 
-import           B9.Content.Environment
+import           B9.Environment
 import           B9.Content.StringTemplate
 import           B9.DiskImages
 import           B9.ExecEnv

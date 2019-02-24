@@ -16,8 +16,8 @@ import           Data.Generics.Aliases
 import           Data.Generics.Schemes
 import           Data.List
 import           Data.Maybe
-import qualified Data.Text.Lazy                 as LazyT
-import qualified Data.Text.Lazy.Encoding        as LazyE
+import qualified Data.Text.Lazy            as LazyT
+import qualified Data.Text.Lazy.Encoding   as LazyE
 import           System.Directory
 import           System.FilePath
 import           System.IO.B9Extras        (ensureDir, getDirectoryFiles)
@@ -28,13 +28,12 @@ import           B9.ArtifactGenerator
 import           B9.B9Config
 import           B9.B9Monad
 import           B9.Content.Builtin
-import           B9.Content.Environment
+import           B9.Environment
 import           B9.Content.Generator
 import           B9.Content.StringTemplate
 import           B9.DiskImageBuilder
 import           B9.Vm
 import           B9.VmBuilder
-
 
 -- | Execute an 'ArtifactGenerator' and return a 'B9Invocation' that returns
 -- the build id obtained by 'getBuildId'.
@@ -49,7 +48,7 @@ buildArtifacts artifactGenerator = do
 -- | Return a list of relative paths for the /local/ files to be generated
 -- by the ArtifactGenerator. This excludes 'Shared' and Transient image targets.
 getArtifactOutputFiles :: ArtifactGenerator -> Either String [FilePath]
-getArtifactOutputFiles g = concatMap getOutputs <$> evalArtifactGenerator undefined undefined [] g
+getArtifactOutputFiles g = concatMap getOutputs <$> evalArtifactGenerator undefined undefined mempty g
   where
     getOutputs (IG _ sgs a) =
       let toOutFile (AssemblyGeneratesOutputFiles fs) = fs
@@ -74,13 +73,16 @@ evalArtifactGenerator ::
      String -> String -> Environment -> ArtifactGenerator -> Either String [InstanceGenerator [SourceGenerator]]
 evalArtifactGenerator buildId buildDate b9cfgEnvVars artGen =
   let ag = parseArtifactGenerator artGen
-      e = CGEnv (fromStringPairs ((buildDateKey, buildDate) : (buildIdKey, buildId) : b9cfgEnvVars)) []
-   in case execCGParser ag e of
+      ee = addBindings [(buildDateKey, buildDate), (buildIdKey, buildId)] $ CGEnv b9cfgEnvVars []
+   in case ee of
         Left err -> Left (printf "error parsing: %s: %s" (ppShow artGen) (show err))
-        Right igs ->
-          case execIGEnv `mapM` igs of
-            Left err -> Left (printf "Failed to parse:\n%s\nError: %s" (ppShow artGen) err)
-            Right is -> Right is
+        Right e ->
+          case execCGParser ag e of
+            Left err -> Left (printf "error parsing: %s: %s" (ppShow artGen) (show err))
+            Right igs ->
+              case execIGEnv `mapM` igs of
+                Left err -> Left (printf "Failed to parse:\n%s\nError: %s" (ppShow artGen) err)
+                Right is -> Right is
 
 -- | Parse an artifacto generator inside a 'CGParser' monad.
 parseArtifactGenerator :: ArtifactGenerator -> CGParser ()
@@ -154,13 +156,7 @@ writeInstanceGenerator (IID iidStrT) assembly = do
 -- | Monad for creating Instance generators.
 newtype CGParser a = CGParser
   { runCGParser :: WriterT [InstanceGenerator CGEnv] (ReaderT CGEnv (Either SomeException)) a
-  } deriving ( MonadThrow
-             , Functor
-             , Applicative
-             , Monad
-             , MonadReader CGEnv
-             , MonadWriter [InstanceGenerator CGEnv]
-             )
+  } deriving (MonadThrow, Functor, Applicative, Monad, MonadReader CGEnv, MonadWriter [InstanceGenerator CGEnv])
 
 data CGEnv = CGEnv
   { agEnv     :: Environment

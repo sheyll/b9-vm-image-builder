@@ -73,14 +73,14 @@ import Data.ConfigFile.B9Extras
   , toStringCP
   )
 import Data.Function (on)
-import Data.List (partition, sortBy)
 import Data.Maybe (fromMaybe)
 import qualified Data.Semigroup as Sem
+import qualified Data.Text.Lazy as LazyT
 import System.Directory
 import System.IO.B9Extras (SystemPath(..), ensureDir, resolve)
 import Text.Printf (printf)
 
-import B9.Content.Environment
+import B9.Environment
 
 data ExecEnvType =
   LibVirtLXC
@@ -132,7 +132,8 @@ instance Sem.Semigroup B9Config where
 
 instance Monoid B9Config where
   mappend = (Sem.<>)
-  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC Nothing [] True Nothing Nothing False Nothing Nothing []
+  mempty =
+    B9Config Nothing Nothing Nothing False LibVirtLXC Nothing mempty True Nothing Nothing False Nothing Nothing []
 
 -- | Override b9 configuration items and/or the path of the b9 configuration file.
 -- This is useful, i.e. when dealing with command line parameters.
@@ -271,7 +272,7 @@ defaultB9Config =
     , _keepTempDirs = False
     , _execEnvType = LibVirtLXC
     , _profileFile = Nothing
-    , _envVars = []
+    , _envVars = mempty
     , _uniqueBuildDirs = True
     , _repository = Nothing
     , _repositoryCache = Just defaultRepositoryCache
@@ -359,7 +360,8 @@ parseB9Config cp =
         B9Config <$> getr verbosityK <*> getr logFileK <*> getr buildDirRootK <*> getr keepTempDirsK <*>
         getr execEnvTypeK <*>
         getr profileFileK <*>
-        getr envVarsK <*>
+        (fromStringPairs <$> getr envVarsK)
+         <*>
         getr uniqueBuildDirsK <*>
         getr repositoryCacheK <*>
         getr repositoryK <*>
@@ -375,4 +377,4 @@ parseB9Config cp =
 appendPositionalArguments :: [String] -> B9Config -> B9Config
 appendPositionalArguments extraPositional c = c {_envVars = appendVars (_envVars c)}
   where
-    appendVars = insertPositionalArguments (T.pack <$> extraPositional)
+    appendVars = insertPositionalArguments (LazyT.pack <$> extraPositional)

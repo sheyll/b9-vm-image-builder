@@ -23,61 +23,54 @@ module B9.B9Monad
   , getRemoteRepos
   , getRepoCache
   , cmd
-  )
-where
+  ) where
 
 import           B9.B9Config
+import           B9.Environment
 import           B9.Repository
 import           Control.Applicative
-import           Control.Exception              ( bracket )
+import           Control.Concurrent.Async (Concurrently (..))
+import           Control.Exception        (bracket)
+import           Control.Lens             ((%~), (&), (.~), (?~), (^.))
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.State
-import           Control.Lens                   ( (&)
-                                                , (.~)
-                                                , (^.)
-                                                , (%~)
-                                                , (?~)
-                                                )
-import qualified Data.ByteString.Char8         as Strict
-import           Data.Functor                   ( )
+import qualified Data.ByteString.Char8    as Strict
+import           Data.Conduit             (runConduit, (.|))
+import qualified Data.Conduit.List        as CL
+import           Data.Conduit.Process
+import           Data.Foldable
+import           Data.Functor             ()
 import           Data.Hashable
 import           Data.Maybe
 import           Data.Time.Clock
 import           Data.Time.Format
-import           Data.Word                      ( Word32 )
+import           Data.Word                (Word32)
 import           System.Directory
 import           System.Exit
 import           System.FilePath
-import           System.Random                  ( randomIO )
-import qualified System.IO                     as SysIO
+import qualified System.IO                as SysIO
+import           System.Random            (randomIO)
 import           Text.Printf
-import           Control.Concurrent.Async       ( Concurrently(..) )
-import           Data.Conduit                   ( (.|)
-                                                , runConduit
-                                                )
-import qualified Data.Conduit.List             as CL
-import           Data.Foldable
-import           Data.Conduit.Process
 
-data BuildState =
-  BuildState {bsBuildId :: String
-             ,bsBuildDate :: String
-             ,bsCfg :: B9Config
-             ,bsBuildDir :: FilePath
-             ,bsLogFileHandle :: Maybe SysIO.Handle
-             ,bsSelectedRemoteRepo :: Maybe RemoteRepo
-             ,bsRepoCache :: RepoCache
-             ,bsProf :: [ProfilingEntry]
-             ,bsStartTime :: UTCTime
-             ,bsInheritStdIn :: Bool}
+data BuildState = BuildState
+  { bsBuildId            :: String
+  , bsBuildDate          :: String
+  , bsCfg                :: B9Config
+  , bsBuildDir           :: FilePath
+  , bsLogFileHandle      :: Maybe SysIO.Handle
+  , bsSelectedRemoteRepo :: Maybe RemoteRepo
+  , bsRepoCache          :: RepoCache
+  , bsProf               :: [ProfilingEntry]
+  , bsStartTime          :: UTCTime
+  , bsInheritStdIn       :: Bool
+  }
 
 data ProfilingEntry
   = IoActionDuration NominalDiffTime
   | LogEvent LogLevel
              String
-  deriving (Eq,Show)
-
+  deriving (Eq, Show)
 
 run :: MonadIO m => B9 a -> B9ConfigAction m a
 run action = do
@@ -95,17 +88,15 @@ run action = do
           canonicalizePath root'
     withLogFile cfg f = maybe (f Nothing) (\logf -> SysIO.withFile logf SysIO.AppendMode (f . Just)) (_logFile cfg)
     withBuildDir cfg buildId = bracket (createBuildDir cfg buildId) (removeBuildDir cfg)
-    runImpl cfg buildId now buildDir logFileHandle
-      -- Check repositories
-     = do
+    runImpl cfg buildId now buildDir logFileHandle = do
       repoCache <- initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg))
       let buildDate = formatTime undefined "%F-%T" now
       remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
       buildDirRootAbs <- resolveBuildDirRoot cfg
       let finalCfg =
-            cfg & remoteRepos .~ remoteRepos' & (buildDirRoot ?~ buildDirRootAbs) &
-            envVars %~ mappend [("buildDirRoot", buildDirRootAbs)]
-      let ctx =
+            cfg & remoteRepos .~ remoteRepos' & (buildDirRoot ?~ buildDirRootAbs) & envVars %~ fromJust .
+            addStringBinding ("buildDirRoot", buildDirRootAbs)
+          ctx =
             BuildState
               buildId
               buildDate
@@ -126,6 +117,7 @@ run action = do
       when (isJust (_profileFile cfg)) $
         writeFile (fromJust (_profileFile cfg)) (unlines $ show <$> reverse (bsProf ctxOut))
       return r
+            -- Check repositories
     createBuildDir cfg buildId = do
       let subDir = "BUILD-" ++ buildId
       buildDir <- resolveBuildDir subDir
@@ -144,7 +136,6 @@ run action = do
               salt <- randomIO :: IO Word32
               return (printf "%08X-%08X" cfgHash salt)
             else return (printf "%08X" cfgHash)
-  -- Run the action build action
     wrappedAction = do
       b9cfg <- getConfig
       traverse_ (traceL . printf "Root Build Directory: %s") (b9cfg ^. buildDirRoot)
@@ -155,6 +146,7 @@ run action = do
       infoL (printf "DURATION: %s" duration)
       return r
 
+-- Run the action build action
 getBuildId :: B9 String
 getBuildId = gets bsBuildId
 
@@ -194,11 +186,12 @@ getRepoCache = gets bsRepoCache
 -- readContentFromUrl :: String -> B9 Strict.ByteString
 -- readContentFromUrl url = do
 --   return expression
-
 cmd :: String -> B9 ()
 cmd str = do
   inheritStdIn <- gets bsInheritStdIn
-  if inheritStdIn then interactiveCmd str else nonInteractiveCmd str
+  if inheritStdIn
+    then interactiveCmd str
+    else nonInteractiveCmd str
 
 interactiveCmd :: String -> B9 ()
 interactiveCmd str = void (cmdWithStdIn True str :: B9 Inherited)
@@ -213,26 +206,26 @@ cmdWithStdIn :: (InputSource stdin) => Bool -> String -> B9 stdin
 cmdWithStdIn toStdOut cmdStr = do
   traceL $ "COMMAND: " ++ cmdStr
   cmdLogger <- getCmdLogger
-  let outPipe = if toStdOut then CL.mapM_ Strict.putStr else cmdLogger LogTrace
+  let outPipe =
+        if toStdOut
+          then CL.mapM_ Strict.putStr
+          else cmdLogger LogTrace
   (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
-  e                         <-
-    liftIO
-    $  runConcurrently
-    $  Concurrently (runConduit (cpOut .| outPipe))
-    *> Concurrently (runConduit (cpErr .| cmdLogger LogInfo))
-    *> Concurrently (waitForStreamingProcess cph)
+  e <-
+    liftIO $ runConcurrently $ Concurrently (runConduit (cpOut .| outPipe)) *>
+    Concurrently (runConduit (cpErr .| cmdLogger LogInfo)) *>
+    Concurrently (waitForStreamingProcess cph)
   checkExitCode e
   return cpIn
- where
-  getCmdLogger = do
-    lv  <- gets $ _verbosity . bsCfg
-    lfh <- gets bsLogFileHandle
-    return $ \level -> CL.mapM_ (logImpl lv lfh level . Strict.unpack)
-  checkExitCode ExitSuccess =
-    traceL $ printf "COMMAND '%s' exited with exit code: 0" cmdStr
-  checkExitCode ec@(ExitFailure e) = do
-    errorL $ printf "COMMAND '%s' exited with exit code: %i" cmdStr e
-    liftIO $ exitWith ec
+  where
+    getCmdLogger = do
+      lv <- gets $ _verbosity . bsCfg
+      lfh <- gets bsLogFileHandle
+      return $ \level -> CL.mapM_ (logImpl lv lfh level . Strict.unpack)
+    checkExitCode ExitSuccess = traceL $ printf "COMMAND '%s' exited with exit code: 0" cmdStr
+    checkExitCode ec@(ExitFailure e) = do
+      errorL $ printf "COMMAND '%s' exited with exit code: %i" cmdStr e
+      liftIO $ exitWith ec
 
 traceL :: String -> B9 ()
 traceL = b9Log LogTrace
@@ -251,9 +244,9 @@ errorExitL e = b9Log LogError e >> fail e
 
 b9Log :: LogLevel -> String -> B9 ()
 b9Log level msg = do
-  lv  <- gets $ _verbosity . bsCfg
+  lv <- gets $ _verbosity . bsCfg
   lfh <- gets bsLogFileHandle
-  modify $ \ctx -> ctx { bsProf = LogEvent level msg : bsProf ctx }
+  modify $ \ctx -> ctx {bsProf = LogEvent level msg : bsProf ctx}
   B9 $ liftIO $ logImpl lv lfh level msg
 
 logImpl :: Maybe LogLevel -> Maybe SysIO.Handle -> LogLevel -> String -> IO ()
@@ -271,22 +264,23 @@ formatLogMsg l msg = do
   return $ unlines $ printf "[%s] %s - %s" (printLevel l) time <$> lines msg
 
 printLevel :: LogLevel -> String
-printLevel l = case l of
-  LogNothing -> "NOTHING"
-  LogError   -> " ERROR "
-  LogInfo    -> " INFO  "
-  LogDebug   -> " DEBUG "
-  LogTrace   -> " TRACE "
+printLevel l =
+  case l of
+    LogNothing -> "NOTHING"
+    LogError   -> " ERROR "
+    LogInfo    -> " INFO  "
+    LogDebug   -> " DEBUG "
+    LogTrace   -> " TRACE "
 
-newtype B9 a =
-  B9 {runB9 :: StateT BuildState IO a}
-  deriving (Functor,Applicative,Monad,MonadState BuildState,Alternative)
+newtype B9 a = B9
+  { runB9 :: StateT BuildState IO a
+  } deriving (Functor, Applicative, Monad, MonadState BuildState, Alternative)
 
 instance MonadIO B9 where
   liftIO m = do
     start <- B9 $ liftIO getCurrentTime
-    res   <- B9 $ liftIO m
-    stop  <- B9 $ liftIO getCurrentTime
+    res <- B9 $ liftIO m
+    stop <- B9 $ liftIO getCurrentTime
     let durMS = IoActionDuration (stop `diffUTCTime` start)
-    modify $ \ctx -> ctx { bsProf = durMS : bsProf ctx }
+    modify $ \ctx -> ctx {bsProf = durMS : bsProf ctx}
     return res

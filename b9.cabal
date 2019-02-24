@@ -75,7 +75,7 @@ library
                    , B9.Content.AST
                    , B9.Content.CloudConfigYaml
                    , B9.Content.Generator
-                   , B9.Content.Environment
+                   , B9.Environment
                    , B9.Content.ErlangPropList
                    , B9.Content.ErlTerms
                    , B9.Content.Builtin
@@ -167,6 +167,7 @@ executable b9c
                    , bytestring >= 0.10
                    , optparse-applicative >= 0.13
                    , lens >= 4
+                   , text >= 1.2
   hs-source-dirs:    src/cli
   default-language:  Haskell2010
   default-extensions: TupleSections

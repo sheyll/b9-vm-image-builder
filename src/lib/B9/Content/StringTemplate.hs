@@ -15,7 +15,7 @@ module B9.Content.StringTemplate
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import B9.Content.Environment
+import B9.Environment
 import B9.QCUtil
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class (MonadIO(liftIO))

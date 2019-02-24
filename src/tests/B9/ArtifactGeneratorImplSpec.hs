@@ -4,7 +4,7 @@ import Data.Text ()
 
 import B9.ArtifactGenerator
 import B9.ArtifactGeneratorImpl
-import B9.Content.Environment as Env
+import B9.Environment as Env
 import B9.DiskImages
 import B9.ExecEnv
 import B9.Vm
