@@ -43,7 +43,7 @@ import System.FilePath as X
 import Text.Printf as X (printf)
 import Data.Version as X
 import System.IO.B9Extras as X
-import B9.Artifact as X
+-- import B9.Artifact as X
 import B9.Artifact.Readable as X
 import B9.Artifact.Content as X
 import B9.Artifact.Content.AST as X
@@ -53,7 +53,6 @@ import B9.Artifact.Content.ErlangPropList as X
 import B9.Artifact.Content.Readable as X
 import B9.Artifact.Content.StringTemplate as X
 import B9.Artifact.Content.YamlObject as X
-import B9.Artifact.Readable.Source as X
 import B9.Artifact.Readable.Interpreter as X
 import B9.B9Monad as X
 import B9.B9Config as X

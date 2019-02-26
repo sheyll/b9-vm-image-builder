@@ -6,17 +6,11 @@ module B9.Artifact.Readable.Source
   , getArtifactSourceFiles
   ) where
 
-import           Control.Eff
-import           Control.Eff.Extend
-import           Control.Eff.Writer.Lazy
 import           Control.Parallel.Strategies
 import           Data.Data
-import           Data.Tagged
 import           GHC.Generics                       (Generic)
 import           System.FilePath                    ((</>))
-import           Text.Read
 
-import           B9.Artifact.Content
 import           B9.Artifact.Content.Readable
 import           B9.Artifact.Content.StringTemplate
 import           B9.QCUtil

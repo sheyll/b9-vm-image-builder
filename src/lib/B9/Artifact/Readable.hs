@@ -30,8 +30,6 @@ import           GHC.Generics                (Generic)
 import           System.FilePath             ((<.>))
 
 import           B9.Artifact.Readable.Source
-import           B9.Artifact.Content.Readable
-import           B9.Artifact.Content.StringTemplate
 import           B9.DiskImages
 import           B9.QCUtil
 import           B9.Vm

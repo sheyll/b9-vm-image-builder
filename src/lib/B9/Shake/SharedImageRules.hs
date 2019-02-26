@@ -24,8 +24,7 @@ enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
  where
   sharedImageIdentity :: BuiltinIdentity SharedImageName SharedImageBuildId
   sharedImageIdentity (SharedImageName k) (SharedImageBuildId v) =
-    LazyByteString.toStrict
-      (Builder.toLazyByteString (stringUtf8 k <> stringUtf8 v))
+      Just (LazyByteString.toStrict (Builder.toLazyByteString (stringUtf8 k <> stringUtf8 v)))
 
   go :: BuiltinRun SharedImageName SharedImageBuildId
   go nameQ mOldBIdBinary dependenciesChanged = do

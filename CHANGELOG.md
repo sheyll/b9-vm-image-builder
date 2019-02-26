@@ -1,5 +1,9 @@
 # Changelog for B9
 
+## 0.5.63
+
+* Depend on `shake-0.17.6` to fix build errors 
+
 ## 0.5.62
 
 * Rewrite `B9.Shake.SharedImageRules` in line with 

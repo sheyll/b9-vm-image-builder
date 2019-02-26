@@ -2,7 +2,9 @@
 --
 -- An extensible approach to vm deployment configuration management.
 --
+-- TODO: do it.
+--
 -- @since 1.0.0
-{-# LANGUAGE FlexibleInstances #-}
-module B9.Artifact where
+module B9.Artifact () where
+
 
