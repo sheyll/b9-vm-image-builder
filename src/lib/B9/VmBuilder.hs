@@ -15,7 +15,7 @@ import B9.DiskImageBuilder
 import B9.ExecEnv
 import B9.B9Config
 import B9.Vm
-import B9.ArtifactGenerator
+import B9.Artifact.Readable
 import B9.ShellScript
 import qualified B9.LibVirtLXC as LXC
 

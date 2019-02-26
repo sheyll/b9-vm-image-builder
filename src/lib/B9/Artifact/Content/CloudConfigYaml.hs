@@ -11,13 +11,13 @@ Otherwise, this is just a wrapper around 'YamlObject'.
 
 @Since 0.5.62
 -}
-module B9.Content.CloudConfigYaml
+module B9.Artifact.Content.CloudConfigYaml
   ( CloudConfigYaml(..)
   , cloudConfigFileHeader
   ) where
 
-import           B9.Content.AST
-import           B9.Content.YamlObject
+import           B9.Artifact.Content.AST
+import           B9.Artifact.Content.YamlObject
 
 import           Control.Parallel.Strategies (NFData)
 import           Data.Binary                 (Binary)

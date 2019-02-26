@@ -35,13 +35,14 @@
   
      * Add `appendPositionalArguments`
   
-* Rename the previous `B9.Content.Generator` to `B9.Content.Builtin`
+* Rename the previous `B9.Artifact.Content` to `B9.Artifact.Content`
 
 * Introduce `ContentGenerator` as an open, extensible alternative
   to `Content`, `AST` and `CanRender` in the module
-  `B9.Content.Generator`
+  `B9.Artifact.Content`
+* Rename-and-Split refactor `B9.ArtifactSource{Impl}` to `B9.Artifact.Generator.{..}`
 
-* Move `CanRender` from `B9.Content.AST` to `B9.Content.Generator`    
+* Move `CanRender` from `B9.Artifact.Content.AST` to `B9.Artifact.Content`    
 
 * Switch to lazy `Text`s and `ByteString`s where possible, since B9 might
   read/generate large files. 

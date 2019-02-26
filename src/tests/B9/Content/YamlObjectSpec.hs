@@ -8,9 +8,9 @@ import Data.Semigroup
 import Data.Text ()
 import Data.Yaml
 
-import B9.Content.YamlObject
-import B9.Content.CloudConfigYaml
-import B9.Content.AST
+import B9.Artifact.Content.YamlObject
+import B9.Artifact.Content.CloudConfigYaml
+import B9.Artifact.Content.AST
 
 spec :: Spec
 spec = do

@@ -6,7 +6,7 @@
     This module re-exports the modules needed to build a tool around the
     library, e.g. see @src\/cli\/Main.hs@ as an example.
 
-    "B9.ArtifactGenerator" is the module containing the basic data structure
+    "B9.Artifact.Generator" is the module containing the basic data structure
     used to describe a B9 build.
 
 -}
@@ -42,8 +42,20 @@ import System.FilePath as X
         (takeDirectory, takeFileName, replaceExtension, (</>), (<.>))
 import Text.Printf as X (printf)
 import Data.Version as X
-import B9.B9Monad as X
 import System.IO.B9Extras as X
+import B9.Artifact as X
+import B9.Artifact.Readable as X
+import B9.Artifact.Content as X
+import B9.Artifact.Content.AST as X
+import B9.Artifact.Content.CloudConfigYaml as X
+import B9.Artifact.Content.ErlTerms as X
+import B9.Artifact.Content.ErlangPropList as X
+import B9.Artifact.Content.Readable as X
+import B9.Artifact.Content.StringTemplate as X
+import B9.Artifact.Content.YamlObject as X
+import B9.Artifact.Readable.Source as X
+import B9.Artifact.Readable.Interpreter as X
+import B9.B9Monad as X
 import B9.B9Config as X
 import B9.ExecEnv as X
 import B9.DiskImages as X
@@ -51,20 +63,10 @@ import B9.DiskImageBuilder as X
 import B9.ShellScript as X
 import B9.Repository as X
 import B9.RepositoryIO as X
-import B9.ArtifactGenerator as X
-import B9.ArtifactGeneratorImpl as X
 import B9.Vm as X
 import B9.VmBuilder as X
 import B9.QCUtil as X
-import B9.Content.AST as X
-import B9.Content.Builtin as X
-import B9.Content.CloudConfigYaml as X
 import B9.Environment as X
-import B9.Content.ErlTerms as X
-import B9.Content.ErlangPropList as X
-import B9.Content.Generator as X
-import B9.Content.StringTemplate as X
-import B9.Content.YamlObject as X
 import Paths_b9 (version)
 
 -- | Return the cabal package version of the B9 library.

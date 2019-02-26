@@ -1,5 +1,5 @@
 {-| Allow reading, merging and writing Erlang terms. -}
-module B9.Content.ErlangPropList
+module B9.Artifact.Content.ErlangPropList
   ( ErlangPropList(..)
   ) where
 
@@ -18,10 +18,10 @@ import qualified Data.Text.Lazy.Encoding as E
 import GHC.Generics (Generic)
 import Text.Printf
 
-import B9.Content.AST
-import B9.Content.ErlTerms
-import B9.Content.Generator
-import B9.Content.StringTemplate
+import B9.Artifact.Content.AST
+import B9.Artifact.Content.ErlTerms
+import           B9.Artifact.Content
+import B9.Artifact.Content.StringTemplate
 
 import Data.Binary.Put (putLazyByteString)
 import Test.QuickCheck

@@ -1,8 +1,10 @@
--- | Monadic actions that generate the content that
+-- | Content is what is written to files in the generated VM images and cloud configuration.
+--
+-- Contains the monadic actions that generate the content that
 -- is written to the generated artifacts.
 --
 -- @since 0.5.62
-module B9.Content.Generator
+module B9.Artifact.Content
   ( ContentGeneratorT(MkContentGeneratorT)
   , ContentGenerator
   , ByteStringGenerator

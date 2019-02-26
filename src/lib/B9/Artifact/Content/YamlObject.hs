@@ -1,6 +1,6 @@
 -- | A wrapper around Yaml with 'Semigroup' and 'Monoid' instances for merging, reading and
 -- writing yaml files within B9.
-module B9.Content.YamlObject
+module B9.Artifact.Content.YamlObject
   ( YamlObject(..)
   ) where
 
@@ -24,9 +24,9 @@ import           GHC.Generics                (Generic)
 import           Prelude                     hiding ((++))
 import           Text.Printf
 
-import           B9.Content.AST
-import           B9.Content.Generator
-import           B9.Content.StringTemplate
+import           B9.Artifact.Content
+import           B9.Artifact.Content.AST
+import           B9.Artifact.Content.StringTemplate
 
 import           Test.QuickCheck
 

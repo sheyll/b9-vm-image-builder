@@ -20,7 +20,7 @@ merging fields as one would expect, e.g. when merging multiple snippets with
 Another example is the OTP/Erlang sys.config for configuring OTP/Erlang releases.
 -}
 
-module B9.Content.AST ( FromAST(..)
+module B9.Artifact.Content.AST ( FromAST(..)
                       , AST(..)
                       , decodeOrFail'
                       ) where
@@ -34,8 +34,8 @@ import           Data.Hashable
 import           GHC.Generics (Generic)
 import           Test.QuickCheck
 
-import           B9.Content.StringTemplate
-import           B9.Content.Generator
+import           B9.Artifact.Content.StringTemplate
+import           B9.Artifact.Content
 import           B9.QCUtil
 
 -- | Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
@@ -54,8 +54,8 @@ decodeOrFail' errorMessage b =
 -- | Describe how to create structured content that has a tree-like syntactic
 -- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines
 -- a /context/ into which the 'AST' is embedded,
--- e.g. B9.Content.Builtin.Content'. The second parameter defines a specifix
--- syntax, e.g 'B9.Content.ErlangPropList' that the 'AST' value generates.
+-- e.g. B9.Artifact.Content'. The second parameter defines a specifix
+-- syntax, e.g 'B9.Artifact.Content.ErlangPropList' that the 'AST' value generates.
 data AST c a
     = ASTObj [(String, AST c a)] -- ^ Create an object similar to a
                                  -- Json object.

@@ -5,7 +5,7 @@ import Data.List
 import Test.Hspec
 import Test.QuickCheck
 import Data.Maybe
-import B9.Content.ErlTerms
+import B9.Artifact.Content.ErlTerms
 import qualified Data.ByteString.Lazy.Char8 as Lazy
 
 spec :: Spec

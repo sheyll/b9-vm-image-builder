@@ -1,7 +1,7 @@
 {-| Definition of 'VmScript' an artifact encapsulating several virtual machines
     disk images that can be mounted in an execution environment like
     "B9.LibVirtLXC". A 'VmScript' is embedded by in an
-    'B9.ArtifactGenerator.ArtifactGenerator'. -}
+    'B9.Artifact.Generator.ArtifactGenerator'. -}
 module B9.Vm
   ( VmScript(..)
   , substVmScript
@@ -16,7 +16,7 @@ import           Data.Hashable
 import           GHC.Generics                (Generic)
 
 import           B9.Environment
-import           B9.Content.StringTemplate
+import           B9.Artifact.Content.StringTemplate
 import           B9.DiskImages
 import           B9.ExecEnv
 import           B9.ShellScript

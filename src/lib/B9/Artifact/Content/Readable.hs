@@ -1,6 +1,7 @@
-{-| The basic data structure that ties together syntax trees making them
-    composable and addressable in B9 artifacts. -}
-module B9.Content.Builtin where
+{-| Content defined in text files (.b9 files), read with the 'Read' instances.
+
+-}
+module B9.Artifact.Content.Readable where
 
 import Control.Monad.Trans (lift)
 import Control.Parallel.Strategies
@@ -19,12 +20,12 @@ import System.Process
 import Test.QuickCheck
 
 import B9.B9Monad
-import B9.Content.AST
-import B9.Content.CloudConfigYaml
-import B9.Content.ErlangPropList
-import B9.Content.Generator
-import B9.Content.StringTemplate
-import B9.Content.YamlObject
+import B9.Artifact.Content
+import B9.Artifact.Content.AST
+import B9.Artifact.Content.CloudConfigYaml
+import B9.Artifact.Content.ErlangPropList
+import B9.Artifact.Content.StringTemplate
+import B9.Artifact.Content.YamlObject
 import B9.QCUtil
 
 -- | This is content that can be 'read' via the generated 'Read' instance.
@@ -72,7 +73,6 @@ instance ToContentGenerator Content where
   toContentGenerator (RenderCloudConfig ast) = Binary.encode <$> fromAST ast
   toContentGenerator (FromTextFile s) = readTemplateFile s
   toContentGenerator (RenderBase64BinaryFile s) = readBinaryFileAsBase64 s
-      -- | Read a binary file and encode it as base64
     where
       readBinaryFileAsBase64 :: MonadIO m => FilePath -> m Lazy.ByteString
       readBinaryFileAsBase64 f = Lazy.fromStrict . B64.encode <$> liftIO (Strict.readFile f)

@@ -1,7 +1,0 @@
-flags: {}
-packages:
-- '.'
-extra-deps: []
-resolver: lts-11.0
-allow-newer: true
-# pvp-bounds: lower

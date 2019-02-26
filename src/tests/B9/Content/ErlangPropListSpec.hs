@@ -8,10 +8,11 @@ import Test.QuickCheck
 import Data.Semigroup
 #endif
 import Data.Text ()
+import qualified Data.Binary as Binary
 
-import B9.Content.ErlTerms
-import B9.Content.ErlangPropList
-import B9.Content.AST
+import B9.Artifact.Content.ErlTerms
+import B9.Artifact.Content.ErlangPropList
+import B9.Artifact.Content.AST
 
 spec :: Spec
 spec =

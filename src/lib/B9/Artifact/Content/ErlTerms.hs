@@ -1,5 +1,5 @@
 {-| Erlang term parser and pretty printer. -}
-module B9.Content.ErlTerms (parseErlTerm
+module B9.Artifact.Content.ErlTerms (parseErlTerm
                            ,erlTermParser
                            ,renderErlTerm
                            ,SimpleErlangTerm(..)

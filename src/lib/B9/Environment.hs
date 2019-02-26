@@ -24,7 +24,6 @@ module B9.Environment
 
 import           Control.Arrow               ((***))
 import           Control.Exception           (Exception)
-import           Control.Lens.Prism
 import           Control.Monad.Catch         (MonadThrow, throwM)
 import           Control.Monad.Reader
 import           Control.Parallel.Strategies
@@ -34,6 +33,7 @@ import qualified Data.HashMap.Strict         as HashMap
 import           Data.Maybe                  (maybe)
 import           Data.Text.Lazy              (Text)
 import qualified Data.Text.Lazy              as Text
+import           GHC.Generics                (Generic)
 
 -- | A map of textual keys to textual values.
 --
@@ -41,7 +41,9 @@ import qualified Data.Text.Lazy              as Text
 data Environment = MkEnvironment
   { nextPosition    :: Int
   , fromEnvironment :: HashMap Text Text
-  } deriving (Show, Typeable, Data, Eq)
+  } deriving (Show, Typeable, Data, Eq, Generic)
+
+instance NFData Environment
 
 instance Semigroup Environment where
   e1 <> e2 =
@@ -51,9 +53,7 @@ instance Semigroup Environment where
             (0, 0) -> 0
             (0, p2) -> p2
             (p1, 0) -> p1
-            (p1, p2)
-              | p1 /= 0 && p2 /= 0 ->
-                error ("Overlapping positional arguments (<>): (" ++ show e1 ++ ") <> (" ++ show e2 ++ ")")
+            _ -> error ("Overlapping positional arguments (<>): (" ++ show e1 ++ ") <> (" ++ show e2 ++ ")")
       , fromEnvironment =
           let i = HashMap.intersection (fromEnvironment e1) (fromEnvironment e2)
            in if HashMap.null i

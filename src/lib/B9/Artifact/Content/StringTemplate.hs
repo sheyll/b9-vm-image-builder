@@ -2,7 +2,7 @@
 
 {-| Utility functions based on 'Data.Text.Template' to offer @ $var @ variable
     expansion in string throughout a B9 artifact. -}
-module B9.Content.StringTemplate
+module B9.Artifact.Content.StringTemplate
   ( subst
   , substE
   , substEB
