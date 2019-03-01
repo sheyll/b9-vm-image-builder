@@ -30,7 +30,10 @@ import           B9.Environment
 import           B9.Repository
 import           Control.Applicative
 import           Control.Concurrent.Async (Concurrently (..))
-import           Control.Exception        (bracket)
+import qualified Control.Eff                   as Eff (run)
+import           Control.Eff.Exception         as Eff
+import           Control.Exception              ( bracket )
+
 import           Control.Lens             ((%~), (&), (.~), (?~), (^.))
 import           Control.Monad
 import           Control.Monad.IO.Class
@@ -94,8 +97,8 @@ run action = do
       remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
       buildDirRootAbs <- resolveBuildDirRoot cfg
       let finalCfg =
-            cfg & remoteRepos .~ remoteRepos' & (buildDirRoot ?~ buildDirRootAbs) & envVars %~ fromJust .
-            addStringBinding ("buildDirRoot", buildDirRootAbs)
+            cfg & remoteRepos .~ remoteRepos' & (buildDirRoot ?~ buildDirRootAbs)
+                & envVars     %~ (either (error . show) id . Eff.run . runError . addStringBinding ("buildDirRoot", buildDirRootAbs))
           ctx =
             BuildState
               buildId

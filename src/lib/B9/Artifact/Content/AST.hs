@@ -20,18 +20,21 @@ merging fields as one would expect, e.g. when merging multiple snippets with
 Another example is the OTP/Erlang sys.config for configuring OTP/Erlang releases.
 -}
 
-module B9.Artifact.Content.AST ( FromAST(..)
-                      , AST(..)
-                      , decodeOrFail'
-                      ) where
+module B9.Artifact.Content.AST
+  ( FromAST(..)
+  , AST(..)
+  , decodeOrFail'
+  )
+where
 
+import           Control.Eff
 import           Control.Parallel.Strategies
-import           Data.Binary (Binary)
-import qualified Data.Binary as Binary
-import qualified Data.ByteString.Lazy.Char8 as Lazy
+import           Data.Binary                    ( Binary )
+import qualified Data.Binary                   as Binary
+import qualified Data.ByteString.Lazy.Char8    as Lazy
 import           Data.Data
 import           Data.Hashable
-import           GHC.Generics (Generic)
+import           GHC.Generics                   ( Generic )
 import           Test.QuickCheck
 
 import           B9.Artifact.Content.StringTemplate
@@ -42,14 +45,13 @@ import           B9.QCUtil
 -- This is like 'Binary.decodeOrFail' exception that it allows to add and extra
 -- error message
 decodeOrFail'
-    :: Binary a
-    => String -- ^ An arbitrary string for error messages
-    -> Lazy.ByteString
-    -> Either String a
-decodeOrFail' errorMessage b =
-  case Binary.decodeOrFail b of
-    Left (_,_,e) -> Left (unwords [errorMessage, e])
-    Right (_,_,a) -> Right a
+  :: Binary a
+  => String -- ^ An arbitrary string for error messages
+  -> Lazy.ByteString
+  -> Either String a
+decodeOrFail' errorMessage b = case Binary.decodeOrFail b of
+  Left  (_, _, e) -> Left (unwords [errorMessage, e])
+  Right (_, _, a) -> Right a
 
 -- | Describe how to create structured content that has a tree-like syntactic
 -- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines
@@ -77,14 +79,14 @@ data AST c a
     deriving (Read,Show,Typeable,Data,Eq,Generic)
 
 instance Functor (AST c) where
-  fmap f (AST a)          = AST (f a)
-  fmap f (ASTObj x)       = ASTObj ((fmap . fmap . fmap) f x)
-  fmap f (ASTArr x)       = ASTArr ((fmap . fmap) f x)
-  fmap f (ASTMerge x)     = ASTMerge ((fmap . fmap) f x)
-  fmap _ (ASTEmbed x)     = ASTEmbed x
-  fmap _ (ASTString x)    = ASTString x
-  fmap _ (ASTInt x)       = ASTInt x
-  fmap _ (ASTParse x)     = ASTParse x
+  fmap f (AST       a) = AST (f a)
+  fmap f (ASTObj    x) = ASTObj ((fmap . fmap . fmap) f x)
+  fmap f (ASTArr    x) = ASTArr ((fmap . fmap) f x)
+  fmap f (ASTMerge  x) = ASTMerge ((fmap . fmap) f x)
+  fmap _ (ASTEmbed  x) = ASTEmbed x
+  fmap _ (ASTString x) = ASTString x
+  fmap _ (ASTInt    x) = ASTInt x
+  fmap _ (ASTParse  x) = ASTParse x
 
 instance (Hashable c, Hashable a) => Hashable (AST c a)
 instance (Binary c, Binary a) => Binary (AST c a)
@@ -93,19 +95,16 @@ instance (NFData c, NFData a) => NFData (AST c a)
 -- | Types of values that describe content, that can be created from an 'AST'.
 class FromAST a  where
     fromAST
-        :: (ToContentGenerator c)
-        => AST c a -> ContentGenerator a
+        :: (IsContentGenerator e, ToContentGenerator c Lazy.ByteString)
+        => AST c a -> Eff e a
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where
-    arbitrary =
-        oneof
-            [ ASTObj <$> smaller (listOf ((,) <$> arbitrary <*> arbitrary))
-            , ASTArr <$> smaller (listOf arbitrary)
-            , ASTMerge <$>
-              sized
-                  (\s ->
-                        resize (max 2 s) (listOf (halfSize arbitrary)))
-            , ASTEmbed <$> smaller arbitrary
-            , ASTString <$> arbitrary
-            , ASTParse <$> smaller arbitrary
-            , AST <$> smaller arbitrary]
+  arbitrary = oneof
+    [ ASTObj <$> smaller (listOf ((,) <$> arbitrary <*> arbitrary))
+    , ASTArr <$> smaller (listOf arbitrary)
+    , ASTMerge <$> sized (\s -> resize (max 2 s) (listOf (halfSize arbitrary)))
+    , ASTEmbed <$> smaller arbitrary
+    , ASTString <$> arbitrary
+    , ASTParse <$> smaller arbitrary
+    , AST <$> smaller arbitrary
+    ]

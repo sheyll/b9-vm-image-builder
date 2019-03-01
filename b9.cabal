@@ -83,6 +83,7 @@ library
                    , B9.B9Config
                    , B9.B9Config.LibVirtLXC
                    , B9.B9Config.Repository
+                   , B9.B9Error
                    , B9.B9Monad
                    , B9.DiskImageBuilder
                    , B9.DiskImages

@@ -1,5 +1,5 @@
 
-## Release 1.0.0 Back-Log
+# Release 1.0.0 Back-Log
 
 * TODO What should go into 1.0.0?
 
@@ -25,7 +25,6 @@ inputs. All input must be instances of Hashable.
 
    1. **source
 
-
 ### Improve Code Maintainability
 
 * More modules;
@@ -45,63 +44,58 @@ inputs. All input must be instances of Hashable.
 * Introduce a clearly seperated set of core principles, namely:
    **executor**, **configuration**, **source**, **host**, **builder** and **target**
 
-   * **executor** the code that holds together and connects the other parts
+  * **executor** the code that holds together and connects the other parts
 
-        * Has a `cli-tool` (i.e. a _Main_ module)
+    * Has a `cli-tool` (i.e. a _Main_ module)
 
-        * Provides a high-level API
+    * Provides a high-level API
 
-        * Reads the **local** OS and platform
+    * Reads the **local** OS and platform
 
-        * Calls **configuration**
+    * Calls **configuration**
 
     * **configuration** Framework
 
-            * Either `type classes` or `records` for combining command line and
-              file based configuration of all sub-components.
+      * Either `type classes` or `records` for combining command line and
+           file based configuration of all sub-components.
 
-            * every component could provide a config data type that is parameterized over a functor, e.g.:
+      * every component could provide a config data type that is  parameterized   over a functor, e.g.:
 
-                 data SystemDNSpawnConfig1 f = SNSConfig { _snsAddToSplice :: f (Maybe String)
-                                                         , ...
-                                                         }
-                                                         deriving (Generic1)
+               data SystemDNSpawnConfig1 f = SNSConfig { _snsAddToSplice :: f    (Maybe String)
+                                                       , ...
+                                                       }
+                                                       deriving (Generic1)
 
-                 type SystemDNSpawnConfig = SystemDNSpawnConfig1 Identity
+               type SystemDNSpawnConfig = SystemDNSpawnConfig1 Identity
 
-                 type SystemDNSpawnConfigMonoid = SystemDNSpawnConfig1 Maybe
+               type SystemDNSpawnConfigMonoid = SystemDNSpawnConfig1 Maybe
 
+           This way ... TODO
 
-            This way
+      * Parses command line configuration
 
-        * Parses command line configuration
+      * Parses configuration files
 
-        * Parses configuration files
+        * every component must provide a list of configuration files to inspect
 
-            * every component must provide a list of configuration files to inspect
+        * every component must provide a command line switch to overwrite the    configuration file
 
-            * every component must provide a command line switch to overwrite the configuration file
+    * **source**-components provide inputs used by **host** **build** and
+   **target**
 
-        * Knows
+     Each input must specify a platform triple for compatibility with the other three components.
 
-   * **source**-components provide inputs used by **host** **build** and **target**
+     E.g.: The `raw ext4 creator/transformer` **source** component needs to run _Linux commands_ on **host**
+     e.g. `mkfs.ext4`, it also needs _Linux image mounting_ system during **build** and will most likely
+     contain a Linux based **target** system.
 
-    Each input must specify a platform triple for compatibility with the other three components.
+     Source unpacking:
 
-    E.g.: The `raw ext4 creator/transformer` **source** component needs to run _Linux commands_ on **host**
-    e.g. `mkfs.ext4`, it also needs _Linux image mounting_ system during **build** and will most likely
-    contain a Linux based **target** system.
+     How can we unify .tar.gz archives, MBR disk images with ext4 filesystems in them, and local directories
+     in the light of building in them and generating output targets?
 
-    Source unpacking:
-
-    How can we unify .tar.gz archives, MBR disk images with ext4 filesystems in them, and local directories
-    in the light of building in them and generating output targets?
-
-
-
-
-    Now suppose there is `Linux Container` **host** component, and a `Linux Shell` **build** component,
-    then a B9 execution would be the orchestration of the sources, hosts and builds:
+     Now suppose there is `Linux Container` **host** component, and a `Linux Shell` **build** component,
+     then a B9 execution would be the orchestration of the sources, hosts and builds:
 
         inputs:
             - compressed-mrf-build-image:
@@ -148,20 +142,13 @@ inputs. All input must be instances of Hashable.
                 input-bindings: []
 
 
-
-
-
-
-
-
    * **host**
 
    * **builder**
 
    * **target**
 
-
-### **source** Examples:
+### **source** Examples
 
 1. docker images
 

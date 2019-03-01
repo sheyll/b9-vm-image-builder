@@ -54,6 +54,7 @@ import B9.Artifact.Content.Readable as X
 import B9.Artifact.Content.StringTemplate as X
 import B9.Artifact.Content.YamlObject as X
 import B9.Artifact.Readable.Interpreter as X
+import B9.B9Error as X
 import B9.B9Monad as X
 import B9.B9Config as X
 import B9.ExecEnv as X
