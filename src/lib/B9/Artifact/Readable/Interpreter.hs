@@ -1,16 +1,18 @@
 {-|
 Mostly effectful functions to assemble artifacts.
 -}
-module B9.Artifact.Readable.Interpreter(buildArtifacts, assemble, getArtifactOutputFiles) where
+module B9.Artifact.Readable.Interpreter
+  ( buildArtifacts
+  , assemble
+  , getArtifactOutputFiles
+  )
+where
 
-import           Control.Applicative            ( (<|>) )
 import           Control.Arrow
 import           Control.Eff                   as Eff
-import           Control.Eff.Exception         as Eff
 import           Control.Eff.Reader.Lazy       as Eff
 import           Control.Eff.Writer.Lazy       as Eff
-import           Control.Exception              ( Exception
-                                                , SomeException
+import           Control.Exception              ( SomeException
                                                 , displayException
                                                 )
 import           Control.Lens                   ( view )
@@ -20,7 +22,6 @@ import           Data.Function                  ( (&) )
 import           Data.Generics.Aliases
 import           Data.Generics.Schemes
 import           Data.List
-import           Data.Maybe
 import qualified Data.Text.Lazy                as LazyT
 import qualified Data.Text.Lazy.Encoding       as LazyE
 import           Data.String
@@ -42,7 +43,7 @@ import           B9.Artifact.Content.Readable
 import           B9.Artifact.Content.StringTemplate
 import           B9.DiskImageBuilder
 import           B9.Vm
-import Control.Monad.IO.Class
+import           Control.Monad.IO.Class
 import           Control.Monad
 import           B9.VmBuilder
 
@@ -58,17 +59,19 @@ buildArtifacts artifactGenerator = do
 
 -- | Return a list of relative paths for the /local/ files to be generated
 -- by the ArtifactGenerator. This excludes 'Shared' and Transient image targets.
-getArtifactOutputFiles
-  :: ArtifactGenerator
-  -> Eff ArtifactEnv [FilePath]
-getArtifactOutputFiles g =
-  concatMap getOutputs
-    <$> evalArtifactGenerator "no build-id" "no build-date" g
+getArtifactOutputFiles :: ArtifactGenerator -> Either SomeException [FilePath]
+getArtifactOutputFiles g = concatMap getOutputs <$> Eff.run
+  (runExcB9
+    (runInstanceSourcesReader
+      (InstanceSources mempty mempty)
+      (evalArtifactGenerator "no build-id" "no build-date" g)
+    )
+  )
  where
   getOutputs (IG _ sgs a) =
     let toOutFile (AssemblyGeneratesOutputFiles fs) = fs
         toOutFile (AssemblyCopiesSourcesToDirectory pd) =
-            let sourceFiles = sourceGeneratorOutputFile <$> sgs
+            let sourceFiles = fileGeneratorOutputFile <$> sgs
             in  (pd </>) <$> sourceFiles
     in  getAssemblyOutput a >>= toOutFile
 
@@ -78,9 +81,13 @@ assemble artGen = do
   b9cfgEnvVars <- view envVars <$> getConfig
   buildId      <- getBuildId
   buildDate    <- getBuildDate
-  case Eff.run (evalArtifactGenerator buildId buildDate artGen) of
-    Left  err -> error (displayException err)
-    Right is  -> createAssembledArtifacts is
+  Eff.runLift
+    $ errorOnException
+    $ runInstanceSourcesReader (InstanceSources b9cfgEnvVars mempty)
+    $ do
+        is <- evalArtifactGenerator buildId buildDate artGen
+        createAssembledArtifacts is
+
 
 -- | Evaluate an 'ArtifactGenerator' into a list of low-level build instructions
 -- that can be built with 'createAssembledArtifacts'.
@@ -88,18 +95,22 @@ evalArtifactGenerator
   :: String
   -> String
   -> ArtifactGenerator
-  -> Eff ArtifactEnv [InstanceGenerator [SourceGenerator]]
+  -> Eff (InstanceSourcesReader e) [InstanceGenerator [FileGenerator]]
 evalArtifactGenerator buildId buildDate artGen =
-  withSubstitutedStringBindings [(buildDateKey, buildDate), (buildIdKey, buildId)] go
-   `catchB9Error`
-  (throwB9Error . printf "Failed to eval:\n%s\nError: %s" (ppShow artGen) . displayException)
-  where
-    go = do
-     ((), igs) <- runMonoidWriter $ interpretGenerator artGen
-     traverse execIGEnv igs
+  withSubstitutedStringBindings
+      [(buildDateKey, buildDate), (buildIdKey, buildId)]
+      go
+    `catchB9Error` ( throwB9Error
+                   . printf "Failed to eval:\n%s\nError: %s" (ppShow artGen)
+                   . displayException
+                   )
+ where
+  go = do
+    ((), igs) <- runMonoidWriter $ interpretGenerator artGen
+    traverse execIGEnv igs
 
 -- | Parse an artifacto generator inside a 'ArtifactInterpreter' monad.
-interpretGenerator :: ArtifactGenerator -> Eff ArtifactInterpreter ()
+interpretGenerator :: ArtifactGenerator -> Eff (ArtifactInterpreter e) ()
 interpretGenerator g = case g of
   Sources srcs gs -> withArtifactSources srcs (mapM_ interpretGenerator gs)
   Let bs gs -> withSubstitutedStringBindings bs (mapM_ interpretGenerator gs)
@@ -107,7 +118,9 @@ interpretGenerator g = case g of
   EachT keySet valueSets gs -> do
     allBindings <- eachBindingSetT g keySet valueSets
     sequence_
-      (flip withSubstitutedStringBindings (mapM_ interpretGenerator gs) <$> allBindings)
+      (   flip withSubstitutedStringBindings (mapM_ interpretGenerator gs)
+      <$> allBindings
+      )
   Each kvs gs -> do
     allBindings <- eachBindingSet g kvs
     sequence_ $ do
@@ -118,10 +131,16 @@ interpretGenerator g = case g of
 
 -- | Execute a 'ArtifactInterpreter' action in an environment that contains a list of
 -- 'ArtifactSource's.
-withArtifactSources :: [ArtifactSource] -> Eff ArtifactInterpreter s -> Eff ArtifactInterpreter s
-withArtifactSources srcs =  local (++ srcs)
+withArtifactSources
+  :: [ArtifactSource]
+  -> Eff (ArtifactInterpreter e) s
+  -> Eff (ArtifactInterpreter e) s
+withArtifactSources srcs = local (++ srcs)
 
-withXBindings :: [(String, [String])] -> Eff ArtifactInterpreter () -> Eff ArtifactInterpreter ()
+withXBindings
+  :: [(String, [String])]
+  -> Eff (ArtifactInterpreter e) ()
+  -> Eff (ArtifactInterpreter e) ()
 withXBindings bs cp =
   (`withSubstitutedStringBindings` cp) `mapM_` (allXBindings bs)
  where
@@ -133,10 +152,10 @@ eachBindingSetT
   :: ArtifactGenerator
   -> [String]
   -> [[String]]
-  -> Eff ArtifactInterpreter [[(String, String)]]
+  -> Eff (ArtifactInterpreter e) [[(String, String)]]
 eachBindingSetT g vars valueSets = if all ((== length vars) . length) valueSets
   then return (zip vars <$> valueSets)
-  else cgError
+  else throwB9Error
     (printf
       "Error in 'Each' binding during artifact generation in:\n '%s'.\n\nThe variable list\n%s\n has %i entries, but this binding set\n%s\n\nhas a different number of entries!\n"
       (ppShow g)
@@ -146,7 +165,9 @@ eachBindingSetT g vars valueSets = if all ((== length vars) . length) valueSets
     )
 
 eachBindingSet
-  :: ArtifactGenerator -> [(String, [String])] -> Eff ArtifactInterpreter [[(String, String)]]
+  :: ArtifactGenerator
+  -> [(String, [String])]
+  -> Eff (ArtifactInterpreter e) [[(String, String)]]
 eachBindingSet g kvs = do
   checkInput
   return bindingSets
@@ -154,46 +175,38 @@ eachBindingSet g kvs = do
   bindingSets = transpose [ repeat k `zip` vs | (k, vs) <- kvs ]
   checkInput  = when
     (1 /= length (nub $ length . snd <$> kvs))
-    (cgError
+    (throwB9Error
       (printf
         "Error in 'Each' binding: \n%s\nAll value lists must have the same length!"
         (ppShow g)
       )
     )
 
-interpretAssembly :: InstanceId -> ArtifactAssembly -> Eff ArtifactInterpreter ()
+interpretAssembly
+  :: InstanceId -> ArtifactAssembly -> Eff (ArtifactInterpreter e) ()
 interpretAssembly (IID iidStrTemplate) assembly = do
   iid@(IID iidStr) <- IID <$> subst iidStrTemplate
-  env <- AssemblyInput <$> askEnvironment <*> ask
-  withSubstitutedStringBindings [(fromString instanceIdKey, fromString iidStr)]
+  env              <- InstanceSources <$> askEnvironment <*> ask
+  withSubstitutedStringBindings
+    [(fromString instanceIdKey, fromString iidStr)]
     (tell [IG iid env assembly])
 
 -- | Monad for creating Instance generators.
-type ArtifactInterpreter =
-      Writer [InstanceGenerator AssemblyInput]
-        ': ArtifactEnv
-
-runCGParser :: AssemblyInput -> Eff ArtifactInterpreter  a -> (Either SomeException (a, [InstanceGenerator AssemblyInput]))
-runCGParser x y = runMonoidWriter y & runCGParserOnly x & Eff.run
-
+type ArtifactInterpreter e
+  = Writer [InstanceGenerator InstanceSources] : InstanceSourcesReader e
 
 -- | Monad for creating Instance generators.
-type ArtifactEnv =
-      Reader [ArtifactSource]
-        ': EnvironmentReader
-        ': ExcB9
-        ': '[]
+type InstanceSourcesReader e
+  = Reader [ArtifactSource] : EnvironmentReader : ExcB9 : e
 
-runCGParserOnly :: AssemblyInput -> Eff ArtifactEnv a -> Eff '[] (Either SomeException a)
-runCGParserOnly x y =
-    y
-  & runReader (agSources x)
-  & runEnvironmentReader (agEnv x)
-  & runExcB9
+runInstanceSourcesReader
+  :: InstanceSources -> Eff (InstanceSourcesReader e) a -> Eff (ExcB9 ': e) a
+runInstanceSourcesReader x y =
+  y & runReader (isSources x) & runEnvironmentReader (isEnv x)
 
-data AssemblyInput = AssemblyInput
-  { agEnv     :: Environment
-  , agSources :: [ArtifactSource]
+data InstanceSources = InstanceSources
+  { isEnv     :: Environment
+  , isSources :: [ArtifactSource]
   } deriving (Show, Eq)
 
 data InstanceGenerator e =
@@ -202,80 +215,82 @@ data InstanceGenerator e =
      ArtifactAssembly
   deriving (Read, Show, Typeable, Data, Eq)
 
-newtype CGError =
-  CGError String
-  deriving (Read, Show, Typeable, Data, Eq)
-
-instance Exception CGError
-
-cgError :: String -> Eff ArtifactInterpreter a
-cgError = undefined
-
-execCGParser
-  :: Eff ArtifactInterpreter () -> AssemblyInput -> Either SomeException [InstanceGenerator AssemblyInput]
-execCGParser = undefined
 
 execIGEnv
   :: Member ExcB9 e
-  => InstanceGenerator AssemblyInput
-  -> Eff e (InstanceGenerator [SourceGenerator])
-execIGEnv (IG iid (AssemblyInput env sources) assembly) =
+  => InstanceGenerator InstanceSources
+  -> Eff e (InstanceGenerator [FileGenerator])
+execIGEnv (IG iid (InstanceSources env sources) assembly) =
   runEnvironmentReader env $ do
     assembly' <- substAssembly assembly
-    srcs <- join <$> traverse toSourceGen sources
+    srcs      <- join <$> traverse toSourceGen sources
     pure (IG iid srcs assembly')
 
-substAssembly :: forall e . ('[ExcB9, EnvironmentReader] <:: e) => ArtifactAssembly -> Eff e ArtifactAssembly
+substAssembly
+  :: forall e
+   . (Member ExcB9 e, Member EnvironmentReader e)
+  => ArtifactAssembly
+  -> Eff e ArtifactAssembly
 substAssembly = everywhereM gsubst
  where
   gsubst :: Data a => a -> Eff e a
-  gsubst =
-    mkM substAssembly_ `extM` substImageTarget `extM` substVmScript
+  gsubst = mkM substAssembly_ `extM` substImageTarget `extM` substVmScript
   substAssembly_ (CloudInit ts f) = CloudInit ts <$> subst f
   substAssembly_ vm               = pure vm
 
 
-toSourceGen :: ('[ExcB9, EnvironmentReader] <:: e) => ArtifactSource -> Eff e [SourceGenerator]
+toSourceGen
+  :: (Member ExcB9 e, Member EnvironmentReader e)
+  => ArtifactSource
+  -> Eff e [FileGenerator]
 toSourceGen src = do
   env <- askEnvironment
   case src of
     FromFile t (Source conv f) -> do
       t' <- subst t
       f' <- subst f
-      return [SG env (SGFiles [Source conv f']) KeepPerm t']
+      return
+        [ MkFileGenerator env
+                          (ExternalFiles [Source conv f'])
+                          KeepPermissions
+                          t'
+        ]
     FromContent t c -> do
       t' <- subst t
-      return [SG env (SGContent c) KeepPerm t']
+      return [MkFileGenerator env (StaticContent c) KeepPermissions t']
     SetPermissions o g a src' -> do
       sgs <- join <$> mapM toSourceGen src'
-      traverse (setSGPerm o g a) sgs
+      traverse (setFilePermissionAction o g a) sgs
     FromDirectory fromDir src' -> do
       sgs      <- join <$> mapM toSourceGen src'
       fromDir' <- subst fromDir
-      return (setSGFromDirectory fromDir' <$> sgs)
+      return (prefixExternalSourcesPaths fromDir' <$> sgs)
     IntoDirectory toDir src' -> do
       sgs    <- join <$> mapM toSourceGen src'
       toDir' <- subst toDir
-      return (setSGToDirectory toDir' <$> sgs)
+      return (prefixOutputFilePaths toDir' <$> sgs)
 
 createAssembledArtifacts
-  :: [InstanceGenerator [SourceGenerator]] -> B9 [AssembledArtifact]
+  :: (Member ExcB9 e, Lifted B9 e)
+  => [InstanceGenerator [FileGenerator]]
+  -> Eff e [AssembledArtifact]
 createAssembledArtifacts igs = do
-  buildDir <- getBuildDir
+  buildDir <- lift getBuildDir
   let outDir = buildDir </> "artifact-instances"
   ensureDir (outDir ++ "/")
   generated <- generateSources outDir `mapM` igs
-  createTargets `mapM` generated
+  lift (createTargets `mapM` generated)
 
 generateSources
-  :: FilePath
-  -> InstanceGenerator [SourceGenerator]
-  -> B9 (InstanceGenerator FilePath)
+  :: (Member ExcB9 e, Lifted B9 e)
+  => FilePath
+  -> InstanceGenerator [FileGenerator]
+  -> Eff e (InstanceGenerator FilePath)
 generateSources outDir (IG iid sgs assembly) = do
   uiid@(IID uiidStr) <- generateUniqueIID iid
-  dbgL (printf "generating sources for %s" uiidStr)
+  lift (dbgL (printf "generating sources for %s" uiidStr))
   let instanceDir = outDir </> uiidStr
-  traceL (printf "generating sources for %s:\n%s\n" uiidStr (ppShow sgs))
+  lift (traceL (printf "generating sources for %s:\n%s\n" uiidStr (ppShow sgs)))
   generateSourceTo instanceDir `mapM_` sgs
   return (IG uiid instanceDir assembly)
 
@@ -285,63 +300,60 @@ createTargets (IG uiid@(IID uiidStr) instanceDir assembly) = do
   dbgL (printf "assembled artifact %s" uiidStr)
   return (AssembledArtifact uiid targets)
 
-generateUniqueIID :: InstanceId -> B9 InstanceId
-generateUniqueIID (IID iid) = IID . printf "%s-%s" iid <$> getBuildId
+generateUniqueIID :: Lifted B9 e => InstanceId -> Eff e InstanceId
+generateUniqueIID (IID iid) = IID . printf "%s-%s" iid <$> lift getBuildId
 
-generateSourceTo :: FilePath -> SourceGenerator -> B9 ()
-generateSourceTo instanceDir (SG env sgSource p to) = do
-  let toAbs = instanceDir </> to
-  ensureDir toAbs
-  result <- case sgSource of
-    SGFiles froms -> do
-      sources <- mapM (sgReadSourceFile env) froms
-      return (mconcat sources)
-    SGContent c -> renderContentGenerator env c
-  traceL (printf "rendered: \n%s\n" (LazyT.unpack (LazyE.decodeUtf8 result)))
-  liftIO (Lazy.writeFile toAbs result)
-  sgChangePerm toAbs p
+generateSourceTo
+  :: (Member ExcB9 e, Lifted B9 e) => FilePath -> FileGenerator -> Eff e ()
+generateSourceTo instanceDir (MkFileGenerator env sgSource p to) =
+  runEnvironmentReader env $ do
+    let toAbs = instanceDir </> to
+    ensureDir toAbs
+    result <- case sgSource of
+      ExternalFiles froms -> do
+        sources <- mapM readTemplateFile froms
+        return (mconcat sources)
+      StaticContent c -> toContentGenerator c
+    lift
+      (traceL
+        (printf "rendered: \n%s\n" (LazyT.unpack (LazyE.decodeUtf8 result)))
+      )
+    liftIO (Lazy.writeFile toAbs result)
+    sgChangePerm toAbs p
 
-sgReadSourceFile :: Environment -> SourceFile -> B9 Lazy.ByteString
-sgReadSourceFile env sf =
-  runContentGenerator env =<< readTemplateFile sf
-
-sgChangePerm :: FilePath -> SGPerm -> B9 ()
-sgChangePerm _ KeepPerm = return ()
-sgChangePerm f (SGSetPerm (o, g, a)) =
-  cmd (printf "chmod 0%i%i%i '%s'" o g a f)
+sgChangePerm :: Lifted B9 e => FilePath -> FilePermissionAction -> Eff e ()
+sgChangePerm _ KeepPermissions = return ()
+sgChangePerm f (ChangePermissions (o, g, a)) =
+  lift (cmd (printf "chmod 0%i%i%i '%s'" o g a f))
 
 -- | Internal data type simplifying the rather complex source generation by
---   bioling down 'ArtifactSource's to a flat list of uniform 'SourceGenerator's.
-data SourceGenerator =
-  SG Environment
-     SGSource
-     SGPerm
+--   bioling down 'ArtifactSource's to a flat list of uniform 'FileGenerator's.
+data FileGenerator =
+  MkFileGenerator Environment
+     FileGeneratorInput
+     FilePermissionAction
      FilePath
   deriving (Show, Eq)
 
 -- | Return the (internal-)output file of the source file that is generated.
-sourceGeneratorOutputFile :: SourceGenerator -> FilePath
-sourceGeneratorOutputFile (SG _ _ _ f) = f
+fileGeneratorOutputFile :: FileGenerator -> FilePath
+fileGeneratorOutputFile (MkFileGenerator _ _ _ f) = f
 
-data SGSource
-  = SGFiles [SourceFile]
-  | SGContent Content
+data FileGeneratorInput
+  = ExternalFiles [SourceFile]
+  | StaticContent Content
   deriving (Read, Show, Eq)
 
-data SGPerm
-  = SGSetPerm (Int, Int, Int)
-  | KeepPerm
+data FilePermissionAction
+  = ChangePermissions (Int, Int, Int)
+  | KeepPermissions
   deriving (Read, Show, Typeable, Data, Eq)
 
-sgGetFroms :: SourceGenerator -> [SourceFile]
-sgGetFroms (SG _ (SGFiles fs) _ _) = fs
-sgGetFroms _                       = []
-
-setSGPerm
-  :: Member ExcB9 e => Int -> Int -> Int -> SourceGenerator -> Eff e SourceGenerator
-setSGPerm o g a (SG env from KeepPerm dest) =
-  pure (SG env from (SGSetPerm (o, g, a)) dest)
-setSGPerm o g a sg
+setFilePermissionAction
+  :: Member ExcB9 e => Int -> Int -> Int -> FileGenerator -> Eff e FileGenerator
+setFilePermissionAction o g a (MkFileGenerator env from KeepPermissions dest) =
+  pure (MkFileGenerator env from (ChangePermissions (o, g, a)) dest)
+setFilePermissionAction o g a sg
   | o < 0 || o > 7 = throwB9Error
     (printf "Bad 'owner' permission %i in \n%s" o (ppShow sg))
   | g < 0 || g > 7 = throwB9Error
@@ -351,17 +363,15 @@ setSGPerm o g a sg
   | otherwise = throwB9Error
     (printf "Permission for source already defined:\n %s" (ppShow sg))
 
-setSGFromDirectory :: FilePath -> SourceGenerator -> SourceGenerator
-setSGFromDirectory fromDir (SG e (SGFiles fs) p d) = SG
-  e
-  (SGFiles (setSGFrom <$> fs))
-  p
-  d
-  where setSGFrom (Source t f) = Source t (fromDir </> f)
-setSGFromDirectory _fromDir sg = sg
+prefixExternalSourcesPaths :: FilePath -> FileGenerator -> FileGenerator
+prefixExternalSourcesPaths fromDir (MkFileGenerator e (ExternalFiles fs) p d) =
+  MkFileGenerator e (ExternalFiles (prefixExternalSourcePaths <$> fs)) p d
+  where prefixExternalSourcePaths (Source t f) = Source t (fromDir </> f)
+prefixExternalSourcesPaths _fromDir sg = sg
 
-setSGToDirectory :: FilePath -> SourceGenerator -> SourceGenerator
-setSGToDirectory toDir (SG e fs p d) = SG e fs p (toDir </> d)
+prefixOutputFilePaths :: FilePath -> FileGenerator -> FileGenerator
+prefixOutputFilePaths toDir (MkFileGenerator e fs p d) =
+  MkFileGenerator e fs p (toDir </> d)
 
 -- | Create the actual target, either just a mountpoint, or an ISO or VFAT
 -- image.

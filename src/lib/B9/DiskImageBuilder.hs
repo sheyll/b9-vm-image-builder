@@ -39,7 +39,6 @@ import           Control.Exception
 import           Control.Lens                   ( (^.) )
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Data.Data
 import           Data.Function
 import           Data.Generics.Aliases
 import           Data.Generics.Schemes
