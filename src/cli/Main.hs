@@ -17,10 +17,8 @@ main = do
 -- as well as build parameters.
 data B9RunParameters =
   B9RunParameters B9ConfigOverride
-                  Cmd
+                  (B9ConfigAction IO ())
                   Environment
-
-type Cmd = B9ConfigAction IO ()
 
 hostNetworkMagicValue :: String
 hostNetworkMagicValue = "host"
@@ -28,10 +26,11 @@ hostNetworkMagicValue = "host"
 applyB9RunParameters :: B9RunParameters -> IO ()
 applyB9RunParameters (B9RunParameters overrides act vars) =
   let cfg =
-        noB9ConfigOverride & customB9Config %~ (over envVars (`mappend` vars) . const (overrides ^. customB9Config)) &
+        noB9ConfigOverride &
         customLibVirtNetwork .~ (overrides ^. customLibVirtNetwork) &
-        maybe id overrideB9ConfigPath (overrides ^. customB9ConfigPath)
-   in execB9ConfigAction act cfg
+        maybe id overrideB9ConfigPath (overrides ^. customB9ConfigPath) &
+        customEnvironment .~ vars
+   in runB9ConfigActionWithOverrides act cfg
 
 parseCommandLine :: IO B9RunParameters
 parseCommandLine =
@@ -40,7 +39,7 @@ parseCommandLine =
        (helper <*> (B9RunParameters <$> globals <*> cmds <*> buildVars))
        (fullDesc <>
         progDesc
-          "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'. The current working directory is used as ${buildDirRoot} if not otherwise specified in the config file, or via the '-b' option." <>
+          "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'. The current working directory is used as ${projectRoot} if not otherwise specified in the config file, or via the '-b' option." <>
         headerDoc (Just b9HelpHeader)))
   where
     b9HelpHeader = linebreak <> text ("B9 - a benign VM-Image build tool v. " ++ b9VersionString)
@@ -59,7 +58,7 @@ globals =
   optional
     (strOption
        (help
-          "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${buildDirRoot}." <>
+          "Root directory for build directories. If not specified '.'. The path will be canonicalized and stored in ${projectRoot}." <>
         short 'b' <>
         long "build-root-dir" <>
         metavar "DIRECTORY")) <*>
@@ -98,7 +97,7 @@ globals =
             | quiet = Just LogError
             | otherwise = Nothing
           b9cfg =
-            mempty & verbosity .~ minLogLevel & logFile .~ logF & profileFile .~ profF & buildDirRoot .~ buildRoot &
+            mempty & verbosity .~ minLogLevel & logFile .~ logF & profileFile .~ profF & projectRoot .~ buildRoot &
             keepTempDirs .~ keep &
             uniqueBuildDirs .~ not predictableBuildDir &
             repository .~ repo &
@@ -114,7 +113,7 @@ globals =
                 libvirtNet
             }
 
-cmds :: Parser Cmd
+cmds :: Parser (B9ConfigAction IO ())
 cmds =
   subparser
     (command "version" (info (pure runShowVersion) (progDesc "Show program version and exit.")) <>
@@ -164,7 +163,7 @@ buildFileParser =
         noArgError (ErrorMsg "No build file specified!")))
 
 buildVars :: Parser Environment
-buildVars = flip insertPositionalArguments mempty . fmap LazyT.pack <$> many (strArgument idm)
+buildVars = flip addPositionalArguments mempty . fmap LazyT.pack <$> many (strArgument idm)
 
 remoteRepoParser :: Parser RemoteRepo
 remoteRepoParser =

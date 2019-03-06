@@ -43,7 +43,7 @@
 * Introduce the type `Environment` that replaces the ubiquotus `[(String, String)]`
   by a lazy `Text` based `HashMap`.
 
-     * Add `appendPositionalArguments`
+     * Add `addLocalPositionalArguments`
 
 * Rename the previous `B9.Artifact.Content` to `B9.Artifact.Content`
 
