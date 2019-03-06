@@ -20,7 +20,7 @@ data LibVirtLXCConfig = LibVirtLXCConfig
   , _networkId :: Maybe String
   , guestCapabilities :: [LXCGuestCapability]
   , guestRamSize :: RamSize
-  } deriving (Read, Show)
+  } deriving (Read, Show, Eq)
 
 -- | Available linux capabilities for lxc containers. This maps directly to the
 -- capabilities defined in 'man 7 capabilities'.
@@ -63,7 +63,7 @@ data LXCGuestCapability
   | CAP_SYS_TTY_CONFIG
   | CAP_SYSLOG
   | CAP_WAKE_ALARM
-  deriving (Read, Show)
+  deriving (Read, Show, Eq)
 
 makeLenses ''LibVirtLXCConfig
 

@@ -1,26 +1,30 @@
 {-| Effectful functions to execute and build virtual machine images using
     an execution environment like e.g. libvirt-lxc. -}
-module B9.VmBuilder (buildWithVm) where
+module B9.VmBuilder
+  ( buildWithVm
+  ) where
 
-import Data.List
+import Control.Eff
 import Control.Monad
 import Control.Monad.IO.Class
-import System.Directory (createDirectoryIfMissing, canonicalizePath)
-import Text.Printf ( printf )
+import Data.List
+import System.Directory (canonicalizePath, createDirectoryIfMissing)
+import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
 
-import B9.B9Monad
-import B9.DiskImages
-import B9.DiskImageBuilder
-import B9.ExecEnv
-import B9.B9Config
-import B9.Vm
 import B9.Artifact.Readable
-import B9.ShellScript
+import B9.B9Config
+import B9.B9Logging
+import B9.B9Monad
+import B9.BuildInfo
+import B9.DiskImageBuilder
+import B9.DiskImages
+import B9.ExecEnv
 import qualified B9.LibVirtLXC as LXC
+import B9.ShellScript
+import B9.Vm
 
-
-buildWithVm :: InstanceId -> [ImageTarget] -> FilePath -> VmScript -> B9 Bool
+buildWithVm :: IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Eff e Bool
 buildWithVm iid imageTargets instanceDir vmScript = do
   vmBuildSupportedImageTypes <- getVmScriptSupportedImageTypes vmScript
   buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
@@ -28,15 +32,14 @@ buildWithVm iid imageTargets instanceDir vmScript = do
   when success (createDestinationImages buildImages imageTargets)
   return success
 
-getVmScriptSupportedImageTypes :: VmScript -> B9 [ImageType]
-getVmScriptSupportedImageTypes NoVmScript =
-  return [QCow2, Raw, Vmdk]
+getVmScriptSupportedImageTypes :: IsB9 e => VmScript -> Eff e [ImageType]
+getVmScriptSupportedImageTypes NoVmScript = return [QCow2, Raw, Vmdk]
 getVmScriptSupportedImageTypes _ = supportedImageTypes <$> getExecEnvType
 
 supportedImageTypes :: ExecEnvType -> [ImageType]
 supportedImageTypes LibVirtLXC = LXC.supportedImageTypes
 
-createBuildImages :: [ImageTarget] -> [ImageType] -> B9 [Image]
+createBuildImages :: IsB9 e => [ImageTarget] -> [ImageType] -> Eff e [Image]
 createBuildImages imageTargets vmBuildSupportedImageTypes = do
   dbgL "creating build images"
   traceL (ppShow imageTargets)
@@ -48,24 +51,22 @@ createBuildImages imageTargets vmBuildSupportedImageTypes = do
     createBuildImage (ImageTarget dest imageSource _mnt) = do
       buildDir <- getBuildDir
       destTypes <- preferredDestImageTypes imageSource
-      let buildImgType = head (destTypes
-                               `intersect`
-                               preferredSourceImageTypes dest
-                               `intersect`
-                               vmBuildSupportedImageTypes)
+      let buildImgType =
+            head (destTypes `intersect` preferredSourceImageTypes dest `intersect` vmBuildSupportedImageTypes)
       srcImg <- resolveImageSource imageSource
-      let buildImg = changeImageFormat buildImgType
-                                       (changeImageDirectory buildDir srcImg)
+      let buildImg = changeImageFormat buildImgType (changeImageDirectory buildDir srcImg)
       buildImgAbsolutePath <- ensureAbsoluteImageDirExists buildImg
       materializeImageSource imageSource buildImg
       return buildImgAbsolutePath
 
-runVmScript :: InstanceId
-            -> [ImageTarget]
-            -> [Image]
-            -> FilePath
-            -> VmScript
-            -> B9 Bool
+runVmScript ::
+     forall e. IsB9 e
+  => InstanceId
+  -> [ImageTarget]
+  -> [Image]
+  -> FilePath
+  -> VmScript
+  -> Eff e Bool
 runVmScript _ _ _ _ NoVmScript = return True
 runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
   dbgL (printf "starting vm script with instanceDir '%s'" instanceDir)
@@ -78,17 +79,14 @@ runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
     else errorL "BUILD SCRIPT FAILED"
   return success
   where
-    setUpExecEnv :: B9 ExecEnv
+    setUpExecEnv :: IsB9 e => Eff e ExecEnv
     setUpExecEnv = do
       let (VmScript cpu shares _) = vmScript
       let mountedImages = buildImages `zip` (itImageMountPoint <$> imageTargets)
       sharesAbs <- createSharedDirs instanceDir shares
-      return (ExecEnv iid
-                      mountedImages
-                      sharesAbs
-                      (Resources AutomaticRamSize 8 cpu))
+      return (ExecEnv iid mountedImages sharesAbs (Resources AutomaticRamSize 8 cpu))
 
-createSharedDirs :: FilePath -> [SharedDirectory] -> B9 [SharedDirectory]
+createSharedDirs :: IsB9 e => FilePath -> [SharedDirectory] -> Eff e [SharedDirectory]
 createSharedDirs instanceDir = mapM createSharedDir
   where
     createSharedDir (SharedDirectoryRO d m) = do
@@ -100,11 +98,12 @@ createSharedDirs instanceDir = mapM createSharedDir
     createSharedDir (SharedSources mp) = do
       d' <- createAndCanonicalize instanceDir
       return $ SharedDirectoryRO d' mp
-    createAndCanonicalize d = liftIO $ do
-      createDirectoryIfMissing True d
-      canonicalizePath d
+    createAndCanonicalize d =
+      liftIO $ do
+        createDirectoryIfMissing True d
+        canonicalizePath d
 
-createDestinationImages :: [Image] -> [ImageTarget] -> B9 ()
+createDestinationImages :: IsB9 e => [Image] -> [ImageTarget] -> Eff e ()
 createDestinationImages buildImages imageTargets = do
   dbgL "converting build- to output images"
   let pairsToConvert = buildImages `zip` (itImageDestination `map` imageTargets)
@@ -112,8 +111,8 @@ createDestinationImages buildImages imageTargets = do
   mapM_ (uncurry createDestinationImage) pairsToConvert
   infoL "CONVERTED BUILD- TO OUTPUT IMAGES"
 
-runInEnvironment :: ExecEnv -> Script -> B9 Bool
+runInEnvironment :: IsB9 e => ExecEnv -> Script -> Eff e Bool
 runInEnvironment env script = do
   t <- getExecEnvType
   case t of
-   LibVirtLXC -> LXC.runInEnvironment env script
+    LibVirtLXC -> LXC.runInEnvironment env script

@@ -36,7 +36,7 @@ import           Data.Data
 import           Data.Hashable
 import           GHC.Generics                   ( Generic )
 import           Test.QuickCheck
-
+import           B9.B9Monad
 import           B9.Artifact.Content.StringTemplate
 import           B9.Artifact.Content
 import           B9.QCUtil
@@ -95,7 +95,7 @@ instance (NFData c, NFData a) => NFData (AST c a)
 -- | Types of values that describe content, that can be created from an 'AST'.
 class FromAST a  where
     fromAST
-        :: (IsContentGenerator e, ToContentGenerator c Lazy.ByteString)
+        :: (IsB9 e, ToContentGenerator c Lazy.ByteString)
         => AST c a -> Eff e a
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where

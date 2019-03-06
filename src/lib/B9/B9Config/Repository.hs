@@ -20,19 +20,19 @@ data RemoteRepo = RemoteRepo String
                              SshPrivKey
                              SshRemoteHost
                              SshRemoteUser
-  deriving (Read, Show, Typeable, Data)
+  deriving (Read, Show, Typeable, Data, Eq)
 
 remoteRepoRepoId :: RemoteRepo -> String
 remoteRepoRepoId (RemoteRepo repoId _ _ _ _) = repoId
 
 newtype SshPrivKey = SshPrivKey FilePath
-  deriving (Read, Show, Typeable, Data)
+  deriving (Read, Show, Typeable, Data, Eq)
 
 newtype SshRemoteHost = SshRemoteHost (String,Int)
-  deriving (Read, Show, Typeable, Data)
+  deriving (Read, Show, Typeable, Data, Eq)
 
 newtype SshRemoteUser = SshRemoteUser String
-  deriving (Read, Show, Typeable, Data)
+  deriving (Read, Show, Typeable, Data, Eq)
 
 
 -- | Persist a repo to a configuration file.

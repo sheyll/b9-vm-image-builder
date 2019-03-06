@@ -4,6 +4,13 @@ the whole thing is supposed to be build-server-safe, that means no two builds
 shall interfere with each other. This is accomplished by refraining from
 automatic cache updates from/to remote repositories.-}
 module B9.Repository (initRepoCache
+                     ,RepoCacheReader
+                     ,getRepoCache
+                     ,withRemoteRepos
+                     ,withSelectedRemoteRepo
+                     ,getSelectedRemoteRepo
+                     ,SelectedRemoteRepoReader
+                     ,SelectedRemoteRepo(..)
                      ,initRemoteRepo
                      ,cleanRemoteRepo
                      ,remoteRepoCheckSshPrivKey
@@ -12,16 +19,91 @@ module B9.Repository (initRepoCache
                      ,lookupRemoteRepo
                      ,module X) where
 
+import B9.B9Config
+import B9.B9Error
 import Control.Monad
+import Control.Eff
+import Control.Eff.Reader.Lazy
+import Control.Lens
 import Control.Monad.IO.Class
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
+import Data.Maybe
 import Text.Printf
 import System.FilePath
 import System.Directory
 import B9.B9Config.Repository as X
 import System.IO.B9Extras
+
+-- | Initialize the local repository cache directory and the 'RemoteRepo's.
+-- Run the given action with a 'B9Config' that contains the initialized
+-- repositories in '_remoteRepos'.
+--
+-- @since 0.5.65
+withRemoteRepos :: (Member B9ConfigReader e, Lifted IO e)
+  => Eff (RepoCacheReader ': e) a -> Eff e a
+withRemoteRepos f = do
+      cfg <- getB9Config
+      repoCache <- lift (initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg)))
+      remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
+      let setRemoteRepos = remoteRepos .~ remoteRepos'
+      localB9Config setRemoteRepos (runReader repoCache f)
+
+-- | Alias for a 'Reader' 'Eff'ect that reads a list of 'RemoteRepo's.
+--
+-- @since 0.5.65
+type RepoCacheReader = Reader RepoCache
+
+-- | Ask for the 'RepoCache' initialized by 'withRemoteRepos'.
+--
+-- @since 0.5.65
+getRepoCache :: Member RepoCacheReader e => Eff e RepoCache
+getRepoCache = ask
+
+-- | Run a 'SelectedRemoteRepoReader' with the 'SelectedRemoteRepo' selected
+-- in the 'B9Config'.
+--
+-- If the selected repo does not exist, and exception is thrown.
+--
+-- @since 0.5.65
+withSelectedRemoteRepo
+  :: (Member B9ConfigReader e, Member ExcB9 e)
+  => Eff (SelectedRemoteRepoReader ': e) a
+  -> Eff e a
+withSelectedRemoteRepo e = do
+  remoteRepos' <- _remoteRepos <$> getB9Config
+  mSelectedRepoName <- _repository <$> getB9Config
+  case mSelectedRepoName of
+    Nothing -> runReader (MkSelectedRemoteRepo Nothing) e
+    Just selectedRepoName ->
+      case lookupRemoteRepo remoteRepos' selectedRepoName of
+        Nothing ->
+          throwB9Error
+            (printf "selected remote repo '%s' not configured, valid remote repos are: '%s'"
+                    (show selectedRepoName)
+                    (show remoteRepos'))
+        Just r ->
+          runReader (MkSelectedRemoteRepo (Just r)) e
+
+-- | Contains the 'Just' the 'RemoteRepo' selected by the 'B9Config' value '_repository',
+-- or 'Nothing' of no 'RemoteRepo' was selected in the 'B9Config'.
+--
+-- @since 0.5.65
+newtype SelectedRemoteRepo = MkSelectedRemoteRepo { fromSelectedRemoteRepo :: Maybe RemoteRepo }
+
+-- | Alias for a 'Reader' 'Eff'ect that reads the 'RemoteRepo'
+-- selected by the 'B9Config' value '_repository'. See 'withSelectedRemoteRepo'.
+--
+-- @since 0.5.65
+type SelectedRemoteRepoReader = Reader SelectedRemoteRepo
+
+-- | Ask for the 'RemoteRepo'
+-- selected by the 'B9Config' value '_repository'. See 'withSelectedRemoteRepo'.
+--
+-- @since 0.5.65
+getSelectedRemoteRepo :: Member SelectedRemoteRepoReader e => Eff e SelectedRemoteRepo
+getSelectedRemoteRepo = ask
 
 -- | Initialize the local repository cache directory.
 initRepoCache :: MonadIO m => SystemPath -> m RepoCache

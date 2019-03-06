@@ -26,6 +26,9 @@ module B9.DiskImageBuilder
 where
 
 import           B9.B9Config
+import           B9.BuildInfo
+import           B9.B9Exec
+import           B9.B9Logging
 import           B9.B9Error
 import           B9.B9Monad
 import           B9.Artifact.Content.StringTemplate
@@ -55,10 +58,10 @@ import           Text.Printf                    ( printf )
 import           Text.Show.Pretty               ( ppShow )
 
 -- -- | Convert relative file paths of images, sources and mounted host directories
--- -- to absolute paths relative to '_buildDirRoot'.
+-- -- to absolute paths relative to '_projectRoot'.
 -- makeImagePathsAbsoluteToBuildDirRoot :: ImageTarget -> B9 ImageTarget
 -- makeImagePathsAbsoluteToBuildDirRoot img =
---   getConfig >>= maybe (return img) (return . go) . _buildDirRoot
+--   getConfig >>= maybe (return img) (return . go) . _projectRoot
 --   where
 --     go rootDir = everywhere mkAbs img
 --       where mkAbs = mkT
@@ -90,7 +93,7 @@ substImageTarget = everywhereM gsubst
 
 -- | Resolve an ImageSource to an 'Image'. The ImageSource might
 -- not exist, as is the case for 'EmptyImage'.
-resolveImageSource :: ImageSource -> B9 Image
+resolveImageSource :: IsB9 e => ImageSource -> Eff e Image
 resolveImageSource src = case src of
   (EmptyImage fsLabel fsType imgType _size) ->
     let img = Image fsLabel imgType fsType
@@ -106,7 +109,7 @@ resolveImageSource src = case src of
             ensureAbsoluteImageDirExists
 
 -- | Return all valid image types sorted by preference.
-preferredDestImageTypes :: ImageSource -> B9 [ImageType]
+preferredDestImageTypes :: IsB9 e => ImageSource -> Eff e [ImageType]
 preferredDestImageTypes src = case src of
   (CopyOnWrite (Image _file fmt _fs)) -> return [fmt]
   (EmptyImage _label NoFileSystem fmt _size) ->
@@ -137,16 +140,16 @@ allowedImageTypesForResize r = case r of
   _               -> [Raw, QCow2, Vmdk]
 
 -- | Create the parent directories for the file that contains the 'Image'.
--- If the path to the image file is relative, prepend '_buildDirRoot' from
+-- If the path to the image file is relative, prepend '_projectRoot' from
 -- the 'B9Config'.
-ensureAbsoluteImageDirExists :: Image -> B9 Image
+ensureAbsoluteImageDirExists :: IsB9 e => Image -> Eff e Image
 ensureAbsoluteImageDirExists img@(Image path _ _) = do
   b9cfg <- getConfig
   let dir =
         let dirRel = takeDirectory path
         in  if isRelative dirRel
               then
-                let prefix = fromMaybe "." (b9cfg ^. buildDirRoot)
+                let prefix = fromMaybe "." (b9cfg ^. projectRoot)
                 in  prefix </> dirRel
               else dirRel
   liftIO $ do
@@ -157,7 +160,7 @@ ensureAbsoluteImageDirExists img@(Image path _ _) = do
 -- | Create an image from an image source. The destination image must have a
 -- compatible image type and filesystem. The directory of the image MUST be
 -- present and the image file itself MUST NOT alredy exist.
-materializeImageSource :: ImageSource -> Image -> B9 ()
+materializeImageSource :: IsB9 e => ImageSource -> Image -> Eff e ()
 materializeImageSource src dest = case src of
   (EmptyImage fsLabel fsType _imgType size) ->
     let (Image _ imgType _) = dest
@@ -171,13 +174,13 @@ materializeImageSource src dest = case src of
       materializeImageSource (SourceImage sharedImg NoPT resize) dest
     )
 
-createImageFromImage :: Image -> Partition -> ImageResize -> Image -> B9 ()
+createImageFromImage :: IsB9 e => Image -> Partition -> ImageResize -> Image -> Eff e ()
 createImageFromImage src part size out = do
   importImage src out
   extractPartition part out
   resizeImage size out
  where
-  extractPartition :: Partition -> Image -> B9 ()
+  extractPartition :: IsB9 e => Partition -> Image -> Eff e ()
   extractPartition NoPT                  _                     = return ()
   extractPartition (Partition partIndex) (Image outFile Raw _) = do
     (start, len, blockSize) <- liftIO (P.getPartition partIndex outFile)
@@ -201,7 +204,7 @@ createImageFromImage src part size out = do
 
 -- | Convert some 'Image', e.g. a temporary image used during the build phase
 -- to the final destination.
-createDestinationImage :: Image -> ImageDestination -> B9 ()
+createDestinationImage :: IsB9 e => Image -> ImageDestination -> Eff e ()
 createDestinationImage buildImg dest = case dest of
   (Share name imgType imgResize) -> do
     resizeImage imgResize buildImg
@@ -234,7 +237,7 @@ createDestinationImage buildImg dest = case dest of
   Transient -> return ()
 
 createEmptyImage
-  :: String -> FileSystem -> ImageType -> ImageSize -> Image -> B9 ()
+  :: IsB9 e => String -> FileSystem -> ImageType -> ImageSize -> Image -> Eff e ()
 createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
   | fsType /= fsType' = error
     (printf
@@ -279,7 +282,7 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
                 (show it)
         )
 
-createCOWImage :: Image -> Image -> B9 ()
+createCOWImage :: IsB9 e => Image -> Image -> Eff e ()
 createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
   dbgL (printf "Creating COW image '%s' backed by '%s'" imgOut backingFile)
   cmd
@@ -290,7 +293,7 @@ createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
     )
 
 -- | Resize an image, including the file system inside the image.
-resizeImage :: ImageResize -> Image -> B9 ()
+resizeImage :: IsB9 e => ImageResize -> Image -> Eff e ()
 resizeImage KeepSize _ = return ()
 resizeImage (Resize newSize) (Image img Raw fs) | fs == Ext4 || fs == Ext4_64 =
   do
@@ -313,27 +316,27 @@ resizeImage _ img = error
 
 -- | Import a disk image from some external source into the build directory
 -- if necessary convert the image.
-importImage :: Image -> Image -> B9 ()
+importImage :: IsB9 e => Image -> Image -> Eff e ()
 importImage imgIn imgOut@(Image imgOutPath _ _) = do
   alreadyThere <- liftIO (doesFileExist imgOutPath)
   unless alreadyThere (convert False imgIn imgOut)
 
 -- | Export a disk image from the build directory; if necessary convert the image.
-exportImage :: Image -> Image -> B9 ()
+exportImage :: IsB9 e => Image -> Image -> Eff e ()
 exportImage = convert False
 
 -- | Export a disk image from the build directory; if necessary convert the image.
-exportAndRemoveImage :: Image -> Image -> B9 ()
+exportAndRemoveImage :: IsB9 e => Image -> Image -> Eff e ()
 exportAndRemoveImage = convert True
 
 -- | Convert an image in the build directory to another format and return the new image.
-convertImage :: Image -> Image -> B9 ()
+convertImage :: IsB9 e => Image -> Image -> Eff e ()
 convertImage imgIn imgOut@(Image imgOutPath _ _) = do
   alreadyThere <- liftIO (doesFileExist imgOutPath)
   unless alreadyThere (convert True imgIn imgOut)
 
 -- | Convert/Copy/Move images
-convert :: Bool -> Image -> Image -> B9 ()
+convert :: IsB9 e => Bool -> Image -> Image -> Eff e ()
 convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
   | imgIn == imgOut = do
     ensureDir imgOut
@@ -377,7 +380,7 @@ toQemuSizeOptVal (ImageSize amount u) = show amount ++ case u of
 
 -- | Publish an sharedImage made from an image and image meta data to the
 -- configured repository
-shareImage :: Image -> SharedImageName -> B9 SharedImage
+shareImage :: IsB9 e => Image -> SharedImageName -> Eff e SharedImage
 shareImage buildImg sname@(SharedImageName name) = do
   sharedImage <- createSharedImageInCache buildImg sname
   infoL (printf "SHARED '%s'" name)
@@ -386,7 +389,7 @@ shareImage buildImg sname@(SharedImageName name) = do
 
 -- | Return a 'SharedImage' with the current build data and build id from the
 -- name and disk image.
-getSharedImageFromImageInfo :: SharedImageName -> Image -> B9 SharedImage
+getSharedImageFromImageInfo :: IsB9 e =>  SharedImageName -> Image -> Eff e SharedImage
 getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
   buildId <- getBuildId
   date    <- getBuildDate
@@ -401,7 +404,7 @@ getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
 -- | Convert the disk image and serialize the base image data structure.
 -- If the 'maxLocalSharedImageRevisions' configuration is set to @Just n@
 -- also delete all but the @n - 1@ newest images from the local cache.
-createSharedImageInCache :: Image -> SharedImageName -> B9 SharedImage
+createSharedImageInCache :: IsB9 e => Image -> SharedImageName -> Eff e SharedImage
 createSharedImageInCache img sname@(SharedImageName name) = do
   dbgL (printf "CREATING SHARED IMAGE: '%s' '%s'" (ppShow img) name)
   sharedImg <- getSharedImageFromImageInfo sname img
@@ -414,7 +417,7 @@ createSharedImageInCache img sname@(SharedImageName name) = do
 
 -- | Publish the latest version of a shared image identified by name to the
 -- selected repository from the cache.
-pushSharedImageLatestVersion :: SharedImageName -> B9 ()
+pushSharedImageLatestVersion :: IsB9 e => SharedImageName -> Eff e ()
 pushSharedImageLatestVersion name@(SharedImageName imgName) =
   getLatestSharedImageByNameFromCache name >>= maybe
     (errorExitL (printf "Nothing found for %s." (show imgName)))
@@ -425,10 +428,10 @@ pushSharedImageLatestVersion name@(SharedImageName imgName) =
     )
 
 -- | Upload a shared image from the cache to a selected remote repository
-pushToSelectedRepo :: SharedImage -> B9 ()
+pushToSelectedRepo :: IsB9 e => SharedImage -> Eff e ()
 pushToSelectedRepo i = do
   c <- getSharedImagesCacheDir
-  r <- getSelectedRemoteRepo
+  MkSelectedRemoteRepo r <- getSelectedRemoteRepo
   when (isJust r) $ do
     let (Image imgFile' _imgType _imgFS) = sharedImageImage i
         cachedImgFile = c </> imgFile'
@@ -439,7 +442,7 @@ pushToSelectedRepo i = do
     pushToRepo (fromJust r) cachedInfoFile repoInfoFile
 
 -- | Pull metadata files from all remote repositories.
-pullRemoteRepos :: B9 ()
+pullRemoteRepos :: IsB9 e => Eff e ()
 pullRemoteRepos = do
   repos <- getSelectedRepos
   mapM_ dl repos
@@ -449,7 +452,7 @@ pullRemoteRepos = do
 
 -- | Pull the latest version of an image, either from the selected remote
 -- repo or from the repo that has the latest version.
-pullLatestImage :: SharedImageName -> B9 (Maybe SharedImageBuildId)
+pullLatestImage :: IsB9 e => SharedImageName -> Eff e (Maybe SharedImageBuildId)
 pullLatestImage name@(SharedImageName dbgName) = do
   repos <- getSelectedRepos
   let repoPredicate Cache           = False
@@ -485,7 +488,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
 
 -- | Return the 'Image' of the latest version of a shared image named 'name'
 -- from the local cache.
-getLatestImageByName :: SharedImageName -> B9 (Maybe Image)
+getLatestImageByName :: IsB9 e => SharedImageName -> Eff e (Maybe Image)
 getLatestImageByName name = do
   sharedImage <- getLatestSharedImageByNameFromCache name
   cacheDir    <- getSharedImagesCacheDir
@@ -496,7 +499,7 @@ getLatestImageByName name = do
   return image
 
 -- | Return the latest version of a shared image named 'name' from the local cache.
-getLatestSharedImageByNameFromCache :: SharedImageName -> B9 (Maybe SharedImage)
+getLatestSharedImageByNameFromCache :: IsB9 e => SharedImageName -> Eff e (Maybe SharedImage)
 getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
   imgs <- lookupSharedImages (== Cache) ((== name) . sharedImageName)
   case reverse imgs of
@@ -506,7 +509,7 @@ getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
       return Nothing
 
 -- | Return a list of all existing sharedImages from cached repositories.
-getSharedImages :: B9 [(Repository, [SharedImage])]
+getSharedImages :: IsB9 e => Eff e [(Repository, [SharedImage])]
 getSharedImages = do
   reposAndFiles <- repoSearch sharedImagesRootDirectory
                               (FileExtension sharedImageFileExtension)
@@ -530,9 +533,9 @@ getSharedImages = do
 -- | Find shared images and the associated repos from two predicates. The result
 -- is the concatenated result of the sorted shared images satisfying 'imgPred'.
 lookupSharedImages
-  :: (Repository -> Bool)
+  ::IsB9 e =>  (Repository -> Bool)
   -> (SharedImage -> Bool)
-  -> B9 [(Repository, SharedImage)]
+  -> Eff e [(Repository, SharedImage)]
 lookupSharedImages repoPred imgPred = do
   xs <- getSharedImages
   let rs           = [ (r, s) | (r, ss) <- xs, s <- ss ]
@@ -542,16 +545,16 @@ lookupSharedImages repoPred imgPred = do
   return (mconcat (pure <$> sorted))
 
 -- | Return either all remote repos or just the single selected repo.
-getSelectedRepos :: B9 [RemoteRepo]
+getSelectedRepos ::IsB9 e =>  Eff e [RemoteRepo]
 getSelectedRepos = do
   allRepos     <- getRemoteRepos
-  selectedRepo <- getSelectedRemoteRepo
+  MkSelectedRemoteRepo selectedRepo <- getSelectedRemoteRepo
   let repos = maybe allRepos return selectedRepo -- 'Maybe' a repo
   return repos
 
 -- | Return the path to the sub directory in the cache that contains files of
 -- shared images.
-getSharedImagesCacheDir :: B9 FilePath
+getSharedImagesCacheDir :: IsB9 e => Eff e FilePath
 getSharedImagesCacheDir = do
   cacheDir <- localRepoDir <$> getRepoCache
   return (cacheDir </> sharedImagesRootDirectory)
@@ -559,7 +562,7 @@ getSharedImagesCacheDir = do
 -- | Depending on the 'maxLocalSharedImageRevisions' 'B9Config' settings either
 -- do nothing or delete all but the configured number of most recent shared
 -- images with the given name from the local cache.
-cleanOldSharedImageRevisionsFromCache :: SharedImageName -> B9 ()
+cleanOldSharedImageRevisionsFromCache :: IsB9 e => SharedImageName -> Eff e ()
 cleanOldSharedImageRevisionsFromCache sn = do
   b9Cfg <- getConfig
   forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
@@ -577,7 +580,7 @@ cleanOldSharedImageRevisionsFromCache sn = do
       mapM_ traceL         filesToDelete
       mapM_ removeIfExists filesToDelete
  where
-  newestSharedImages :: B9 [SharedImage]
+  newestSharedImages :: IsB9 e => Eff e [SharedImage]
   newestSharedImages = reverse . map snd <$> lookupSharedImages
     (== Cache)
     ((sn ==) . sharedImageName)

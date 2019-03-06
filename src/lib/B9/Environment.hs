@@ -10,7 +10,9 @@ module B9.Environment
   ( Environment()
   , fromStringPairs
   , addStringBinding
-  , insertPositionalArguments
+  , addLocalStringBinding
+  , addPositionalArguments
+  , addLocalPositionalArguments
   , EnvironmentReader
   , hasKey
   , runEnvironmentReader
@@ -93,14 +95,23 @@ instance Monoid Environment where
 -- Note that the Environment contains an index of the next position.
 --
 -- @since 0.5.62
-insertPositionalArguments :: [Text] -> Environment -> Environment
-insertPositionalArguments = flip
+addPositionalArguments :: [Text] -> Environment -> Environment
+addPositionalArguments = flip
   (foldr
     (\arg (MkEnvironment i e) -> MkEnvironment
       (i + 1)
       (HashMap.insert (Text.pack ("arg_" ++ show i)) arg e)
     )
   )
+
+
+-- | Convenient wrapper around 'addPositionalArguments' and 'localEnvironment'.
+--
+-- @since 0.5.65
+addLocalPositionalArguments :: Member EnvironmentReader e => [String] -> Eff e a -> Eff e a
+addLocalPositionalArguments extraPositional = localEnvironment appendVars
+  where
+    appendVars = addPositionalArguments (Text.pack <$> extraPositional)
 
 -- | Create an 'Environment' from a list of pairs ('String's).
 -- Duplicated entries are ignored.
@@ -124,6 +135,18 @@ addStringBinding (kStr, vNewStr) env =
         Just vOld | vOld /= vNew ->
           throwSomeException (MkDuplicateKey k vOld vNew)
         _ -> pure (MkEnvironment (nextPosition env) (HashMap.insert k vNew h))
+
+-- | Insert a value into an 'Environment' like 'addStringBinding',
+-- but add it to the environment of the given effect, as in 'localEnvironment'.
+--
+-- @since 0.5.65
+addLocalStringBinding
+  :: (Member EnvironmentReader e, Member ExcB9 e)
+  => (String, String) -> Eff e a-> Eff e a
+addLocalStringBinding binding action =
+  do e <- askEnvironment
+     e' <- addStringBinding binding e
+     localEnvironment (const e') action
 
 -- | A monad transformer providing a 'MonadReader' instance for 'Environment'
 --
