@@ -17,7 +17,6 @@ import B9.B9Config
 import B9.B9Error
 import B9.B9Logging
 import B9.Environment
-import B9.Repository
 import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Exception (bracket)

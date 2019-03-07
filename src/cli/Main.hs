@@ -3,7 +3,7 @@ module Main
   ) where
 
 import           B9
-import           Control.Lens                    (over, (&), (.~), (^.))
+import           Control.Lens                    ((&), (.~), (^.))
 import qualified Data.Text.Lazy                  as LazyT
 import           Options.Applicative             hiding (action)
 import           Options.Applicative.Help.Pretty hiding ((</>))
@@ -17,7 +17,7 @@ main = do
 -- as well as build parameters.
 data B9RunParameters =
   B9RunParameters B9ConfigOverride
-                  (B9ConfigAction IO ())
+                  (B9ConfigAction ())
                   Environment
 
 hostNetworkMagicValue :: String
@@ -54,7 +54,6 @@ globals =
   switch (help "Log everything that happens to stdout" <> short 'v' <> long "verbose") <*>
   switch (help "Suppress non-error output" <> short 'q' <> long "quiet") <*>
   optional (strOption (help "Path to a logfile" <> short 'l' <> long "log-file" <> metavar "FILENAME")) <*>
-  optional (strOption (help "Output file for a command/timing profile" <> long "profile-file" <> metavar "FILENAME")) <*>
   optional
     (strOption
        (help
@@ -84,20 +83,19 @@ globals =
       -> Bool
       -> Maybe FilePath
       -> Maybe FilePath
-      -> Maybe FilePath
       -> Bool
       -> Bool
       -> Maybe FilePath
       -> Maybe String
       -> Maybe String
       -> B9ConfigOverride
-    toGlobalOpts cfg verbose quiet logF profF buildRoot keep predictableBuildDir mRepoCache repo libvirtNet =
+    toGlobalOpts cfg verbose quiet logF buildRoot keep predictableBuildDir mRepoCache repo libvirtNet =
       let minLogLevel
             | verbose = Just LogTrace
             | quiet = Just LogError
             | otherwise = Nothing
           b9cfg =
-            mempty & verbosity .~ minLogLevel & logFile .~ logF & profileFile .~ profF & projectRoot .~ buildRoot &
+            mempty & verbosity .~ minLogLevel & logFile .~ logF & projectRoot .~ buildRoot &
             keepTempDirs .~ keep &
             uniqueBuildDirs .~ not predictableBuildDir &
             repository .~ repo &
@@ -111,9 +109,10 @@ globals =
                      then Nothing
                      else Just n) <$>
                 libvirtNet
+            , _customEnvironment = mempty
             }
 
-cmds :: Parser (B9ConfigAction IO ())
+cmds :: Parser (B9ConfigAction ())
 cmds =
   subparser
     (command "version" (info (pure runShowVersion) (progDesc "Show program version and exit.")) <>

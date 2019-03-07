@@ -1,5 +1,9 @@
 # Changelog for B9
 
+## 0.5.65
+
+* Refactor the B9 Monad to use `extensible-effects`
+
 ## 0.5.64
 
 * Refactor and prepare for more drastic changes

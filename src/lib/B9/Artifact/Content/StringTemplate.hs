@@ -1,7 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 {-| Utility functions based on 'Data.Text.Template' to offer @ $var @ variable
-    expansion in string throughout a B9 artifact. -}
+    expansion in string throughout a B9 artifact.
+
+    @deprecated
+
+    TODO remove this in the move to Dhall
+    -}
 module B9.Artifact.Content.StringTemplate
   ( subst
   , substFile
@@ -102,6 +107,12 @@ substEB templateStr = do
   t <- template'
   LazyE.encodeUtf8 <$> renderA t templateEnvLookup
  where
+  templateEnvLookup
+    :: (Member EnvironmentReader e, Member ExcB9 e)
+    => StrictT.Text
+    -> Eff e StrictT.Text
+  templateEnvLookup x = LazyT.toStrict <$> lookupOrThrow (LazyT.fromStrict x)
+
   template' =
     case templateSafe (LazyT.toStrict (LazyE.decodeUtf8 templateStr)) of
       Left (row, col) -> throwB9Error
@@ -139,13 +150,6 @@ substFile src dest = do
       out <- LazyE.encodeUtf8
         <$> renderA template' (templateEnvLookupSrcFile src)
       liftIO (Lazy.writeFile dest out)
-
-
-templateEnvLookup
-  :: (Member EnvironmentReader e, Member ExcB9 e)
-  => StrictT.Text
-  -> Eff e StrictT.Text
-templateEnvLookup x = LazyT.toStrict <$> lookupOrThrow (LazyT.fromStrict x)
 
 templateEnvLookupSrcFile
   :: (Member EnvironmentReader e, Member ExcB9 e, MonadIO (Eff e))

@@ -66,6 +66,7 @@ String substitution of these variables is done by "B9.Artifact.Content.StringTem
 These variables can be used as value in nested 'Let's, in most file names/paths
 and in source files added with 'B9.Artifact.Content.StringTemplate.SourceFile'
 
+-- @deprecated TODO remove this when switching to Dhall
 -}
 data ArtifactGenerator
   = Sources [ArtifactSource]
@@ -76,6 +77,7 @@ data ArtifactGenerator
         [ArtifactGenerator]
       -- ^ Bind variables, variables are available in nested
       -- generators.
+      -- @deprecated TODO remove this when switching to Dhall
   | LetX [(String, [String])]
          [ArtifactGenerator]
       -- ^ A 'Let' where each variable is assigned to each
@@ -97,6 +99,7 @@ data ArtifactGenerator
       --       Let [("x", "3"), ("y", "b")] [..]
       --     ]
       -- @
+      -- @deprecated TODO remove this when switching to Dhall
   | Each [(String, [String])]
          [ArtifactGenerator]
       -- ^ Bind each variable to their first value, then each
@@ -105,6 +108,7 @@ data ArtifactGenerator
       -- product of all variables, whereas 'Each' represents a
       -- sum of variable bindings - 'Each' is more like a /zip/
       -- whereas 'LetX' is more like a list comprehension.
+      -- @deprecated TODO remove this when switching to Dhall
   | EachT [String]
           [[String]]
           [ArtifactGenerator]
@@ -112,6 +116,7 @@ data ArtifactGenerator
       -- in the first list to each a set of values from the
       -- second argument; execute the nested generators for
       -- each binding
+      -- @deprecated TODO remove this when switching to Dhall
   | Artifact InstanceId
              ArtifactAssembly
       -- ^ Generate an artifact defined by an
@@ -181,7 +186,7 @@ instance Binary ArtifactAssembly
 
 instance NFData ArtifactAssembly
 
--- | A type representing the targets assembled by
+-- | A symbolic representation of the targets assembled by
 -- 'B9.Artifact.Readable.Interpreter.assemble' from an 'ArtifactAssembly'. There is a
 -- list of 'ArtifactTarget's because e.g. a single 'CloudInit' can produce up to
 -- three output files, a directory, an ISO image and a VFAT image.
