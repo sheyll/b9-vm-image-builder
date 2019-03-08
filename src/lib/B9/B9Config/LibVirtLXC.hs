@@ -5,17 +5,20 @@ module B9.B9Config.LibVirtLXC
   , LibVirtLXCConfig(..)
   , networkId
   , LXCGuestCapability(..)
-  ) where
+  , getEmulatorPath
+  )
+where
 
-import B9.DiskImages
-import B9.ExecEnv
-import Control.Lens (makeLenses)
-import Data.ConfigFile.B9Extras
+import           B9.DiskImages
+import           B9.ExecEnv
+import           Control.Lens                   ( makeLenses )
+import           Data.ConfigFile.B9Extras
+import           Control.Monad.IO.Class
+import           System.Environment.Blank      as SysIO
 
 data LibVirtLXCConfig = LibVirtLXCConfig
   { useSudo :: Bool
-  , virshPath :: FilePath
-  , emulator :: FilePath
+  , emulator :: Maybe FilePath
   , virshURI :: FilePath
   , _networkId :: Maybe String
   , guestCapabilities :: [LXCGuestCapability]
@@ -68,24 +71,22 @@ data LXCGuestCapability
 makeLenses ''LibVirtLXCConfig
 
 defaultLibVirtLXCConfig :: LibVirtLXCConfig
-defaultLibVirtLXCConfig =
-  LibVirtLXCConfig
-    True
-    "/usr/bin/virsh"
-    "/usr/lib/libvirt/libvirt_lxc"
-    "lxc:///"
-    Nothing
-    [ CAP_MKNOD
-    , CAP_SYS_ADMIN
-    , CAP_SYS_CHROOT
-    , CAP_SETGID
-    , CAP_SETUID
-    , CAP_NET_BIND_SERVICE
-    , CAP_SETPCAP
-    , CAP_SYS_PTRACE
-    , CAP_SYS_MODULE
-    ]
-    (RamSize 1 GB)
+defaultLibVirtLXCConfig = LibVirtLXCConfig
+  True
+  (Just "/usr/lib/libvirt/libvirt_lxc")
+  "lxc:///"
+  Nothing
+  [ CAP_MKNOD
+  , CAP_SYS_ADMIN
+  , CAP_SYS_CHROOT
+  , CAP_SETGID
+  , CAP_SETUID
+  , CAP_NET_BIND_SERVICE
+  , CAP_SETPCAP
+  , CAP_SYS_PTRACE
+  , CAP_SYS_MODULE
+  ]
+  (RamSize 1 GB)
 
 cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
@@ -93,11 +94,13 @@ cfgFileSection = "libvirt-lxc"
 useSudoK :: String
 useSudoK = "use_sudo"
 
-virshPathK :: String
-virshPathK = "virsh_path"
-
 emulatorK :: String
 emulatorK = "emulator_path"
+
+-- NOTE: This variable name is also specified in the NIX build
+-- in @default.nix@.
+emulatorEnvVar :: String
+emulatorEnvVar = "B9_LIBVIRT_LXC"
 
 virshURIK :: String
 virshURIK = "connection"
@@ -111,21 +114,37 @@ guestCapabilitiesK = "guest_capabilities"
 guestRamSizeK :: String
 guestRamSizeK = "guest_ram_size"
 
-libVirtLXCConfigToCPDocument :: LibVirtLXCConfig -> CPDocument -> Either CPError CPDocument
+libVirtLXCConfigToCPDocument
+  :: LibVirtLXCConfig -> CPDocument -> Either CPError CPDocument
 libVirtLXCConfigToCPDocument c cp = do
   cp1 <- addSectionCP cp cfgFileSection
   cp2 <- setShowCP cp1 cfgFileSection useSudoK $ useSudo c
-  cp3 <- setCP cp2 cfgFileSection virshPathK $ virshPath c
-  cp4 <- setCP cp3 cfgFileSection emulatorK $ emulator c
-  cp5 <- setCP cp4 cfgFileSection virshURIK $ virshURI c
-  cp6 <- setShowCP cp5 cfgFileSection networkIdK $ _networkId c
-  cp7 <- setShowCP cp6 cfgFileSection guestCapabilitiesK $ guestCapabilities c
-  setShowCP cp7 cfgFileSection guestRamSizeK $ guestRamSize c
+  cp3 <- setShowCP cp2 cfgFileSection emulatorK $ emulator c
+  cp4 <- setCP cp3 cfgFileSection virshURIK $ virshURI c
+  cp5 <- setShowCP cp4 cfgFileSection networkIdK $ _networkId c
+  cp6 <- setShowCP cp5 cfgFileSection guestCapabilitiesK $ guestCapabilities c
+  setShowCP cp6 cfgFileSection guestRamSizeK $ guestRamSize c
 
 parseLibVirtLXCConfig :: CPDocument -> Either CPError LibVirtLXCConfig
 parseLibVirtLXCConfig cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
       getr = readCP cp cfgFileSection
-   in LibVirtLXCConfig <$> getr useSudoK <*> getr virshPathK <*> getr emulatorK <*> getr virshURIK <*> getr networkIdK <*>
-      getr guestCapabilitiesK <*>
-      getr guestRamSizeK
+  in  LibVirtLXCConfig
+        <$> getr useSudoK
+        <*> getr emulatorK
+        <*> getr virshURIK
+        <*> getr networkIdK
+        <*> getr guestCapabilitiesK
+        <*> getr guestRamSizeK
+
+-- | Return the path to @/usr/lib/libvirt/libexec/libvirt_lxc@
+--  the 'emulatorK' field from the config file, or set the path
+-- in the environment variable named like the value in 'emulatorEnvVar'
+-- dictates.
+--
+-- @since 0.5.66
+getEmulatorPath :: MonadIO m => LibVirtLXCConfig -> m FilePath
+getEmulatorPath cfg = maybe fromEnv return (emulator cfg)
+ where
+  fromEnv =
+    liftIO (SysIO.getEnvDefault emulatorEnvVar "/usr/lib/libexec/libvirt_lxc")

@@ -1,5 +1,13 @@
 # Changelog for B9
 
+## 0.5.66
+
+* Fix the Nix package:
+
+  * Get rid of the virsh path configuration item
+
+  * Allow setting the path to @/.../libexec/libvirt_lxc@ via environment variable
+
 ## 0.5.65
 
 * Refactor the B9 Monad to use `extensible-effects`
@@ -21,11 +29,9 @@
 
 * Replace `ConcatableSyntax` by using `Binary` instances, and also
 
-    * Remove/Inline `encodeSyntax` by using `Binary.encode`
+  * Remove/Inline `encodeSyntax` by using `Binary.encode`
 
-    * Rename `decodeSyntax` to `decodeOrFail'` and delegate
-      to `Binary.decodeOrFail`.
-
+  * Rename `decodeSyntax` to `decodeOrFail'` and delegate to `Binary.decodeOrFail`.
 
 * Add a newtype wrapper around `YamlObject` for **cloud-init** yaml documents
   `CloudConfigYaml`
@@ -47,7 +53,7 @@
 * Introduce the type `Environment` that replaces the ubiquotus `[(String, String)]`
   by a lazy `Text` based `HashMap`.
 
-     * Add `addLocalPositionalArguments`
+* Add `addLocalPositionalArguments`
 
 * Rename the previous `B9.Artifact.Content` to `B9.Artifact.Content`
 
@@ -69,6 +75,7 @@
 * Rename `FromAST` to `FromAST`
 
 * Rearrange modules for content generation:
-   - Introduce `Content.FromByteString`
 
-* Remove deprecated `Concatenation`
+  * Introduce `Content.FromByteString`
+
+  * Remove deprecated `Concatenation`
