@@ -1,32 +1,20 @@
-language: c
-
-sudo: false
-
-addons:
-  apt:
-    sources:
-    - hvr-ghc
-    packages:
-    - ghc-8.2.2
-    - genisoimage
-
-before_install:
- - mkdir -p ~/.local/bin
- - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
- - export PATH=~/.local/bin:/opt/ghc/$GHCVER/bin:$PATH
- - chmod a+x ~/.local/bin/stack
-
-install:
-  - stack --no-terminal --skip-ghc-check setup
-
-script:
-  - stack --no-terminal --skip-ghc-check build
-  - stack --no-terminal --skip-ghc-check test
-  - stack --no-terminal --skip-ghc-check haddock
+language: nix
 
 cache:
-  directories:
-  - ~/.stack
-  - ~/.local
-  - ~/.stack-work-cache
-  apt: true
+  directories:          
+  - $HOME/nix.store
+
+
+before_install:
+- sudo mkdir -p /etc/nix
+- echo "substituters = https://cache.nixos.org/ file://$HOME/nix.store" | sudo tee -a /etc/nix/nix.conf > /dev/null
+- echo 'require-sigs = false' | sudo tee -a /etc/nix/nix.conf > /dev/null
+
+before_cache:
+- mkdir -p $HOME/nix.store
+- nix copy --to file://$HOME/nix.store -f release.nix buildInputs
+- nix copy --to file://$HOME/nix.store -f release.nix depsHostHost
+
+  #before_script:
+  #  - sudo mkdir /etc/nix && echo 'sandbox = true' | sudo tee /etc/nix/nix.conf
+  

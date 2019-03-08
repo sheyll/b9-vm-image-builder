@@ -60,7 +60,7 @@ extra-source-files:  README.md
                    , CONTRIBUTING.md
                    , CODE_OF_CONDUCT.md
                    , CHANGELOG.md
-cabal-version:       >=1.22
+cabal-version:     1.22
 
 source-repository head
   type:                 git
