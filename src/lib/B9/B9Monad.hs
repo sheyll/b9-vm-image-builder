@@ -3,16 +3,17 @@ module B9.B9Monad
   , B9
   , B9Eff
   , IsB9
-  ) where
+  )
+where
 
-import B9.B9Config
-import B9.B9Error
-import B9.B9Logging
-import B9.BuildInfo
-import B9.Environment
-import B9.Repository
-import Control.Eff
-import Data.Functor ()
+import           B9.B9Config
+import           B9.B9Error
+import           B9.B9Logging
+import           B9.BuildInfo
+import           B9.Environment
+import           B9.Repository
+import           Control.Eff
+import           Data.Functor                   ( )
 
 -- | Definition of the B9 monad. See 'B9Eff'.
 --
@@ -29,7 +30,8 @@ type B9 a = Eff B9Eff a
 --
 -- @since 0.5.65
 type B9Eff
-   = '[ SelectedRemoteRepoReader, RepoCacheReader, BuildInfoReader, LoggerReader, B9ConfigReader, EnvironmentReader, ExcB9, Lift IO]
+  = '[SelectedRemoteRepoReader, RepoCacheReader, BuildInfoReader, LoggerReader, B9ConfigReader, EnvironmentReader, ExcB9, Lift
+    IO]
 
 -- | A constraint that contains all effects of 'B9Eff'
 --
@@ -45,8 +47,13 @@ runB9 action = do
   cfg <- getB9Config
   env <- askEnvironment
   lift
-    (runLift .
-     errorOnException .
-     runEnvironmentReader env .
-     runB9ConfigReader cfg . withLogger . withBuildInfo . withRemoteRepos . withSelectedRemoteRepo $
-     action)
+    ( runLift
+    . errorOnException
+    . runEnvironmentReader env
+    . runB9ConfigReader cfg
+    . withLogger
+    . withBuildInfo
+    . withRemoteRepos
+    . withSelectedRemoteRepo
+    $ action
+    )

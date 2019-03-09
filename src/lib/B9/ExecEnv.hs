@@ -5,22 +5,23 @@
     "B9.LibVirtLXC" should configure and execute
     build scripts, as defined in "B9.ShellScript" and "B9.Vm".
     -}
-module B9.ExecEnv (
-    ExecEnv(..),
-    Resources(..),
-    noResources,
-    SharedDirectory(..),
-    CPUArch(..),
-    RamSize(..),
-    ) where
+module B9.ExecEnv
+    ( ExecEnv(..)
+    , Resources(..)
+    , noResources
+    , SharedDirectory(..)
+    , CPUArch(..)
+    , RamSize(..)
+    )
+where
 
-import Control.Parallel.Strategies
-import Data.Binary
-import Data.Data
-import Data.Hashable
-import Data.Semigroup as Sem
-import B9.DiskImages
-import GHC.Generics (Generic)
+import           Control.Parallel.Strategies
+import           Data.Binary
+import           Data.Data
+import           Data.Hashable
+import           Data.Semigroup                as Sem
+import           B9.DiskImages
+import           GHC.Generics                   ( Generic )
 
 data ExecEnv = ExecEnv
     { envName :: String
@@ -57,11 +58,12 @@ instance Binary Resources
 instance NFData Resources
 
 instance Sem.Semigroup Resources where
-  (<>) (Resources m c a) (Resources m' c' a') = Resources (m <> m') (max c c') (a <> a')
+    (<>) (Resources m c a) (Resources m' c' a') =
+        Resources (m <> m') (max c c') (a <> a')
 
 instance Monoid Resources where
-    mempty = Resources mempty 1 mempty
-    mappend  = (Sem.<>)
+    mempty  = Resources mempty 1 mempty
+    mappend = (Sem.<>)
 
 noResources :: Resources
 noResources = mempty
@@ -76,11 +78,11 @@ instance Binary CPUArch
 instance NFData CPUArch
 
 instance Sem.Semigroup CPUArch where
-    I386 <> x = x
+    I386   <> x = x
     X86_64 <> _ = X86_64
 
 instance Monoid CPUArch where
-    mempty = I386
+    mempty  = I386
     mappend = (Sem.<>)
 
 data RamSize
@@ -94,10 +96,10 @@ instance Binary RamSize
 instance NFData RamSize
 
 instance Sem.Semigroup RamSize where
-    AutomaticRamSize <> x = x
-    x <> AutomaticRamSize = x
-    r <> r' = max r r'
+    AutomaticRamSize <> x                = x
+    x                <> AutomaticRamSize = x
+    r                <> r'               = max r r'
 
 instance Monoid RamSize where
-    mempty = AutomaticRamSize
+    mempty  = AutomaticRamSize
     mappend = (Sem.<>)

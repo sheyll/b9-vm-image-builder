@@ -1,5 +1,25 @@
 # Changelog for B9
 
+## 0.5.67
+
+* Iron out UTF-8 decoding issues
+
+  * Use `Data.Text` in more places
+
+  * Remove `ByteStringGenerator`
+
+  * Change `ToContentGenerator` to produce only (strict) `Data.Text.Text`s
+
+* Add `B9.Text` a module with conversion functions for different string types.
+
+* Add helper functions and type for Erlang parsing:
+
+  * `textToErlangAst`,
+
+  * `stringToErlangAst` and
+
+  * `ErlangAST`
+
 ## 0.5.66
 
 * Fix the Nix package:

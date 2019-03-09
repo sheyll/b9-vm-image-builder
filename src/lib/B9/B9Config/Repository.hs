@@ -1,16 +1,18 @@
-module B9.B9Config.Repository ( RemoteRepo(..)
-                              , remoteRepoRepoId
-                              , RepoCache(..)
-                              , SshPrivKey(..)
-                              , SshRemoteHost(..)
-                              , SshRemoteUser(..)
-                              , remoteRepoToCPDocument
-                              , parseRemoteRepos
-                              ) where
+module B9.B9Config.Repository
+  ( RemoteRepo(..)
+  , remoteRepoRepoId
+  , RepoCache(..)
+  , SshPrivKey(..)
+  , SshRemoteHost(..)
+  , SshRemoteUser(..)
+  , remoteRepoToCPDocument
+  , parseRemoteRepos
+  )
+where
 
-import Data.Data
-import Data.List (isSuffixOf)
-import Data.ConfigFile.B9Extras
+import           Data.Data
+import           Data.List                      ( isSuffixOf )
+import           Data.ConfigFile.B9Extras
 
 newtype RepoCache = RepoCache FilePath
   deriving (Read, Show, Typeable, Data)

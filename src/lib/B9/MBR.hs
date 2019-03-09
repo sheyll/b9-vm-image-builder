@@ -1,39 +1,42 @@
 {-| Utility module to extract a primary partition from an MBR partition on a
     raw image file. -}
-module B9.MBR ( getPartition
-              , PrimaryPartition (..)
-              , MBR(..)
-              , CHS(..)) where
+module B9.MBR
+  ( getPartition
+  , PrimaryPartition(..)
+  , MBR(..)
+  , CHS(..)
+  )
+where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
-import Data.Binary.Get
-import Data.Word
-import Text.Printf
-import qualified Data.ByteString.Lazy as BL
+import           Data.Binary.Get
+import           Data.Word
+import           Text.Printf
+import qualified Data.ByteString.Lazy          as BL
 
 getPartition :: Int -> FilePath -> IO (Word64, Word64)
 getPartition n f = decodeMBR <$> BL.readFile f
-  where
-    decodeMBR input =
-        let mbr = runGet getMBR input
-            part =
-                (case n of
-                     1 -> mbrPart1
-                     2 -> mbrPart2
-                     3 -> mbrPart3
-                     4 -> mbrPart4
-                     b ->
-                         error
-                             (printf
-                                  "Error: Invalid partition index %i only partitions 1-4 are allowed. Image file: '%s'"
-                                  b
-                                  f))
-                    mbr
-            start = fromIntegral (primPartLbaStart part)
-            len = fromIntegral (primPartSectors part)
-        in (start * sectorSize, len * sectorSize)
+ where
+  decodeMBR input =
+    let
+      mbr = runGet getMBR input
+      part =
+        (case n of
+            1 -> mbrPart1
+            2 -> mbrPart2
+            3 -> mbrPart3
+            4 -> mbrPart4
+            b -> error
+              (printf
+                "Error: Invalid partition index %i only partitions 1-4 are allowed. Image file: '%s'"
+                b
+                f
+              )
+          )
+          mbr
+      start = fromIntegral (primPartLbaStart part)
+      len   = fromIntegral (primPartSectors part)
+    in
+      (start * sectorSize, len * sectorSize)
 
 sectorSize :: Word64
 sectorSize = 512
@@ -64,16 +67,18 @@ data CHS = CHS { chsH :: !Word8
   deriving Show
 
 getMBR :: Get MBR
-getMBR = skip bootCodeSize >>
-         MBR <$> getPart <*> getPart <*> getPart <*> getPart
+getMBR =
+  skip bootCodeSize >> MBR <$> getPart <*> getPart <*> getPart <*> getPart
 
 getPart :: Get PrimaryPartition
-getPart = PrimaryPartition <$> getWord8
-                           <*> getCHS
-                           <*> getWord8
-                           <*> getCHS
-                           <*> getWord32le
-                           <*> getWord32le
+getPart =
+  PrimaryPartition
+    <$> getWord8
+    <*> getCHS
+    <*> getWord8
+    <*> getCHS
+    <*> getWord32le
+    <*> getWord32le
 
 getCHS :: Get CHS
 getCHS = CHS <$> getWord8 <*> getWord8 <*> getWord8

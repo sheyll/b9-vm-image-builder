@@ -2,10 +2,11 @@
 module B9.Shake.Actions
   ( b9InvocationAction
   , buildB9File
-  ) where
+  )
+where
 
 import           B9
-import           Control.Lens               ((?~))
+import           Control.Lens                   ( (?~) )
 import           Development.Shake
 
 -- | Convert a 'B9Invocation' action into a Shake 'Action'. This is just
@@ -24,4 +25,8 @@ buildB9File b9Root b9File args = do
   need [f]
   liftIO
     (runB9ConfigAction
-       (addLocalPositionalArguments args (localB9Config (projectRoot ?~ b9Root) (runBuildArtifacts [f]))))
+      (addLocalPositionalArguments
+        args
+        (localB9Config (projectRoot ?~ b9Root) (runBuildArtifacts [f]))
+      )
+    )

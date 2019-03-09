@@ -14,20 +14,20 @@ Otherwise, this is just a wrapper around 'YamlObject'.
 module B9.Artifact.Content.CloudConfigYaml
   ( CloudConfigYaml(..)
   , cloudConfigFileHeader
-  ) where
+  )
+where
 
 import           B9.Artifact.Content.AST
 import           B9.Artifact.Content.YamlObject
-
-import           Control.Parallel.Strategies (NFData)
-import           Data.Binary                 (Binary)
-import qualified Data.Binary                 as Binary
-import qualified Data.Binary.Get             as Binary
-import qualified Data.ByteString.Lazy.Char8  as Lazy
-import           Data.Data                   (Data, Typeable)
-import           Data.Hashable               (Hashable)
-import           GHC.Generics                (Generic)
-import           Test.QuickCheck             (Arbitrary)
+import           B9.Text
+import           Control.Parallel.Strategies    ( NFData )
+import           Data.Data                      ( Data
+                                                , Typeable
+                                                )
+import           Data.Text                     as Text
+import           Data.Hashable                  ( Hashable )
+import           GHC.Generics                   ( Generic )
+import           Test.QuickCheck                ( Arbitrary )
 
 -- | Cloud-init @meta-data@ configuration Yaml.
 --
@@ -43,24 +43,22 @@ newtype CloudConfigYaml = MkCloudConfigYaml
 -- text file containing the cloud-config Yaml document.
 --
 -- @Since 0.5.62
-cloudConfigFileHeader :: Lazy.ByteString
+cloudConfigFileHeader :: Text
 cloudConfigFileHeader = "#cloud-config\n"
 
 instance FromAST CloudConfigYaml where
   fromAST ast = MkCloudConfigYaml <$> fromAST (fromCloudConfigYaml <$> ast)
 
-instance Binary CloudConfigYaml where
-  get
-    -- skip the optional header line
-   = do
-    Binary.lookAheadM
-      (do completeDocument <- Binary.lookAhead Binary.getRemainingLazyByteString
-          if Lazy.length completeDocument >= Lazy.length cloudConfigFileHeader &&
-                Lazy.take (Lazy.length cloudConfigFileHeader) completeDocument == cloudConfigFileHeader
-               then do Binary.skip (fromIntegral (Lazy.length cloudConfigFileHeader))
-                       return (Just ())
-               else return Nothing)
-    MkCloudConfigYaml <$> Binary.get
-  put (MkCloudConfigYaml y) = do
-    Binary.put cloudConfigFileHeader
-    Binary.put y
+instance Textual CloudConfigYaml where
+  parseFromText txt = do
+-- skip the optional header line
+    let header = Text.take (Text.length cloudConfigFileHeader) txt
+        txt'   = if header == cloudConfigFileHeader
+          then Text.drop (Text.length cloudConfigFileHeader) txt
+          else txt
+    y <- parseFromText txt'
+    return (MkCloudConfigYaml y)
+
+  renderToText (MkCloudConfigYaml y) = do
+    txt <- renderToText y
+    return (Text.unlines [cloudConfigFileHeader, txt])

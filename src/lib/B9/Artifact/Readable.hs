@@ -19,15 +19,16 @@ module B9.Artifact.Readable
   -- ** Re-exports
   , ArtifactSource(..)
   , getArtifactSourceFiles
-  ) where
+  )
+where
 
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
 import           Data.Hashable
-import           Data.Semigroup              as Sem
-import           GHC.Generics                (Generic)
-import           System.FilePath             ((<.>))
+import           Data.Semigroup                as Sem
+import           GHC.Generics                   ( Generic )
+import           System.FilePath                ( (<.>) )
 
 import           B9.Artifact.Readable.Source
 import           B9.DiskImages
@@ -133,12 +134,12 @@ data ArtifactGenerator
 instance NFData ArtifactGenerator
 
 instance Sem.Semigroup ArtifactGenerator where
-  (Let [] []) <> x = x
-  x <> (Let [] []) = x
-  x <> y = Let [] [x, y]
+  (Let [] []) <> x           = x
+  x           <> (Let [] []) = x
+  x           <> y           = Let [] [x, y]
 
 instance Monoid ArtifactGenerator where
-  mempty = Let [] []
+  mempty  = Let [] []
   mappend = (Sem.<>)
 
 -- | Identify an artifact. __Deprecated__ TODO: B9 does not check if all
@@ -234,43 +235,48 @@ data AssemblyOutput
 
 -- | Return the files that the artifact assembly consist of.
 getAssemblyOutput :: ArtifactAssembly -> [AssemblyOutput]
-getAssemblyOutput (VmImages ts _) = AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
+getAssemblyOutput (VmImages ts _) =
+  AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
 getAssemblyOutput (CloudInit ts o) = getCloudInitOutputFiles o <$> ts
-  where
-    getCloudInitOutputFiles baseName t =
-      case t of
-        CI_ISO  -> AssemblyGeneratesOutputFiles [baseName <.> "iso"]
-        CI_VFAT -> AssemblyGeneratesOutputFiles [baseName <.> "vfat"]
-        CI_DIR  -> AssemblyCopiesSourcesToDirectory baseName
+ where
+  getCloudInitOutputFiles baseName t = case t of
+    CI_ISO  -> AssemblyGeneratesOutputFiles [baseName <.> "iso"]
+    CI_VFAT -> AssemblyGeneratesOutputFiles [baseName <.> "vfat"]
+    CI_DIR  -> AssemblyCopiesSourcesToDirectory baseName
 
 -- * QuickCheck instances
 instance Arbitrary ArtifactGenerator where
-  arbitrary =
-    oneof
-      [ Sources <$> halfSize arbitrary <*> halfSize arbitrary
-      , Let <$> halfSize arbitraryEnv <*> halfSize arbitrary
-      , halfSize arbitraryEachT <*> halfSize arbitrary
-      , halfSize arbitraryEach <*> halfSize arbitrary
-      , Artifact <$> smaller arbitrary <*> smaller arbitrary
-      , pure EmptyArtifact
-      ]
+  arbitrary = oneof
+    [ Sources <$> halfSize arbitrary <*> halfSize arbitrary
+    , Let <$> halfSize arbitraryEnv <*> halfSize arbitrary
+    , halfSize arbitraryEachT <*> halfSize arbitrary
+    , halfSize arbitraryEach <*> halfSize arbitrary
+    , Artifact <$> smaller arbitrary <*> smaller arbitrary
+    , pure EmptyArtifact
+    ]
 
 arbitraryEachT :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
-arbitraryEachT =
-  sized $ \n ->
-    EachT <$> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))) <*>
-    oneof [listOf (vectorOf n (halfSize arbitrary)), listOf1 (listOf (halfSize arbitrary))]
+arbitraryEachT = sized $ \n ->
+  EachT <$> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))) <*> oneof
+    [ listOf (vectorOf n (halfSize arbitrary))
+    , listOf1 (listOf (halfSize arbitrary))
+    ]
 
 arbitraryEach :: Gen ([ArtifactGenerator] -> ArtifactGenerator)
-arbitraryEach =
-  sized $ \n ->
-    Each <$> listOf ((,) <$> listOf1 (choose ('a', 'z')) <*> vectorOf n (halfSize (listOf1 (choose ('a', 'z')))))
+arbitraryEach = sized $ \n -> Each <$> listOf
+  ((,) <$> listOf1 (choose ('a', 'z')) <*> vectorOf
+    n
+    (halfSize (listOf1 (choose ('a', 'z'))))
+  )
 
 instance Arbitrary InstanceId where
   arbitrary = IID <$> arbitraryFilePath
 
 instance Arbitrary ArtifactAssembly where
-  arbitrary = oneof [CloudInit <$> arbitrary <*> arbitraryFilePath, VmImages <$> smaller arbitrary <*> pure NoVmScript]
+  arbitrary = oneof
+    [ CloudInit <$> arbitrary <*> arbitraryFilePath
+    , VmImages <$> smaller arbitrary <*> pure NoVmScript
+    ]
 
 instance Arbitrary CloudInitType where
   arbitrary = elements [CI_ISO, CI_VFAT, CI_DIR]

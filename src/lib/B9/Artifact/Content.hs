@@ -5,22 +5,25 @@
 --
 -- @since 0.5.62
 module B9.Artifact.Content
-  ( ByteStringGenerator
+  ( ContentGenerator
   , ToContentGenerator(..)
+  , Text
   )
 where
 
 import           B9.B9Monad
 import           Control.Eff
-import           Data.ByteString.Lazy          as Lazy
+import           Data.Text                      ( Text )
+import           GHC.Stack
 
--- | A 'B9' action that procuces a 'Lazy.ByteString'.
+-- | A 'B9' action that procuces a 'Text'.
 --
 -- @since 0.5.62
-type ByteStringGenerator = B9 Lazy.ByteString
+type ContentGenerator = B9 Text
 
--- | Types whose values can be turned into a 'ContentGenerator'
+-- | Types whose values can be turned into an 'Eff'ect that produces
+-- 'Text', e.g. 'ContentGenerator'
 --
 -- @since 0.5.62
-class ToContentGenerator c a where
-    toContentGenerator :: IsB9 e => c -> Eff e a
+class ToContentGenerator c where
+    toContentGenerator :: (HasCallStack, IsB9 e) => c -> Eff e Text

@@ -1,11 +1,11 @@
 {-| Allow reading, merging and writing Erlang terms. -}
 module B9.Artifact.Content.ErlangPropList
   ( ErlangPropList(..)
+  , textToErlangAst
+  , stringToErlangAst
   ) where
 
 import Control.Parallel.Strategies
-import Data.Binary as Binary
-import Data.Binary.Get as Binary
 import Data.Data
 import Data.Function
 import Data.Hashable
@@ -13,8 +13,7 @@ import Data.List (partition, sortBy)
 #if !MIN_VERSION_base(4,11,0)
 import Data.Semigroup
 #endif
-import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.Encoding as E
+import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Text.Printf
 
@@ -22,8 +21,7 @@ import B9.Artifact.Content.AST
 import B9.Artifact.Content.ErlTerms
 import           B9.Artifact.Content
 import B9.Artifact.Content.StringTemplate
-
-import Data.Binary.Put (putLazyByteString)
+import B9.Text
 import Test.QuickCheck
 
 -- | A wrapper type around erlang terms with a Semigroup instance useful for
@@ -74,13 +72,12 @@ instance Semigroup ErlangPropList where
       combine t1 (ErlList pl2) = ErlList ([t1] <> pl2)
       combine t1 t2 = ErlList [t1, t2]
 
-instance Binary ErlangPropList where
-  get = do
-    str <- Binary.getRemainingLazyByteString
-    case parseErlTerm "" str of
-      Right t -> return (ErlangPropList t)
-      Left e -> fail e
-  put (ErlangPropList t) = putLazyByteString (renderErlTerm t)
+instance Textual ErlangPropList where
+  parseFromText txt = do
+    str <- parseFromText txt
+    t <- parseErlTerm "" str
+    return (ErlangPropList t)
+  renderToText (ErlangPropList t) = renderToText (renderErlTerm t)
 
 instance FromAST ErlangPropList where
   fromAST (AST a) = pure a
@@ -98,11 +95,30 @@ instance FromAST ErlangPropList where
       xs
   fromAST (ASTString s) = pure $ ErlangPropList $ ErlString s
   fromAST (ASTInt i) = pure $ ErlangPropList $ ErlString (show i)
-  fromAST (ASTEmbed c) = ErlangPropList . ErlString . T.unpack . E.decodeUtf8 <$> toContentGenerator c
+  fromAST (ASTEmbed c) = ErlangPropList . ErlString . T.unpack <$> toContentGenerator c
   fromAST (ASTMerge []) = error "ASTMerge MUST NOT be used with an empty list!"
   fromAST (ASTMerge asts) = foldl1 (<>) <$> mapM fromAST asts
   fromAST (ASTParse src@(Source _ srcPath)) = do
     c <- readTemplateFile src
-    case decodeOrFail' srcPath c of
+    case parseFromTextWithErrorMessage srcPath c of
       Right s -> return s
       Left e -> error (printf "could not parse erlang source file: '%s'\n%s\n" srcPath e)
+
+
+-- * Misc. utilities
+
+-- | Parse a text containing an @Erlang@ expression ending with a @.@ and Return
+-- an 'AST'.
+--
+-- @since 0.5.67
+textToErlangAst :: Text ->  AST c ErlangPropList
+textToErlangAst txt = either (error . ((unsafeParseFromText txt ++ "\n:  ") ++))
+                             AST
+                             (parseFromTextWithErrorMessage "textToErlangAst" txt)
+
+-- | Parse a string containing an @Erlang@ expression ending with a @.@ and Return
+-- an 'AST'.
+--
+-- @since 0.5.67
+stringToErlangAst :: String ->  AST c ErlangPropList
+stringToErlangAst = textToErlangAst . unsafeRenderToText

@@ -3,28 +3,26 @@
 -}
 module B9.Artifact.Content.Readable where
 
-import Control.Parallel.Strategies
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
-import B9.Artifact.Content
-import B9.Artifact.Content.AST
-import B9.Artifact.Content.CloudConfigYaml
-import B9.Artifact.Content.ErlangPropList
-import B9.Artifact.Content.StringTemplate
-import B9.Artifact.Content.YamlObject
-import B9.B9Logging
-import B9.QCUtil
-import Control.Monad.IO.Class
-import Data.Binary as Binary
-import qualified Data.ByteString as Strict
-import qualified Data.ByteString.Base64 as B64
-import qualified Data.ByteString.Lazy.Char8 as Lazy
-import Data.Data
-import GHC.Generics (Generic)
-import System.Exit
-import System.Process
-import Test.QuickCheck
+import           Control.Parallel.Strategies
+import           B9.Artifact.Content
+import           B9.Artifact.Content.AST
+import           B9.Artifact.Content.CloudConfigYaml
+import           B9.Artifact.Content.ErlangPropList
+import           B9.Artifact.Content.StringTemplate
+import           B9.Artifact.Content.YamlObject
+import           B9.B9Logging
+import           B9.QCUtil
+import           B9.Text
+import           Control.Monad.IO.Class
+import qualified Data.ByteString               as Strict
+import qualified Data.ByteString.Lazy          as Lazy
+import qualified Data.ByteString.Base64        as B64
+import           Data.Data
+import           GHC.Generics                   ( Generic )
+import           System.Exit
+import           System.Process
+import           Test.QuickCheck
+import           GHC.Stack
 
 -- | This is content that can be 'read' via the generated 'Read' instance.
 data Content
@@ -52,39 +50,52 @@ data Content
 instance NFData Content
 
 instance Arbitrary Content where
-  arbitrary =
-    oneof
-      [ FromTextFile <$> smaller arbitrary
-      , RenderBase64BinaryFile <$> smaller arbitrary
-      , RenderErlang <$> smaller arbitrary
-      , RenderYamlObject <$> smaller arbitrary
-      , RenderCloudConfig <$> smaller arbitrary
-      , FromString <$> smaller arbitrary
-      , FromByteString . Lazy.pack <$> smaller arbitrary
-      , RenderBase64Binary . Lazy.pack <$> smaller arbitrary
-      , FromURL <$> smaller arbitrary
-      ]
+  arbitrary = oneof
+    [ FromTextFile <$> smaller arbitrary
+    , RenderBase64BinaryFile <$> smaller arbitrary
+    , RenderErlang <$> smaller arbitrary
+    , RenderYamlObject <$> smaller arbitrary
+    , RenderCloudConfig <$> smaller arbitrary
+    , FromString <$> smaller arbitrary
+    , FromByteString . Lazy.pack <$> smaller arbitrary
+    , RenderBase64Binary . Lazy.pack <$> smaller arbitrary
+    , FromURL <$> smaller arbitrary
+    ]
 
-instance ToContentGenerator Content Lazy.ByteString where
-  toContentGenerator (RenderErlang ast) = Binary.encode <$> fromAST ast
-  toContentGenerator (RenderYamlObject ast) = Binary.encode <$> fromAST ast
-  toContentGenerator (RenderCloudConfig ast) = Binary.encode <$> fromAST ast
-  toContentGenerator (FromTextFile s) = readTemplateFile s
+instance ToContentGenerator Content where
+  toContentGenerator (RenderErlang ast) = unsafeRenderToText <$> fromAST ast
+  toContentGenerator (RenderYamlObject ast) =
+    unsafeRenderToText <$> fromAST ast
+  toContentGenerator (RenderCloudConfig ast) =
+    unsafeRenderToText <$> fromAST ast
+  toContentGenerator (FromTextFile           s) = readTemplateFile s
   toContentGenerator (RenderBase64BinaryFile s) = readBinaryFileAsBase64 s
-    where
-      readBinaryFileAsBase64 :: MonadIO m => FilePath -> m Lazy.ByteString
-      readBinaryFileAsBase64 f = Lazy.fromStrict . B64.encode <$> liftIO (Strict.readFile f)
-  toContentGenerator (RenderBase64Binary b) = pure (Lazy.fromStrict $ B64.encode $ Lazy.toStrict b)
-  toContentGenerator (FromString str) = pure (Lazy.pack str)
-  toContentGenerator (FromByteString str) = pure str
+   where
+    readBinaryFileAsBase64 :: (HasCallStack, MonadIO m) => FilePath -> m Text
+    readBinaryFileAsBase64 f =
+      unsafeRenderToText . B64.encode <$> liftIO (Strict.readFile f)
+  toContentGenerator (RenderBase64Binary b) =
+    pure (unsafeRenderToText . B64.encode . Lazy.toStrict $ b)
+  toContentGenerator (FromString str) = pure (unsafeRenderToText str)
+  toContentGenerator (FromByteString str) =
+    pure (unsafeRenderToText . Lazy.toStrict $ str)
   toContentGenerator (FromURL url) = do
     dbgL ("Downloading: " ++ url)
     (exitCode, out, err) <- liftIO (readProcessWithExitCode "curl" [url] "")
     if exitCode == ExitSuccess
       then do
         dbgL ("Download finished. Bytes read: " ++ show (length out))
-        traceL ("Downloaded (truncated to first 4K): \n\n" ++ take 4096 out ++ "\n\n")
-        pure (Lazy.pack out)
+        traceL
+          ("Downloaded (truncated to first 4K): \n\n" ++ take 4096 out ++ "\n\n"
+          )
+        pure (unsafeRenderToText out)
       else do
         errorL ("Download failed: " ++ err)
         liftIO (exitWith exitCode)
+
+-- ** Convenient Aliases
+
+-- | An 'ErlangPropList' 'AST' with 'Content'
+--
+-- @since 0.5.67
+type ErlangAst = AST Content ErlangPropList

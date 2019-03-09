@@ -9,6 +9,7 @@ variables or configuration file.
 module B9.Environment
   ( Environment()
   , fromStringPairs
+  , addBinding
   , addStringBinding
   , addLocalStringBinding
   , addPositionalArguments
@@ -26,6 +27,7 @@ module B9.Environment
 where
 
 import           B9.B9Error
+import           B9.Text
 import           Control.Arrow                  ( (***) )
 import           Control.Exception              ( Exception )
 import           Control.Eff                   as Eff
@@ -37,8 +39,6 @@ import qualified Data.HashMap.Strict           as HashMap
 import           Data.Maybe                     ( maybe
                                                 , isJust
                                                 )
-import           Data.Text.Lazy                 ( Text )
-import qualified Data.Text.Lazy                as Text
 import           GHC.Generics                   ( Generic )
 
 -- | A map of textual keys to textual values.
@@ -100,7 +100,7 @@ addPositionalArguments = flip
   (foldr
     (\arg (MkEnvironment i e) -> MkEnvironment
       (i + 1)
-      (HashMap.insert (Text.pack ("arg_" ++ show i)) arg e)
+      (HashMap.insert (unsafeRenderToText ("arg_" ++ show i)) arg e)
     )
   )
 
@@ -108,33 +108,40 @@ addPositionalArguments = flip
 -- | Convenient wrapper around 'addPositionalArguments' and 'localEnvironment'.
 --
 -- @since 0.5.65
-addLocalPositionalArguments :: Member EnvironmentReader e => [String] -> Eff e a -> Eff e a
+addLocalPositionalArguments
+  :: Member EnvironmentReader e => [String] -> Eff e a -> Eff e a
 addLocalPositionalArguments extraPositional = localEnvironment appendVars
-  where
-    appendVars = addPositionalArguments (Text.pack <$> extraPositional)
+ where
+  appendVars = addPositionalArguments (unsafeRenderToText <$> extraPositional)
 
 -- | Create an 'Environment' from a list of pairs ('String's).
 -- Duplicated entries are ignored.
 --
 -- @since 0.5.62
 fromStringPairs :: [(String, String)] -> Environment
-fromStringPairs =
-  MkEnvironment 0 . HashMap.fromList . fmap (Text.pack *** Text.pack)
+fromStringPairs = MkEnvironment 0 . HashMap.fromList . fmap
+  (unsafeRenderToText *** unsafeRenderToText)
 
--- | Insert a value into an 'Environment'. Thrown an exception when the
--- key already exists, and the value is different.
+-- | Insert a key value binding to the 'Environment'.
 --
--- @since 0.5.62
-addStringBinding
-  :: Member ExcB9 e => (String, String) -> Environment -> Eff e Environment
-addStringBinding (kStr, vNewStr) env =
-  let k    = Text.pack kStr
-      vNew = Text.pack vNewStr
-      h    = fromEnvironment env
+-- Throw 'DuplicateKey' if the key already exists, but
+-- the value is not equal to the given value.
+--
+-- @since 0.5.67
+addBinding :: Member ExcB9 e => (Text, Text) -> Environment -> Eff e Environment
+addBinding (k, vNew) env =
+  let h = fromEnvironment env
   in  case HashMap.lookup k h of
         Just vOld | vOld /= vNew ->
           throwSomeException (MkDuplicateKey k vOld vNew)
         _ -> pure (MkEnvironment (nextPosition env) (HashMap.insert k vNew h))
+
+-- | Insert 'String's into the 'Environment', see 'addBinding'.
+--
+-- @since 0.5.62
+addStringBinding
+  :: Member ExcB9 e => (String, String) -> Environment -> Eff e Environment
+addStringBinding = addBinding . (unsafeRenderToText *** unsafeRenderToText)
 
 -- | Insert a value into an 'Environment' like 'addStringBinding',
 -- but add it to the environment of the given effect, as in 'localEnvironment'.
@@ -142,11 +149,13 @@ addStringBinding (kStr, vNewStr) env =
 -- @since 0.5.65
 addLocalStringBinding
   :: (Member EnvironmentReader e, Member ExcB9 e)
-  => (String, String) -> Eff e a-> Eff e a
-addLocalStringBinding binding action =
-  do e <- askEnvironment
-     e' <- addStringBinding binding e
-     localEnvironment (const e') action
+  => (String, String)
+  -> Eff e a
+  -> Eff e a
+addLocalStringBinding binding action = do
+  e  <- askEnvironment
+  e' <- addStringBinding binding e
+  localEnvironment (const e') action
 
 -- | A monad transformer providing a 'MonadReader' instance for 'Environment'
 --
@@ -224,9 +233,10 @@ instance Exception KeyNotFound
 
 instance Show KeyNotFound where
   showsPrec _ (MkKeyNotFound key env) =
-    let keys = unlines (Text.unpack <$> HashMap.keys (fromEnvironment env))
+    let keys =
+            unlines (unsafeParseFromText <$> HashMap.keys (fromEnvironment env))
     in  showString "Invalid template parameter: \""
-          . showString (Text.unpack key)
+          . showString (unsafeParseFromText key)
           . showString "\".\nValid variables:\n"
           . showString keys
 

@@ -12,20 +12,24 @@ module B9.B9Logging
   , infoL
   , errorL
   , errorExitL
-  ) where
+  )
+where
 
-import B9.B9Config
-import B9.B9Error
-import Control.Eff
-import Control.Eff.Reader.Lazy
-import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Control (MonadBaseControl, liftBaseWith, restoreM)
-import Data.Maybe
-import Data.Time.Clock
-import Data.Time.Format
-import qualified System.IO as SysIO
-import Text.Printf
+import           B9.B9Config
+import           B9.B9Error
+import           Control.Eff
+import           Control.Eff.Reader.Lazy
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Control    ( MonadBaseControl
+                                                , liftBaseWith
+                                                , restoreM
+                                                )
+import           Data.Maybe
+import           Data.Time.Clock
+import           Data.Time.Format
+import qualified System.IO                     as SysIO
+import           Text.Printf
 
 -- | The logger to write log messages to.
 --
@@ -45,20 +49,28 @@ type LoggerReader = Reader Logger
 -- Then run the given action; if the action crashes, the log file will be closed.
 --
 -- @since 0.5.65
-withLogger ::
-     (MonadBaseControl IO (Eff e), MonadIO (Eff e), Member B9ConfigReader e) => Eff (LoggerReader ': e) a -> Eff e a
+withLogger
+  :: (MonadBaseControl IO (Eff e), MonadIO (Eff e), Member B9ConfigReader e)
+  => Eff (LoggerReader ': e) a
+  -> Eff e a
 withLogger action = do
-  lf <- _logFile <$> getB9Config
-  effState <-
-    liftBaseWith $ \runInIO ->
-      let fInIO = runInIO . flip runReader action . MkLogger
-       in maybe (fInIO Nothing) (\logf -> SysIO.withFile logf SysIO.AppendMode (fInIO . Just)) lf
+  lf       <- _logFile <$> getB9Config
+  effState <- liftBaseWith $ \runInIO ->
+    let fInIO = runInIO . flip runReader action . MkLogger
+    in  maybe (fInIO Nothing)
+              (\logf -> SysIO.withFile logf SysIO.AppendMode (fInIO . Just))
+              lf
   restoreM effState
 
 -- | Convenience type alias for 'Eff'ects that have a 'B9Config', a 'Logger', 'MonadIO' and 'MonadBaseControl'.
 --
 -- @since 0.5.65
-type CommandIO e = (MonadBaseControl IO (Eff e), MonadIO (Eff e), Member LoggerReader e, Member B9ConfigReader e)
+type CommandIO e
+  = ( MonadBaseControl IO (Eff e)
+  , MonadIO (Eff e)
+  , Member LoggerReader e
+  , Member B9ConfigReader e
+  )
 
 traceL :: CommandIO e => String -> Eff e ()
 traceL = b9Log LogTrace
@@ -77,7 +89,7 @@ errorExitL e = b9Log LogError e >> throwB9Error e
 
 b9Log :: CommandIO e => LogLevel -> String -> Eff e ()
 b9Log level msg = do
-  lv <- getLogVerbosity
+  lv  <- getLogVerbosity
   lfh <- logFileHandle <$> ask
   liftIO $ logImpl lv lfh level msg
 
@@ -96,10 +108,9 @@ formatLogMsg l msg = do
   return $ unlines $ printf "[%s] %s - %s" (printLevel l) time <$> lines msg
 
 printLevel :: LogLevel -> String
-printLevel l =
-  case l of
-    LogNothing -> "NOTHING"
-    LogError -> " ERROR "
-    LogInfo -> " INFO  "
-    LogDebug -> " DEBUG "
-    LogTrace -> " TRACE "
+printLevel l = case l of
+  LogNothing -> "NOTHING"
+  LogError   -> " ERROR "
+  LogInfo    -> " INFO  "
+  LogDebug   -> " DEBUG "
+  LogTrace   -> " TRACE "

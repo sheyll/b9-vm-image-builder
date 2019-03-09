@@ -50,15 +50,15 @@ substVmScript = everywhereM gsubst
   gsubst = mkM substMountPoint `extM` substSharedDir `extM` substScript
 
   substMountPoint NotMounted     = pure NotMounted
-  substMountPoint (MountPoint x) = MountPoint <$> subst x
+  substMountPoint (MountPoint x) = MountPoint <$> substStr x
 
   substSharedDir (SharedDirectory fp mp) =
-    SharedDirectory <$> subst fp <*> pure mp
+    SharedDirectory <$> substStr fp <*> pure mp
   substSharedDir (SharedDirectoryRO fp mp) =
-    SharedDirectoryRO <$> subst fp <*> pure mp
+    SharedDirectoryRO <$> substStr fp <*> pure mp
   substSharedDir s = pure s
 
-  substScript (In  fp s   ) = In <$> subst fp <*> pure s
-  substScript (Run fp args) = Run <$> subst fp <*> mapM subst args
-  substScript (As  fp s   ) = As <$> subst fp <*> pure s
+  substScript (In  fp s   ) = In <$> substStr fp <*> pure s
+  substScript (Run fp args) = Run <$> substStr fp <*> mapM substStr args
+  substScript (As  fp s   ) = As <$> substStr fp <*> pure s
   substScript s             = pure s

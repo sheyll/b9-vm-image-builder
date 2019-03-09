@@ -3,16 +3,16 @@ images.-}
 module B9.DiskImages where
 
 import           B9.QCUtil
-import           GHC.Generics (Generic)
+import           GHC.Generics                   ( Generic )
 import           Control.Parallel.Strategies
 import           Data.Binary
 import           Data.Data
 import           Data.Hashable
 import           Data.Maybe
-import           Data.Semigroup as Sem
+import           Data.Semigroup                as Sem
 import           System.FilePath
 import           Test.QuickCheck
-import qualified Text.PrettyPrint.Boxes as Boxes
+import qualified Text.PrettyPrint.Boxes        as Boxes
 import           Text.Printf
 
 -- * Data types for disk image description, e.g. 'ImageTarget',
@@ -204,8 +204,8 @@ fromSharedImageBuildId (SharedImageBuildId b) = b
 
 -- | Shared images are orderd by name, build date and build id
 instance Ord SharedImage where
-  compare (SharedImage n d b _ _) (SharedImage n' d' b' _ _) =
-    compare n n' Sem.<> compare d d' Sem.<> compare b b'
+    compare (SharedImage n d b _ _) (SharedImage n' d' b' _ _) =
+        compare n n' Sem.<> compare d d' Sem.<> compare b b'
 
 -- * Constroctor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'
@@ -222,25 +222,24 @@ imageImageType (Image _ t _) = t
 -- are treated like they have no ouput files because the output files are manged
 -- by B9.
 getImageDestinationOutputFiles :: ImageTarget -> [FilePath]
-getImageDestinationOutputFiles (ImageTarget d _ _) =
-    case d of
-        LiveInstallerImage liName liPath _ ->
-            let path = liPath </> "machines" </> liName </> "disks" </> "raw"
-            in [path </> "0.raw", path </> "0.size", path </> "VERSION"]
-        LocalFile (Image lfPath _ _) _ -> [lfPath]
-        _ -> []
+getImageDestinationOutputFiles (ImageTarget d _ _) = case d of
+    LiveInstallerImage liName liPath _ ->
+        let path = liPath </> "machines" </> liName </> "disks" </> "raw"
+        in  [path </> "0.raw", path </> "0.size", path </> "VERSION"]
+    LocalFile (Image lfPath _ _) _ -> [lfPath]
+    _                              -> []
 
 -- | Return the name of a shared image, if the 'ImageDestination' is a 'Share'
 --   destination
 imageDestinationSharedImageName :: ImageDestination -> Maybe SharedImageName
 imageDestinationSharedImageName (Share n _ _) = Just (SharedImageName n)
-imageDestinationSharedImageName _ = Nothing
+imageDestinationSharedImageName _             = Nothing
 
 -- | Return the name of a shared source image, if the 'ImageSource' is a 'From'
 --   source
 imageSourceSharedImageName :: ImageSource -> Maybe SharedImageName
 imageSourceSharedImageName (From n _) = Just (SharedImageName n)
-imageSourceSharedImageName _ = Nothing
+imageSourceSharedImageName _          = Nothing
 
 -- | Get the 'ImageDestination' of an 'ImageTarget'
 itImageDestination :: ImageTarget -> ImageDestination
@@ -258,39 +257,38 @@ itImageMountPoint (ImageTarget _ _ m) = m
 -- | Return true if a 'Partition' parameter is actually refering to a partition,
 -- false if it is 'NoPT'
 isPartitioned :: Partition -> Bool
-isPartitioned p
-  | p == NoPT = False
-  | otherwise = True
+isPartitioned p | p == NoPT = False
+                | otherwise = True
 
 -- | Return the 'Partition' index or throw a runtime error if aplied to 'NoPT'
 getPartition :: Partition -> Int
 getPartition (Partition p) = p
-getPartition NoPT = error "No partitions!"
+getPartition NoPT          = error "No partitions!"
 
 -- | Return the file name extension of an image file with a specific image
 -- format.
 imageFileExtension :: ImageType -> String
-imageFileExtension Raw = "raw"
+imageFileExtension Raw   = "raw"
 imageFileExtension QCow2 = "qcow2"
-imageFileExtension Vmdk = "vmdk"
+imageFileExtension Vmdk  = "vmdk"
 
 -- | Change the image file format and also rename the image file name to
 -- have the appropriate file name extension. See 'imageFileExtension' and
 -- 'replaceExtension'
 changeImageFormat :: ImageType -> Image -> Image
 changeImageFormat fmt' (Image img _ fs) = Image img' fmt' fs
-  where img' = replaceExtension img (imageFileExtension fmt')
+    where img' = replaceExtension img (imageFileExtension fmt')
 
 changeImageDirectory :: FilePath -> Image -> Image
 changeImageDirectory dir (Image img fmt fs) = Image img' fmt fs
-  where img' = dir </> takeFileName img
+    where img' = dir </> takeFileName img
 
 -- * Constructors and accessors for 'ImageSource's
 getImageSourceImageType :: ImageSource -> Maybe ImageType
 getImageSourceImageType (EmptyImage _ _ t _) = Just t
-getImageSourceImageType (CopyOnWrite i) = Just $ imageImageType i
-getImageSourceImageType (SourceImage i _ _) = Just $ imageImageType i
-getImageSourceImageType (From _ _) = Nothing
+getImageSourceImageType (CopyOnWrite i     ) = Just $ imageImageType i
+getImageSourceImageType (SourceImage i _ _ ) = Just $ imageImageType i
+getImageSourceImageType (From _ _          ) = Nothing
 
 -- * Constructors and accessors for 'SharedImage's
 
@@ -316,30 +314,30 @@ prettyPrintSharedImages imgs = Boxes.render table
           where
             nameC = col "Name" ((\(SharedImageName n) -> n) . sharedImageName)
             dateC = col "Date" ((\(SharedImageDate n) -> n) . sharedImageDate)
-            idC = col "ID" ((\(SharedImageBuildId n) -> n) . sharedImageBuildId)
-            col title accessor = Boxes.text title Boxes.// Boxes.vcat Boxes.left cells
-              where
-                cells = Boxes.text . accessor <$> imgs
+            idC   = col "ID"
+                        ((\(SharedImageBuildId n) -> n) . sharedImageBuildId)
+            col title accessor =
+                Boxes.text title Boxes.// Boxes.vcat Boxes.left cells
+                where cells = Boxes.text . accessor <$> imgs
 
 -- | Return the disk image of an sharedImage
 sharedImageImage :: SharedImage -> Image
-sharedImageImage (SharedImage (SharedImageName n) _ (SharedImageBuildId bid) sharedImageType sharedImageFileSystem) =
-    Image
-        (n ++ "_" ++ bid <.> imageFileExtension sharedImageType)
-        sharedImageType
-        sharedImageFileSystem
+sharedImageImage (SharedImage (SharedImageName n) _ (SharedImageBuildId bid) sharedImageType sharedImageFileSystem)
+    = Image (n ++ "_" ++ bid <.> imageFileExtension sharedImageType)
+            sharedImageType
+            sharedImageFileSystem
 
 -- | Calculate the path to the text file holding the serialized 'SharedImage'
 -- relative to the directory of shared images in a repository.
 sharedImageFileName :: SharedImage -> FilePath
-sharedImageFileName (SharedImage (SharedImageName n) _ (SharedImageBuildId bid) _ _) =
-    n ++ "_" ++ bid <.> sharedImageFileExtension
+sharedImageFileName (SharedImage (SharedImageName n) _ (SharedImageBuildId bid) _ _)
+    = n ++ "_" ++ bid <.> sharedImageFileExtension
 
 sharedImagesRootDirectory :: FilePath
 sharedImagesRootDirectory = "b9_shared_images"
 
 sharedImageFileExtension :: String
-sharedImageFileExtension  = "b9si"
+sharedImageFileExtension = "b9si"
 
 -- | The internal image type to use as best guess when dealing with a 'From'
 -- value.
@@ -350,11 +348,10 @@ sharedImageDefaultImageType = QCow2
 
 -- | Use a 'QCow2' image with an 'Ext4' file system
 transientCOWImage :: FilePath -> FilePath -> ImageTarget
-transientCOWImage fileName mountPoint =
-    ImageTarget
-        Transient
-        (CopyOnWrite (Image fileName QCow2 Ext4))
-        (MountPoint mountPoint)
+transientCOWImage fileName mountPoint = ImageTarget
+    Transient
+    (CopyOnWrite (Image fileName QCow2 Ext4))
+    (MountPoint mountPoint)
 
 -- | Use a shared image
 transientSharedImage :: SharedImageName -> FilePath -> ImageTarget
@@ -368,128 +365,119 @@ transientLocalImage name mountPoint =
 
 -- | Share a 'QCow2' image with 'Ext4' fs
 shareCOWImage :: FilePath -> SharedImageName -> FilePath -> ImageTarget
-shareCOWImage srcFilename (SharedImageName destName) mountPoint =
-    ImageTarget
-        (Share destName QCow2 KeepSize)
-        (CopyOnWrite (Image srcFilename QCow2 Ext4))
-        (MountPoint mountPoint)
+shareCOWImage srcFilename (SharedImageName destName) mountPoint = ImageTarget
+    (Share destName QCow2 KeepSize)
+    (CopyOnWrite (Image srcFilename QCow2 Ext4))
+    (MountPoint mountPoint)
 
 -- | Share an image based on a shared image
-shareSharedImage :: SharedImageName
-                 -> SharedImageName
-                 -> FilePath
-                 -> ImageTarget
-shareSharedImage (SharedImageName srcName) (SharedImageName destName) mountPoint =
-    ImageTarget
-        (Share destName QCow2 KeepSize)
-        (From srcName KeepSize)
-        (MountPoint mountPoint)
+shareSharedImage
+    :: SharedImageName -> SharedImageName -> FilePath -> ImageTarget
+shareSharedImage (SharedImageName srcName) (SharedImageName destName) mountPoint
+    = ImageTarget (Share destName QCow2 KeepSize)
+                  (From srcName KeepSize)
+                  (MountPoint mountPoint)
 
 -- | Share a 'QCow2' image with 'Ext4' fs
 shareLocalImage :: FilePath -> SharedImageName -> FilePath -> ImageTarget
-shareLocalImage srcName (SharedImageName destName) mountPoint =
-    ImageTarget
-        (Share destName QCow2 KeepSize)
-        (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
-        (MountPoint mountPoint)
+shareLocalImage srcName (SharedImageName destName) mountPoint = ImageTarget
+    (Share destName QCow2 KeepSize)
+    (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
+    (MountPoint mountPoint)
 
 -- | Export a 'QCow2' image with 'Ext4' fs
-cowToliveInstallerImage :: String
-                        -> FilePath
-                        -> FilePath
-                        -> FilePath
-                        -> ImageTarget
-cowToliveInstallerImage srcName destName outDir mountPoint =
-    ImageTarget
-        (LiveInstallerImage destName outDir KeepSize)
-        (CopyOnWrite (Image srcName QCow2 Ext4))
-        (MountPoint mountPoint)
+cowToliveInstallerImage
+    :: String -> FilePath -> FilePath -> FilePath -> ImageTarget
+cowToliveInstallerImage srcName destName outDir mountPoint = ImageTarget
+    (LiveInstallerImage destName outDir KeepSize)
+    (CopyOnWrite (Image srcName QCow2 Ext4))
+    (MountPoint mountPoint)
 
 -- | Export a 'QCow2' image file with 'Ext4' fs as
 --   a local file
 cowToLocalImage :: FilePath -> FilePath -> FilePath -> ImageTarget
-cowToLocalImage srcName destName mountPoint =
-    ImageTarget
-        (LocalFile (Image destName QCow2 Ext4) KeepSize)
-        (CopyOnWrite (Image srcName QCow2 Ext4))
-        (MountPoint mountPoint)
+cowToLocalImage srcName destName mountPoint = ImageTarget
+    (LocalFile (Image destName QCow2 Ext4) KeepSize)
+    (CopyOnWrite (Image srcName QCow2 Ext4))
+    (MountPoint mountPoint)
 
 -- | Export a 'QCow2' image file with 'Ext4' fs as
 --   a local file
 localToLocalImage :: FilePath -> FilePath -> FilePath -> ImageTarget
-localToLocalImage srcName destName mountPoint =
-    ImageTarget
-        (LocalFile (Image destName QCow2 Ext4) KeepSize)
-        (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
-        (MountPoint mountPoint)
+localToLocalImage srcName destName mountPoint = ImageTarget
+    (LocalFile (Image destName QCow2 Ext4) KeepSize)
+    (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
+    (MountPoint mountPoint)
 
 -- | Create a local image file from the contents of the first partition
 --   of a local 'QCow2' image.
 partition1ToLocalImage :: FilePath -> FilePath -> FilePath -> ImageTarget
-partition1ToLocalImage srcName destName mountPoint =
-    ImageTarget
-        (LocalFile (Image destName QCow2 Ext4) KeepSize)
-        (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
-        (MountPoint mountPoint)
+partition1ToLocalImage srcName destName mountPoint = ImageTarget
+    (LocalFile (Image destName QCow2 Ext4) KeepSize)
+    (SourceImage (Image srcName QCow2 Ext4) NoPT KeepSize)
+    (MountPoint mountPoint)
 
 -- * 'ImageTarget' Transformations
 
 -- | Split any image target into two image targets, one for creating an intermediate shared image and one
 -- from the intermediate shared image to the output image.
-splitToIntermediateSharedImage :: ImageTarget
-                               -> SharedImageName
-                               -> (ImageTarget, ImageTarget)
-splitToIntermediateSharedImage (ImageTarget dst src mnt) (SharedImageName intermediateName) =
-    (imgTargetShared, imgTargetExport)
+splitToIntermediateSharedImage
+    :: ImageTarget -> SharedImageName -> (ImageTarget, ImageTarget)
+splitToIntermediateSharedImage (ImageTarget dst src mnt) (SharedImageName intermediateName)
+    = (imgTargetShared, imgTargetExport)
   where
     imgTargetShared = ImageTarget intermediateTo src mnt
     imgTargetExport = ImageTarget dst intermediateFrom mnt
-    intermediateTo =
-        Share
-            intermediateName
-            (fromMaybe
-                 sharedImageDefaultImageType
-                 (getImageSourceImageType src))
-            KeepSize
+    intermediateTo  = Share
+        intermediateName
+        (fromMaybe sharedImageDefaultImageType (getImageSourceImageType src))
+        KeepSize
     intermediateFrom = From intermediateName KeepSize
 
 -- * 'Arbitrary' instances for quickcheck
 
 instance Arbitrary ImageTarget where
     arbitrary =
-        ImageTarget <$> smaller arbitrary <*> smaller arbitrary <*>
-        smaller arbitrary
+        ImageTarget
+            <$> smaller arbitrary
+            <*> smaller arbitrary
+            <*> smaller arbitrary
 
 instance Arbitrary ImageSource where
-    arbitrary =
-        oneof
-            [ EmptyImage "img-label" <$> smaller arbitrary <*>
-              smaller arbitrary <*>
-              smaller arbitrary
-            , CopyOnWrite <$> smaller arbitrary
-            , SourceImage <$> smaller arbitrary <*> smaller arbitrary <*>
-              smaller arbitrary
-            , From <$> arbitrarySharedImageName <*> smaller arbitrary]
+    arbitrary = oneof
+        [ EmptyImage "img-label"
+        <$> smaller arbitrary
+        <*> smaller arbitrary
+        <*> smaller arbitrary
+        , CopyOnWrite <$> smaller arbitrary
+        , SourceImage
+        <$> smaller arbitrary
+        <*> smaller arbitrary
+        <*> smaller arbitrary
+        , From <$> arbitrarySharedImageName <*> smaller arbitrary
+        ]
 
 instance Arbitrary ImageDestination where
-    arbitrary =
-        oneof
-            [ Share <$> arbitrarySharedImageName <*> smaller arbitrary <*>
-              smaller arbitrary
-            , LiveInstallerImage "live-installer" "output-path" <$>
-              smaller arbitrary
-            , pure Transient]
+    arbitrary = oneof
+        [ Share
+        <$> arbitrarySharedImageName
+        <*> smaller arbitrary
+        <*> smaller arbitrary
+        , LiveInstallerImage "live-installer" "output-path"
+            <$> smaller arbitrary
+        , pure Transient
+        ]
 
 instance Arbitrary MountPoint where
     arbitrary = elements [MountPoint "/mnt", NotMounted]
 
 instance Arbitrary ImageResize where
-    arbitrary =
-        oneof
-            [ ResizeImage <$> smaller arbitrary
-            , Resize <$> smaller arbitrary
-            , pure ShrinkToMinimum
-            , pure KeepSize]
+    arbitrary = oneof
+        [ ResizeImage <$> smaller arbitrary
+        , Resize <$> smaller arbitrary
+        , pure ShrinkToMinimum
+        , pure KeepSize
+        ]
 
 instance Arbitrary Partition where
     arbitrary = oneof [Partition <$> elements [0, 1, 2], pure NoPT]
@@ -515,4 +503,4 @@ instance Arbitrary SharedImageName where
 
 arbitrarySharedImageName :: Gen String
 arbitrarySharedImageName =
-    elements [printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3]]
+    elements [ printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3] ]

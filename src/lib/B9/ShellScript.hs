@@ -1,26 +1,29 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-| Definition of 'Script' and functions to convert 'Script's to bash
     scripts. -}
-module B9.ShellScript ( writeSh
-                      , renderScript
-                      , emptyScript
-                      , CmdVerbosity (..)
-                      , Cwd (..)
-                      , User (..)
-                      , Script (..)
-                      ) where
+module B9.ShellScript
+    ( writeSh
+    , renderScript
+    , emptyScript
+    , CmdVerbosity(..)
+    , Cwd(..)
+    , User(..)
+    , Script(..)
+    )
+where
 
-import Data.Data
-import Data.Semigroup as Sem
-import Control.Parallel.Strategies
-import Data.Binary
-import Data.Hashable
-import GHC.Generics (Generic)
-import Control.Monad.Reader
-import Data.List ( intercalate )
-import System.Directory ( getPermissions
-                        , setPermissions
-                        , setOwnerExecutable )
+import           Data.Data
+import           Data.Semigroup                as Sem
+import           Control.Parallel.Strategies
+import           Data.Binary
+import           Data.Hashable
+import           GHC.Generics                   ( Generic )
+import           Control.Monad.Reader
+import           Data.List                      ( intercalate )
+import           System.Directory               ( getPermissions
+                                                , setPermissions
+                                                , setOwnerExecutable
+                                                )
 
 data Script
     = In FilePath
@@ -42,15 +45,15 @@ instance Binary Script
 instance NFData Script
 
 instance Sem.Semigroup Script where
-    NoOP <> s = s
-    s <> NoOP = s
+    NoOP       <> s           = s
+    s          <> NoOP        = s
     (Begin ss) <> (Begin ss') = Begin (ss ++ ss')
-    (Begin ss) <> s' = Begin (ss ++ [s'])
-    s <> (Begin ss') = Begin (s : ss')
-    s <> s' = Begin [s, s']
+    (Begin ss) <> s'          = Begin (ss ++ [s'])
+    s          <> (Begin ss') = Begin (s : ss')
+    s          <> s'          = Begin [s, s']
 
 instance Monoid Script where
-    mempty = NoOP
+    mempty  = NoOP
     mappend = (Sem.<>)
 
 data Cmd =
@@ -121,36 +124,15 @@ toCmds :: Script -> [Cmd]
 toCmds s = runReader (toLLC s) (Ctx NoCwd NoUser False Debug)
   where
     toLLC :: Script -> Reader Ctx [Cmd]
-    toLLC NoOP = return []
-    toLLC (In d cs) =
-        local
-            (\ctx ->
-                  ctx
-                  { ctxCwd = Cwd d
-                  })
-            (toLLC (Begin cs))
+    toLLC NoOP      = return []
+    toLLC (In d cs) = local (\ctx -> ctx { ctxCwd = Cwd d }) (toLLC (Begin cs))
     toLLC (As u cs) =
-        local
-            (\ctx ->
-                  ctx
-                  { ctxUser = User u
-                  })
-            (toLLC (Begin cs))
+        local (\ctx -> ctx { ctxUser = User u }) (toLLC (Begin cs))
     toLLC (IgnoreErrors b cs) =
-        local
-            (\ctx ->
-                  ctx
-                  { ctxIgnoreErrors = b
-                  })
-            (toLLC (Begin cs))
+        local (\ctx -> ctx { ctxIgnoreErrors = b }) (toLLC (Begin cs))
     toLLC (Verbosity v cs) =
-        local
-            (\ctx ->
-                  ctx
-                  { ctxVerbosity = v
-                  })
-            (toLLC (Begin cs))
-    toLLC (Begin cs) = concat <$> mapM toLLC cs
+        local (\ctx -> ctx { ctxVerbosity = v }) (toLLC (Begin cs))
+    toLLC (Begin cs    ) = concat <$> mapM toLLC cs
     toLLC (Run cmd args) = do
         c <- reader ctxCwd
         u <- reader ctxUser
@@ -169,31 +151,31 @@ bashHeader = ["#!/bin/bash", "set -e"]
 
 cmdToBash :: Cmd -> String
 cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =
-    intercalate "\n" $
-    disableErrorChecking ++
-    pushd cwdQ ++ execCmd ++ popd cwdQ ++ reenableErrorChecking
+    intercalate "\n"
+        $  disableErrorChecking
+        ++ pushd cwdQ
+        ++ execCmd
+        ++ popd cwdQ
+        ++ reenableErrorChecking
   where
     execCmd = [unwords (runuser ++ [cmd] ++ args ++ redirectOutput)]
       where
-        runuser =
-            case user of
-                NoUser -> []
-                User "root" -> []
-                User u -> ["runuser", "-p", "-u", u, "--"]
-    pushd NoCwd = []
+        runuser = case user of
+            NoUser      -> []
+            User "root" -> []
+            User u      -> ["runuser", "-p", "-u", u, "--"]
+    pushd NoCwd         = []
     pushd (Cwd cwdPath) = [unwords (["pushd", cwdPath] ++ redirectOutput)]
     popd NoCwd = []
     popd (Cwd cwdPath) =
         [unwords (["popd"] ++ redirectOutput ++ ["#", cwdPath])]
-    disableErrorChecking = ["set +e" | ignoreErrors]
-    reenableErrorChecking = ["set -e" | ignoreErrors]
-    cwdQ =
-        case cwd of
-            NoCwd -> NoCwd
-            Cwd d -> Cwd ("'" ++ d ++ "'")
-    redirectOutput =
-        case verbosity of
-            Debug -> []
-            Verbose -> []
-            OnlyStdErr -> [">", "/dev/null"]
-            Quiet -> ["&>", "/dev/null"]
+    disableErrorChecking  = [ "set +e" | ignoreErrors ]
+    reenableErrorChecking = [ "set -e" | ignoreErrors ]
+    cwdQ                  = case cwd of
+        NoCwd -> NoCwd
+        Cwd d -> Cwd ("'" ++ d ++ "'")
+    redirectOutput = case verbosity of
+        Debug      -> []
+        Verbose    -> []
+        OnlyStdErr -> [">", "/dev/null"]
+        Quiet      -> ["&>", "/dev/null"]

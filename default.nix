@@ -2,7 +2,7 @@
  makeWrapper,
  cdrkit, libvirt, sudo,
  openssh, qemu, rsync,
- e2fsprogs, xorriso, bash,
+ e2fsprogs, xorriso, bash, curl,
  coreutils, dosfstools, mtools}:
 
 let
@@ -22,7 +22,7 @@ let
   nonHaskellBuildInputs =
     [cdrkit libvirt sudo
      openssh qemu rsync
-     e2fsprogs xorriso bash
+     e2fsprogs xorriso bash curl
      coreutils dosfstools mtools];
 
 in

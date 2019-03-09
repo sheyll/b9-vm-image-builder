@@ -3,15 +3,10 @@ Some QuickCheck utility functions.
 -}
 module B9.QCUtil where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
-import Control.Monad
-import Test.QuickCheck
+import           Control.Monad
+import           Test.QuickCheck
 
-arbitraryEnv
-    :: Arbitrary a
-    => Gen [(String, a)]
+arbitraryEnv :: Arbitrary a => Gen [(String, a)]
 arbitraryEnv = listOf ((,) <$> listOf1 (choose ('a', 'z')) <*> arbitrary)
 
 halfSize :: Gen a -> Gen a
@@ -22,23 +17,23 @@ smaller g = sized (flip resize g . max 0 . flip (-) 1)
 
 arbitraryFilePath :: Gen FilePath
 arbitraryFilePath = do
-    path <-
-        join <$>
-        listOf
-            (elements
-                 [ "/"
-                 , "../"
-                 , "./"
-                 , "etc/"
-                 , "opt/"
-                 , "user/"
-                 , "var/"
-                 , "tmp/"
-                 , "doc/"
-                 , "share/"
-                 , "conf.d/"])
-    prefix <- elements ["foo_", "", "alt_", "ssh-", ""]
-    body <- elements ["www", "passwd", "cert", "opnsfe", "runtime"]
+    path <- join <$> listOf
+        (elements
+            [ "/"
+            , "../"
+            , "./"
+            , "etc/"
+            , "opt/"
+            , "user/"
+            , "var/"
+            , "tmp/"
+            , "doc/"
+            , "share/"
+            , "conf.d/"
+            ]
+        )
+    prefix    <- elements ["foo_", "", "alt_", "ssh-", ""]
+    body      <- elements ["www", "passwd", "cert", "opnsfe", "runtime"]
     extension <- elements [".txt", ".png", ".ps", ".erl", ""]
     return (path ++ prefix ++ body ++ extension)
 

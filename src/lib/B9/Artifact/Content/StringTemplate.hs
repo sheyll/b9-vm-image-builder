@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-| Utility functions based on 'Data.Text.Template' to offer @ $var @ variable
     expansion in string throughout a B9 artifact.
@@ -9,6 +10,7 @@
     -}
 module B9.Artifact.Content.StringTemplate
   ( subst
+  , substStr
   , substFile
   , substPath
   , readTemplateFile
@@ -27,16 +29,16 @@ import           Control.Eff                   as Eff
 import           Control.Monad.Trans.Identity   ( )
 import           Control.Parallel.Strategies
 import           Data.Binary
-import qualified Data.ByteString               as Strict
-import qualified Data.ByteString.Lazy          as Lazy
 import           Data.Data
 import           Data.Hashable
-import qualified Data.Text.Lazy                as LazyT
-import qualified Data.Text                     as StrictT
-import qualified Data.Text.Encoding            as StrictE
-import qualified Data.Text.Lazy.Encoding       as LazyE
+import           Data.Text                      ( Text )
+import qualified Data.Text.Lazy                as LazyText
+                                                ( toStrict )
+import qualified Data.Text                     as Text
+import qualified Data.Text.IO                  as Text
 import           Data.Text.Template             ( renderA
                                                 , templateSafe
+                                                , Template
                                                 )
 import           GHC.Generics                   ( Generic )
 import           System.IO.B9Extras
@@ -70,7 +72,7 @@ instance NFData SourceFileConversion
 readTemplateFile
   :: (MonadIO (Eff e), '[ExcB9, EnvironmentReader] <:: e)
   => SourceFile
-  -> Eff e Lazy.ByteString
+  -> Eff e Text
 readTemplateFile (Source conv f') = do
   let
     onErrorFileName e = error
@@ -80,8 +82,8 @@ readTemplateFile (Source conv f') = do
         f'
         (displayException e)
       )
-  f <- subst f' `catchB9Error` onErrorFileName
-  c <- liftIO (Lazy.readFile f)
+  f <- subst (Text.pack f') `catchB9Error` onErrorFileName
+  c <- liftIO (Text.readFile (Text.unpack f))
   case conv of
     NoConversion -> return c
     ExpandVariables ->
@@ -91,39 +93,34 @@ readTemplateFile (Source conv f') = do
                         f
                         (displayException e)
                 )
-      in  substEB c `catchB9Error` onErrorFile
+      in  subst c `catchB9Error` onErrorFile
 
--- String template substitution via dollar
-subst :: (Member ExcB9 e, Member EnvironmentReader e) => String -> Eff e String
-subst templateStr = LazyT.unpack . LazyE.decodeUtf8 <$> substEB
-  (LazyE.encodeUtf8 (LazyT.pack templateStr))
+-- | 'Text' template substitution.
+subst :: (Member ExcB9 e, Member EnvironmentReader e) => Text -> Eff e Text
+subst templateStr = do
+  t <- templateSafeExcB9 templateStr
+  LazyText.toStrict <$> renderA t lookupOrThrow
 
--- String template substitution via dollar
-substEB
-  :: (Member ExcB9 e, Member EnvironmentReader e)
-  => Lazy.ByteString
-  -> Eff e Lazy.ByteString
-substEB templateStr = do
-  t <- template'
-  LazyE.encodeUtf8 <$> renderA t templateEnvLookup
- where
-  templateEnvLookup
-    :: (Member EnvironmentReader e, Member ExcB9 e)
-    => StrictT.Text
-    -> Eff e StrictT.Text
-  templateEnvLookup x = LazyT.toStrict <$> lookupOrThrow (LazyT.fromStrict x)
+-- | 'String' template substitution
+substStr
+  :: (Member ExcB9 e, Member EnvironmentReader e) => String -> Eff e String
+substStr templateStr = do
+  t <- templateSafeExcB9 (Text.pack templateStr)
+  Text.unpack . LazyText.toStrict <$> renderA t lookupOrThrow
 
-  template' =
-    case templateSafe (LazyT.toStrict (LazyE.decodeUtf8 templateStr)) of
-      Left (row, col) -> throwB9Error
-        (  "Invalid template, error at row: "
-        ++ show row
-        ++ ", col: "
-        ++ show col
-        ++ " in: \""
-        ++ show templateStr
-        )
-      Right t -> return t
+
+templateSafeExcB9 :: Member ExcB9 e => Text -> Eff e Template
+templateSafeExcB9 templateStr = case templateSafe templateStr of
+  Left (row, col) -> throwB9Error
+    (  "Invalid template, error at row: "
+    ++ show row
+    ++ ", col: "
+    ++ show col
+    ++ " in: \""
+    ++ show templateStr
+    )
+  Right t -> return t
+
 
 substFile
   :: (Member EnvironmentReader e, Member ExcB9 e, MonadIO (Eff e))
@@ -131,14 +128,12 @@ substFile
   -> FilePath
   -> Eff e ()
 substFile src dest = do
-  templateBs <- liftIO (Strict.readFile src)
-  let t = templateSafe (StrictE.decodeUtf8 templateBs)
+  templatedText <- liftIO (Text.readFile src)
+  let t = templateSafe templatedText
   case t of
     Left (r, c) ->
-      let badLine =
-              unlines
-                (take r (lines (StrictT.unpack (StrictE.decodeUtf8 templateBs))))
-          colMarker = replicate (c - 1) '-' ++ "^"
+      let badLine   = Text.unlines (take r (Text.lines templatedText))
+          colMarker = Text.replicate (c - 1) "-" <> "^"
       in  throwB9Error
             (printf "Template error in file '%s' line %i:\n\n%s\n%s\n"
                     src
@@ -147,18 +142,17 @@ substFile src dest = do
                     colMarker
             )
     Right template' -> do
-      out <- LazyE.encodeUtf8
-        <$> renderA template' (templateEnvLookupSrcFile src)
-      liftIO (Lazy.writeFile dest out)
+      out <- renderA template' (templateEnvLookupSrcFile src)
+      liftIO (Text.writeFile dest (LazyText.toStrict out))
 
 templateEnvLookupSrcFile
   :: (Member EnvironmentReader e, Member ExcB9 e, MonadIO (Eff e))
   => FilePath
-  -> StrictT.Text
-  -> Eff e StrictT.Text
+  -> Text
+  -> Eff e Text
 templateEnvLookupSrcFile src x = do
-  r <- catchB9ErrorAsEither (lookupOrThrow (LazyT.fromStrict x))
-  either err (pure . LazyT.toStrict) r
+  r <- catchB9ErrorAsEither (lookupOrThrow x)
+  either err pure r
   where err e = throwB9Error (show e ++ "\nIn file: \'" ++ src ++ "\'\n")
 
 
@@ -167,10 +161,10 @@ substPath
   => SystemPath
   -> Eff e SystemPath
 substPath src = case src of
-  Path        p -> Path <$> subst p
-  InHomeDir   p -> InHomeDir <$> subst p
-  InB9UserDir p -> InB9UserDir <$> subst p
-  InTempDir   p -> InTempDir <$> subst p
+  Path        p -> Path <$> substStr p
+  InHomeDir   p -> InHomeDir <$> substStr p
+  InB9UserDir p -> InB9UserDir <$> substStr p
+  InTempDir   p -> InTempDir <$> substStr p
 
 instance Arbitrary SourceFile where
   arbitrary =
@@ -190,8 +184,8 @@ withSubstitutedStringBindings
   -> Eff e s
 withSubstitutedStringBindings bs nested = do
   let extend env (k, v) = localEnvironment (const env) $ do
-        kv <- (k, ) <$> subst v
-        addStringBinding kv env
+        kv <- (Text.pack k, ) <$> subst (Text.pack v)
+        addBinding kv env
   env    <- askEnvironment
   envExt <- foldM extend env bs
   localEnvironment (const envExt) nested

@@ -23,15 +23,13 @@ Another example is the OTP/Erlang sys.config for configuring OTP/Erlang releases
 module B9.Artifact.Content.AST
   ( FromAST(..)
   , AST(..)
-  , decodeOrFail'
+  , parseFromTextWithErrorMessage
   )
 where
 
 import           Control.Eff
 import           Control.Parallel.Strategies
 import           Data.Binary                    ( Binary )
-import qualified Data.Binary                   as Binary
-import qualified Data.ByteString.Lazy.Char8    as Lazy
 import           Data.Data
 import           Data.Hashable
 import           GHC.Generics                   ( Generic )
@@ -40,18 +38,8 @@ import           B9.B9Monad
 import           B9.Artifact.Content.StringTemplate
 import           B9.Artifact.Content
 import           B9.QCUtil
+import           B9.Text
 
--- | Parse a bytestring into an 'a', and return @Left errorMessage@ or @Right a@
--- This is like 'Binary.decodeOrFail' exception that it allows to add and extra
--- error message
-decodeOrFail'
-  :: Binary a
-  => String -- ^ An arbitrary string for error messages
-  -> Lazy.ByteString
-  -> Either String a
-decodeOrFail' errorMessage b = case Binary.decodeOrFail b of
-  Left  (_, _, e) -> Left (unwords [errorMessage, e])
-  Right (_, _, a) -> Right a
 
 -- | Describe how to create structured content that has a tree-like syntactic
 -- structure, e.g. yaml, JSON and erlang-proplists. The first parameter defines
@@ -95,7 +83,7 @@ instance (NFData c, NFData a) => NFData (AST c a)
 -- | Types of values that describe content, that can be created from an 'AST'.
 class FromAST a  where
     fromAST
-        :: (IsB9 e, ToContentGenerator c Lazy.ByteString)
+        :: (IsB9 e, ToContentGenerator c)
         => AST c a -> Eff e a
 
 instance (Arbitrary c, Arbitrary a) => Arbitrary (AST c a) where

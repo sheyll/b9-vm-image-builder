@@ -80,15 +80,15 @@ substImageTarget = everywhereM gsubst
       `extM` substImageSource
       `extM` substDiskTarget
   substMountPoint NotMounted     = pure NotMounted
-  substMountPoint (MountPoint x) = MountPoint <$> subst x
-  substImage (Image fp t fs) = Image <$> subst fp <*> pure t <*> pure fs
-  substImageSource (From n s) = From <$> subst n <*> pure s
+  substMountPoint (MountPoint x) = MountPoint <$> substStr x
+  substImage (Image fp t fs) = Image <$> substStr fp <*> pure t <*> pure fs
+  substImageSource (From n s) = From <$> substStr n <*> pure s
   substImageSource (EmptyImage l f t s) =
-    EmptyImage <$> subst l <*> pure f <*> pure t <*> pure s
+    EmptyImage <$> substStr l <*> pure f <*> pure t <*> pure s
   substImageSource s = pure s
-  substDiskTarget (Share n t s) = Share <$> subst n <*> pure t <*> pure s
+  substDiskTarget (Share n t s) = Share <$> substStr n <*> pure t <*> pure s
   substDiskTarget (LiveInstallerImage name outDir resize) =
-    LiveInstallerImage <$> subst name <*> subst outDir <*> pure resize
+    LiveInstallerImage <$> substStr name <*> substStr outDir <*> pure resize
   substDiskTarget s = pure s
 
 -- | Resolve an ImageSource to an 'Image'. The ImageSource might
@@ -174,7 +174,8 @@ materializeImageSource src dest = case src of
       materializeImageSource (SourceImage sharedImg NoPT resize) dest
     )
 
-createImageFromImage :: IsB9 e => Image -> Partition -> ImageResize -> Image -> Eff e ()
+createImageFromImage
+  :: IsB9 e => Image -> Partition -> ImageResize -> Image -> Eff e ()
 createImageFromImage src part size out = do
   importImage src out
   extractPartition part out
@@ -237,7 +238,13 @@ createDestinationImage buildImg dest = case dest of
   Transient -> return ()
 
 createEmptyImage
-  :: IsB9 e => String -> FileSystem -> ImageType -> ImageSize -> Image -> Eff e ()
+  :: IsB9 e
+  => String
+  -> FileSystem
+  -> ImageType
+  -> ImageSize
+  -> Image
+  -> Eff e ()
 createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
   | fsType /= fsType' = error
     (printf
@@ -389,7 +396,8 @@ shareImage buildImg sname@(SharedImageName name) = do
 
 -- | Return a 'SharedImage' with the current build data and build id from the
 -- name and disk image.
-getSharedImageFromImageInfo :: IsB9 e =>  SharedImageName -> Image -> Eff e SharedImage
+getSharedImageFromImageInfo
+  :: IsB9 e => SharedImageName -> Image -> Eff e SharedImage
 getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
   buildId <- getBuildId
   date    <- getBuildDate
@@ -404,7 +412,8 @@ getSharedImageFromImageInfo name (Image _ imgType imgFS) = do
 -- | Convert the disk image and serialize the base image data structure.
 -- If the 'maxLocalSharedImageRevisions' configuration is set to @Just n@
 -- also delete all but the @n - 1@ newest images from the local cache.
-createSharedImageInCache :: IsB9 e => Image -> SharedImageName -> Eff e SharedImage
+createSharedImageInCache
+  :: IsB9 e => Image -> SharedImageName -> Eff e SharedImage
 createSharedImageInCache img sname@(SharedImageName name) = do
   dbgL (printf "CREATING SHARED IMAGE: '%s' '%s'" (ppShow img) name)
   sharedImg <- getSharedImageFromImageInfo sname img
@@ -430,7 +439,7 @@ pushSharedImageLatestVersion name@(SharedImageName imgName) =
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo :: IsB9 e => SharedImage -> Eff e ()
 pushToSelectedRepo i = do
-  c <- getSharedImagesCacheDir
+  c                      <- getSharedImagesCacheDir
   MkSelectedRemoteRepo r <- getSelectedRemoteRepo
   when (isJust r) $ do
     let (Image imgFile' _imgType _imgFS) = sharedImageImage i
@@ -499,7 +508,8 @@ getLatestImageByName name = do
   return image
 
 -- | Return the latest version of a shared image named 'name' from the local cache.
-getLatestSharedImageByNameFromCache :: IsB9 e => SharedImageName -> Eff e (Maybe SharedImage)
+getLatestSharedImageByNameFromCache
+  :: IsB9 e => SharedImageName -> Eff e (Maybe SharedImage)
 getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
   imgs <- lookupSharedImages (== Cache) ((== name) . sharedImageName)
   case reverse imgs of
@@ -533,7 +543,8 @@ getSharedImages = do
 -- | Find shared images and the associated repos from two predicates. The result
 -- is the concatenated result of the sorted shared images satisfying 'imgPred'.
 lookupSharedImages
-  ::IsB9 e =>  (Repository -> Bool)
+  :: IsB9 e
+  => (Repository -> Bool)
   -> (SharedImage -> Bool)
   -> Eff e [(Repository, SharedImage)]
 lookupSharedImages repoPred imgPred = do
@@ -545,9 +556,9 @@ lookupSharedImages repoPred imgPred = do
   return (mconcat (pure <$> sorted))
 
 -- | Return either all remote repos or just the single selected repo.
-getSelectedRepos ::IsB9 e =>  Eff e [RemoteRepo]
+getSelectedRepos :: IsB9 e => Eff e [RemoteRepo]
 getSelectedRepos = do
-  allRepos     <- getRemoteRepos
+  allRepos                          <- getRemoteRepos
   MkSelectedRemoteRepo selectedRepo <- getSelectedRemoteRepo
   let repos = maybe allRepos return selectedRepo -- 'Maybe' a repo
   return repos

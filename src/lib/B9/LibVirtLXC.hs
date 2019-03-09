@@ -19,7 +19,9 @@ import           B9.ExecEnv
 import           B9.ShellScript
 import           Control.Eff
 import           Control.Lens                   ( view )
-import           Control.Monad.IO.Class         ( MonadIO, liftIO )
+import           Control.Monad.IO.Class         ( MonadIO
+                                                , liftIO
+                                                )
 import           Data.Char                      ( toLower )
 import           System.Directory
 import           System.FilePath
@@ -54,9 +56,10 @@ runInEnvironment env scriptIn = if emptyScript scriptIn
       scriptDirHost  = buildDir </> "init-script"
       scriptDirGuest = "/" ++ buildId
       domainFile     = buildBaseDir </> uuid' <.> domainConfig
-      mkDomain = createDomain cfg env buildId uuid' scriptDirHost scriptDirGuest
-      uuid'          = printf "%U" uuid
-      setupEnv       = Begin
+      mkDomain =
+        createDomain cfg env buildId uuid' scriptDirHost scriptDirGuest
+      uuid'    = printf "%U" uuid
+      setupEnv = Begin
         [ Run "export" ["HOME=/root"]
         , Run "export" ["USER=root"]
         , Run "source" ["/etc/profile"]
@@ -81,8 +84,8 @@ runInEnvironment env scriptIn = if emptyScript scriptIn
   virshCommand :: LibVirtLXCConfig -> String
   virshCommand cfg = printf "%svirsh -c %s" useSudo' virshURI'
    where
-    useSudo'   = if useSudo cfg then "sudo " else ""
-    virshURI'  = virshURI cfg
+    useSudo'  = if useSudo cfg then "sudo " else ""
+    virshURI' = virshURI cfg
 
 data Context =
   Context FilePath
@@ -106,44 +109,44 @@ createDomain
   -> FilePath
   -> m String
 createDomain cfg e buildId uuid scriptDirHost scriptDirGuest = do
- emulatorPath <- getEmulatorPath cfg
- pure
-  (   "<domain type='lxc'>\n  <name>"
-  ++  buildId
-  ++  "</name>\n  <uuid>"
-  ++  uuid
-  ++  "</uuid>\n  <memory unit='"
-  ++  memoryUnit cfg e
-  ++  "'>"
-  ++  memoryAmount cfg e
-  ++  "</memory>\n  <currentMemory unit='"
-  ++  memoryUnit cfg e
-  ++  "'>"
-  ++  memoryAmount cfg e
-  ++  "</currentMemory>\n  <vcpu placement='static'>"
-  ++  cpuCountStr e
-  ++  "</vcpu>\n  <features>\n   <capabilities policy='default'>\n     "
-  ++  renderGuestCapabilityEntries cfg
-  ++  "\n   </capabilities>\n  </features>\n  <os>\n    <type arch='"
-  ++  osArch e
-  ++  "'>exe</type>\n    <init>"
-  ++  scriptDirGuest
-  </> initScript
-  ++ "</init>\n  </os>\n  <clock offset='utc'/>\n  <on_poweroff>destroy</on_poweroff>\n  <on_reboot>restart</on_reboot>\n  <on_crash>destroy</on_crash>\n  <devices>\n    <emulator>"
-  ++  emulatorPath
-  ++  "</emulator>\n"
-  ++  unlines
-        (  libVirtNetwork (_networkId cfg)
-        ++ (fsImage <$> envImageMounts e)
-        ++ (fsSharedDir <$> envSharedDirectories e)
-        )
-  ++  "\n"
-  ++  "    <filesystem type='mount'>\n      <source dir='"
-  ++  scriptDirHost
-  ++  "'/>\n      <target dir='"
-  ++  scriptDirGuest
-  ++ "'/>\n    </filesystem>\n    <console>\n      <target type='lxc' port='0'/>\n    </console>\n  </devices>\n</domain>\n"
-  )
+  emulatorPath <- getEmulatorPath cfg
+  pure
+    (   "<domain type='lxc'>\n  <name>"
+    ++  buildId
+    ++  "</name>\n  <uuid>"
+    ++  uuid
+    ++  "</uuid>\n  <memory unit='"
+    ++  memoryUnit cfg e
+    ++  "'>"
+    ++  memoryAmount cfg e
+    ++  "</memory>\n  <currentMemory unit='"
+    ++  memoryUnit cfg e
+    ++  "'>"
+    ++  memoryAmount cfg e
+    ++  "</currentMemory>\n  <vcpu placement='static'>"
+    ++  cpuCountStr e
+    ++  "</vcpu>\n  <features>\n   <capabilities policy='default'>\n     "
+    ++  renderGuestCapabilityEntries cfg
+    ++  "\n   </capabilities>\n  </features>\n  <os>\n    <type arch='"
+    ++  osArch e
+    ++  "'>exe</type>\n    <init>"
+    ++  scriptDirGuest
+    </> initScript
+    ++ "</init>\n  </os>\n  <clock offset='utc'/>\n  <on_poweroff>destroy</on_poweroff>\n  <on_reboot>restart</on_reboot>\n  <on_crash>destroy</on_crash>\n  <devices>\n    <emulator>"
+    ++  emulatorPath
+    ++  "</emulator>\n"
+    ++  unlines
+          (  libVirtNetwork (_networkId cfg)
+          ++ (fsImage <$> envImageMounts e)
+          ++ (fsSharedDir <$> envSharedDirectories e)
+          )
+    ++  "\n"
+    ++  "    <filesystem type='mount'>\n      <source dir='"
+    ++  scriptDirHost
+    ++  "'/>\n      <target dir='"
+    ++  scriptDirGuest
+    ++ "'/>\n    </filesystem>\n    <console>\n      <target type='lxc' port='0'/>\n    </console>\n  </devices>\n</domain>\n"
+    )
 
 
 renderGuestCapabilityEntries :: LibVirtLXCConfig -> String
