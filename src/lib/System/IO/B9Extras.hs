@@ -1,6 +1,7 @@
 -- | Some utilities to deal with IO in B9.
 module System.IO.B9Extras
   ( SystemPath(..)
+  , overSystemPath
   , resolve
   , ensureDir
   , getDirectoryFiles
@@ -29,15 +30,25 @@ import           Text.Show.Pretty               ( ppShow )
 -- * Relative Paths
 
 -- | A data type encapsulating different kinds of relative or absolute paths.
-data SystemPath = Path FilePath  -- ^ A path that will just be passed through
-                | InHomeDir FilePath -- ^ A OS specific path relative to
+data SystemPath = Path        FilePath  -- ^ A path that will just be passed through
+                | InHomeDir   FilePath -- ^ A OS specific path relative to
                                       -- the home directory of a user.
                 | InB9UserDir FilePath -- ^ A path relative to the @b9@ sub of
                                        -- the users application configuration
                                        -- directory 'getAppUserDataDirectory'
-                | InTempDir FilePath -- ^ A path relative to the systems
+                | InTempDir   FilePath -- ^ A path relative to the systems
                                      -- temporary directory.
   deriving (Eq, Read, Show, Typeable, Data)
+
+-- | Transform a 'SystemPath'
+overSystemPath :: (FilePath -> FilePath) -> SystemPath -> SystemPath
+overSystemPath f sp =
+  case sp of
+   Path p -> Path (f p)
+   InHomeDir p -> InHomeDir (f p)
+   InB9UserDir p -> InB9UserDir (f p)
+   InTempDir p -> InTempDir (f p)
+
 
 -- | Convert a 'SystemPath' to a 'FilePath'.
 resolve :: MonadIO m => SystemPath -> m FilePath

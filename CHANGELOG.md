@@ -1,5 +1,37 @@
 # Changelog for B9
 
+## 0.5.68
+
+* Allow version specific config file resolution
+
+  B9 changes the config file format from time to time. To enable
+  simultaneous use of different B9 versions with conflicting config file formats
+  the user may provide version specific default config files, and B9 will
+  prefer the file matching its own version most closely.
+
+  When loading its config file, B9 will now look for, and prefer
+  config files suffixed with the longest matching version.
+
+  For example: If B9 has version 0.5.68 these config files will be tried:
+
+  * ~/.b9/b9.conf.0.5.68
+  * ~/.b9/b9.conf.0.5
+  * ~/.b9/b9.conf.0
+  * ~/.b9/b9.conf
+
+  If custom config file path are passed to B9 they will be tried first, and
+  also with the version appended.
+  For example, when runing `b9c -c other-config-path list` these paths would be tried:
+
+  * other-config-path.0.5.68
+  * other-config-path.0.5
+  * other-config-path.0
+  * other-config-path
+  * /home/sven/.b9/b9.conf.0.5.68
+  * /home/sven/.b9/b9.conf.0.5
+  * /home/sven/.b9/b9.conf.0
+  * /home/sven/.b9/b9.conf
+
 ## 0.5.67
 
 * Iron out UTF-8 decoding issues

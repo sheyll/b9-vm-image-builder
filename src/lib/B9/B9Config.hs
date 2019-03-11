@@ -74,7 +74,9 @@ import           Control.Lens                  as Lens
                                                 , over
                                                 , set
                                                 )
-import           Control.Monad                  ( (>=>) )
+import           Control.Monad                  ( (>=>)
+                                                , filterM
+                                                )
 import           Control.Monad.IO.Class
 import           Data.ConfigFile.B9Extras       ( CPDocument
                                                 , CPError
@@ -90,18 +92,25 @@ import           Data.ConfigFile.B9Extras       ( CPDocument
                                                 , toStringCP
                                                 )
 import           Data.Function                  ( on )
-import           Data.Maybe                     ( fromMaybe )
+import           Data.List                      ( inits )
+import           Data.Maybe                     ( fromMaybe
+                                                , listToMaybe
+                                                , maybeToList
+                                                )
 import           Data.Monoid
 import           Data.Semigroup                as Semigroup
                                          hiding ( Last(..) )
+import           Data.Version
 import           System.Directory
+import           System.FilePath                ( (<.>) )
 import           System.IO.B9Extras             ( SystemPath(..)
                                                 , ensureDir
                                                 , resolve
                                                 )
 import           Text.Printf                    ( printf )
-
 import           B9.Environment
+import           Text.ParserCombinators.ReadP
+import qualified Paths_b9                      as My
 
 data ExecEnvType =
   LibVirtLXC
@@ -303,7 +312,28 @@ modifyPermanentConfig = tell
 -- @since 0.5.65
 runB9ConfigActionWithOverrides :: B9ConfigAction a -> B9ConfigOverride -> IO a
 runB9ConfigActionWithOverrides act cfg = do
-  let cfgPath = cfg ^. customB9ConfigPath
+  configuredCfgPath <- traverse resolve (cfg ^. customB9ConfigPath)
+  fallbackCfgPath   <- resolve defaultB9ConfigFile
+  let
+    cfgPathCandidates = case My.version of
+      Version v _ ->
+        (concatMap
+            (\c ->
+              (\v' -> c <.> showVersion (makeVersion v')) <$> reverse (inits v)
+            )
+            (maybeToList configuredCfgPath)
+          )
+
+          ++ (   (\v' -> fallbackCfgPath <.> showVersion (makeVersion v'))
+             <$> reverse (inits v)
+             )
+    pathToCreate = fromMaybe fallbackCfgPath configuredCfgPath
+  existingCfgPaths <- filterM
+    (\candidate -> putStrLn ("Trying to load config file: " ++ candidate)
+      >> doesFileExist candidate
+    )
+    cfgPathCandidates
+  let cfgPath = fromMaybe pathToCreate (listToMaybe existingCfgPaths)
   cp <- openOrCreateB9Config cfgPath
   case parseB9Config cp of
     Left e -> fail
@@ -357,9 +387,8 @@ runB9ConfigAction = flip runB9ConfigActionWithOverrides noB9ConfigOverride
 -- | Open the configuration file that contains the 'B9Config'.
 -- If the configuration does not exist, write a default configuration file,
 -- and create a all missing directories.
-openOrCreateB9Config :: MonadIO m => Maybe SystemPath -> m CPDocument
-openOrCreateB9Config cfgPath = do
-  cfgFile <- resolve (fromMaybe defaultB9ConfigFile cfgPath)
+openOrCreateB9Config :: MonadIO m => FilePath -> m CPDocument
+openOrCreateB9Config cfgFile = do
   ensureDir cfgFile
   liftIO $ do
     exists <- doesFileExist cfgFile
