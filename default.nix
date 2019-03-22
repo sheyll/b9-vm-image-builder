@@ -1,6 +1,6 @@
 {lib, haskellPackages, stdenv,
  makeWrapper,
- cdrkit, libvirt, sudo,
+ cdrkit, libvirt,
  openssh, qemu, rsync,
  e2fsprogs, xorriso, bash, curl,
  coreutils, dosfstools, mtools}:
@@ -20,7 +20,7 @@ let
   b9Unwrapped = haskellPackages.callCabal2nix "b9" cleanSrc {};
 
   nonHaskellBuildInputs =
-    [cdrkit libvirt sudo
+    [cdrkit libvirt
      openssh qemu rsync
      e2fsprogs xorriso bash curl
      coreutils dosfstools mtools];

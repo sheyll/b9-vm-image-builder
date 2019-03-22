@@ -228,6 +228,7 @@ runListSharedImages = localB9Config
   (runB9
     (do
       MkSelectedRemoteRepo remoteRepo <- getSelectedRemoteRepo
+
       let repoPred = maybe (== Cache) ((==) . toRemoteRepository) remoteRepo
       allRepos <- getRemoteRepos
       if isNothing remoteRepo
