@@ -12,6 +12,8 @@
 
 * Remove `Trying to load config file` messages
 
+* Fix #8 - resurrect the environment variable `buildDirRoot`. 
+
 ## 0.5.68
 
 * Allow version specific config file resolution

@@ -113,7 +113,7 @@ withBuildInfo action = withRootDir $ do
       traceL (printf "Project Root Directory: %s" rootD)
       buildD <- getBuildDir
       traceL (printf "Build Directory:        %s" buildD)
-      r       <- action
+      r       <-  addLocalStringBinding ("buildDirRoot", buildD) action
       tsAfter <- liftIO getCurrentTime
       let duration = show (tsAfter `diffUTCTime` startTime)
       infoL (printf "DURATION: %s" duration)
