@@ -1,5 +1,13 @@
 # Changelog for B9
 
+## 0.5.68.1
+
+* Fix positional argument enumeration in the `Enviromnent`; CLI arguments 
+  are passed via the keys `arg_1 .. arg_N` in the `Environment`.
+  They are currently passed in reverse order and start from `arg_0` 
+  instead of `arg_1`. See github issues #6 and #9.
+
+
 ## 0.5.68
 
 * Allow version specific config file resolution

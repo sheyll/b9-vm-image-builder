@@ -6,5 +6,5 @@ extra-deps:
 - template-0.2.0.10
 - extensible-effects-5.0.0.1
 
-resolver: lts-13.9
+resolver: lts-13.13
 require-stack-version: ">=1.6.5"

@@ -34,6 +34,7 @@ import           Control.Eff                   as Eff
 import           Control.Eff.Reader.Lazy       as Eff
 import           Control.Parallel.Strategies
 import           Data.Data
+import           Data.Foldable
 import           Data.HashMap.Strict            ( HashMap )
 import qualified Data.HashMap.Strict           as HashMap
 import           Data.Maybe                     ( maybe
@@ -54,9 +55,9 @@ instance NFData Environment
 instance Semigroup Environment where
   e1 <> e2 = MkEnvironment
     { nextPosition    = case (nextPosition e1, nextPosition e2) of
-                          (0 , 0 ) -> 0
-                          (0 , p2) -> p2
-                          (p1, 0 ) -> p1
+                          (1 , 1 ) -> 1
+                          (1 , p2) -> p2
+                          (p1, 1 ) -> p1
                           _        -> error
                             (  "Overlapping positional arguments (<>): ("
                             ++ show e1
@@ -86,7 +87,7 @@ instance Semigroup Environment where
     }
 
 instance Monoid Environment where
-  mempty = MkEnvironment 0 HashMap.empty
+  mempty = MkEnvironment 1 HashMap.empty
 
 -- | If environment variables @arg_1 .. arg_n@ are bound
 -- and a list of @k@ additional values are passed to this function,
@@ -97,8 +98,8 @@ instance Monoid Environment where
 -- @since 0.5.62
 addPositionalArguments :: [Text] -> Environment -> Environment
 addPositionalArguments = flip
-  (foldr
-    (\arg (MkEnvironment i e) -> MkEnvironment
+  (foldl'
+    (\(MkEnvironment i e) arg -> MkEnvironment
       (i + 1)
       (HashMap.insert (unsafeRenderToText ("arg_" ++ show i)) arg e)
     )
@@ -217,7 +218,7 @@ data DuplicateKey = MkDuplicateKey
   { duplicateKey         :: Text
   , duplicateKeyOldValue :: Text
   , duplicateKeyNewValue :: Text
-  } deriving (Typeable, Show)
+  } deriving (Typeable, Show, Eq)
 
 instance Exception DuplicateKey
 
@@ -227,7 +228,7 @@ instance Exception DuplicateKey
 data KeyNotFound =
   MkKeyNotFound Text
                 Environment
-  deriving (Typeable)
+  deriving (Typeable, Eq)
 
 instance Exception KeyNotFound
 

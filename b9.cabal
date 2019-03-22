@@ -1,6 +1,6 @@
 cabal-version:     2.2
 name:                b9
-version:             0.5.68
+version:             0.5.68.1
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -198,6 +198,7 @@ test-suite spec
                    , B9.Content.YamlObjectSpec
                    , B9.ArtifactGeneratorImplSpec
                    , B9.DiskImagesSpec
+                   , B9.EnvironmentSpec
                    , Paths_b9
   build-depends:     b9
                    , binary >= 0.8 && < 0.9
