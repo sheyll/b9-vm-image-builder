@@ -8,7 +8,7 @@
   instead of `arg_1`. See github issues #6 and #9.
 
 * Fix #7 shared image meta info download and 
-  generalize and simplify `B9ConfigOverrid` while at it
+  generalize and simplify `B9ConfigOverrid` while at it.
 
 ## 0.5.68
 
