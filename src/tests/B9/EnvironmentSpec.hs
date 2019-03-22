@@ -2,7 +2,6 @@
 module B9.EnvironmentSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
 import Data.Text
 import B9.Environment
 import Control.Eff
@@ -11,10 +10,9 @@ spec :: Spec
 spec =
   describe "Environment" $
   describe "addLocalPositionalArguments" $ do
-     let k = 13
-         j = 7
-         n = 13
-         n :: Integer
+     let k = 13 :: Integer
+         j = 7 :: Integer
+         n = 13 :: Integer
          args = [pack (show i) | i <- [1 .. n]]
 
          k_key = pack ("arg_" ++ show k)
