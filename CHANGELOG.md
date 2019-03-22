@@ -10,6 +10,8 @@
 * Fix #7 shared image meta info download and 
   generalize and simplify `B9ConfigOverrid` while at it.
 
+* Remove `Trying to load config file` messages
+
 ## 0.5.68
 
 * Allow version specific config file resolution

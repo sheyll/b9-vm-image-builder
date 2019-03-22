@@ -294,10 +294,7 @@ runB9ConfigActionWithOverrides act cfg = do
               (maybeToList configuredCfgPath) ++
             ((\v' -> fallbackCfgPath <.> showVersion (makeVersion v')) <$> reverse (inits v))
       pathToCreate = fromMaybe fallbackCfgPath configuredCfgPath
-  existingCfgPaths <-
-    filterM
-      (\candidate -> putStrLn ("Trying to load config file: " ++ candidate) >> doesFileExist candidate)
-      cfgPathCandidates
+  existingCfgPaths <- filterM doesFileExist cfgPathCandidates
   let cfgPath = fromMaybe pathToCreate (listToMaybe existingCfgPaths)
   cp <- openOrCreateB9Config cfgPath
   case parseB9Config cp of
