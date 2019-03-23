@@ -1,7 +1,9 @@
-{-| B9 is a library and build tool with primitive operations to rmrun a
-    build script inside a virtual machine and to create and convert
-    virtual machine image files as well as related ISO and VFAT disk images
-    for e.g. cloud-init configuration sources.
+{-| B9 is a library and build tool with which one can create/convert different types
+    of VM images. Additionally installation steps - like installing software -
+    can be done in a LXC container, running on the disk images.
+
+    B9 allows to create and convert virtual machine image files as well as
+    related ISO and VFAT disk images for e.g. cloud-init configuration sources.
 
     This module re-exports the modules needed to build a tool around the
     library, e.g. see @src\/cli\/Main.hs@ as an example.
