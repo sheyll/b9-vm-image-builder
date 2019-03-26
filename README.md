@@ -6,11 +6,12 @@
 
 ### Overview
 
-There is a *DSL* that is described by a few benign Haskell `data` types that can 
-be `B9` can `read` and `show`. It can be put into a **text file** and be interpreted
-by a **command line invokation**. 
+**B9** is an executable and a Haskell library, that consumes a Haskell term describing 
+the generation of VM-Images. 
 
-Also, `B9` can be used as **Haskell library**. 
+A few core `data` types form an EDSL, and  `B9` contains functions to `read` and `show` then. 
+
+Such a term can then be stored into a **text file** and is interpreted by a **command line invokation**. 
 
 ### Installation on NixOS
 
@@ -40,8 +41,8 @@ Update the `packages` section in your `stack.yaml`:
     packages:
     
     - location:
-        git: git@github.com:sheyll/b9-vm-image-builder.git
-        tag: 0.5.68.2
+        github: git@github.com:sheyll/b9-vm-image-builder.git
+        commit: 467c4bf8274a50a72a2a720f3c2710926fb845b2
         extra-dep: true
 
 ### Features
