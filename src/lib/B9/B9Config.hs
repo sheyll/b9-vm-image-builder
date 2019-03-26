@@ -91,6 +91,7 @@ import System.Directory
 import System.FilePath ((<.>))
 import System.IO.B9Extras (SystemPath(..), ensureDir, resolve)
 import Text.Printf (printf)
+import GHC.Stack
 
 data ExecEnvType =
   LibVirtLXC
@@ -148,7 +149,7 @@ type B9ConfigReader = Reader B9Config
 -- | Run a 'B9ConfigReader'.
 --
 -- @since 0.5.65
-runB9ConfigReader :: B9Config -> Eff (B9ConfigReader ': e) a -> Eff e a
+runB9ConfigReader :: HasCallStack => B9Config -> Eff (B9ConfigReader ': e) a -> Eff e a
 runB9ConfigReader = runReader
 
 -- | Return the runtime configuration, that should be the configuration merged
@@ -265,7 +266,7 @@ type B9ConfigAction a = Eff '[ B9ConfigWriter, B9ConfigReader, EnvironmentReader
 type B9ConfigWriter = Writer (Semigroup.Endo B9Config)
 
 -- | Add a modification to the permanent configuration file.
-modifyPermanentConfig :: Member B9ConfigWriter e => Endo B9Config -> Eff e ()
+modifyPermanentConfig :: (HasCallStack, Member B9ConfigWriter e) => Endo B9Config -> Eff e ()
 modifyPermanentConfig = tell
 
 -- | Execute a 'B9ConfigAction'.
@@ -282,7 +283,7 @@ modifyPermanentConfig = tell
 -- See also 'runB9ConfigAction', which does not need the 'B9ConfigOverride' parameter.
 --
 -- @since 0.5.65
-runB9ConfigActionWithOverrides :: B9ConfigAction a -> B9ConfigOverride -> IO a
+runB9ConfigActionWithOverrides :: HasCallStack => B9ConfigAction a -> B9ConfigOverride -> IO a
 runB9ConfigActionWithOverrides act cfg = do
   configuredCfgPath <- traverse resolve (cfg ^. customB9ConfigPath)
   fallbackCfgPath <- resolve defaultB9ConfigFile
@@ -320,13 +321,13 @@ runB9ConfigActionWithOverrides act cfg = do
 -- See 'runB9ConfigActionWithOverrides' for more details.
 --
 -- @since 0.5.65
-runB9ConfigAction :: B9ConfigAction a -> IO a
+runB9ConfigAction :: HasCallStack => B9ConfigAction a -> IO a
 runB9ConfigAction = flip runB9ConfigActionWithOverrides noB9ConfigOverride
 
 -- | Open the configuration file that contains the 'B9Config'.
 -- If the configuration does not exist, write a default configuration file,
 -- and create a all missing directories.
-openOrCreateB9Config :: MonadIO m => FilePath -> m CPDocument
+openOrCreateB9Config :: (HasCallStack, MonadIO m) => FilePath -> m CPDocument
 openOrCreateB9Config cfgFile = do
   ensureDir cfgFile
   liftIO $ do
@@ -341,7 +342,7 @@ openOrCreateB9Config cfgFile = do
 -- | Write the configuration in the 'CPDocument' to either the user supplied
 -- configuration file path or to 'defaultB9ConfigFile'.
 -- Create all missing (parent) directories.
-writeB9CPDocument :: MonadIO m => Maybe SystemPath -> CPDocument -> m ()
+writeB9CPDocument :: (HasCallStack, MonadIO m) => Maybe SystemPath -> CPDocument -> m ()
 writeB9CPDocument cfgFileIn cp = do
   cfgFile <- resolve (fromMaybe defaultB9ConfigFile cfgFileIn)
   ensureDir cfgFile
@@ -408,7 +409,7 @@ modifyCPDocument cp f = do
   return (mergeCP cp cp2)
 
 -- | Append a config file section for the 'B9Config' to an empty 'CPDocument'.
-b9ConfigToCPDocument :: B9Config -> Either CPError CPDocument
+b9ConfigToCPDocument :: HasCallStack => B9Config -> Either CPError CPDocument
 b9ConfigToCPDocument c = do
   cp1 <- addSectionCP emptyCP cfgFileSection
   cp2 <- setShowCP cp1 cfgFileSection verbosityK (_verbosity c)
@@ -423,10 +424,10 @@ b9ConfigToCPDocument c = do
   cpFinal <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpA
   setShowCP cpFinal cfgFileSection repositoryK (_repository c)
 
-readB9Config :: MonadIO m => Maybe SystemPath -> m CPDocument
+readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
 readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
 
-parseB9Config :: CPDocument -> Either CPError B9Config
+parseB9Config :: HasCallStack => CPDocument -> Either CPError B9Config
 parseB9Config cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
       getr = readCP cp cfgFileSection

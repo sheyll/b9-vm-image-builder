@@ -56,6 +56,7 @@ import           System.IO.B9Extras             ( consult
 import           System.IO.Error                ( isDoesNotExistError )
 import           Text.Printf                    ( printf )
 import           Text.Show.Pretty               ( ppShow )
+import           GHC.Stack
 
 -- -- | Convert relative file paths of images, sources and mounted host directories
 -- -- to absolute paths relative to '_projectRoot'.
@@ -68,7 +69,7 @@ import           Text.Show.Pretty               ( ppShow )
 -- | Replace $... variables inside an 'ImageTarget'
 substImageTarget
   :: forall e
-   . (Member EnvironmentReader e, Member ExcB9 e)
+   . (HasCallStack, Member EnvironmentReader e, Member ExcB9 e)
   => ImageTarget
   -> Eff e ImageTarget
 substImageTarget = everywhereM gsubst
@@ -124,7 +125,7 @@ preferredDestImageTypes src = case src of
 
 -- | Return all supported source 'ImageType's compatible to a 'ImageDestinaion'
 -- in the preferred order.
-preferredSourceImageTypes :: ImageDestination -> [ImageType]
+preferredSourceImageTypes :: HasCallStack => ImageDestination -> [ImageType]
 preferredSourceImageTypes dest = case dest of
   (Share _ fmt resize) ->
     nub [fmt, Raw, QCow2, Vmdk] `intersect` allowedImageTypesForResize resize
@@ -133,7 +134,7 @@ preferredSourceImageTypes dest = case dest of
   Transient -> [Raw, QCow2, Vmdk]
   (LiveInstallerImage _name _repo _imgResize) -> [Raw]
 
-allowedImageTypesForResize :: ImageResize -> [ImageType]
+allowedImageTypesForResize :: HasCallStack => ImageResize -> [ImageType]
 allowedImageTypesForResize r = case r of
   Resize _        -> [Raw]
   ShrinkToMinimum -> [Raw]

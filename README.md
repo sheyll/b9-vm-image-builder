@@ -1,9 +1,91 @@
-# B9 - A Benign VM-Build Tool
+# B9 - A Benign VM-Build Tool [![changelog](https://img.shields.io/badge/changelog-green.svg?style=flat)](CHANGELOG.md)
 
-[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9) [![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9)
+[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9)[![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
+
+**An algebraic data type to describe virtual machine images generation.**
+
+### Overview
+
+There is a *DSL* that is described by a few benign Haskell `data` types that can 
+be `B9` can `read` and `show`. It can be put into a **text file** and be interpreted
+by a **command line invokation**. 
+
+Also, `B9` can be used as **Haskell library**. 
+
+### Installation on NixOS
+
+* As **command line utility** in current directory:
+
+      $ nix-build -E 'import ((fetchTarball https://github.com/sheyll/b9-vm-image-builder/archive/0.5.tar.gz) + "/release.nix") {}'
+    
+  Now the executable `b9c` is in `./result/bin/`:
+
+      $ result/bin/b9c      
+
+### Installation as Hackage Library with Stack
+
+**Add a dependency to `b9` in your `.cabal` file.**    
+
+Update the `extra-deps` section in your `stack.yaml`:
+    
+    extra-deps:
+    - b9-0.5.68.2
+
+### Installation of custom version as Library with Stack 
+
+**Instead** of adding to `extra-deps` one can use version **not on Hackage**.
+Update the `packages` section in your `stack.yaml`:
+
+    # Local packages, usually specified by relative directory name
+    packages:
+    
+    - location:
+        git: git@github.com:sheyll/b9-vm-image-builder.git
+        tag: 0.5.68.2
+        extra-dep: true
+
+### Features
+
+* Disk image creation
+  * Growing shrinking of disk images and file systems
+  * File system creation
+  * Using existing Disk/File system as input
+  * Libvirt/LXC based shell script execution
+  * ISO/VFAT cloud-init images without Libvirt/LXC
+  * **Artifact Caching and Sharing**
+     * Shake rules
+ * (Source-) File Creation
+   * Example: Merge yaml config snippets, with template parameterers replaced into a text file
+              included on the output image.    
+   * text-files
+   * structured text files with merging:
+      * raw
+      * yaml
+      * erlang
+      * Syntax trees for *objects* that can be converted to raw text, yaml or erlang
+   * base64 encoded binaries
+   * content fetched via HTTP
+   * simple template support with `${variableName}`
+* Repetition and Reuse
+
+### Supported Formats
+
+Supported Disk Images and File system types:
+
+  * Cloud-init 
+    * ISOs
+    * VFAT floppys
+    * raw directories
+  * VMDK files
+  * QCOW images
+  * RAW images 
+  * MBR partitioned disk images
+  * EXT-4
+
+### Old Readme
 
 Use B9 to compile your software into a deployable set of Linux-VM- or
-configuration images, from a set of scripts and input files and templates
+configuration images, from a set of scripts and input files and templates.
 
 The main goal of this tool is to provide a build tool to increase automation and
 reduce redundancy when creating configured, ready-to-run VM-images.

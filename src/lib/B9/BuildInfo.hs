@@ -34,6 +34,7 @@ import           Data.Time.Format
 import           System.Directory
 import           System.FilePath
 import           Text.Printf
+import           GHC.Stack
 
 -- | Build meta information.
 --
@@ -52,7 +53,10 @@ type BuildInfoReader = Reader BuildInfo
 
 -- | Create the build directories, generate (hash) the build-id and execute the given action.
 --
--- Export the @projectRoot@ 'Environment' variable.
+-- Bindings added to the text template parameter environment:
+--
+-- * @projectRoot@ the directory that contains the sources of the project to build
+-- * @buildDir@ the temporary directory used store the build artifacts passed into- or outof the build
 --
 -- Unless '_keepTempDirs' is @True@ clean up the build directories after the actions
 -- returns - even if the action throws a runtime exception.
@@ -65,6 +69,7 @@ withBuildInfo
      , Member ExcB9 e
      , Member EnvironmentReader e
      , Member LoggerReader e
+     , HasCallStack
      )
   => Eff (BuildInfoReader ': e) a
   -> Eff e a
@@ -113,7 +118,7 @@ withBuildInfo action = withRootDir $ do
       traceL (printf "Project Root Directory: %s" rootD)
       buildD <- getBuildDir
       traceL (printf "Build Directory:        %s" buildD)
-      r       <-  addLocalStringBinding ("buildDirRoot", buildD) action
+      r       <-  addLocalStringBinding ("buildDir", buildD) action
       tsAfter <- liftIO getCurrentTime
       let duration = show (tsAfter `diffUTCTime` startTime)
       infoL (printf "DURATION: %s" duration)

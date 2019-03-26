@@ -14,6 +14,7 @@ import           B9.Environment
 import           B9.Repository
 import           Control.Eff
 import           Data.Functor                   ( )
+import           GHC.Stack
 
 -- | Definition of the B9 monad. See 'B9Eff'.
 --
@@ -36,13 +37,13 @@ type B9Eff
 -- | A constraint that contains all effects of 'B9Eff'
 --
 -- @since 0.5.65
-type IsB9 e = (Lifted IO e, CommandIO e, B9Eff <:: e)
+type IsB9 e = (HasCallStack, Lifted IO e, CommandIO e, B9Eff <:: e)
 
 -- | Execute a 'B9' effect and return an action that needs
 -- the 'B9Config'.
 --
 -- @since 0.5.65
-runB9 :: B9 a -> B9ConfigAction a
+runB9 :: HasCallStack => B9 a -> B9ConfigAction a
 runB9 action = do
   cfg <- getB9Config
   env <- askEnvironment

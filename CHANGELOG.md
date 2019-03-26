@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 0.5.68.2
+
+* Fix a bug in the shared image Shake rule causing unnecessary rebuilds
+
+* Rename the `buildDirRoot` string template environment variable to `buildDir`
+
 ## 0.5.68.1
 
 * Fix positional argument enumeration in the `Enviromnent`; CLI arguments 
