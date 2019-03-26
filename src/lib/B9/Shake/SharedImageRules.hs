@@ -9,24 +9,18 @@ where
 
 import           B9
 import qualified Data.Binary                   as Binary
-import qualified Data.ByteString               as ByteString
-import qualified Data.ByteString.Builder       as Builder
-import           Data.ByteString.Builder        ( stringUtf8 )
-import qualified Data.ByteString.Lazy          as LazyByteString
+import qualified Data.ByteString.Char8         as ByteString
+import qualified Data.ByteString.Lazy.Char8    as LazyByteString
 import           Development.Shake
 import           Development.Shake.Classes
 import           Development.Shake.Rule
 
+
 -- | In order to use 'needSharedImage' and 'customSharedImageAction' you need to
 -- call this action before using any of the aforementioned 'Rules'.
 enableSharedImageRules :: B9ConfigOverride -> Rules ()
-enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
+enableSharedImageRules b9inv = addBuiltinRule noLint noIdentity go
  where
-  sharedImageIdentity :: BuiltinIdentity SharedImageName SharedImageBuildId
-  sharedImageIdentity (SharedImageName k) (SharedImageBuildId v) = Just
-    (LazyByteString.toStrict
-      (Builder.toLazyByteString (stringUtf8 k <> stringUtf8 v))
-    )
   go :: BuiltinRun SharedImageName SharedImageBuildId
   go nameQ mOldBIdBinary dependenciesChanged = do
     mCurrentBId <- getImgBuildId
@@ -34,7 +28,7 @@ enableSharedImageRules b9inv = addBuiltinRule noLint sharedImageIdentity go
       Just currentBId ->
         let currentBIdBinary = encodeBuildId currentBId
         in  if dependenciesChanged
-                 == RunDependenciesChanged
+                 == RunDependenciesSame
                  && mOldBIdBinary
                  == Just currentBIdBinary
               then return $ RunResult ChangedNothing currentBIdBinary currentBId

@@ -9,7 +9,7 @@ import           B9
 import           Control.Lens                   ( (?~) )
 import           Development.Shake
 
--- | Convert a 'B9Invocation' action into a Shake 'Action'. This is just
+-- | Convert a 'B9ConfigAction' action into a Shake 'Action'. This is just
 -- an alias for 'runB9ConfigActionWithOverrides' since 'Action' is an instance of 'MonadIO'
 -- and 'runB9ConfigActionWithOverrides' work on any .
 b9InvocationAction :: B9ConfigAction a -> B9ConfigOverride -> Action a
