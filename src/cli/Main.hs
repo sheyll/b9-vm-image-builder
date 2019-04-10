@@ -97,7 +97,7 @@ globals =
             Endo (repositoryCache .~ (Path <$> mRepoCache)) <>
             case libvirtNet of
               Just n | n /= hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) (Just n))
-              Just n | n == hostNetworkMagicValue -> Endo (set libVirtLXCConfigs Nothing)
+              Just n | n == hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) Nothing)
               _ -> mempty
        in B9ConfigOverride {_customB9ConfigPath = Path <$> cfg, _customB9Config = b9cfg, _customEnvironment = mempty}
 
