@@ -3,6 +3,7 @@
 ## 0.5.68.3
 
 * Fix issue #10: The CLI parameter `--network host` is ignored
+* Flush the log output after every log message to stdout
 
 ## 0.5.68.2
 

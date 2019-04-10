@@ -96,7 +96,9 @@ b9Log level msg = do
 logImpl :: Maybe LogLevel -> Maybe SysIO.Handle -> LogLevel -> String -> IO ()
 logImpl minLevel mh level msg = do
   lm <- formatLogMsg level msg
-  when (isJust minLevel && level >= fromJust minLevel) (putStr lm)
+  when (isJust minLevel && level >= fromJust minLevel) $ do
+    putStr lm
+    SysIO.hFlush SysIO.stdout
   when (isJust mh) $ do
     SysIO.hPutStr (fromJust mh) lm
     SysIO.hFlush (fromJust mh)
