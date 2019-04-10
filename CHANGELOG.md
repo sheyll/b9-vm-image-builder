@@ -1,5 +1,9 @@
 # Changelog for B9
 
+## 0.5.68.3
+
+* Fix issue #10: The CLI parameter `--network host` is ignored
+
 ## 0.5.68.2
 
 * Fix a bug in the shared image Shake rule causing unnecessary rebuilds
@@ -8,17 +12,17 @@
 
 ## 0.5.68.1
 
-* Fix positional argument enumeration in the `Enviromnent`; CLI arguments 
+* Fix positional argument enumeration in the `Enviromnent`; CLI arguments
   are passed via the keys `arg_1 .. arg_N` in the `Environment`.
-  They are currently passed in reverse order and start from `arg_0` 
+  They are currently passed in reverse order and start from `arg_0`
   instead of `arg_1`. See github issues #6 and #9.
 
-* Fix #7 shared image meta info download and 
+* Fix #7 shared image meta info download and
   generalize and simplify `B9ConfigOverrid` while at it.
 
 * Remove `Trying to load config file` messages
 
-* Fix #8 - resurrect the environment variable `buildDirRoot`. 
+* Fix #8 - resurrect the environment variable `buildDirRoot`.
 
 ## 0.5.68
 
