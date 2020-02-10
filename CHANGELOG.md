@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 0.5.69.0
+
+* Add new `ImageResize` option `ShrinkToMinimumAndIncrease`
+* Remove the byte unit from `SizeUnit`
+* Add new utility functions to `B9.DiskImages` for image size calculations
+
 ## 0.5.68.3
 
 * Fix issue #10: The CLI parameter `--network host` is ignored

@@ -14,6 +14,7 @@ import           System.FilePath
 import           Test.QuickCheck
 import qualified Text.PrettyPrint.Boxes        as Boxes
 import           Text.Printf
+import Test.Hspec (Spec, describe, it)
 
 -- * Data types for disk image description, e.g. 'ImageTarget',
 -- 'ImageDestination', 'Image', 'MountPoint', 'SharedImage'
@@ -124,11 +125,45 @@ instance Hashable ImageSize
 instance Binary ImageSize
 instance NFData ImageSize
 
+-- | Convert a size in bytes to an 'ImageSize'
+bytesToKiloBytes :: Int -> ImageSize
+bytesToKiloBytes x = let kbRoundedDown = x `div` 1024
+                         rest = x `mod` 1024
+                         kbRoundedUp = if rest > 0 then kbRoundedDown + 1 else kbRoundedDown
+                     in ImageSize kbRoundedUp KB
+
+-- | Convert an 'ImageSize' to kibi bytes.
+imageSizeToKiB :: ImageSize -> Int
+imageSizeToKiB (ImageSize size unit) =
+  size * sizeUnitKiB unit
+
+-- | Convert a 'SizeUnit' to the number of kibi bytes one element represents.
+sizeUnitKiB :: SizeUnit -> Int
+sizeUnitKiB GB = 1024 * sizeUnitKiB MB
+sizeUnitKiB MB = 1024 * sizeUnitKiB KB
+sizeUnitKiB KB = 1
+
+-- | Choose the greatest unit possible to exactly represent an 'ImageSize'.
+normalizeSize :: ImageSize -> ImageSize
+normalizeSize i@(ImageSize _ GB) = i
+normalizeSize i@(ImageSize size unit)
+  | size `mod` 1024 == 0 =
+    normalizeSize (ImageSize (size `div` 1024) (succ unit))
+  | otherwise = i
+
+-- | Return the sum of two @'ImageSize's@.
+addImageSize :: ImageSize -> ImageSize -> ImageSize
+-- of course we could get more fancy, but is it really needed? The file size will always be bytes ...
+addImageSize (ImageSize value unit) (ImageSize value' unit') =
+  normalizeSize
+    (ImageSize (value * sizeUnitKiB unit + value' * sizeUnitKiB unit') KB)
+
+
 -- | Enumeration of size multipliers. The exact semantics may vary depending on
 -- what external tools look at these. E.g. the size unit is convert to a size
 -- parameter of the @qemu-img@ command line tool.
-data SizeUnit = B | KB | MB | GB
-              deriving (Eq, Show, Read, Ord, Typeable, Data, Generic)
+data SizeUnit = KB | MB | GB
+              deriving (Eq, Show, Read, Ord, Enum, Bounded, Typeable, Data, Generic)
 
 instance Hashable SizeUnit
 instance Binary SizeUnit
@@ -143,8 +178,8 @@ data ImageResize = ResizeImage ImageSize
                    -- 'Resize'.
                  | Resize ImageSize
                    -- ^ Resize an image and the contained file system.
-                 | Increase ImageSize
-                   -- ^ Increase the size of an image and the contained file system.
+                 | ShrinkToMinimumAndIncrease ImageSize
+                   -- ^ Shrink to minimum size needed and increase by the amount given.
                  | ShrinkToMinimum
                    -- ^ Resize an image and the contained file system to the
                    -- smallest size to fit the contents of the file system.
@@ -204,12 +239,12 @@ newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq,Ord,Read,Sho
 fromSharedImageBuildId :: SharedImageBuildId -> String
 fromSharedImageBuildId (SharedImageBuildId b) = b
 
--- | Shared images are orderd by name, build date and build id
+-- | Shared images are ordered by name, build date and build id
 instance Ord SharedImage where
     compare (SharedImage n d b _ _) (SharedImage n' d' b' _ _) =
         compare n n' Sem.<> compare d d' Sem.<> compare b b'
 
--- * Constroctor and accessors for 'Image' 'ImageTarget' 'ImageSource'
+-- * Constructor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'
 
 -- | Return the name of the file corresponding to an 'Image'
@@ -221,7 +256,7 @@ imageImageType :: Image -> ImageType
 imageImageType (Image _ t _) = t
 
 -- | Return the files generated for a 'LocalFile' or a 'LiveInstallerImage'; 'SharedImage' and 'Transient'
--- are treated like they have no ouput files because the output files are manged
+-- are treated like they have no output files because the output files are manged
 -- by B9.
 getImageDestinationOutputFiles :: ImageTarget -> [FilePath]
 getImageDestinationOutputFiles (ImageTarget d _ _) = case d of
@@ -256,13 +291,13 @@ itImageMountPoint :: ImageTarget -> MountPoint
 itImageMountPoint (ImageTarget _ _ m) = m
 
 
--- | Return true if a 'Partition' parameter is actually refering to a partition,
+-- | Return true if a 'Partition' parameter is actually referring to a partition,
 -- false if it is 'NoPT'
 isPartitioned :: Partition -> Bool
 isPartitioned p | p == NoPT = False
                 | otherwise = True
 
--- | Return the 'Partition' index or throw a runtime error if aplied to 'NoPT'
+-- | Return the 'Partition' index or throw a runtime error if applied to 'NoPT'
 getPartition :: Partition -> Int
 getPartition (Partition p) = p
 getPartition NoPT          = error "No partitions!"
@@ -477,7 +512,7 @@ instance Arbitrary ImageResize where
     arbitrary = oneof
         [ ResizeImage <$> smaller arbitrary
         , Resize <$> smaller arbitrary
-        , Increase <$> smaller arbitrary
+        , ShrinkToMinimumAndIncrease <$> smaller arbitrary
         , pure ShrinkToMinimum
         , pure KeepSize
         ]
@@ -499,7 +534,7 @@ instance Arbitrary ImageSize where
     arbitrary = ImageSize <$> smaller arbitrary <*> smaller arbitrary
 
 instance Arbitrary SizeUnit where
-    arbitrary = elements [B, KB, MB, GB]
+    arbitrary = elements [KB, MB, GB]
 
 instance Arbitrary SharedImageName where
     arbitrary = SharedImageName <$> arbitrarySharedImageName
@@ -507,3 +542,14 @@ instance Arbitrary SharedImageName where
 arbitrarySharedImageName :: Gen String
 arbitrarySharedImageName =
     elements [ printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3] ]
+
+unitTests :: Spec
+unitTests =
+  describe "ImageSize" $
+  describe "bytesToKiloBytes" $ do
+    it "accepts maxBound" $
+      toInteger (imageSizeToKiB (bytesToKiloBytes maxBound)) * 1024 === toInteger (maxBound :: Int) + 1
+    it "doesn't decrease in size" $
+      property
+        (\(x :: Int) ->
+           x <= maxBound - 1024 ==> label "bytesToKiloBytes x >= x" (imageSizeToKiB (bytesToKiloBytes x) >= (x `div` 1024)))
