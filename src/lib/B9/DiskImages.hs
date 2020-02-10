@@ -143,6 +143,8 @@ data ImageResize = ResizeImage ImageSize
                    -- 'Resize'.
                  | Resize ImageSize
                    -- ^ Resize an image and the contained file system.
+                 | Increase ImageSize
+                   -- ^ Increase the size of an image and the contained file system.
                  | ShrinkToMinimum
                    -- ^ Resize an image and the contained file system to the
                    -- smallest size to fit the contents of the file system.
@@ -475,6 +477,7 @@ instance Arbitrary ImageResize where
     arbitrary = oneof
         [ ResizeImage <$> smaller arbitrary
         , Resize <$> smaller arbitrary
+        , Increase <$> smaller arbitrary
         , pure ShrinkToMinimum
         , pure KeepSize
         ]

@@ -137,8 +137,10 @@ preferredSourceImageTypes dest = case dest of
 allowedImageTypesForResize :: HasCallStack => ImageResize -> [ImageType]
 allowedImageTypesForResize r = case r of
   Resize _        -> [Raw]
+  Increase _      -> [Raw]
   ShrinkToMinimum -> [Raw]
-  _               -> [Raw, QCow2, Vmdk]
+  ResizeImage _   -> [Raw, QCow2, Vmdk]
+  KeepSize        -> [Raw, QCow2, Vmdk]
 
 -- | Create the parent directories for the file that contains the 'Image'.
 -- If the path to the image file is relative, prepend '_projectRoot' from
@@ -300,15 +302,35 @@ createCOWImage (Image backingFile _ _) (Image imgOut imgFmt _) = do
             imgOut
     )
 
--- | Resize an image, including the file system inside the image.
-resizeImage :: IsB9 e => ImageResize -> Image -> Eff e ()
-resizeImage KeepSize _ = return ()
-resizeImage (Resize newSize) (Image img Raw fs) | fs == Ext4 || fs == Ext4_64 =
-  do
+-- small helper function not to be exported
+inBytes :: SizeUnit -> Int
+inBytes GB = 1024 * inBytes MB
+inBytes MB = 1024 * inBytes KB
+inBytes KB = 1024 * inBytes B
+inBytes B = 1
+
+addImageSize :: ImageSize -> ImageSize -> ImageSize
+-- of course we could get more fancy, but is it really needed? The file size will always be bytes ...
+addImageSize (ImageSize value unit) (ImageSize value' unit') =
+  ImageSize (value * inBytes unit + value' * inBytes unit') B
+
+resizeExtFS :: (IsB9 e) => ImageSize -> FilePath -> Eff e ()
+resizeExtFS newSize img = do
     let sizeOpt = toQemuSizeOptVal newSize
     dbgL (printf "Resizing ext4 filesystem on raw image to %s" sizeOpt)
     cmd (printf "e2fsck -p '%s'" img)
     cmd (printf "resize2fs -f '%s' %s" img sizeOpt)
+
+-- | Resize an image, including the file system inside the image.
+resizeImage :: IsB9 e => ImageResize -> Image -> Eff e ()
+resizeImage KeepSize _ = return ()
+resizeImage (Resize newSize) (Image img Raw fs) | fs == Ext4 || fs == Ext4_64 =
+  resizeExtFS newSize img
+resizeImage (Increase sizeIncrease) (Image img Raw fs) | fs == Ext4 || fs == Ext4_64 =
+  do
+    fileSize <- liftIO (getFileSize img)
+    let newSize = addImageSize (ImageSize (fromInteger fileSize) B) sizeIncrease
+    resizeExtFS newSize img
 resizeImage (ResizeImage newSize) (Image img _ _) = do
   let sizeOpt = toQemuSizeOptVal newSize
   dbgL (printf "Resizing image to %s" sizeOpt)
