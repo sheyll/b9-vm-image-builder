@@ -3,9 +3,9 @@
 TAGS
 *.log
 *.profile
-/BUILD-*
-/dist
-/OUT
+BUILD*
+dist
+OUT
 
 /.cabal-sandbox/
 /cabal.sandbox.config
@@ -16,6 +16,6 @@ TAGS
 *.iml
 
 .stack-work
-/result
+result*
 *~
 /out
