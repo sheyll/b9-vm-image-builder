@@ -1,54 +1,55 @@
-{-| B9 has a concept of 'B9.DiskImages.SharedImaged'. Shared images can be pulled and
-pushed to/from remote locations via rsync+ssh. B9 also maintains a local cache;
-the whole thing is supposed to be build-server-safe, that means no two builds
-shall interfere with each other. This is accomplished by refraining from
-automatic cache updates from/to remote repositories.-}
+-- | B9 has a concept of 'B9.DiskImages.SharedImaged'. Shared images can be pulled and
+-- pushed to/from remote locations via rsync+ssh. B9 also maintains a local cache;
+-- the whole thing is supposed to be build-server-safe, that means no two builds
+-- shall interfere with each other. This is accomplished by refraining from
+-- automatic cache updates from/to remote repositories.
 module B9.Repository
-  ( initRepoCache
-  , RepoCacheReader
-  , getRepoCache
-  , withRemoteRepos
-  , withSelectedRemoteRepo
-  , getSelectedRemoteRepo
-  , SelectedRemoteRepoReader
-  , SelectedRemoteRepo(..)
-  , initRemoteRepo
-  , cleanRemoteRepo
-  , remoteRepoCheckSshPrivKey
-  , remoteRepoCacheDir
-  , localRepoDir
-  , lookupRemoteRepo
-  , module X
+  ( initRepoCache,
+    RepoCacheReader,
+    getRepoCache,
+    withRemoteRepos,
+    withSelectedRemoteRepo,
+    getSelectedRemoteRepo,
+    SelectedRemoteRepoReader,
+    SelectedRemoteRepo (..),
+    initRemoteRepo,
+    cleanRemoteRepo,
+    remoteRepoCheckSshPrivKey,
+    remoteRepoCacheDir,
+    localRepoDir,
+    lookupRemoteRepo,
+    module X,
   )
 where
 
-import           B9.B9Config
-import           B9.B9Error
-import           Control.Monad
-import           Control.Eff
-import           Control.Eff.Reader.Lazy
-import           Control.Lens
-import           Control.Monad.IO.Class
-import           Data.Maybe
-import           Text.Printf
-import           System.FilePath
-import           System.Directory
-import           B9.B9Config.Repository        as X
-import           System.IO.B9Extras
+import B9.B9Config
+import B9.B9Config.Repository as X
+import B9.B9Error
+import Control.Eff
+import Control.Eff.Reader.Lazy
+import Control.Lens
+import Control.Monad
+import Control.Monad.IO.Class
+import Data.Maybe
+import System.Directory
+import System.FilePath
+import System.IO.B9Extras
+import Text.Printf
 
 -- | Initialize the local repository cache directory and the 'RemoteRepo's.
 -- Run the given action with a 'B9Config' that contains the initialized
 -- repositories in '_remoteRepos'.
 --
 -- @since 0.5.65
-withRemoteRepos
-  :: (Member B9ConfigReader e, Lifted IO e)
-  => Eff (RepoCacheReader ': e) a
-  -> Eff e a
+withRemoteRepos ::
+  (Member B9ConfigReader e, Lifted IO e) =>
+  Eff (RepoCacheReader ': e) a ->
+  Eff e a
 withRemoteRepos f = do
-  cfg       <- getB9Config
-  repoCache <- lift
-    (initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg)))
+  cfg <- getB9Config
+  repoCache <-
+    lift
+      (initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg)))
   remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
   let setRemoteRepos = remoteRepos .~ remoteRepos'
   localB9Config setRemoteRepos (runReader repoCache f)
@@ -70,30 +71,31 @@ getRepoCache = ask
 -- If the selected repo does not exist, and exception is thrown.
 --
 -- @since 0.5.65
-withSelectedRemoteRepo
-  :: (Member B9ConfigReader e, Member ExcB9 e)
-  => Eff (SelectedRemoteRepoReader ': e) a
-  -> Eff e a
+withSelectedRemoteRepo ::
+  (Member B9ConfigReader e, Member ExcB9 e) =>
+  Eff (SelectedRemoteRepoReader ': e) a ->
+  Eff e a
 withSelectedRemoteRepo e = do
-  remoteRepos'      <- _remoteRepos <$> getB9Config
+  remoteRepos' <- _remoteRepos <$> getB9Config
   mSelectedRepoName <- _repository <$> getB9Config
   case mSelectedRepoName of
     Nothing -> runReader (MkSelectedRemoteRepo Nothing) e
     Just selectedRepoName ->
       case lookupRemoteRepo remoteRepos' selectedRepoName of
-        Nothing -> throwB9Error
-          (printf
-            "selected remote repo '%s' not configured, valid remote repos are: '%s'"
-            (show selectedRepoName)
-            (show remoteRepos')
-          )
+        Nothing ->
+          throwB9Error
+            ( printf
+                "selected remote repo '%s' not configured, valid remote repos are: '%s'"
+                (show selectedRepoName)
+                (show remoteRepos')
+            )
         Just r -> runReader (MkSelectedRemoteRepo (Just r)) e
 
 -- | Contains the 'Just' the 'RemoteRepo' selected by the 'B9Config' value '_repository',
 -- or 'Nothing' of no 'RemoteRepo' was selected in the 'B9Config'.
 --
 -- @since 0.5.65
-newtype SelectedRemoteRepo = MkSelectedRemoteRepo { fromSelectedRemoteRepo :: Maybe RemoteRepo }
+newtype SelectedRemoteRepo = MkSelectedRemoteRepo {fromSelectedRemoteRepo :: Maybe RemoteRepo}
 
 -- | Alias for a 'Reader' 'Eff'ect that reads the 'RemoteRepo'
 -- selected by the 'B9Config' value '_repository'. See 'withSelectedRemoteRepo'.
@@ -105,8 +107,8 @@ type SelectedRemoteRepoReader = Reader SelectedRemoteRepo
 -- selected by the 'B9Config' value '_repository'. See 'withSelectedRemoteRepo'.
 --
 -- @since 0.5.65
-getSelectedRemoteRepo
-  :: Member SelectedRemoteRepoReader e => Eff e SelectedRemoteRepo
+getSelectedRemoteRepo ::
+  Member SelectedRemoteRepoReader e => Eff e SelectedRemoteRepo
 getSelectedRemoteRepo = ask
 
 -- | Initialize the local repository cache directory.
@@ -119,12 +121,12 @@ initRepoCache repoDirSystemPath = do
 -- | Check for existance of priv-key and make it an absolute path.
 remoteRepoCheckSshPrivKey :: MonadIO m => RemoteRepo -> m RemoteRepo
 remoteRepoCheckSshPrivKey (RemoteRepo rId rp (SshPrivKey keyFile) h u) = do
-  exists   <- liftIO (doesFileExist keyFile)
+  exists <- liftIO (doesFileExist keyFile)
   keyFile' <- liftIO (canonicalizePath keyFile)
   unless
     exists
-    (error
-      (printf "SSH Key file '%s' for repository '%s' is missing." keyFile' rId)
+    ( error
+        (printf "SSH Key file '%s' for repository '%s' is missing." keyFile' rId)
     )
   return (RemoteRepo rId rp (SshPrivKey keyFile') h u)
 
@@ -144,7 +146,7 @@ initRemoteRepo cache repo = do
 -- directory.
 cleanRemoteRepo :: MonadIO m => RepoCache -> RemoteRepo -> m ()
 cleanRemoteRepo cache repo = do
-  let repoId  = remoteRepoRepoId repo
+  let repoId = remoteRepoRepoId repo
       repoDir = remoteRepoCacheDir cache repoId ++ "/"
   -- TODO logging infoL $ printf "Cleaning remote repo: %s" repoId
   ensureDir repoDir
@@ -154,22 +156,28 @@ cleanRemoteRepo cache repo = do
 
 -- | Return the cache directory for a remote repository relative to the root
 -- cache dir.
-remoteRepoCacheDir
-  :: RepoCache  -- ^ The repository cache directory
-  -> String    -- ^ Id of the repository
-  -> FilePath  -- ^ The existing, absolute path to the
-                                -- cache directory
+remoteRepoCacheDir ::
+  -- | The repository cache directory
+  RepoCache ->
+  -- | Id of the repository
+  String ->
+  -- | The existing, absolute path to the
+  -- cache directory
+  FilePath
 remoteRepoCacheDir (RepoCache cacheDir) repoId =
   cacheDir </> "remote-repos" </> repoId
 
 -- | Return the local repository directory.
-localRepoDir
-  :: RepoCache  -- ^ The repository cache directory
-  -> FilePath  -- ^ The existing, absolute path to the
-                          --  directory
+localRepoDir ::
+  -- | The repository cache directory
+  RepoCache ->
+  -- | The existing, absolute path to the
+  --  directory
+  FilePath
 localRepoDir (RepoCache cacheDir) = cacheDir </> "local-repo"
 
 -- | Select the first 'RemoteRepo' with a given @repoId@.
 lookupRemoteRepo :: [RemoteRepo] -> String -> Maybe RemoteRepo
 lookupRemoteRepo repos repoId = lookup repoId repoIdRepoPairs
-  where repoIdRepoPairs = map (\r@(RemoteRepo rid _ _ _ _) -> (rid, r)) repos
+  where
+    repoIdRepoPairs = map (\r@(RemoteRepo rid _ _ _ _) -> (rid, r)) repos

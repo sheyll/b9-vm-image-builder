@@ -5,8 +5,10 @@
 -- TODO: do it.
 --
 -- @since 1.0.0
-module B9.Artifact () where
-
+module B9.Artifact
+  (
+  )
+where
 
 ---- | Build Environment
 --disks = let
@@ -21,5 +23,3 @@ module B9.Artifact () where
 --          unZipped (remoteBinary foo)
 --          fileAttributes (\_f -> UnixFilePermissions 0 7 5 5 "root" "root")
 --
-
-

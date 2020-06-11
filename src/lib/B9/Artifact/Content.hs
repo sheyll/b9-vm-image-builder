@@ -5,16 +5,16 @@
 --
 -- @since 0.5.62
 module B9.Artifact.Content
-  ( ContentGenerator
-  , ToContentGenerator(..)
-  , Text
+  ( ContentGenerator,
+    ToContentGenerator (..),
+    Text,
   )
 where
 
-import           B9.B9Monad
-import           Control.Eff
-import           Data.Text                      ( Text )
-import           GHC.Stack
+import B9.B9Monad
+import Control.Eff
+import Data.Text (Text)
+import GHC.Stack
 
 -- | A 'B9' action that procuces a 'Text'.
 --
@@ -26,4 +26,4 @@ type ContentGenerator = B9 Text
 --
 -- @since 0.5.62
 class ToContentGenerator c where
-    toContentGenerator :: (HasCallStack, IsB9 e) => c -> Eff e Text
+  toContentGenerator :: (HasCallStack, IsB9 e) => c -> Eff e Text

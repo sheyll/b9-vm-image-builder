@@ -1,19 +1,19 @@
 -- | Convenient Shake 'Action's for 'B9' rules.
 module B9.Shake.Actions
-  ( b9InvocationAction
-  , buildB9File
+  ( b9InvocationAction,
+    buildB9File,
   )
 where
 
-import           B9
-import           Control.Lens                   ( (?~) )
-import           Development.Shake
-import           GHC.Stack
+import B9
+import Control.Lens ((?~))
+import Development.Shake
+import GHC.Stack
 
 -- | Convert a 'B9ConfigAction' action into a Shake 'Action'. This is just
 -- an alias for 'runB9ConfigActionWithOverrides' since 'Action' is an instance of 'MonadIO'
 -- and 'runB9ConfigActionWithOverrides' work on any .
-b9InvocationAction :: HasCallStack =>  B9ConfigAction a -> B9ConfigOverride -> Action a
+b9InvocationAction :: HasCallStack => B9ConfigAction a -> B9ConfigOverride -> Action a
 b9InvocationAction x y = liftIO (runB9ConfigActionWithOverrides x y)
 
 -- | An action that does the equivalent of
@@ -25,9 +25,9 @@ buildB9File b9Root b9File args = do
   let f = b9Root </> b9File
   need [f]
   liftIO
-    (runB9ConfigAction
-      (addLocalPositionalArguments
-        args
-        (localB9Config (projectRoot ?~ b9Root) (runBuildArtifacts [f]))
-      )
+    ( runB9ConfigAction
+        ( addLocalPositionalArguments
+            args
+            (localB9Config (projectRoot ?~ b9Root) (runBuildArtifacts [f]))
+        )
     )

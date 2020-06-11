@@ -1,29 +1,31 @@
 module B9.B9Config.LibVirtLXC
-  ( libVirtLXCConfigToCPDocument
-  , defaultLibVirtLXCConfig
-  , parseLibVirtLXCConfig
-  , LibVirtLXCConfig(..)
-  , networkId
-  , LXCGuestCapability(..)
-  , getEmulatorPath
+  ( libVirtLXCConfigToCPDocument,
+    defaultLibVirtLXCConfig,
+    parseLibVirtLXCConfig,
+    LibVirtLXCConfig (..),
+    networkId,
+    LXCGuestCapability (..),
+    getEmulatorPath,
   )
 where
 
-import           B9.DiskImages
-import           B9.ExecEnv
-import           Control.Lens                   ( makeLenses )
-import           Data.ConfigFile.B9Extras
-import           Control.Monad.IO.Class
-import           System.Environment.Blank      as SysIO
+import B9.DiskImages
+import B9.ExecEnv
+import Control.Lens (makeLenses)
+import Control.Monad.IO.Class
+import Data.ConfigFile.B9Extras
+import System.Environment.Blank as SysIO
 
-data LibVirtLXCConfig = LibVirtLXCConfig
-  { useSudo :: Bool
-  , emulator :: Maybe FilePath
-  , virshURI :: FilePath
-  , _networkId :: Maybe String
-  , guestCapabilities :: [LXCGuestCapability]
-  , guestRamSize :: RamSize
-  } deriving (Read, Show, Eq)
+data LibVirtLXCConfig
+  = LibVirtLXCConfig
+      { useSudo :: Bool,
+        emulator :: Maybe FilePath,
+        virshURI :: FilePath,
+        _networkId :: Maybe String,
+        guestCapabilities :: [LXCGuestCapability],
+        guestRamSize :: RamSize
+      }
+  deriving (Read, Show, Eq)
 
 -- | Available linux capabilities for lxc containers. This maps directly to the
 -- capabilities defined in 'man 7 capabilities'.
@@ -71,22 +73,23 @@ data LXCGuestCapability
 makeLenses ''LibVirtLXCConfig
 
 defaultLibVirtLXCConfig :: LibVirtLXCConfig
-defaultLibVirtLXCConfig = LibVirtLXCConfig
-  True
-  (Just "/usr/lib/libvirt/libvirt_lxc")
-  "lxc:///"
-  Nothing
-  [ CAP_MKNOD
-  , CAP_SYS_ADMIN
-  , CAP_SYS_CHROOT
-  , CAP_SETGID
-  , CAP_SETUID
-  , CAP_NET_BIND_SERVICE
-  , CAP_SETPCAP
-  , CAP_SYS_PTRACE
-  , CAP_SYS_MODULE
-  ]
-  (RamSize 1 GB)
+defaultLibVirtLXCConfig =
+  LibVirtLXCConfig
+    True
+    (Just "/usr/lib/libvirt/libvirt_lxc")
+    "lxc:///"
+    Nothing
+    [ CAP_MKNOD,
+      CAP_SYS_ADMIN,
+      CAP_SYS_CHROOT,
+      CAP_SETGID,
+      CAP_SETUID,
+      CAP_NET_BIND_SERVICE,
+      CAP_SETPCAP,
+      CAP_SYS_PTRACE,
+      CAP_SYS_MODULE
+    ]
+    (RamSize 1 GB)
 
 cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
@@ -114,8 +117,8 @@ guestCapabilitiesK = "guest_capabilities"
 guestRamSizeK :: String
 guestRamSizeK = "guest_ram_size"
 
-libVirtLXCConfigToCPDocument
-  :: LibVirtLXCConfig -> CPDocument -> Either CPError CPDocument
+libVirtLXCConfigToCPDocument ::
+  LibVirtLXCConfig -> CPDocument -> Either CPError CPDocument
 libVirtLXCConfigToCPDocument c cp = do
   cp1 <- addSectionCP cp cfgFileSection
   cp2 <- setShowCP cp1 cfgFileSection useSudoK $ useSudo c
@@ -129,7 +132,7 @@ parseLibVirtLXCConfig :: CPDocument -> Either CPError LibVirtLXCConfig
 parseLibVirtLXCConfig cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
       getr = readCP cp cfgFileSection
-  in  LibVirtLXCConfig
+   in LibVirtLXCConfig
         <$> getr useSudoK
         <*> getr emulatorK
         <*> getr virshURIK
@@ -145,6 +148,6 @@ parseLibVirtLXCConfig cp =
 -- @since 0.5.66
 getEmulatorPath :: MonadIO m => LibVirtLXCConfig -> m FilePath
 getEmulatorPath cfg = maybe fromEnv return (emulator cfg)
- where
-  fromEnv =
-    liftIO (SysIO.getEnvDefault emulatorEnvVar "/usr/lib/libexec/libvirt_lxc")
+  where
+    fromEnv =
+      liftIO (SysIO.getEnvDefault emulatorEnvVar "/usr/lib/libexec/libvirt_lxc")

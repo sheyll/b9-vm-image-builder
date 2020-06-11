@@ -1,10 +1,11 @@
 -- | A crude, unsafe and preliminary solution to building B9 'SharedImage's
 -- from Shake.
 module B9.Shake.SharedImageRules
-  ( customSharedImageAction
-  , needSharedImage
-  , enableSharedImageRules
-  ) where
+  ( customSharedImageAction,
+    needSharedImage,
+    enableSharedImageRules,
+  )
+where
 
 import B9
 import qualified Data.Binary as Binary
@@ -25,12 +26,16 @@ enableSharedImageRules b9inv = addBuiltinRule noLint noIdentity go
       mCurrentBId <- getImgBuildId
       let mCurrentBIdBinary = encodeBuildId <$> mCurrentBId
       putLoud $
-        "share image rule for: " ++
-        show nameQ ++
-        ". Deps: " ++
-        show dependenciesChanged ++
-        ", current BId: " ++
-        show mCurrentBId ++ " Binary: " ++ show mCurrentBIdBinary ++ ", old BId: " ++ show mOldBIdBinary
+        "share image rule for: "
+          ++ show nameQ
+          ++ ". Deps: "
+          ++ show dependenciesChanged
+          ++ ", current BId: "
+          ++ show mCurrentBId
+          ++ " Binary: "
+          ++ show mCurrentBIdBinary
+          ++ ", old BId: "
+          ++ show mOldBIdBinary
       case mCurrentBIdBinary of
         Just currentBIdBinary ->
           if dependenciesChanged == RunDependenciesSame && mOldBIdBinary == Just currentBIdBinary
@@ -83,9 +88,10 @@ customSharedImageAction b9img customAction = addUserRule (SharedImageCustomActio
 
 type instance RuleResult SharedImageName = SharedImageBuildId
 
-data SharedImageCustomActionRule =
-  SharedImageCustomActionRule SharedImageName
-                              (B9ConfigOverride -> Action SharedImageBuildId)
+data SharedImageCustomActionRule
+  = SharedImageCustomActionRule
+      SharedImageName
+      (B9ConfigOverride -> Action SharedImageBuildId)
   deriving (Typeable)
 
 errorSharedImageNotFound :: (HasCallStack, Monad m) => SharedImageName -> m a

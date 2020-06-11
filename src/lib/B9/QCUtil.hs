@@ -1,10 +1,9 @@
-{-|
-Some QuickCheck utility functions.
--}
+-- |
+-- Some QuickCheck utility functions.
 module B9.QCUtil where
 
-import           Control.Monad
-import           Test.QuickCheck
+import Control.Monad
+import Test.QuickCheck
 
 arbitraryEnv :: Arbitrary a => Gen [(String, a)]
 arbitraryEnv = listOf ((,) <$> listOf1 (choose ('a', 'z')) <*> arbitrary)
@@ -17,25 +16,27 @@ smaller g = sized (flip resize g . max 0 . flip (-) 1)
 
 arbitraryFilePath :: Gen FilePath
 arbitraryFilePath = do
-    path <- join <$> listOf
-        (elements
-            [ "/"
-            , "../"
-            , "./"
-            , "etc/"
-            , "opt/"
-            , "user/"
-            , "var/"
-            , "tmp/"
-            , "doc/"
-            , "share/"
-            , "conf.d/"
+  path <-
+    join
+      <$> listOf
+        ( elements
+            [ "/",
+              "../",
+              "./",
+              "etc/",
+              "opt/",
+              "user/",
+              "var/",
+              "tmp/",
+              "doc/",
+              "share/",
+              "conf.d/"
             ]
         )
-    prefix    <- elements ["foo_", "", "alt_", "ssh-", ""]
-    body      <- elements ["www", "passwd", "cert", "opnsfe", "runtime"]
-    extension <- elements [".txt", ".png", ".ps", ".erl", ""]
-    return (path ++ prefix ++ body ++ extension)
+  prefix <- elements ["foo_", "", "alt_", "ssh-", ""]
+  body <- elements ["www", "passwd", "cert", "opnsfe", "runtime"]
+  extension <- elements [".txt", ".png", ".ps", ".erl", ""]
+  return (path ++ prefix ++ body ++ extension)
 
 arbitraryLetter :: Gen Char
 arbitraryLetter = oneof [arbitraryLetterUpper, arbitraryLetterLower]

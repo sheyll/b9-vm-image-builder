@@ -1,90 +1,95 @@
-{-| An 'Environment' contains textual key value pairs, relavant for string template
-substitution.
-
-The variables are passed to the B9 build either via command line, OS environment
-variables or configuration file.
-
-@since 0.5.62
- -}
+-- | An 'Environment' contains textual key value pairs, relavant for string template
+-- substitution.
+--
+-- The variables are passed to the B9 build either via command line, OS environment
+-- variables or configuration file.
+--
+-- @since 0.5.62
 module B9.Environment
-  ( Environment()
-  , fromStringPairs
-  , addBinding
-  , addStringBinding
-  , addLocalStringBinding
-  , addPositionalArguments
-  , addLocalPositionalArguments
-  , EnvironmentReader
-  , hasKey
-  , runEnvironmentReader
-  , askEnvironment
-  , localEnvironment
-  , lookupOrThrow
-  , lookupEither
-  , KeyNotFound(..)
-  , DuplicateKey(..)
+  ( Environment (),
+    fromStringPairs,
+    addBinding,
+    addStringBinding,
+    addLocalStringBinding,
+    addPositionalArguments,
+    addLocalPositionalArguments,
+    EnvironmentReader,
+    hasKey,
+    runEnvironmentReader,
+    askEnvironment,
+    localEnvironment,
+    lookupOrThrow,
+    lookupEither,
+    KeyNotFound (..),
+    DuplicateKey (..),
   )
 where
 
-import           B9.B9Error
-import           B9.Text
-import           Control.Arrow                  ( (***) )
-import           Control.Exception              ( Exception )
-import           Control.Eff                   as Eff
-import           Control.Eff.Reader.Lazy       as Eff
-import           Control.Parallel.Strategies
-import           Data.Data
-import           Data.Foldable
-import           Data.HashMap.Strict            ( HashMap )
-import qualified Data.HashMap.Strict           as HashMap
-import           Data.Maybe                     ( maybe
-                                                , isJust
-                                                )
-import           GHC.Generics                   ( Generic )
+import B9.B9Error
+import B9.Text
+import Control.Arrow ((***))
+import Control.Eff as Eff
+import Control.Eff.Reader.Lazy as Eff
+import Control.Exception (Exception)
+import Control.Parallel.Strategies
+import Data.Data
+import Data.Foldable
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
+import Data.Maybe
+  ( isJust,
+    maybe,
+  )
+import GHC.Generics (Generic)
 
 -- | A map of textual keys to textual values.
 --
 -- @since 0.5.62
-data Environment = MkEnvironment
-  { nextPosition    :: Int
-  , fromEnvironment :: HashMap Text Text
-  } deriving (Show, Typeable, Data, Eq, Generic)
+data Environment
+  = MkEnvironment
+      { nextPosition :: Int,
+        fromEnvironment :: HashMap Text Text
+      }
+  deriving (Show, Typeable, Data, Eq, Generic)
 
 instance NFData Environment
 
 instance Semigroup Environment where
-  e1 <> e2 = MkEnvironment
-    { nextPosition    = case (nextPosition e1, nextPosition e2) of
-                          (1 , 1 ) -> 1
-                          (1 , p2) -> p2
-                          (p1, 1 ) -> p1
-                          _        -> error
-                            (  "Overlapping positional arguments (<>): ("
-                            ++ show e1
-                            ++ ") <> ("
-                            ++ show e2
-                            ++ ")"
-                            )
-    , fromEnvironment = let i  = HashMap.intersection h1 h2
-                            h1 = fromEnvironment e1
-                            h2 = fromEnvironment e2
-                        in  if HashMap.null i || all
-                               (\k -> HashMap.lookup k h1 == HashMap.lookup k h2
-                               )
-                               (HashMap.keys i)
-                            then
-                              h1 <> h2
-                            else
-                              error
-                                (  "Overlapping entries (<>): ("
-                                ++ show e1
-                                ++ ") <> ("
-                                ++ show e2
-                                ++ "): ("
-                                ++ show i
-                                ++ ")"
-                                )
-    }
+  e1 <> e2 =
+    MkEnvironment
+      { nextPosition = case (nextPosition e1, nextPosition e2) of
+          (1, 1) -> 1
+          (1, p2) -> p2
+          (p1, 1) -> p1
+          _ ->
+            error
+              ( "Overlapping positional arguments (<>): ("
+                  ++ show e1
+                  ++ ") <> ("
+                  ++ show e2
+                  ++ ")"
+              ),
+        fromEnvironment =
+          let i = HashMap.intersection h1 h2
+              h1 = fromEnvironment e1
+              h2 = fromEnvironment e2
+           in if HashMap.null i
+                || all
+                  ( \k -> HashMap.lookup k h1 == HashMap.lookup k h2
+                  )
+                  (HashMap.keys i)
+                then h1 <> h2
+                else
+                  error
+                    ( "Overlapping entries (<>): ("
+                        ++ show e1
+                        ++ ") <> ("
+                        ++ show e2
+                        ++ "): ("
+                        ++ show i
+                        ++ ")"
+                    )
+      }
 
 instance Monoid Environment where
   mempty = MkEnvironment 1 HashMap.empty
@@ -97,31 +102,34 @@ instance Monoid Environment where
 --
 -- @since 0.5.62
 addPositionalArguments :: [Text] -> Environment -> Environment
-addPositionalArguments = flip
-  (foldl'
-    (\(MkEnvironment i e) arg -> MkEnvironment
-      (i + 1)
-      (HashMap.insert (unsafeRenderToText ("arg_" ++ show i)) arg e)
+addPositionalArguments =
+  flip
+    ( foldl'
+        ( \(MkEnvironment i e) arg ->
+            MkEnvironment
+              (i + 1)
+              (HashMap.insert (unsafeRenderToText ("arg_" ++ show i)) arg e)
+        )
     )
-  )
-
 
 -- | Convenient wrapper around 'addPositionalArguments' and 'localEnvironment'.
 --
 -- @since 0.5.65
-addLocalPositionalArguments
-  :: Member EnvironmentReader e => [String] -> Eff e a -> Eff e a
+addLocalPositionalArguments ::
+  Member EnvironmentReader e => [String] -> Eff e a -> Eff e a
 addLocalPositionalArguments extraPositional = localEnvironment appendVars
- where
-  appendVars = addPositionalArguments (unsafeRenderToText <$> extraPositional)
+  where
+    appendVars = addPositionalArguments (unsafeRenderToText <$> extraPositional)
 
 -- | Create an 'Environment' from a list of pairs ('String's).
 -- Duplicated entries are ignored.
 --
 -- @since 0.5.62
 fromStringPairs :: [(String, String)] -> Environment
-fromStringPairs = MkEnvironment 0 . HashMap.fromList . fmap
-  (unsafeRenderToText *** unsafeRenderToText)
+fromStringPairs =
+  MkEnvironment 0 . HashMap.fromList
+    . fmap
+      (unsafeRenderToText *** unsafeRenderToText)
 
 -- | Insert a key value binding to the 'Environment'.
 --
@@ -132,29 +140,30 @@ fromStringPairs = MkEnvironment 0 . HashMap.fromList . fmap
 addBinding :: Member ExcB9 e => (Text, Text) -> Environment -> Eff e Environment
 addBinding (k, vNew) env =
   let h = fromEnvironment env
-  in  case HashMap.lookup k h of
-        Just vOld | vOld /= vNew ->
-          throwSomeException (MkDuplicateKey k vOld vNew)
+   in case HashMap.lookup k h of
+        Just vOld
+          | vOld /= vNew ->
+            throwSomeException (MkDuplicateKey k vOld vNew)
         _ -> pure (MkEnvironment (nextPosition env) (HashMap.insert k vNew h))
 
 -- | Insert 'String's into the 'Environment', see 'addBinding'.
 --
 -- @since 0.5.62
-addStringBinding
-  :: Member ExcB9 e => (String, String) -> Environment -> Eff e Environment
+addStringBinding ::
+  Member ExcB9 e => (String, String) -> Environment -> Eff e Environment
 addStringBinding = addBinding . (unsafeRenderToText *** unsafeRenderToText)
 
 -- | Insert a value into an 'Environment' like 'addStringBinding',
 -- but add it to the environment of the given effect, as in 'localEnvironment'.
 --
 -- @since 0.5.65
-addLocalStringBinding
-  :: (Member EnvironmentReader e, Member ExcB9 e)
-  => (String, String)
-  -> Eff e a
-  -> Eff e a
+addLocalStringBinding ::
+  (Member EnvironmentReader e, Member ExcB9 e) =>
+  (String, String) ->
+  Eff e a ->
+  Eff e a
 addLocalStringBinding binding action = do
-  e  <- askEnvironment
+  e <- askEnvironment
   e' <- addStringBinding binding e
   localEnvironment (const e') action
 
@@ -178,11 +187,11 @@ askEnvironment = ask
 -- | Run a computation with a modified 'Environment'
 --
 -- @since 0.5.62
-localEnvironment
-  :: Member EnvironmentReader e
-  => (Environment -> Environment)
-  -> Eff e a
-  -> Eff e a
+localEnvironment ::
+  Member EnvironmentReader e =>
+  (Environment -> Environment) ->
+  Eff e a ->
+  Eff e a
 localEnvironment = local
 
 -- | Lookup a key for a value.
@@ -194,9 +203,10 @@ localEnvironment = local
 lookupOrThrow :: ('[ExcB9, EnvironmentReader] <:: e) => Text -> Eff e Text
 lookupOrThrow key = do
   env <- askEnvironment
-  maybe (throwSomeException (MkKeyNotFound key env))
-        return
-        (HashMap.lookup key (fromEnvironment env))
+  maybe
+    (throwSomeException (MkKeyNotFound key env))
+    return
+    (HashMap.lookup key (fromEnvironment env))
 
 -- | Lookup a key for a value.
 --
@@ -204,8 +214,8 @@ lookupOrThrow key = do
 -- in the 'Environment', or 'Right' the value.
 --
 -- @Since 0.5.62
-lookupEither
-  :: Member EnvironmentReader e => Text -> Eff e (Either KeyNotFound Text)
+lookupEither ::
+  Member EnvironmentReader e => Text -> Eff e (Either KeyNotFound Text)
 lookupEither key = do
   env <- askEnvironment
   (return . maybe (Left (MkKeyNotFound key env)) Right)
@@ -214,20 +224,23 @@ lookupEither key = do
 -- | An 'Exception' thrown by 'addBinding' indicating that a key already exists.
 --
 -- @Since 0.5.62
-data DuplicateKey = MkDuplicateKey
-  { duplicateKey         :: Text
-  , duplicateKeyOldValue :: Text
-  , duplicateKeyNewValue :: Text
-  } deriving (Typeable, Show, Eq)
+data DuplicateKey
+  = MkDuplicateKey
+      { duplicateKey :: Text,
+        duplicateKeyOldValue :: Text,
+        duplicateKeyNewValue :: Text
+      }
+  deriving (Typeable, Show, Eq)
 
 instance Exception DuplicateKey
 
 -- | An 'Exception' thrown by 'lookupOrThrow' indicating that a key does not exist.
 --
 -- @Since 0.5.62
-data KeyNotFound =
-  MkKeyNotFound Text
-                Environment
+data KeyNotFound
+  = MkKeyNotFound
+      Text
+      Environment
   deriving (Typeable, Eq)
 
 instance Exception KeyNotFound
@@ -235,8 +248,8 @@ instance Exception KeyNotFound
 instance Show KeyNotFound where
   showsPrec _ (MkKeyNotFound key env) =
     let keys =
-            unlines (unsafeParseFromText <$> HashMap.keys (fromEnvironment env))
-    in  showString "Invalid template parameter: \""
+          unlines (unsafeParseFromText <$> HashMap.keys (fromEnvironment env))
+     in showString "Invalid template parameter: \""
           . showString (unsafeParseFromText key)
           . showString "\".\nValid variables:\n"
           . showString keys

@@ -1,30 +1,33 @@
-{-# Language DeriveDataTypeable, ConstraintKinds, ExplicitNamespaces #-}
-{-| Extensions to 'Data.ConfigFile' and utility functions for dealing with
-    configuration in general and reading/writing files. -}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ExplicitNamespaces #-}
+
+-- | Extensions to 'Data.ConfigFile' and utility functions for dealing with
+--    configuration in general and reading/writing files.
 module Data.ConfigFile.B9Extras
-  ( addSectionCP
-  , setShowCP
-  , setCP
-  , readCP
-  , mergeCP
-  , toStringCP
-  , sectionsCP
-  , emptyCP
-  , type CPGet
-  , type CPOptionSpec
-  , type CPSectionSpec
-  , type CPDocument
-  , CPError()
-  , readCPDocument
-  , CPReadException(..)
+  ( addSectionCP,
+    setShowCP,
+    setCP,
+    readCP,
+    mergeCP,
+    toStringCP,
+    sectionsCP,
+    emptyCP,
+    type CPGet,
+    type CPOptionSpec,
+    type CPSectionSpec,
+    type CPDocument,
+    CPError (),
+    readCPDocument,
+    CPReadException (..),
   )
 where
 
-import           Data.Typeable
-import           Data.ConfigFile
-import           Control.Exception
-import           Control.Monad.Except
-import           System.IO.B9Extras
+import Control.Exception
+import Control.Monad.Except
+import Data.ConfigFile
+import Data.Typeable
+import System.IO.B9Extras
 
 -- * Aliases for functions and types from 'ConfigParser' in 'Data.ConfigFile'
 
@@ -38,40 +41,40 @@ type CPSectionSpec = SectionSpec
 type CPOptionSpec = OptionSpec
 
 -- | An alias for 'setshow'.
-setShowCP
-  :: (Show a, MonadError CPError m)
-  => CPDocument
-  -> CPSectionSpec
-  -> CPOptionSpec
-  -> a
-  -> m CPDocument
+setShowCP ::
+  (Show a, MonadError CPError m) =>
+  CPDocument ->
+  CPSectionSpec ->
+  CPOptionSpec ->
+  a ->
+  m CPDocument
 setShowCP = setshow
 
 -- | An alias for 'set'.
-setCP
-  :: (MonadError CPError m)
-  => CPDocument
-  -> CPSectionSpec
-  -> CPOptionSpec
-  -> String
-  -> m CPDocument
+setCP ::
+  (MonadError CPError m) =>
+  CPDocument ->
+  CPSectionSpec ->
+  CPOptionSpec ->
+  String ->
+  m CPDocument
 setCP = set
 
 -- | An alias for 'get'.
-readCP
-  :: (CPGet a, MonadError CPError m)
-  => CPDocument
-  -> CPSectionSpec
-  -> CPOptionSpec
-  -> m a
+readCP ::
+  (CPGet a, MonadError CPError m) =>
+  CPDocument ->
+  CPSectionSpec ->
+  CPOptionSpec ->
+  m a
 readCP = get
 
 -- | An alias for 'Get_C'
 type CPGet a = Get_C a
 
 -- | An alias for 'add_section'.
-addSectionCP
-  :: MonadError CPError m => CPDocument -> CPSectionSpec -> m CPDocument
+addSectionCP ::
+  MonadError CPError m => CPDocument -> CPSectionSpec -> m CPDocument
 addSectionCP = add_section
 
 -- | An alias for 'merge'.
@@ -96,10 +99,11 @@ readCPDocument cfgFile' = do
   liftIO $ do
     res <- readfile emptyCP cfgFilePath
     case res of
-      Left  e  -> throwIO (CPReadException cfgFilePath e)
+      Left e -> throwIO (CPReadException cfgFilePath e)
       Right cp -> return cp
 
 -- | An exception thrown by 'readCPDocument'.
 data CPReadException = CPReadException FilePath CPError
-                      deriving (Show, Typeable)
+  deriving (Show, Typeable)
+
 instance Exception CPReadException
