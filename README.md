@@ -1,8 +1,8 @@
 # B9 - A Benign VM-Build Tool [![changelog](https://img.shields.io/badge/changelog-green.svg?style=flat)](CHANGELOG.md)
 
-[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![b9 LTS](http://stackage.org/package/b9/badge/lts)](http://stackage.org/lts/package/b9)[![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
+[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
 
-**An algebraic data type to describe virtual machine images generation.**
+## What it can do
 
 ### Overview
 
@@ -13,6 +13,53 @@ A few core `data` types form an EDSL, and  `B9` contains functions to `read` and
 
 Such a term can then be stored into a **text file** and is interpreted by a **command line invokation**. 
 
+### Make VM Disk Images 
+
+* Extract partitions from MRB Partitioned images
+* Create, resuse, resize EXT-4 on Qcow2, vmdk or raw Images 
+* Run commands on images to create new image, similar to what docker build does, 
+  * Using libvirt-lxc 
+  * Using docker 
+  * Using systemd-nspawn
+
+### Manage Disk Images 
+
+* Cache images locally
+* Distribute cached images via SCP
+
+### Assemble Cloud-init Configuration
+
+* Merge YAML Expressions
+* Merge Erlang Terms 
+* Load local files 
+* Load files from HTTP servers
+* Support `${identifier}` variable interpolation 
+* Create cloud-init 
+  * ISO images 
+  * Floppy images 
+  * yaml files
+
+### Input files 
+
+The input files can be in:
+
+* DHALL format
+* Haskell values interpreted by the `Read` instances.
+
+### Usage as Library 
+
+* Use as a Haskell library
+
+### Configuration 
+
+B9 uses a *`.ini` - style* configuration file.
+
+### Incremental Builds 
+
+B9 uses `shake` so some degree of incremental build is available.
+
+## Installation 
+
 ### Installation on NixOS
 
 * As **command line utility** in current directory:
@@ -22,161 +69,6 @@ Such a term can then be stored into a **text file** and is interpreted by a **co
   Now the executable `b9c` is in `./result/bin/`:
 
       $ result/bin/b9c      
-
-### Installation as Hackage Library with Stack
-
-**Add a dependency to `b9` in your `.cabal` file.**    
-
-Update the `extra-deps` section in your `stack.yaml`:
-    
-    extra-deps:
-    - b9-0.5.68.2
-
-### Installation of custom version as Library with Stack 
-
-**Instead** of adding to `extra-deps` one can use version **not on Hackage**.
-Update the `packages` section in your `stack.yaml`:
-
-    # Local packages, usually specified by relative directory name
-    packages:
-    
-    - location:
-        github: git@github.com:sheyll/b9-vm-image-builder.git
-        commit: 467c4bf8274a50a72a2a720f3c2710926fb845b2
-        extra-dep: true
-
-### Features
-
-* Disk image creation
-  * Growing shrinking of disk images and file systems
-  * File system creation
-  * Using existing Disk/File system as input
-  * Libvirt/LXC based shell script execution
-  * ISO/VFAT cloud-init images without Libvirt/LXC
-  * **Artifact Caching and Sharing**
-     * Shake rules
- * (Source-) File Creation
-   * Example: Merge yaml config snippets, with template parameterers replaced into a text file
-              included on the output image.    
-   * text-files
-   * structured text files with merging:
-      * raw
-      * yaml
-      * erlang
-      * Syntax trees for *objects* that can be converted to raw text, yaml or erlang
-   * base64 encoded binaries
-   * content fetched via HTTP
-   * simple template support with `${variableName}`
-* Repetition and Reuse
-
-### Supported Formats
-
-Supported Disk Images and File system types:
-
-  * Cloud-init 
-    * ISOs
-    * VFAT floppys
-    * raw directories
-  * VMDK files
-  * QCOW images
-  * RAW images 
-  * MBR partitioned disk images
-  * EXT-4
-
-### Old Readme
-
-Use B9 to compile your software into a deployable set of Linux-VM- or
-configuration images, from a set of scripts and input files and templates.
-
-The main goal of this tool is to provide a build tool to increase automation and
-reduce redundancy when creating configured, ready-to-run VM-images.
-
-It is designed to help implementing what's buzz-worded as _immutable_
-infrastructure, by making whole-VM-deployments as safe and a fast as possible.
-
-B9 does not bring infrastructure to run and connect any VM-image in production,
-it is merely a build tool to assemble deployable artifacts.
-
-One big thing is that it can produce many machines and cloud-configs from a
-single build file, because build files can describe concrete as well as
-parameterized generators. It can create parameterized VM-Images by uploading
-(e.g. system-)files assembled by syntax aware template application and
-combination, all statically checked by during the build.
-
-This sets B9 apart from e.g. cloud-init or other configuration management
-systems that provide configuration via user provided dynamic script-programs,
-which rely on the user to contain correct error handling.
-
-The general idea is the same as in statically type programming languages: catch
-errors as early as possible without relying on the user to create a covering set
-of tests/error checks.
-
-Certain sacrifies were made; there might be a steep laerning curve, but you will
-eventually get there. The tool at hand works stable and reliable. The build
-files are check rigorously, all builds happen in a random build directory and
-failure leaves no stale LXC-containers running or multiple GiB of temporary disk
-image files around. Also, there is no way modify an existing image in
-place. Work on VM-Images is always done on a copy of an image, and to speed
-things up, it is possible to explicitly use copy-on-write images.
-
-B9 creates bootable virtual machine images, without necessarily using
-virtualization itself.
-
-In essence B9 is a tool for _creation_, _configuration_ and _sharing_ of VM images and
-all peripheral artifacts, it creates:
-
-* VMDK/QCOW2/Raw VM images
-* Converted, extracted and resized copies of existing vm images
-* Empty VM images with extended 4 file system
-* Cloud-Config Images
-* Text files from template files with variable interpolation
-* Erlang OTP sys.config files
-* beqemu-life-installer compatible VM images
-
-B9 creates/converts/assembles virtual disk images as well as any number of
-config-input files and executes scripts in LXC containers into which these
-images are mounted.
-
-The input is in both cases a single, text-based configuration file wich can be
-put along side with other build files (e.g. Makefiles, maven poms, ...).
-
-## Some Random Features:
-
-* Tailored for both software compilation environments and VM image creation
-* Creation of cloud-init (NoCloud) ISO images, VFAT images and directories
-* Assembly and creation of arbitrary files with safe variable interpolation
-* Creation of multiple images/machines/cloud-configs based on creation rules
-* Syntax-checked merging of several cloud-config yaml user-data files with
-  variable expansion
-* Syntax-checked parsing and recombination of Erlang/OTP sys.config files with
-  variable expansion
-* Reusing and Sharing of vm-images, e.g. via The Internet using 'push' and 'pull'
-* Arbitrary command execution inside a guest container
-* Execution of interactive commands inside guest containers
-* Create empty VM Images with file system
-* Builtin config file formatter
-* Create CopyOnWrite-Images backed by existing QCow2 or Raw images
-* Create disk images from other disk image
-* Derive disk images from a partition inside of an existing disk image
-* Transparent support for QCOW2, VMDK and Raw (intermediate images will have the appropriate formats)
-* Resize images and optionally also file systems inside disk images
-* Support for 64-bit and 32-bit guests
-* Share directories with the host
-* Haskell library for parsing the config files and running builds
-* Speed: Smart disk image conversion, raw image preference, flexible configuration, simple profiling
-* Configurable Logging
-* Automatic build clean-up
-* Configurable LibVirtLXC parameters
-* Configurable remote (ssh with pubkey auth + rsync) image shareing
-* Local caching of shared images
-
-## Installation
-
-### b9 executable and library
-
-Install via `stack`:
-
-    $ stack install b9
 
 ### Runtime dependencies
 
@@ -234,7 +126,7 @@ for a list of command line parameters and commands.
 To enable B9 to work correctly on your machine edit the config file and make
 necessary adaptions.
 
-## B9 configuration file
+### B9 configuration file
 
 This is an example of a B9 configuration file, by default found in
 `~/.b9/b9.conf`:
@@ -263,7 +155,54 @@ This is an example of a B9 configuration file, by default found in
 
 Some of the options can also be specified on the command line.
 
-# Writing B9 build files
+
+## Goal of the project
+
+Use B9 to compile your software into a deployable set of Linux-VM- or
+configuration images, from a set of scripts and input files and templates.
+
+The main goal of this tool is to provide a build tool to increase automation and
+reduce redundancy when creating configured, ready-to-run VM-images.
+
+One big thing is that it can produce many machines and cloud-configs from a
+single build file, because build files can describe concrete as well as
+parameterized generators. It can create parameterized VM-Images by uploading
+(e.g. system-)files assembled by syntax aware template application and
+combination, all statically checked by during the build.
+
+This sets B9 apart from e.g. cloud-init or other configuration management
+systems that provide configuration through user provided dynamic script-programs,
+which rely on the user to contain correct error handling.
+
+The general idea is the same as in statically type programming languages: catch
+errors as early as possible without relying on the user to create a covering set
+of tests/error checks.
+
+Certain sacrifies were made; there might be a steep laerning curve, but you will
+eventually get there. The tool at hand works stable and reliable. 
+
+All builds happen in isolation, i.e. by default in random build directories, and
+are cleaned on failure. 
+
+Also, B9 does not modify cached images. 
+Work on VM-Images is always done on a copy of an image, and to speed
+things up, it is possible to explicitly use copy-on-write images.
+
+B9 creates bootable virtual machine images, without necessarily using
+virtualization itself.
+
+In essence B9 is a tool for _creation_, _configuration_ and _sharing_ of VM images and
+all peripheral artifacts, it creates:
+
+* VMDK/QCOW2/Raw VM images
+* Converted, extracted and resized copies of existing vm images
+* Empty VM images with extended 4 file system
+* Cloud-Config Images
+* Text files from template files with variable interpolation
+* Erlang OTP sys.config files
+
+
+## Writing B9 build files
 
 If you really need to write these file, you are basically f'ed.
 
@@ -273,7 +212,7 @@ around.
 
 More documentation is comming soon!
 
-## General Structure
+### General Structure
 
 A B9 configuration describes a single `ArtifactGenerator`. It generates files
 belonging to a VM, such as qcow2/raw/vmdk-image file(s) and e.g. cloud-init ISO
@@ -283,7 +222,7 @@ Just to recap: a `something.b9` build file _is_ always ever only a mere
 `ArtifactGenerator` literal, no matter how many `Let`, `Each`, `Artifacts`,
 etc... you see flying around there.
 
-## Creating artifacts
+### Creating artifacts
 
 To get any _real_ artifact out of an artifact generator use the `Artifact`
 constructor. It takes _2_ parameters an arbitrary id and a describtion of what
@@ -296,7 +235,7 @@ An artifact can either be a (set of) VM-disk-image(s) likely in combination
 with some shell script to install software, etc _or_ a static collection of
 files put on a cloud-init image(VFAT or ISO or directory).
 
-### Defining artifact generators that produce vm image files
+#### Defining artifact generators that produce vm image files
 
 To produce vm image files, e.g. with some software installed use the `VmImages`
 artifact generator. It has only _2_ parameters:
@@ -310,7 +249,7 @@ Of course it must be wrapped in an `Artifact` definition, so we get this structu
      Artifact (IID "my_first_image")
        (VmImages [...] (...))
 
-#### ImageTargets
+##### ImageTargets
 
 The first argument to `VmImages` is a list of `ImageTarget`. Each describes
 a single VM-disk-image. The syntax is:
@@ -325,7 +264,7 @@ a single VM-disk-image. The syntax is:
 * A `MountPoint` specifies where to mount the image during the execution of an
   optional `VmBuild`-script.
 
-### Parameterized artifact generators
+#### Parameterized artifact generators
 
 B9 supports `$varnam` variable interpolation in all strings anywhere in an
 `ArtifactGenerator`:
@@ -363,14 +302,14 @@ This `("webserver", "www.${domainname}")` is an example to show that the _value_
 may also contain a variable reference. (Of course, only to variabled defined
 _before_)
 
-## Anger-Management
+### Anger-Management
 
 B9 build files contain a single literal `ArtifactGenerator` value
 in Haskell syntax. B9 currently 'parses' the config file without any
 error checking, so writing config files is VERY frustrating without
 some tricks:
 
-### Trick 1
+#### Trick 1
 
 Start with a working file and run
 
@@ -384,7 +323,7 @@ You will immediately know if a modification broke the file.
 NOTE: If your build file refers to any `${arg_...}` positional arguments pass
 them to `reformat` using `--` followed by the argument list.
 
-### Trick 2
+#### Trick 2
 
 Obtain and build the sources of B9, start an interactive haskell shell with the
 B9 code loaded and try to paste the contents of the config file to see if ghci
