@@ -5,8 +5,9 @@ TAGS
 *.profile
 BUILD*
 dist
+dist-newstyle
 OUT
-
+*.orig
 /.cabal-sandbox/
 /cabal.sandbox.config
 /upload_doc.sh
