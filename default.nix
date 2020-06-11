@@ -4,13 +4,15 @@ let
 
   shell = pkgsWithB9.haskellPackages.shellFor {
     packages = p: [
-      p."b9"
+      p.b9
     ];
     buildInputs = with pkgsWithB9.haskellPackages; [
       cabal-install
       hlint
-      brittany
       ghcid
+      pkgsWithB9.docker
+      niv
+      ormolu
     ];
     withHoogle = true;
   };
