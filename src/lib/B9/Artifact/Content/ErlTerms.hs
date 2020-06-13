@@ -233,7 +233,7 @@ erlFloatParser = do
   -- issues.
   sign <- option "" ((char '-' >> return "-") <|> (char '+' >> return ""))
   s1 <- many digit
-  char '.'
+  _ <- char '.'
   s2 <- many1 digit
   e <-
     do
@@ -283,19 +283,19 @@ decimalLiteral =
 
 erlStringParser :: Parser SimpleErlangTerm
 erlStringParser = do
-  char '"'
+  _ <- char '"'
   str <- many (erlCharEscaped <|> noneOf "\"")
-  char '"'
+  _ <- char '"'
   return (ErlString str)
 
 erlCharEscaped :: Parser Char
 erlCharEscaped =
   char '\\'
     >> ( do
-           char '^'
+           _ <- char '^'
            choice (zipWith escapedChar ccodes creplacements)
            <|> do
-             char 'x'
+             _ <- char 'x'
              do
                ds <-
                  between
@@ -333,10 +333,10 @@ erlCharEscaped =
 
 erlBinaryParser :: Parser SimpleErlangTerm
 erlBinaryParser = do
-  string "<<"
+  _ <- string "<<"
   spaces
   ErlString str <- option (ErlString "") erlStringParser
-  string ">>"
+  _ <- string ">>"
   spaces
   return (ErlBinary str)
 

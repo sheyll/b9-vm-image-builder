@@ -58,7 +58,7 @@ buildArtifacts artifactGenerator = do
   traceL . ("CWD: " ++) =<< liftIO getCurrentDirectory
   infoL "BUILDING ARTIFACTS"
   getConfig >>= traceL . printf "USING BUILD CONFIGURATION: %v" . ppShow
-  assemble artifactGenerator
+  _ <- assemble artifactGenerator
   getBuildId
 
 -- | Return a list of relative paths for the /local/ files to be generated

@@ -129,7 +129,7 @@ runFormatBuildFiles :: MonadIO m => [FilePath] -> m ()
 runFormatBuildFiles buildFiles = liftIO $ do
   generators <- mapM consult buildFiles
   let generatorsFormatted = map ppShow (generators :: [ArtifactGenerator])
-  putStrLn `mapM` generatorsFormatted
+  putStrLn `mapM_` generatorsFormatted
   zipWithM_ writeFile buildFiles generatorsFormatted
 
 -- | Upload a 'SharedImageName' to the default remote repository.

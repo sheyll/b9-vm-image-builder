@@ -16,7 +16,6 @@ where
 import Control.Exception
 import Control.Monad.Except
 import Data.Data
-import Data.Typeable
 import Data.Word
   ( Word16,
     Word32,

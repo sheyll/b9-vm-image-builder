@@ -49,7 +49,7 @@ enableSharedImageRules b9inv = addBuiltinRule noLint noIdentity go
         rebuild :: Maybe ByteString.ByteString -> Action (RunResult SharedImageBuildId)
         rebuild mCurrentBIdBinary = do
           (_, act) <- getUserRuleOne nameQ (const Nothing) imgMatch
-          act b9inv
+          _ <- act b9inv
           mNewBId <- getImgBuildId
           newBId <-
             maybe
