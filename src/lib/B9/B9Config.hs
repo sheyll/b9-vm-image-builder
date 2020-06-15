@@ -59,6 +59,7 @@ where
 
 import B9.B9Config.Docker as X
 import B9.B9Config.LibVirtLXC as X
+import B9.B9Config.Container as X
 import B9.B9Config.Repository as X
 import B9.Environment
 import Control.Eff

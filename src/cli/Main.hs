@@ -114,8 +114,8 @@ globals =
                 Just n | n == hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) Nothing)
                 _ -> mempty
               <> case containerNetworking of
-                Just n | n /= hostNetworkMagicValue -> Endo (set (dockerConfig . _Just . networkId) (Just n))
-                Just n | n == hostNetworkMagicValue -> Endo (set (dockerConfig . _Just . networkId) Nothing)
+                Just n | n /= hostNetworkMagicValue -> Endo (set (dockerConfig . _Just . dockerNetworkId) (Just n))
+                Just n | n == hostNetworkMagicValue -> Endo (set (dockerConfig . _Just . dockerNetworkId) Nothing)
                 _ -> mempty
        in B9ConfigOverride {_customB9ConfigPath = Path <$> cfg, _customB9Config = b9cfg, _customEnvironment = mempty}
 

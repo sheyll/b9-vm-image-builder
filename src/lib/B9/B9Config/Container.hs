@@ -1,7 +1,7 @@
 module B9.B9Config.Container
-  ( parseContainerConfig,
-    ContainerConfig (..),
-    ContainerCapability(..),
+  ( parseContainerCapabilities,
+    ContainerCapability (..),
+    containerCapsToCPDocument,
   )
 where
 
@@ -51,19 +51,13 @@ data ContainerCapability
   deriving (Read, Show, Eq)
 
 containerCapabilitiesK :: String
-containerCapabilitiesK = "container_capibilities"
-
+containerCapabilitiesK = "guest_capabilities"
 
 containerCapsToCPDocument ::
-  ContainerCapability -> CPDocument -> Either CPError CPDocument
-containerCapsToCPDocument c cp = do
-  setShowCP cp2 cfgFileSection containerCapabilitiesK $ containerCapabilities c
+  CPDocument -> CPSectionSpec -> [ContainerCapability] -> Either CPError CPDocument
+containerCapsToCPDocument cp cfgFileSection c =
+  setShowCP cp cfgFileSection containerCapabilitiesK c
 
-parseContainerCapabilities :: CPDocument -> Either CPError DockerConfig
-parseContainerCapabilities =
-  let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
-      getr = readCP cp cfgFileSection
-   in DockerConfig
-        <$> getr networkIdK
-        <*> getr containerCapabilitiesK
-
+parseContainerCapabilities :: CPDocument -> CPSectionSpec -> Either CPError [ContainerCapability]
+parseContainerCapabilities cp cfgFileSection =
+  readCP cp cfgFileSection containerCapabilitiesK

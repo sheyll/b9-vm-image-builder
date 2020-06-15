@@ -119,6 +119,7 @@ library
                    , B9.Artifact.Readable.Source
                    , B9.BuildInfo
                    , B9.B9Config
+                   , B9.B9Config.Container
                    , B9.B9Config.Docker
                    , B9.B9Config.LibVirtLXC
                    , B9.B9Config.Repository
@@ -161,6 +162,7 @@ library
                    , monad-control >= 1.0 && < 1.1
                    , mtl >= 2.2
                    , time >= 1.6
+                   , optparse-applicative >= 0.14
                    , parallel >= 3.2
                    , parsec >= 3.1
                    , pretty-show >= 1.6

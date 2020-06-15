@@ -8,7 +8,7 @@ module B9.LibVirtLXC
 where
 
 import B9.B9Config
-  ( getB9Config,
+  (ContainerCapability,  getB9Config,
     libVirtLXCConfigs,
   )
 import B9.B9Config.LibVirtLXC as X
@@ -156,7 +156,7 @@ createDomain cfg e buildId uuid scriptDirHost scriptDirGuest = do
 renderGuestCapabilityEntries :: LibVirtLXCConfig -> String
 renderGuestCapabilityEntries = unlines . map render . guestCapabilities
   where
-    render :: LXCGuestCapability -> String
+    render :: ContainerCapability -> String
     render cap =
       let capStr = toLower <$> drop (length "CAP_") (show cap)
        in printf "<%s state='on'/>" capStr

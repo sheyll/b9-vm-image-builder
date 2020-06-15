@@ -1,8 +1,4 @@
 cradle:
   cabal:
-    - path: "."
-      component: "test:spec"
-    - path: "."
-      component: "exe:b9c"
-    - path: "."
+    - path: "./"
       component: "lib:b9"
