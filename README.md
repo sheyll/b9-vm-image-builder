@@ -2,6 +2,10 @@
 
 [![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg?branch=0.5)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
 
+**NOTE: The feature list is not completely implemented yet!**
+
+**When version 2 is released of b9, all features listed here can be expected to work.**
+
 ## What it can do
 
 ### Overview

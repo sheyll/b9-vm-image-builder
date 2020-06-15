@@ -1,4 +1,4 @@
-cabal-version:       2.2
+cabal-version:       2.4
 name:                b9
 version:             1.0.0
 
@@ -119,6 +119,7 @@ library
                    , B9.Artifact.Readable.Source
                    , B9.BuildInfo
                    , B9.B9Config
+                   , B9.B9Config.Docker
                    , B9.B9Config.LibVirtLXC
                    , B9.B9Config.Repository
                    , B9.B9Error

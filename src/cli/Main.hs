@@ -36,7 +36,7 @@ parseCommandLine =
         (helper <*> (B9RunParameters <$> globals <*> cmds <*> buildVars))
         ( fullDesc
             <> progDesc
-              "Build and run VM-Images inside LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'. The current working directory is used as ${projectRoot} if not otherwise specified in the config file, or via the '-b' option."
+              "Build and run VM-Images inside docker/system-nspawn/LXC containers. Custom arguments follow after '--' and are accessable in many strings in build files  trough shell like variable references, i.e. '${arg_N}' referes to positional argument $N.\n\nRepository names passed to the command line are looked up in the B9 configuration file, which is per default located in: '~/.b9/b9.conf'. The current working directory is used as ${projectRoot} if not otherwise specified in the config file, or via the '-b' option."
             <> headerDoc (Just b9HelpHeader)
         )
     )
@@ -77,7 +77,7 @@ globals =
     <*> optional
       ( strOption
           ( help
-              ( "Override the libvirt-lxc network setting.\nThe special value '"
+              ( "Override the container network setting.\nThe special value '"
                   ++ hostNetworkMagicValue
                   ++ "' disables restricted container networking."
               )
@@ -98,7 +98,7 @@ globals =
       Maybe String ->
       Maybe String ->
       B9ConfigOverride
-    toGlobalOpts cfg verbose quiet logF buildRoot keep predictableBuildDir mRepoCache repo libvirtNet =
+    toGlobalOpts cfg verbose quiet logF buildRoot keep predictableBuildDir mRepoCache repo containerNetworking =
       let minLogLevel
             | verbose = Just LogTrace
             | quiet = Just LogError
@@ -109,9 +109,13 @@ globals =
               <> Endo (uniqueBuildDirs .~ not predictableBuildDir)
               <> Endo (repository .~ repo)
               <> Endo (repositoryCache .~ (Path <$> mRepoCache))
-              <> case libvirtNet of
+              <> case containerNetworking of
                 Just n | n /= hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) (Just n))
                 Just n | n == hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) Nothing)
+                _ -> mempty
+              <> case containerNetworking of
+                Just n | n /= hostNetworkMagicValue -> Endo (set (dockerConfig . _Just . networkId) (Just n))
+                Just n | n == hostNetworkMagicValue -> Endo (set (dockerConfig . _Just . networkId) Nothing)
                 _ -> mempty
        in B9ConfigOverride {_customB9ConfigPath = Path <$> cfg, _customB9Config = b9cfg, _customEnvironment = mempty}
 

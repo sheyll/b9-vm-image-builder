@@ -23,6 +23,7 @@ module B9.B9Config
     repository,
     interactive,
     libVirtLXCConfigs,
+    dockerConfig,
     remoteRepos,
     maxLocalSharedImageRevisions,
     B9ConfigOverride (..),
@@ -56,6 +57,7 @@ module B9.B9Config
   )
 where
 
+import B9.B9Config.Docker as X
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Config.Repository as X
 import B9.Environment
@@ -118,6 +120,7 @@ data B9Config
         _interactive :: Bool,
         _maxLocalSharedImageRevisions :: Maybe Int,
         _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
+        _dockerConfig :: Maybe DockerConfig,
         _remoteRepos :: [RemoteRepo]
       }
   deriving (Show, Eq)
@@ -136,12 +139,13 @@ instance Semigroup B9Config where
         _interactive = getAny ((mappend `on` (Any . _interactive)) c c'),
         _maxLocalSharedImageRevisions = getLast ((mappend `on` (Last . _maxLocalSharedImageRevisions)) c c'),
         _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
+        _dockerConfig = getLast ((mappend `on` (Last . _dockerConfig)) c c'),
         _remoteRepos = (mappend `on` _remoteRepos) c c'
       }
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC True Nothing Nothing False Nothing Nothing []
+  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC True Nothing Nothing False Nothing Nothing Nothing []
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -366,6 +370,7 @@ defaultB9Config =
       _interactive = False,
       _maxLocalSharedImageRevisions = Just 2,
       _libVirtLXCConfigs = Just defaultLibVirtLXCConfig,
+      _dockerConfig = Just defaultDockerConfig,
       _remoteRepos = []
     }
 
@@ -442,4 +447,5 @@ parseB9Config cp =
         <*> pure False
         <*> pure (either (const Nothing) id (getr maxLocalSharedImageRevisionsK))
         <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
+        <*> pure (either (const Nothing) Just (parseDockerConfig cp))
         <*> parseRemoteRepos cp
