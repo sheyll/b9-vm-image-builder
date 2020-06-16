@@ -6,7 +6,6 @@ module B9.B9Config
     runB9ConfigReader,
     B9ConfigReader,
     getB9Config,
-    getExecEnvType,
     getConfig,
     getLogVerbosity,
     getProjectRoot,
@@ -17,13 +16,12 @@ module B9.B9Config
     logFile,
     projectRoot,
     keepTempDirs,
-    execEnvType,
     uniqueBuildDirs,
     repositoryCache,
     repository,
     interactive,
     libVirtLXCConfigs,
-    dockerConfig,
+    dockerConfigs,
     remoteRepos,
     maxLocalSharedImageRevisions,
     B9ConfigOverride (..),
@@ -51,7 +49,6 @@ module B9.B9Config
     modifyCPDocument,
     b9ConfigToCPDocument,
     LogLevel (..),
-    ExecEnvType (..),
     Environment,
     module X,
   )
@@ -96,9 +93,6 @@ import System.FilePath ((<.>))
 import System.IO.B9Extras (SystemPath (..), ensureDir, resolve)
 import Text.Printf (printf)
 
-data ExecEnvType
-  = LibVirtLXC
-  deriving (Eq, Show, Ord, Read)
 
 data LogLevel
   = LogTrace
@@ -114,14 +108,13 @@ data B9Config
         _logFile :: Maybe FilePath,
         _projectRoot :: Maybe FilePath,
         _keepTempDirs :: Bool,
-        _execEnvType :: ExecEnvType,
         _uniqueBuildDirs :: Bool,
         _repositoryCache :: Maybe SystemPath,
         _repository :: Maybe String,
         _interactive :: Bool,
         _maxLocalSharedImageRevisions :: Maybe Int,
         _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
-        _dockerConfig :: Maybe DockerConfig,
+        _dockerConfigs :: Maybe DockerConfig,
         _remoteRepos :: [RemoteRepo]
       }
   deriving (Show, Eq)
@@ -133,20 +126,19 @@ instance Semigroup B9Config where
         _logFile = getLast $ on mappend (Last . _logFile) c c',
         _projectRoot = getLast $ on mappend (Last . _projectRoot) c c',
         _keepTempDirs = getAny $ on mappend (Any . _keepTempDirs) c c',
-        _execEnvType = LibVirtLXC,
         _uniqueBuildDirs = getAll ((mappend `on` (All . _uniqueBuildDirs)) c c'),
         _repositoryCache = getLast $ on mappend (Last . _repositoryCache) c c',
         _repository = getLast ((mappend `on` (Last . _repository)) c c'),
         _interactive = getAny ((mappend `on` (Any . _interactive)) c c'),
         _maxLocalSharedImageRevisions = getLast ((mappend `on` (Last . _maxLocalSharedImageRevisions)) c c'),
         _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
-        _dockerConfig = getLast ((mappend `on` (Last . _dockerConfig)) c c'),
+        _dockerConfigs = getLast ((mappend `on` (Last . _dockerConfigs)) c c'),
         _remoteRepos = (mappend `on` _remoteRepos) c c'
       }
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False LibVirtLXC True Nothing Nothing False Nothing Nothing Nothing []
+  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing []
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -187,12 +179,6 @@ getConfig = getB9Config
 -- @since 0.5.65
 isInteractive :: Member B9ConfigReader e => Eff e Bool
 isInteractive = _interactive <$> getB9Config
-
--- | Ask for the 'ExecEnvType'.
---
--- @since 0.5.65
-getExecEnvType :: Member B9ConfigReader e => Eff e ExecEnvType
-getExecEnvType = _execEnvType <$> getB9Config
 
 -- | Ask for the 'RemoteRepo's.
 --
@@ -364,14 +350,13 @@ defaultB9Config =
       _logFile = Nothing,
       _projectRoot = Nothing,
       _keepTempDirs = False,
-      _execEnvType = LibVirtLXC,
       _uniqueBuildDirs = True,
       _repository = Nothing,
       _repositoryCache = Just defaultRepositoryCache,
       _interactive = False,
       _maxLocalSharedImageRevisions = Just 2,
       _libVirtLXCConfigs = Just defaultLibVirtLXCConfig,
-      _dockerConfig = Just defaultDockerConfig,
+      _dockerConfigs = Just defaultDockerConfig,
       _remoteRepos = []
     }
 
@@ -392,9 +377,6 @@ projectRootK = "build_dir_root"
 
 keepTempDirsK :: String
 keepTempDirsK = "keep_temp_dirs"
-
-execEnvTypeK :: String
-execEnvTypeK = "exec_env"
 
 uniqueBuildDirsK :: String
 uniqueBuildDirsK = "unique_build_dirs"
@@ -426,8 +408,7 @@ b9ConfigToCPDocument c = do
   cp3 <- setShowCP cp2 cfgFileSection logFileK (_logFile c)
   cp4 <- setShowCP cp3 cfgFileSection projectRootK (_projectRoot c)
   cp5 <- setShowCP cp4 cfgFileSection keepTempDirsK (_keepTempDirs c)
-  cp6 <- setShowCP cp5 cfgFileSection execEnvTypeK (_execEnvType c)
-  cp7 <- setShowCP cp6 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
+  cp7 <- setShowCP cp5 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
   cp8 <- setShowCP cp7 cfgFileSection maxLocalSharedImageRevisionsK (_maxLocalSharedImageRevisions c)
   cp9 <- setShowCP cp8 cfgFileSection repositoryCacheK (_repositoryCache c)
   cpA <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cp9
@@ -441,7 +422,7 @@ parseB9Config :: HasCallStack => CPDocument -> Either CPError B9Config
 parseB9Config cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
       getr = readCP cp cfgFileSection
-   in B9Config <$> getr verbosityK <*> getr logFileK <*> getr projectRootK <*> getr keepTempDirsK <*> getr execEnvTypeK
+   in B9Config <$> getr verbosityK <*> getr logFileK <*> getr projectRootK <*> getr keepTempDirsK 
         <*> getr uniqueBuildDirsK
         <*> getr repositoryCacheK
         <*> getr repositoryK

@@ -1,8 +1,7 @@
 -- | Implementation of an execution environment that uses "libvirt-lxc".
 module B9.LibVirtLXC
-  ( runInEnvironment,
-    supportedImageTypes,
-    logLibVirtLXCConfig,
+  ( 
+    LibVirtLXC(..),
     module X,
   )
 where
@@ -13,12 +12,11 @@ import B9.B9Config
   )
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Exec
-import B9.B9Logging
 import B9.BuildInfo
+import B9.Container
 import B9.DiskImages
 import B9.ExecEnv
 import B9.ShellScript
-import Control.Eff
 import Control.Lens (view)
 import Control.Monad.IO.Class
   ( MonadIO,
@@ -33,63 +31,54 @@ import System.IO.B9Extras
   )
 import Text.Printf (printf)
 
-logLibVirtLXCConfig :: CommandIO e => LibVirtLXCConfig -> Eff e ()
-logLibVirtLXCConfig c = traceL $ printf "USING LibVirtLXCConfig: %s" (show c)
+newtype LibVirtLXC = LibVirtLXC LibVirtLXCConfig
 
-supportedImageTypes :: [ImageType]
-supportedImageTypes = [Raw]
-
-runInEnvironment ::
-  forall e.
-  (Member BuildInfoReader e, CommandIO e) =>
-  ExecEnv ->
-  Script ->
-  Eff e Bool
-runInEnvironment env scriptIn =
-  if emptyScript scriptIn
-    then return True
-    else setUp >>= execute
-  where
-    setUp = do
-      mcfg <- view libVirtLXCConfigs <$> getB9Config
-      cfg <- maybe (fail "No LibVirtLXC Configuration!") return mcfg
-      buildId <- getBuildId
-      buildBaseDir <- getBuildDir
-      uuid <- randomUUID
-      let scriptDirHost = buildDir </> "init-script"
-          scriptDirGuest = "/" ++ buildId
-          domainFile = buildBaseDir </> uuid' <.> domainConfig
-          mkDomain =
-            createDomain cfg env buildId uuid' scriptDirHost scriptDirGuest
-          uuid' = printf "%U" uuid
-          setupEnv =
-            Begin
-              [ Run "export" ["HOME=/root"],
-                Run "export" ["USER=root"],
-                Run "source" ["/etc/profile"]
-              ]
-          script = Begin [setupEnv, scriptIn, successMarkerCmd scriptDirGuest]
-          buildDir = buildBaseDir </> uuid'
-      liftIO $ do
-        createDirectoryIfMissing True scriptDirHost
-        writeSh (scriptDirHost </> initScript) script
-        domain <- mkDomain
-        writeFile domainFile domain
-      return $ Context scriptDirHost uuid domainFile cfg
-    successMarkerCmd scriptDirGuest =
-      In scriptDirGuest [Run "touch" [successMarkerFile]]
-    execute :: Context -> Eff e Bool
-    execute (Context scriptDirHost _uuid domainFile cfg) = do
-      let virsh = virshCommand cfg
-      cmd $ printf "%s create '%s' --console --autodestroy" virsh domainFile
-      -- cmd $ printf "%s console %U" virsh uuid
-      liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
-    successMarkerFile = "SUCCESS"
-    virshCommand :: LibVirtLXCConfig -> String
-    virshCommand cfg = printf "%svirsh -c %s" useSudo' virshURI'
-      where
-        useSudo' = if useSudo cfg then "sudo " else ""
-        virshURI' = virshURI cfg
+instance Backend LibVirtLXC where 
+  getBackendConfig _ =  
+      fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
+  supportedImageTypes _ = [Raw]
+  runInEnvironment (LibVirtLXC cfgIn) env scriptIn =
+    if emptyScript scriptIn
+      then return True
+      else setUp >>= execute
+    where
+      setUp = do
+        buildId <- getBuildId
+        buildBaseDir <- getBuildDir
+        uuid <- randomUUID
+        let scriptDirHost = buildDir </> "init-script"
+            scriptDirGuest = "/" ++ buildId
+            domainFile = buildBaseDir </> uuid' <.> domainConfig
+            mkDomain =
+              createDomain cfgIn env buildId uuid' scriptDirHost scriptDirGuest
+            uuid' = printf "%U" uuid
+            setupEnv =
+              Begin
+                [ Run "export" ["HOME=/root"],
+                  Run "export" ["USER=root"],
+                  Run "source" ["/etc/profile"]
+                ]
+            script = Begin [setupEnv, scriptIn, successMarkerCmd scriptDirGuest]
+            buildDir = buildBaseDir </> uuid'
+        liftIO $ do
+          createDirectoryIfMissing True scriptDirHost
+          writeSh (scriptDirHost </> initScript) script
+          domain <- mkDomain
+          writeFile domainFile domain
+        return $ Context scriptDirHost uuid domainFile cfgIn
+      successMarkerCmd scriptDirGuest =
+        In scriptDirGuest [Run "touch" [successMarkerFile]]
+      execute (Context scriptDirHost _uuid domainFile cfg) = do
+        let virsh = virshCommand cfg
+        cmd $ printf "%s create '%s' --console --autodestroy" virsh domainFile
+        -- cmd $ printf "%s console %U" virsh uuid
+        liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
+      successMarkerFile = "SUCCESS"
+      virshCommand :: LibVirtLXCConfig -> String
+      virshCommand cfg = printf "%svirsh -c %s" useSudo' virshURI'
+        where
+          useSudo' = if useSudo cfg then "sudo " else ""
+          virshURI' = virshURI cfg
 
 data Context
   = Context

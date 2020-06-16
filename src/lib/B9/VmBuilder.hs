@@ -10,8 +10,10 @@ import B9.B9Config
 import B9.B9Logging
 import B9.B9Monad
 import B9.BuildInfo
+import B9.Container
 import B9.DiskImageBuilder
 import B9.DiskImages
+import qualified B9.Docker as Docker
 import B9.ExecEnv
 import qualified B9.LibVirtLXC as LXC
 import B9.ShellScript
@@ -26,22 +28,22 @@ import System.Directory
   )
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
+import Data.Proxy
 
 buildWithVm ::
   IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Eff e Bool
 buildWithVm iid imageTargets instanceDir vmScript = do
-  vmBuildSupportedImageTypes <- getVmScriptSupportedImageTypes vmScript
-  buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
-  success <- runVmScript iid imageTargets buildImages instanceDir vmScript
-  when success (createDestinationImages buildImages imageTargets)
-  return success
-
-getVmScriptSupportedImageTypes :: IsB9 e => VmScript -> Eff e [ImageType]
-getVmScriptSupportedImageTypes NoVmScript = return [QCow2, Raw, Vmdk]
-getVmScriptSupportedImageTypes _ = supportedImageTypes <$> getExecEnvType
-
-supportedImageTypes :: ExecEnvType -> [ImageType]
-supportedImageTypes LibVirtLXC = LXC.supportedImageTypes
+  res <- withBackend $ \backendCfg -> do
+    let vmBuildSupportedImageTypes = supportedImageTypes backendCfg 
+    buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
+    success <- runVmScript backendCfg iid imageTargets buildImages instanceDir vmScript
+    when success (createDestinationImages buildImages imageTargets)
+    return success
+  case res of 
+    Nothing -> 
+      errorExitL "No container configured."
+    Just success ->
+      return success
 
 createBuildImages :: IsB9 e => [ImageTarget] -> [ImageType] -> Eff e [Image]
 createBuildImages imageTargets vmBuildSupportedImageTypes = do
@@ -69,21 +71,22 @@ createBuildImages imageTargets vmBuildSupportedImageTypes = do
       return buildImgAbsolutePath
 
 runVmScript ::
-  forall e.
-  IsB9 e =>
+  forall e backendCfg.
+  (Backend backendCfg, IsB9 e) =>
+  Maybe backendCfg ->
   InstanceId ->
   [ImageTarget] ->
   [Image] ->
   FilePath ->
   VmScript ->
   Eff e Bool
-runVmScript _ _ _ _ NoVmScript = return True
-runVmScript (IID iid) imageTargets buildImages instanceDir vmScript = do
+runVmScript _ _ _ _ _ NoVmScript = return True
+runVmScript backendCfg (IID iid) imageTargets buildImages instanceDir vmScript = do
   dbgL (printf "starting vm script with instanceDir '%s'" instanceDir)
   traceL (ppShow vmScript)
   execEnv <- setUpExecEnv
   let (VmScript _ _ script) = vmScript
-  success <- runInEnvironment execEnv script
+  success <- runInEnvironment backendCfg execEnv script
   if success
     then infoL "EXECUTED BUILD SCRIPT"
     else errorL "BUILD SCRIPT FAILED"
@@ -123,8 +126,20 @@ createDestinationImages buildImages imageTargets = do
   mapM_ (uncurry createDestinationImage) pairsToConvert
   infoL "CONVERTED BUILD- TO OUTPUT IMAGES"
 
-runInEnvironment :: IsB9 e => ExecEnv -> Script -> Eff e Bool
-runInEnvironment env script = do
-  t <- getExecEnvType
-  case t of
-    LibVirtLXC -> LXC.runInEnvironment env script
+
+withBackend :: IsB9 e => (forall x. Backend x => Maybe x -> Eff e a) -> Eff e (Maybe a)
+withBackend k = do
+  lxcCfg <- getBackendConfig (Proxy :: Proxy LXC.LibVirtLXC)
+  case lxcCfg of
+    Just cfg -> 
+      Just <$> k cfg
+    Nothing -> do
+      dockerCfg <- getBackendConfig (Proxy :: Proxy Docker.Docker)
+      case dockerCfg of 
+        Just cfg -> 
+          Just <$> k cfg
+        Nothing ->
+          return Nothing
+
+
+

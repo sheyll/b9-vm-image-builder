@@ -8,7 +8,6 @@ module B9.BuildInfo
   ( getBuildId,
     getBuildDate,
     getBuildDir,
-    getExecEnvType,
     withBuildInfo,
     BuildInfoReader,
   )
