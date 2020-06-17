@@ -1,11 +1,13 @@
 -- | Implementation of an execution environment that uses /docker/.
-module B9.Docker 
-  ( Docker(..) ) where
-
+module B9.Docker
+  ( Docker (..),
+  )
+where
 
 import B9.B9Config
-  (ContainerCapability,  getB9Config,
+  ( ContainerCapability,
     dockerConfigs,
+    getB9Config,
   )
 import B9.B9Config.Docker as X
 import B9.B9Exec
@@ -30,8 +32,6 @@ import Text.Printf (printf)
 
 newtype Docker = Docker DockerConfig
 
-instance Backend Docker where 
-
-  getBackendConfig _ =  
-      fmap Docker . view dockerConfigs <$> getB9Config
-    
+instance Backend Docker where
+  getBackendConfig _ =
+    fmap Docker . view dockerConfigs <$> getB9Config

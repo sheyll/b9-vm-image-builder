@@ -23,7 +23,6 @@ import Data.Hashable
 import Data.Semigroup as Sem
 import GHC.Generics (Generic)
 
-
 -- | The environment for the execution of 'Script's inside a 'Container'
 data ExecEnv
   = ExecEnv

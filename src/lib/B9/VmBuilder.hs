@@ -6,7 +6,6 @@ module B9.VmBuilder
 where
 
 import B9.Artifact.Readable
-import B9.B9Config
 import B9.B9Logging
 import B9.B9Monad
 import B9.BuildInfo
@@ -16,34 +15,36 @@ import B9.DiskImages
 import qualified B9.Docker as Docker
 import B9.ExecEnv
 import qualified B9.LibVirtLXC as LXC
-import B9.ShellScript
 import B9.Vm
 import Control.Eff
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.List
+import Data.Proxy
 import System.Directory
   ( canonicalizePath,
     createDirectoryIfMissing,
   )
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
-import Data.Proxy
 
 buildWithVm ::
   IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Eff e Bool
 buildWithVm iid imageTargets instanceDir vmScript = do
-  res <- withBackend $ \backendCfg -> do
-    let vmBuildSupportedImageTypes = supportedImageTypes backendCfg 
-    buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
-    success <- runVmScript backendCfg iid imageTargets buildImages instanceDir vmScript
-    when success (createDestinationImages buildImages imageTargets)
-    return success
-  case res of 
-    Nothing -> 
+  res <- withBackend (buildWithBackend iid imageTargets instanceDir vmScript)
+  case res of
+    Nothing ->
       errorExitL "No container configured."
     Just success ->
       return success
+
+buildWithBackend :: forall backendCfg e. (Backend backendCfg, IsB9 e) => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> backendCfg -> Eff e Bool
+buildWithBackend iid imageTargets instanceDir vmScript backendCfg = do
+  let vmBuildSupportedImageTypes = supportedImageTypes (Proxy :: Proxy backendCfg)
+  buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
+  success <- runVmScript backendCfg iid imageTargets buildImages instanceDir vmScript
+  when success (createDestinationImages buildImages imageTargets)
+  return success
 
 createBuildImages :: IsB9 e => [ImageTarget] -> [ImageType] -> Eff e [Image]
 createBuildImages imageTargets vmBuildSupportedImageTypes = do
@@ -73,7 +74,7 @@ createBuildImages imageTargets vmBuildSupportedImageTypes = do
 runVmScript ::
   forall e backendCfg.
   (Backend backendCfg, IsB9 e) =>
-  Maybe backendCfg ->
+  backendCfg ->
   InstanceId ->
   [ImageTarget] ->
   [Image] ->
@@ -126,20 +127,16 @@ createDestinationImages buildImages imageTargets = do
   mapM_ (uncurry createDestinationImage) pairsToConvert
   infoL "CONVERTED BUILD- TO OUTPUT IMAGES"
 
-
-withBackend :: IsB9 e => (forall x. Backend x => Maybe x -> Eff e a) -> Eff e (Maybe a)
+withBackend :: IsB9 e => (forall x. Backend x => x -> Eff e a) -> Eff e (Maybe a)
 withBackend k = do
   lxcCfg <- getBackendConfig (Proxy :: Proxy LXC.LibVirtLXC)
   case lxcCfg of
-    Just cfg -> 
+    Just cfg ->
       Just <$> k cfg
     Nothing -> do
       dockerCfg <- getBackendConfig (Proxy :: Proxy Docker.Docker)
-      case dockerCfg of 
-        Just cfg -> 
+      case dockerCfg of
+        Just cfg ->
           Just <$> k cfg
         Nothing ->
           return Nothing
-
-
-

@@ -54,9 +54,9 @@ module B9.B9Config
   )
 where
 
+import B9.B9Config.Container as X
 import B9.B9Config.Docker as X
 import B9.B9Config.LibVirtLXC as X
-import B9.B9Config.Container as X
 import B9.B9Config.Repository as X
 import B9.Environment
 import Control.Eff
@@ -92,7 +92,6 @@ import System.Directory
 import System.FilePath ((<.>))
 import System.IO.B9Extras (SystemPath (..), ensureDir, resolve)
 import Text.Printf (printf)
-
 
 data LogLevel
   = LogTrace
@@ -422,7 +421,7 @@ parseB9Config :: HasCallStack => CPDocument -> Either CPError B9Config
 parseB9Config cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
       getr = readCP cp cfgFileSection
-   in B9Config <$> getr verbosityK <*> getr logFileK <*> getr projectRootK <*> getr keepTempDirsK 
+   in B9Config <$> getr verbosityK <*> getr logFileK <*> getr projectRootK <*> getr keepTempDirsK
         <*> getr uniqueBuildDirsK
         <*> getr repositoryCacheK
         <*> getr repositoryK

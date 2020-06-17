@@ -1,22 +1,25 @@
 -- | Implementation of an execution environment that uses "libvirt-lxc".
 module B9.LibVirtLXC
-  ( 
-    LibVirtLXC(..),
+  ( LibVirtLXC (..),
     module X,
   )
 where
 
 import B9.B9Config
-  (ContainerCapability,  getB9Config,
+  ( B9ConfigReader,
+    ContainerCapability,
+    getB9Config,
     libVirtLXCConfigs,
   )
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Exec
+import B9.B9Logging
 import B9.BuildInfo
 import B9.Container
 import B9.DiskImages
 import B9.ExecEnv
 import B9.ShellScript
+import Control.Eff
 import Control.Lens (view)
 import Control.Monad.IO.Class
   ( MonadIO,
@@ -33,9 +36,9 @@ import Text.Printf (printf)
 
 newtype LibVirtLXC = LibVirtLXC LibVirtLXCConfig
 
-instance Backend LibVirtLXC where 
-  getBackendConfig _ =  
-      fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
+instance Backend LibVirtLXC where
+  getBackendConfig _ =
+    fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
   supportedImageTypes _ = [Raw]
   runInEnvironment (LibVirtLXC cfgIn) env scriptIn =
     if emptyScript scriptIn
@@ -66,19 +69,25 @@ instance Backend LibVirtLXC where
           domain <- mkDomain
           writeFile domainFile domain
         return $ Context scriptDirHost uuid domainFile cfgIn
-      successMarkerCmd scriptDirGuest =
-        In scriptDirGuest [Run "touch" [successMarkerFile]]
-      execute (Context scriptDirHost _uuid domainFile cfg) = do
-        let virsh = virshCommand cfg
-        cmd $ printf "%s create '%s' --console --autodestroy" virsh domainFile
-        -- cmd $ printf "%s console %U" virsh uuid
-        liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
-      successMarkerFile = "SUCCESS"
-      virshCommand :: LibVirtLXCConfig -> String
-      virshCommand cfg = printf "%svirsh -c %s" useSudo' virshURI'
-        where
-          useSudo' = if useSudo cfg then "sudo " else ""
-          virshURI' = virshURI cfg
+
+successMarkerCmd :: FilePath -> Script
+successMarkerCmd scriptDirGuest =
+  In scriptDirGuest [Run "touch" [successMarkerFile]]
+
+successMarkerFile :: [Char]
+successMarkerFile = "SUCCESS"
+
+execute :: (CommandIO e, Member B9ConfigReader e) => Context -> Eff e Bool
+execute (Context scriptDirHost _uuid domainFile cfg) = do
+  cmd $ printf "%s create '%s' --console --autodestroy" virshCommand domainFile
+  -- cmd $ printf "%s console %U" virsh uuid
+  liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
+  where
+    virshCommand :: String
+    virshCommand = printf "%svirsh -c %s" useSudo' virshURI'
+      where
+        useSudo' = if useSudo cfg then "sudo " else ""
+        virshURI' = virshURI cfg
 
 data Context
   = Context
