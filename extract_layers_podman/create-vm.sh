@@ -1,12 +1,12 @@
 #! /usr/bin/env nix-shell 
 #! nix-shell -i bash --pure 
-#! nix-shell -p docker bash qemu gnutar e2fsprogs coreutils utillinux conmon runc
+#! nix-shell -p podman bash qemu gnutar e2fsprogs coreutils utillinux conmon runc
 
 set -ex
 
 BASE_IMG=${1?BASE_IMG parameter missing}
 
-BUILD_DIR_REL=$(mktemp -d /mnt/b9-docker-XXXXXXXXXXX)
+BUILD_DIR_REL=$(mktemp -d /mnt/b9-podman-XXXXXXXXXXX)
 mkdir -p "$BUILD_DIR_REL"
 BUILD_DIR=$(realpath "$BUILD_DIR_REL")
 
@@ -29,11 +29,11 @@ function cleanup() {
 
   if [[ -e "$CID" ]] 
   then
-    docker container rm "$(cat "$CID")"
+    podman container rm "$(cat "$CID")"
   fi 
   if [[ -e "$OUT_IMAGE_ID" ]]
   then
-    docker image rm "$(cat "$OUT_IMAGE_ID")"
+    podman image rm "$(cat "$OUT_IMAGE_ID")"
   fi
   rm -rf "$BUILD_DIR"
 }
@@ -60,11 +60,11 @@ mkdir -p "$STEP1MNT/mnt/vm_scripts"
 tar -cf "$STEP1TAR" -C "$STEP1MNT" .
 
 set +x
-STEP1_IMPORTED_IMAGE_ID=$(docker import "$STEP1TAR" | cut -d: -f2 | tr -c -d '0123456789abcdef')
-echo "Imported base image with docker as: $STEP1_IMPORTED_IMAGE_ID"
+STEP1_IMPORTED_IMAGE_ID=$(podman import "$STEP1TAR" | cut -d: -f2 | tr -c -d '0123456789abcdef')
+echo "Imported base image with podman as: $STEP1_IMPORTED_IMAGE_ID"
 if [[ -n "$STEP1_IMPORTED_IMAGE_ID" ]]
 then
-  echo "docker import failed."
+  echo "podman import failed."
   umount "$STEP1MNT"
   exit 1
 fi
@@ -76,7 +76,7 @@ mkfs.ext4 -Ldata "$DATA"
 mkdir -p "$DATAMNT"
 mount -o loop "$DATA" "$DATAMNT"
 
-docker run \
+podman run \
   -v "$(realpath vm_scripts)":/mnt/vm_scripts \
   -v "$DATAMNT":/data \
   --network=host \
@@ -89,14 +89,14 @@ docker run \
 
 qemu-img convert -q -f raw -O qcow2 "$DATA" data.qcow2
 
-docker container commit "$(cat "$CID")" \
+podman container commit "$(cat "$CID")" \
   | cut -d: -f2 \
   | tr -c -d '0123456789abcdef' \
   > "$OUT_IMAGE_ID"
 
 mkdir -p "$OUT_LAYER_UNPACK_DIR"
 
-docker image save "$(cat "$OUT_IMAGE_ID")" | tar -C "$OUT_LAYER_UNPACK_DIR" -xf -
+podman image save "$(cat "$OUT_IMAGE_ID")" | tar -C "$OUT_LAYER_UNPACK_DIR" -xf -
 
 OUT_LAYER_TAR="${OUT_LAYER_UNPACK_DIR}/$(jq '.[0].Layers[-1]' < "$OUT_LAYER_UNPACK_DIR/manifest.json"  | tr -d '"')"
 

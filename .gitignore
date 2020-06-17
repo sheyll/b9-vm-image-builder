@@ -20,3 +20,7 @@ OUT
 result*
 *~
 /out
+*.raw
+*.qcow2
+*.tar
+

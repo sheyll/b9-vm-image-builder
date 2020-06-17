@@ -109,34 +109,36 @@ library
                    , B9.Artifact.Content
                    , B9.Artifact.Content.AST
                    , B9.Artifact.Content.CloudConfigYaml
-                   , B9.Artifact.Content.ErlangPropList
                    , B9.Artifact.Content.ErlTerms
+                   , B9.Artifact.Content.ErlangPropList
                    , B9.Artifact.Content.Readable
                    , B9.Artifact.Content.StringTemplate
                    , B9.Artifact.Content.YamlObject
                    , B9.Artifact.Readable
                    , B9.Artifact.Readable.Interpreter
                    , B9.Artifact.Readable.Source
-                   , B9.BuildInfo
                    , B9.B9Config
                    , B9.B9Config.Container
                    , B9.B9Config.Docker
                    , B9.B9Config.LibVirtLXC
+                   , B9.B9Config.Podman
                    , B9.B9Config.Repository
+                   , B9.B9Config.SystemdNspawn
                    , B9.B9Error
-                   , B9.B9Logging
                    , B9.B9Exec
+                   , B9.B9Logging
                    , B9.B9Monad                  
+                   , B9.BuildInfo
                    , B9.Container
-                   , B9.Docker
                    , B9.DiskImageBuilder
                    , B9.DiskImages
+                   , B9.Docker
                    , B9.Environment
                    , B9.ExecEnv
-                   , B9.Text
                    , B9.LibVirtLXC
                    , B9.MBR
                    , B9.PartitionTable
+                   , B9.Podman
                    , B9.QCUtil
                    , B9.Repository
                    , B9.RepositoryIO
@@ -144,6 +146,8 @@ library
                    , B9.Shake.Actions
                    , B9.Shake.SharedImageRules
                    , B9.ShellScript
+                   , B9.SystemdNspawn
+                   , B9.Text
                    , B9.Vm
                    , B9.VmBuilder
                    , Data.ConfigFile.B9Extras
@@ -155,33 +159,33 @@ library
                    , aeson >= 1.0
                    , async >= 2.1
                    , base64-bytestring
+                   , bifunctors >= 5.4
                    , binary >= 0.8.3
+                   , boxes >= 0.1.4
                    , conduit >= 1.2
                    , conduit-extra >= 1.1
                    , exceptions >= 0.10
                    , filepath >= 1.4
+                   , free >= 4.12
                    , hashable >= 1.2
                    , monad-control >= 1.0 && < 1.1
                    , mtl >= 2.2
-                   , time >= 1.6
                    , optparse-applicative >= 0.14
                    , parallel >= 3.2
                    , parsec >= 3.1
-                   , pretty-show >= 1.6
                    , pretty >= 1.1
+                   , pretty-show >= 1.6
                    , process >= 1.4
                    , random >= 1.1
                    , shake >= 0.17.6 && < 0.19
                    , syb >= 0.6
                    , tagged >= 0.8 && < 0.9
                    , template >= 0.2
+                   , time >= 1.6
                    , transformers >= 0.5
                    , unordered-containers >= 0.2.8
                    , vector >= 0.11
                    , yaml >= 0.8
-                   , bifunctors >= 5.4
-                   , free >= 4.12
-                   , boxes >= 0.1.4
 
 executable b9c
   import:           b9Extensions, b9Deps
@@ -201,18 +205,18 @@ test-suite spec
   main-is:           Spec.hs
   autogen-modules:   Paths_b9
   other-modules:     B9.Content.ErlTermsSpec
+                   , B9.ArtifactGeneratorImplSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
-                   , B9.ArtifactGeneratorImplSpec
                    , B9.DiskImagesSpec
                    , B9.EnvironmentSpec
                    , Paths_b9
-  build-depends:     b9
+  build-depends:     QuickCheck >= 2.5
+                   , b9
+                   , aeson >= 1.0
                    , binary >= 0.8 && < 0.9
                    , hspec
                    , hspec-expectations
-                   , QuickCheck >= 2.5
-                   , aeson >= 1.0
-                   , yaml >= 0.8
-                   , vector >= 0.11
                    , unordered-containers >= 0.2
+                   , vector >= 0.11
+                   , yaml >= 0.8

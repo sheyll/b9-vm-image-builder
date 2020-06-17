@@ -22,6 +22,8 @@ module B9.B9Config
     interactive,
     libVirtLXCConfigs,
     dockerConfigs,
+    podmanConfigs,
+    systemdNspawnConfigs,
     remoteRepos,
     maxLocalSharedImageRevisions,
     B9ConfigOverride (..),
@@ -57,6 +59,8 @@ where
 import B9.B9Config.Container as X
 import B9.B9Config.Docker as X
 import B9.B9Config.LibVirtLXC as X
+import B9.B9Config.SystemdNspawn as X
+import B9.B9Config.Podman as X
 import B9.B9Config.Repository as X
 import B9.Environment
 import Control.Eff
