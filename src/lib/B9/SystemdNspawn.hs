@@ -1,15 +1,15 @@
--- | Implementation of an execution environment that uses /docker/.
-module B9.Docker
-  ( Docker (..),
+-- | Implementation of an execution environment that uses /systemdNspawn/.
+module B9.SystemdNspawn
+  ( SystemdNspawn (..),
   )
 where
 
 import B9.B9Config
   ( ContainerCapability,
-    dockerConfigs,
+    systemdNspawnConfigs,
     getB9Config,
   )
-import B9.B9Config.Docker as X
+import B9.B9Config.SystemdNspawn as X
 import B9.B9Exec
 import B9.BuildInfo
 import B9.Container
@@ -30,11 +30,11 @@ import System.IO.B9Extras
   )
 import Text.Printf (printf)
 
-newtype Docker = Docker DockerConfig
+newtype SystemdNspawn = SystemdNspawn SystemdNspawnConfig
 
-instance Backend Docker where
+instance Backend SystemdNspawn where
   getBackendConfig _ =
-    fmap Docker . view dockerConfigs <$> getB9Config
+    fmap SystemdNspawn . view systemdNspawnConfigs <$> getB9Config
 
   -- supportedImageTypes :: proxy config -> [ImageType]
   supportedImageTypes _ = [Raw]
@@ -46,7 +46,7 @@ instance Backend Docker where
   --   ExecEnv ->
   --   Script ->
   --   Eff e Bool
-  runInEnvironment (Docker dcfg) env scriptIn = do
+  runInEnvironment (SystemdNspawn dcfg) env scriptIn = do
 
     if emptyScript scriptIn
       then return True
