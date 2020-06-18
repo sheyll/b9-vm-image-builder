@@ -116,8 +116,10 @@ data B9Config
         _repository :: Maybe String,
         _interactive :: Bool,
         _maxLocalSharedImageRevisions :: Maybe Int,
-        _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
+        _systemdNspawnConfigs :: Maybe SystemdNspawnConfig,
+        _podmanConfigs :: Maybe PodmanConfig,
         _dockerConfigs :: Maybe DockerConfig,
+        _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
         _remoteRepos :: [RemoteRepo]
       }
   deriving (Show, Eq)
@@ -134,14 +136,16 @@ instance Semigroup B9Config where
         _repository = getLast ((mappend `on` (Last . _repository)) c c'),
         _interactive = getAny ((mappend `on` (Any . _interactive)) c c'),
         _maxLocalSharedImageRevisions = getLast ((mappend `on` (Last . _maxLocalSharedImageRevisions)) c c'),
-        _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
+        _systemdNspawnConfigs = getLast ((mappend `on` (Last . _systemdNspawnConfigs)) c c'),
+        _podmanConfigs = getLast ((mappend `on` (Last . _podmanConfigs)) c c'),
         _dockerConfigs = getLast ((mappend `on` (Last . _dockerConfigs)) c c'),
+        _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
         _remoteRepos = (mappend `on` _remoteRepos) c c'
       }
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing []
+  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing Nothing Nothing []
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -358,6 +362,8 @@ defaultB9Config =
       _repositoryCache = Just defaultRepositoryCache,
       _interactive = False,
       _maxLocalSharedImageRevisions = Just 2,
+      _systemdNspawnConfigs = Just defaultSystemdNspawnConfig,
+      _podmanConfigs = Just defaultPodmanConfig,
       _libVirtLXCConfigs = Just defaultLibVirtLXCConfig,
       _dockerConfigs = Just defaultDockerConfig,
       _remoteRepos = []
@@ -414,8 +420,10 @@ b9ConfigToCPDocument c = do
   cp7 <- setShowCP cp5 cfgFileSection uniqueBuildDirsK (_uniqueBuildDirs c)
   cp8 <- setShowCP cp7 cfgFileSection maxLocalSharedImageRevisionsK (_maxLocalSharedImageRevisions c)
   cp9 <- setShowCP cp8 cfgFileSection repositoryCacheK (_repositoryCache c)
-  cpA <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cp9
-  cpFinal <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpA
+  cpA <- foldr (>=>) return (systemdNspawnConfigToCPDocument <$> _systemdNspawnConfigs c) cp9
+  cpB <- foldr (>=>) return (podmanConfigToCPDocument <$> _podmanConfigs c) cpA
+  cpC <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpB
+  cpFinal <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpC
   setShowCP cpFinal cfgFileSection repositoryK (_repository c)
 
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
@@ -431,6 +439,8 @@ parseB9Config cp =
         <*> getr repositoryK
         <*> pure False
         <*> pure (either (const Nothing) id (getr maxLocalSharedImageRevisionsK))
-        <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
+        <*> pure (either (const Nothing) Just (parseSystemdNspawnConfig cp))
+        <*> pure (either (const Nothing) Just (parsePodmanConfig cp))
         <*> pure (either (const Nothing) Just (parseDockerConfig cp))
+        <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
         <*> parseRemoteRepos cp

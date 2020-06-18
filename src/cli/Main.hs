@@ -110,12 +110,16 @@ globals =
               <> Endo (repository .~ repo)
               <> Endo (repositoryCache .~ (Path <$> mRepoCache))
               <> case containerNetworking of
-                Just n | n /= hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) (Just n))
-                Just n | n == hostNetworkMagicValue -> Endo (set (libVirtLXCConfigs . _Just . networkId) Nothing)
-                _ -> mempty
-              <> case containerNetworking of
-                Just n | n /= hostNetworkMagicValue -> Endo (set (dockerConfigs . _Just . dockerNetworkId) (Just n))
-                Just n | n == hostNetworkMagicValue -> Endo (set (dockerConfigs . _Just . dockerNetworkId) Nothing)
+                Just n | n /= hostNetworkMagicValue -> 
+                  Endo ( set (libVirtLXCConfigs . _Just . networkId) (Just n)
+                       . set (dockerConfigs . _Just . dockerNetworkId) (Just n)
+                       . set (podmanConfigs . _Just . podmanNetworkId) (Just n)
+                       )
+                Just n | n == hostNetworkMagicValue -> 
+                  Endo ( set (libVirtLXCConfigs . _Just . networkId) Nothing
+                       . set (dockerConfigs . _Just . dockerNetworkId) Nothing
+                       . set (podmanConfigs . _Just . podmanNetworkId) Nothing
+                       )
                 _ -> mempty
        in B9ConfigOverride {_customB9ConfigPath = Path <$> cfg, _customB9Config = b9cfg, _customEnvironment = mempty}
 
