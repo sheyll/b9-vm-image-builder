@@ -121,7 +121,11 @@ globals =
                        . set (podmanConfigs . _Just . podmanNetworkId) Nothing
                        )
                 _ -> mempty
-       in B9ConfigOverride {_customB9ConfigPath = Path <$> cfg, _customB9Config = b9cfg, _customEnvironment = mempty}
+       in B9ConfigOverride {
+           _customB9ConfigPath = Path <$> cfg, 
+           _customB9Config = b9cfg, 
+           _customEnvironment = mempty
+          }
 
 cmds :: Parser (B9ConfigAction ())
 cmds =
@@ -129,7 +133,8 @@ cmds =
     ( command "version" (info (pure runShowVersion) (progDesc "Show program version and exit."))
         <> command
           "build"
-          ( info
+          ( info 
+            
               (void . runBuildArtifacts <$> buildFileParser)
               (progDesc "Merge all build file and generate all artifacts.")
           )

@@ -73,6 +73,7 @@ common b9Deps
                    , text >= 1.2
 
 common b9Extensions
+  other-extensions: OverloadedStrings
   default-extensions: ConstraintKinds
                     , CPP
                     , DataKinds
@@ -164,6 +165,7 @@ library
                    , boxes >= 0.1.4
                    , conduit >= 1.2
                    , conduit-extra >= 1.1
+                   , dhall >= 1
                    , exceptions >= 0.10
                    , filepath >= 1.4
                    , free >= 4.12
