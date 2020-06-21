@@ -39,8 +39,10 @@ type ExcB9 = Exc SomeException
 --
 -- @since 0.5.64
 newtype B9Error = MkB9Error {fromB9Error :: String}
-  deriving (Show, IsString)
+  deriving (IsString)
 
+instance Show B9Error where
+  show (MkB9Error msg) = "B9 internal error: " ++ msg
 instance Exception B9Error
 
 -- | Run an `ExcB9`.
