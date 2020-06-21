@@ -110,22 +110,26 @@ globals =
               <> Endo (repository .~ repo)
               <> Endo (repositoryCache .~ (Path <$> mRepoCache))
               <> case containerNetworking of
-                Just n | n /= hostNetworkMagicValue -> 
-                  Endo ( set (libVirtLXCConfigs . _Just . networkId) (Just n)
-                       . set (dockerConfigs . _Just . dockerNetworkId) (Just n)
-                       . set (podmanConfigs . _Just . podmanNetworkId) (Just n)
-                       )
-                Just n | n == hostNetworkMagicValue -> 
-                  Endo ( set (libVirtLXCConfigs . _Just . networkId) Nothing
-                       . set (dockerConfigs . _Just . dockerNetworkId) Nothing
-                       . set (podmanConfigs . _Just . podmanNetworkId) Nothing
-                       )
+                Just n
+                  | n /= hostNetworkMagicValue ->
+                    Endo
+                      ( set (libVirtLXCConfigs . _Just . networkId) (Just n)
+                          . set (dockerConfigs . _Just . dockerNetworkId) (Just n)
+                          . set (podmanConfigs . _Just . podmanNetworkId) (Just n)
+                      )
+                Just n
+                  | n == hostNetworkMagicValue ->
+                    Endo
+                      ( set (libVirtLXCConfigs . _Just . networkId) Nothing
+                          . set (dockerConfigs . _Just . dockerNetworkId) Nothing
+                          . set (podmanConfigs . _Just . podmanNetworkId) Nothing
+                      )
                 _ -> mempty
-       in B9ConfigOverride {
-           _customB9ConfigPath = Path <$> cfg, 
-           _customB9Config = b9cfg, 
-           _customEnvironment = mempty
-          }
+       in B9ConfigOverride
+            { _customB9ConfigPath = Path <$> cfg,
+              _customB9Config = b9cfg,
+              _customEnvironment = mempty
+            }
 
 cmds :: Parser (B9ConfigAction ())
 cmds =
@@ -133,8 +137,7 @@ cmds =
     ( command "version" (info (pure runShowVersion) (progDesc "Show program version and exit."))
         <> command
           "build"
-          ( info 
-            
+          ( info
               (void . runBuildArtifacts <$> buildFileParser)
               (progDesc "Merge all build file and generate all artifacts.")
           )

@@ -47,12 +47,9 @@ instance Backend Docker where
   --   Script ->
   --   Eff e Bool
   runInEnvironment (Docker dcfg) env scriptIn = do
-
     if emptyScript scriptIn
       then return True
-      else do error "TODO" 
-
-
+      else do error "TODO"
 -- where
 --       setUp = do
 --         buildId <- getBuildId

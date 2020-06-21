@@ -59,9 +59,9 @@ where
 import B9.B9Config.Container as X
 import B9.B9Config.Docker as X
 import B9.B9Config.LibVirtLXC as X
-import B9.B9Config.SystemdNspawn as X
 import B9.B9Config.Podman as X
 import B9.B9Config.Repository as X
+import B9.B9Config.SystemdNspawn as X
 import B9.Environment
 import Control.Eff
 import Control.Eff.Reader.Lazy
@@ -86,7 +86,7 @@ import Data.ConfigFile.B9Extras
   )
 import Data.Function (on)
 import Data.List (inits)
-import Data.Maybe (fromMaybe, listToMaybe, maybeToList)
+import Data.Maybe (fromMaybe)
 import Data.Monoid
 import Data.Semigroup as Semigroup hiding (Last (..))
 import Data.Version
@@ -286,18 +286,30 @@ modifyPermanentConfig = tell
 -- @since 0.5.65
 runB9ConfigActionWithOverrides :: HasCallStack => B9ConfigAction a -> B9ConfigOverride -> IO a
 runB9ConfigActionWithOverrides act cfg = do
-  configuredCfgPath <- traverse resolve (cfg ^. customB9ConfigPath)
-  fallbackCfgPath <- resolve defaultB9ConfigFile
-  let cfgPathCandidates =
-        case My.version of
-          Version v _ ->
-            concatMap
-              (\c -> (\v' -> c <.> showVersion (makeVersion v')) <$> reverse (inits v))
-              (maybeToList configuredCfgPath)
-              ++ ((\v' -> fallbackCfgPath <.> showVersion (makeVersion v')) <$> reverse (inits v))
-      pathToCreate = fromMaybe fallbackCfgPath configuredCfgPath
-  existingCfgPaths <- filterM doesFileExist cfgPathCandidates
-  let cfgPath = fromMaybe pathToCreate (listToMaybe existingCfgPaths)
+  configuredCfgPaths <- traverse resolve (cfg ^. customB9ConfigPath)
+  defCfgPath <- resolve defaultB9ConfigFile
+  let (Version myVer _) = My.version
+      appendVersionVariations name =
+        (\v' -> name <.> showVersion (makeVersion v')) <$> reverse (inits myVer)
+      (pathsToTry, pathsToCreate) =
+        case configuredCfgPaths of
+          Just configuredCfgPath ->
+            (appendVersionVariations configuredCfgPath, Nothing)
+          Nothing ->
+            (appendVersionVariations defCfgPath, Just defCfgPath)
+  existingCfgPaths <- filterM doesFileExist pathsToTry
+  cfgPath <-
+    case existingCfgPaths of
+      (cfgPath : _) ->
+        return cfgPath
+      [] -> do
+        putStrLn ("B9 config file resolver: None of these files exists " ++ show pathsToTry)
+        case pathsToCreate of
+          Just c -> do
+            putStrLn ("creating a new config file with defaults at: " ++ c)
+            return c
+          Nothing ->
+            fail "Please provide a valid config file path."
   cp <- openOrCreateB9Config cfgPath
   case parseB9Config cp of
     Left e -> fail (printf "Internal configuration load error, please report this: %s\n" (show e))
@@ -422,8 +434,9 @@ b9ConfigToCPDocument c = do
   cp9 <- setShowCP cp8 cfgFileSection repositoryCacheK (_repositoryCache c)
   cpA <- foldr (>=>) return (systemdNspawnConfigToCPDocument <$> _systemdNspawnConfigs c) cp9
   cpB <- foldr (>=>) return (podmanConfigToCPDocument <$> _podmanConfigs c) cpA
-  cpC <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpB
-  cpFinal <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpC
+  cpC <- foldr (>=>) return (dockerConfigToCPDocument <$> _dockerConfigs c) cpB
+  cpD <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpC
+  cpFinal <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpD
   setShowCP cpFinal cfgFileSection repositoryK (_repository c)
 
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument

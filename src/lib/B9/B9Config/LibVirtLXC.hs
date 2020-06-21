@@ -8,13 +8,13 @@ module B9.B9Config.LibVirtLXC
   )
 where
 
-import Data.Maybe (fromMaybe)
 import B9.B9Config.Container
 import B9.DiskImages
 import B9.ExecEnv
 import Control.Lens (makeLenses)
 import Control.Monad.IO.Class
 import Data.ConfigFile.B9Extras
+import Data.Maybe (fromMaybe)
 import System.Environment.Blank as SysIO
 
 data LibVirtLXCConfig

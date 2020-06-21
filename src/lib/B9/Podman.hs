@@ -6,8 +6,8 @@ where
 
 import B9.B9Config
   ( ContainerCapability,
-    podmanConfigs,
     getB9Config,
+    podmanConfigs,
   )
 import B9.B9Config.Podman as X
 import B9.B9Exec
@@ -47,8 +47,6 @@ instance Backend Podman where
   --   Script ->
   --   Eff e Bool
   runInEnvironment (Podman dcfg) env scriptIn = do
-
     if emptyScript scriptIn
       then return True
-      else do error "TODO" 
-
+      else do error "TODO"

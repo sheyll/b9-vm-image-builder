@@ -13,7 +13,7 @@ import Data.ConfigFile.B9Extras
 
 data SystemdNspawnConfig
   = SystemdNspawnConfig
-      { _systemdNspawnCapabilities :: [ContainerCapability]      
+      { _systemdNspawnCapabilities :: [ContainerCapability]
       }
   deriving (Read, Show, Eq)
 
@@ -35,7 +35,6 @@ defaultSystemdNspawnConfig =
 
 cfgFileSection :: String
 cfgFileSection = "systemdNspawn"
-
 
 systemdNspawnConfigToCPDocument ::
   SystemdNspawnConfig -> CPDocument -> Either CPError CPDocument

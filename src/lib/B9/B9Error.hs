@@ -43,6 +43,7 @@ newtype B9Error = MkB9Error {fromB9Error :: String}
 
 instance Show B9Error where
   show (MkB9Error msg) = "B9 internal error: " ++ msg
+
 instance Exception B9Error
 
 -- | Run an `ExcB9`.

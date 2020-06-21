@@ -6,8 +6,8 @@ where
 
 import B9.B9Config
   ( ContainerCapability,
-    systemdNspawnConfigs,
     getB9Config,
+    systemdNspawnConfigs,
   )
 import B9.B9Config.SystemdNspawn as X
 import B9.B9Exec
@@ -47,12 +47,9 @@ instance Backend SystemdNspawn where
   --   Script ->
   --   Eff e Bool
   runInEnvironment (SystemdNspawn dcfg) env scriptIn = do
-
     if emptyScript scriptIn
       then return True
-      else do error "TODO" 
-
-
+      else do error "TODO"
 -- where
 --       setUp = do
 --         buildId <- getBuildId

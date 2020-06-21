@@ -15,6 +15,7 @@ import B9.DiskImages
 import qualified B9.Docker as Docker
 import B9.ExecEnv
 import qualified B9.LibVirtLXC as LXC
+import qualified B9.SystemdNspawn as SystemdNspawn
 import B9.Vm
 import Control.Eff
 import Control.Monad
@@ -138,5 +139,10 @@ withBackend k = do
       case dockerCfg of
         Just cfg ->
           Just <$> k cfg
-        Nothing ->
-          return Nothing
+        Nothing -> do
+          systemdNspawnCfg <- getBackendConfig (Proxy :: Proxy SystemdNspawn.SystemdNspawn)
+          case systemdNspawnCfg of
+            Just cfg ->
+              Just <$> k cfg
+            Nothing ->
+              return Nothing
