@@ -1,0 +1,14 @@
+Artifact (IID "test-libvirt") 
+ (VmImages 
+  [ImageTarget 
+    (LocalFile (Image "minimal-image-out.vmdk" Vmdk Ext4) KeepSize)
+    (SourceImage (Image "minimal-image-in.qcow2" QCow2 Ext4) NoPT KeepSize)
+    (MountPoint "/")
+  ]
+  (VmScript 
+    X86_64
+    [SharedDirectoryRO "test-share-ro" (MountPoint "/mnt/test-share-ro")]
+    (Verbosity Debug [
+       Run "cp" ["/mnt/test-share-ro/test", "/test-2-passed"]
+     , Run "touch" ["/test-1-passed"]])))
+
