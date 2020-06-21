@@ -8,6 +8,7 @@ module B9.B9Config.LibVirtLXC
   )
 where
 
+import Data.Maybe (fromMaybe)
 import B9.B9Config.Container
 import B9.DiskImages
 import B9.ExecEnv
@@ -101,7 +102,7 @@ parseLibVirtLXCConfig cp =
 --
 -- @since 0.5.66
 getEmulatorPath :: MonadIO m => LibVirtLXCConfig -> m FilePath
-getEmulatorPath cfg = maybe fromEnv return (emulator cfg)
+getEmulatorPath cfg =
+  liftIO (SysIO.getEnvDefault emulatorEnvVar fromCfgOrDefault)
   where
-    fromEnv =
-      liftIO (SysIO.getEnvDefault emulatorEnvVar "/usr/lib/libexec/libvirt_lxc")
+    fromCfgOrDefault = fromMaybe "/usr/lib/libexec/libvirt_lxc" (emulator cfg)
