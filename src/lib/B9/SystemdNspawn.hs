@@ -46,10 +46,21 @@ instance Backend SystemdNspawn where
   --   ExecEnv ->
   --   Script ->
   --   Eff e Bool
-  runInEnvironment (SystemdNspawn dcfg) env scriptIn = do
+  runInEnvironment (SystemdNspawn dCfg) env scriptIn = do
     if emptyScript scriptIn
       then return True
-      else do error "TODO"
+      else 
+        setupBuildEnv env scriptIn
+        >>= execBuild dCfg 
+      error "TODO"
+
+setupBuildEnv :: (Member BuildInfoReader e, CommandIO e) =>
+  ExecEnv -> 
+  Script ->
+  Eff e 
+setupBuildEnv _ _ = do 
+
+
 -- where
 --       setUp = do
 --         buildId <- getBuildId
