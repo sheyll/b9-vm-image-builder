@@ -109,30 +109,36 @@ type RunResult = (Int, String, String)
 data FileSpec = FileSpec FilePath
 
 data B9Op a where
-  Run :: String -> [String] -> (RunResult -> a) -> B9Op a
+  NextId :: (Ord x, Eq x,Enum x, Show x, Typeable x) => (x -> a) -> B9Op a
+  Run :: CanRun c => c -> (RunResult c -> a) -> B9Op a
   Pushd :: FilePath -> a -> B9Op a
   Popd :: a -> B9Op a
   WriteFile :: String -> FileSpec -> a -> B9Op a
   ImportFile :: FilePath -> FileSpec -> a -> B9Op a
 
-
-
-data LayerInterface where
-  FromLayer :: Symbol -> Symbol -> LayerInterface
-  Reserve :: Resource -> LayerInterface
-  Share :: Resource -> LayerInterface
-  Need :: Resource -> LayerInterface
+data LayerInfo where
+  DefineLayer :: Symbol    -> Symbol     -> LayerInfo
+  (:>)        :: LayerInfo -> Dependency -> LayerInfo
 
 data Resource where
   FileName :: Symbol -> Resource
   UserName :: Symbol -> Resource
+  Layer    :: Symbol -> Resource
+  IpPort   :: Nat    -> Resource
+  Hostname :: Symbol -> Resource
+  HttpUrl  :: Symbol -> Resource
 
-data LayerInfo where
-  Layer :: Symbol -> Symbol -> LayerInfo
-  (:>) :: LayerInfo -> LayerInterface -> LayerInfo
+data Dependency where
+  Parameter :: Resource -> Dependency
+  Reserve   :: Resource -> Dependency
+  Provide   :: Resource -> Dependency
+  Need      :: Resource -> Dependency
 
-type TestLayer = Layer "test" "0.3"
-       :> FromLayer "linux" "7"
-       :> Reserve (UserName "app")
-       :> Reserve (FileName "/app/test")
-       :> Share (FileName "/app/test/modules")
+type TestLayer = DefineLayer "test" "0.3"
+       :> Need      (Layer "centos-7")
+       :> Parameter (UserName "app")
+       :> Reserve   (UserName "app")
+       :> Parameter (FileName "/app/test")
+       :> Reserve   (FileName "/app/test/lib")
+       :> Provide   (FileName "/app/test/plugins")
+       
