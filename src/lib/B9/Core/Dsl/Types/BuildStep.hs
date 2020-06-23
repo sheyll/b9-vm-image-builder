@@ -94,7 +94,7 @@ bind src toAction dst = liftF $ Bind src toAction dst ()
 -- > do
 -- >    outHandle <- initialiseBuilder (OutputFile "dest")
 -- >    srcHandle <- initialiseBuilder (OutputFile "source")
--- >    docHandle <- (initialiseBuilder (Document EmptyYamlObject)
+-- >    docHandle <- initialiseBuilder (Document EmptyYamlObject)
 -- >    applyToArtifact outHandle docHandle $
 -- >      \doc -> execAction (WriteFile . renderYaml) doc
 -- >    applyToArtifact docHandle srcHandle $

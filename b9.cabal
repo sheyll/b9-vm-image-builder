@@ -44,7 +44,7 @@ author:              Sven Heyll <svh@posteo.de>
 maintainer:          svh@posteo.de
 homepage:            https://github.com/sheyll/b9-vm-image-builder
 bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
-copyright:           2015,2016 Sven Heyll <svh@posteo.de>
+copyright:           2015,2016,2017 Sven Heyll <svh@posteo.de>
 category:            DevOps
 build-type:          Simple
 extra-source-files:  README.md, LICENSE, TODO.org, Setup.hs, stack.yaml, b9.cabal, .gitignore, .travis.yml, CONTRIBUTORS
@@ -73,7 +73,7 @@ library
                    , B9.Core.Dsl.Basic.Mono
                    , B9.Core.Dsl.Types.BuildStep
                    , B9.Core.Dsl.Types.Handle
-                   , B9.Core.Dsl.Interpreter
+                   , B9.Core.DslInterpreter
                    , B9.Core.System.B9IO
                    , B9.Core.System.Command
                    , B9.Core.System.Configuration
@@ -82,6 +82,7 @@ library
                    , B9.Core.Util.Logging
                    , B9.Core.Util.PropList
                    , B9.Core.Util.Size
+                   , B9.Core.Util.Stage
                    , B9.Core.Prelude
   other-modules:   Paths_b9
   -- other-extensions:
@@ -105,6 +106,7 @@ library
                    , free
                    , hashable
                    , lens
+                   , more-extensible-effects
                    , mtl
                    , optparse-applicative
                    , parallel

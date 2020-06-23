@@ -1,5 +1,6 @@
-03.06.2016
-----------
+# Developer Diary
+
+## 04.06.2016
 
 ## BuildStep simplification
 
@@ -44,7 +45,7 @@ hypervisors or execution containers.
                 - Json
                 - Yaml
           - System    (Reading and writing to local or remote storage, launching
-                                                       of commands using the OS)            
+                                                       of commands using the OS)
             - Command                             (execution of system commands)
             - File                                    (using and creating files)
             - Http                        (up- downloading via HTTP PUT and GET)
@@ -57,7 +58,7 @@ hypervisors or execution containers.
     - System.                                                        (Impure IO)
         - B9IO                 (thin wrapper monad around IO, command execution,
                                               logging, build directory creation)
-        - Command                                 (execution of system commands)
+        - Command                     8.22            (execution of system commands)
         - Configuration  (parse/generate B9s configuration file and command line
                                                                            args)
         - Directory                          (finding files, paths, directories)
@@ -67,7 +68,6 @@ hypervisors or execution containers.
         - Logging                                (Types for printf-like logging)
         - PropList                                (heterogenous key-value lists)
         - Size                 (ADT for power of integral two disk/memory sizes)
-
 
 ### B9.Linux - Basic VM build/tooling
 
@@ -105,8 +105,7 @@ repositories.
       - LibvirtEsx
       - LibvirtKvm
 
-03.06.2016
-----------
+## 03.06.2016
 
 Q: What's B9? Should I keep it around??
 A: Yes.
@@ -118,7 +117,6 @@ Haskell is used because it has a simple syntax and allows for vm-build
 configuration programs that look only a little more complex than typical
 configuration files, but it provides all the necessary, under the hood magic,
 for automatic consistency checks.
-
 
 Q: What's at the core of B9?
 
@@ -140,14 +138,11 @@ potentially-missle-launching I/O code using (possibly uninhabited) Haskell types
 The current B9-package bundles some instances to build VM images on Linux using
 qemu to create/convert sytem images and libvirt to run containers.
 
-
 Q: What's at the top of B9?
 
 A: No clear idea yet. Could be _servant_ style types, could be something else.
 
-
-06.01.2016 05:04
-----------------
+## 06.01.2016 05:04
 
 Thinking about cleaning up `B9.ConfigUtils`.
 
@@ -158,9 +153,7 @@ anymore, the functions `tell`, `consult`, `maybeConsult`,
 The UUID handling should be refactored away. The type `UUID` should move to
 `B9.CommonTypes` and the function `randomUUID` should go into `B9Monad` maybe.
 
-
-06.01.2016 04:47
-----------------
+## 06.01.2016 04:47
 
 I will refactor the module structure of B9 such that the top-level package B9
 will be a lot cleaner and suffer from less redundance.
@@ -171,6 +164,7 @@ The Content package will be seperated such that no direct IO is done in a
 `Content`.
 
 The modules:
+
 * `DiskImages`
 * `ExecEnv`
 * `FileSystems`
@@ -183,6 +177,7 @@ The modules:
 Will be merged into the corresponding modules in `Dsl.*`
 
 The modules:
+
 * `FileSystemsImpl`
 * `GPT`
 * `LibVirtLXC`
@@ -199,14 +194,11 @@ The profiling stuff in `B9Monad` has never been used, I should scrub it.
 
 The module `ConfigUtils` should follow `B9Config`.
 
-06.01.2016 04:46
-----------------
+## 06.01.2016 04:46
 
 DSL.hs hash been refactored to use type-classes and open type families.
 
-
-12.12.2015 23:20
-----------------
+## 12.12.2015 23:20
 
 Thinking about wether DSL.hs should be based upon open type families or stay
 simply closed, the way it is. Then I could add a servant like type API ontop of
@@ -214,17 +206,19 @@ that, analogous how servant relates to wai.
 
 Or should I rather convert it to type classes with associated type families?
 Which could be:
-- FileSystem functions
-- VmImage conversiion and partitioning functions
-- deployment functions
-- script execution
-- configuration management
+
+* FileSystem functions
+* VmImage conversiion and partitioning functions
+* deployment functions
+* script execution
+* configuration management
 
 First steps could be:
-- Use _relaxed_ kinds
-- convert everything to a single typeclass with associated type
-- split Artifact
-- rewrite the interpretation module
+
+* Use _relaxed_ kinds
+* convert everything to a single typeclass with associated type
+* split Artifact
+* rewrite the interpretation module
 
 Or should I split it up just so the code is more seperate and clean?
 

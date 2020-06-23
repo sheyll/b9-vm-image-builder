@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module B9.Core.Dsl.Interpreter where
+module B9.Core.DslInterpreter where
 
 import B9.Core.Prelude
 import B9.Core.System.B9IO
