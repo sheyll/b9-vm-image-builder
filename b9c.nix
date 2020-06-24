@@ -8,7 +8,7 @@
  coreutils, dosfstools, mtools}:
 
 let
-  b9Unwrapped = import ./b9.nix {inherit haskellPackages nix-gitignore;}; 
+  b9Unwrapped = haskellPackages.b9;
 
   b9Static = haskell.lib.justStaticExecutables b9Unwrapped;
 
@@ -21,7 +21,7 @@ let
 in
   stdenv.mkDerivation {
     name = "b9c";
-    buildInputs = [b9Unwrapped makeWrapper];
+    buildInputs = [makeWrapper];
     depsHostHost = nonHaskellBuildInputs;
     phases = ["installPhase" "postFixup"];
     installPhase = ''

@@ -13,7 +13,7 @@ let
       pkgsWithB9.docker
       niv
       ormolu
-      ghcide
+      ghcide 
     ];
     withHoogle = true;
   };
