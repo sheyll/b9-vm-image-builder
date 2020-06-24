@@ -4,6 +4,7 @@ module B9.Container
   )
 where
 
+import B9.B9Error
 import B9.B9Logging
 import B9.BuildInfo
 import B9.DiskImages
@@ -30,7 +31,7 @@ class Backend config where
   -- completed successfully.
   runInEnvironment ::
     forall e.
-    (Member BuildInfoReader e, CommandIO e) =>
+    (Member BuildInfoReader e, CommandIO e, Member ExcB9 e) =>
     config ->
     ExecEnv ->
     Script ->

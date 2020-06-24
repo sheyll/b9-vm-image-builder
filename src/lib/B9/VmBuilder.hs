@@ -6,6 +6,7 @@ module B9.VmBuilder
 where
 
 import B9.Artifact.Readable
+import B9.B9Error
 import B9.B9Logging
 import B9.B9Monad
 import B9.BuildInfo
@@ -88,12 +89,18 @@ runVmScript backendCfg (IID iid) imageTargets buildImages instanceDir vmScript =
   traceL (ppShow vmScript)
   execEnv <- setUpExecEnv
   let (VmScript _ _ script) = vmScript
-  success <- runInEnvironment backendCfg execEnv script
-  if success
-    then infoL "EXECUTED BUILD SCRIPT"
-    else errorL "BUILD SCRIPT FAILED"
-  return success
+  result <- runExcB9 $ runInEnvironment backendCfg execEnv script
+  handleErrors (either (Left . show) Right result)
   where
+    handleErrors :: IsB9 e => Either String Bool -> Eff e Bool
+    handleErrors (Right False) = do
+      errorL "The containerized build failed!"
+      return False
+    handleErrors (Right True) = do
+      traceL "The containerized build was successfull."
+      return True
+    handleErrors (Left err) =
+      errorExitL ("Failed to complete the containerized build: " ++ show err)
     setUpExecEnv :: IsB9 e => Eff e ExecEnv
     setUpExecEnv = do
       let (VmScript cpu shares _) = vmScript

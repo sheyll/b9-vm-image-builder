@@ -14,6 +14,7 @@ module B9.B9Error
     fromB9Error,
     catchB9Error,
     catchB9ErrorAsEither,
+    finallyB9,
   )
 where
 
@@ -95,3 +96,10 @@ catchB9Error = catchError
 catchB9ErrorAsEither ::
   Member ExcB9 e => Eff e a -> Eff e (Either SomeException a)
 catchB9ErrorAsEither x = catchB9Error (Right <$> x) (pure . Left)
+
+-- | Always execute an action and rethrow any exceptions caught.
+--
+-- @since 1.0.0
+finallyB9 :: Member ExcB9 e => Eff e a -> Eff e () -> Eff e a
+finallyB9 mainAction cleanupAction =
+  catchB9Error mainAction (\e -> cleanupAction >> throwSomeException e)
