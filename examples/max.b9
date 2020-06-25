@@ -16,6 +16,8 @@ Artifact (IID "test-max")
       Run "source /etc/profile" []
      , Run "export PATH=$$PATH:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin" []
      , Run "cp" ["/mnt/test-share-max/hosts", "/etc/hosts"] 
+     , Run "yum -y clean all" []
+     , IgnoreErrors True [Run "yum -y makecache" []]
      , Run "yum -y update" []
      , Run "yum install -y docker" []
      ]

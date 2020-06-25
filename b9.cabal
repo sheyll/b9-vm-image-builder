@@ -198,11 +198,13 @@ executable b9c
                    , extensible-effects >= 5 && < 6
                    , optparse-applicative >= 0.13
   hs-source-dirs:    src/cli
+  ghc-options:       -Wall
+                     -fwarn-unused-binds -fno-warn-unused-do-bind -threaded
 
 test-suite spec
   import:           b9Extensions, b9Deps
   type:              exitcode-stdio-1.0
-  ghc-options:       -Wall
+  ghc-options:       -Wall -threaded
   hs-source-dirs:    src/tests
   main-is:           Spec.hs
   autogen-modules:   Paths_b9

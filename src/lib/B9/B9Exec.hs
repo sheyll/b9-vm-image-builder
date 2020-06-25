@@ -11,7 +11,6 @@ module B9.B9Exec
   )
 where
 
-import System.IO (hSetBuffering, BufferMode(LineBuffering))
 import B9.B9Config
 import B9.B9Error
 import B9.B9Logging
@@ -21,7 +20,7 @@ import Control.Eff
 import qualified Control.Exception as ExcIO
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Control (embed_)
+import Control.Monad.Trans.Control (control, restoreM, embed_)
 import qualified Data.ByteString as Strict
 -- import qualified Data.ByteString.Lazy as Lazy
 import Data.Conduit
@@ -124,39 +123,42 @@ hostCmd cmdStr timeout = do
 -- This is only useful for non-interactive commands.
 --
 -- @since 1.0.0
-hostCmdEither ::
+hostCmdEither :: forall e. 
   (CommandIO e) => String -> Maybe CommandTimeout -> Eff e (Either CommandTimeout ExitCode)
 hostCmdEither cmdStr timeout = do
   let tag = "[" ++ printHash cmdStr ++ "]"
   traceL $ "COMMAND " ++ tag ++ ": " ++ cmdStr
-  (ClosedStream, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
-  liftIO $ do 
-    -- hSetBuffering cpOut LineBuffering
-    hSetBuffering cpErr LineBuffering
-  traceLC <- traceMsgProcessLogger tag
-  errorLC <- errorMsgProcessLogger tag
-  let timer t@(CommandTimeout micros) = do
-        threadDelay micros
-        return t
-      runCmd =
-        ExcIO.catch -- TODO
-         (runConcurrently 
-           (Concurrently (putStrLn "XXXXXXXXXXXXXXXXXXXXXXXX" >> runConduit (cpOut .| (CL.mapM_ (\b -> putStrLn $ tag ++ ": " ++ show b))))
-            *> Concurrently (runConduit (CL.sourceHandle cpErr .| runProcessLogger errorLC))
-            *> Concurrently (waitForStreamingProcess cph)))
-        (\(e :: ExcIO.SomeException) -> do 
-            putStrLn ("COMMAND " ++ tag++ " interrupted: " ++ show e)
-            return (ExitFailure 666))
-  e <- liftIO (maybe (fmap Right) (race . timer) timeout runCmd)
-  closeStreamingProcessHandle cph
-  case e of
-    Left _ ->
-      errorL $ "COMMAND TIMED OUT " ++ tag
-    Right ExitSuccess ->
-      traceL $ "COMMAND FINISHED " ++ tag
-    Right (ExitFailure ec) ->
-      errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
-  return e
+  control $ \runInIO -> do
+    ExcIO.catch 
+      (runInIO (go tag)) 
+      (\(e :: ExcIO.SomeException) -> do 
+        putStrLn ("COMMAND " ++ tag++ " interrupted: " ++ show e)
+        runInIO (return (Right (ExitFailure 126):: Either CommandTimeout ExitCode)))
+    >>= restoreM
+ where
+   go :: String -> Eff e (Either CommandTimeout ExitCode)
+   go tag = do
+      (ClosedStream, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
+      traceLC <- traceMsgProcessLogger tag
+      errorLC <- errorMsgProcessLogger tag
+      let timer t@(CommandTimeout micros) = do
+            threadDelay micros
+            return t
+          runCmd =
+             (runConcurrently 
+               (Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
+                *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
+                *> Concurrently (waitForStreamingProcess cph)))
+      e <- liftIO (maybe (fmap Right) (race . timer) timeout runCmd)
+      closeStreamingProcessHandle cph
+      case e of
+        Left _ ->
+          errorL $ "COMMAND TIMED OUT " ++ tag
+        Right ExitSuccess ->
+          traceL $ "COMMAND FINISHED " ++ tag
+        Right (ExitFailure ec) ->
+          errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
+      return e
 
 data CommandTimeout = CommandTimeout Int
   deriving (Show)
@@ -166,7 +168,7 @@ newtype ProcessLogger
       {runProcessLogger :: ConduitT Strict.ByteString Void IO ()}
 
 traceMsgProcessLogger :: (CommandIO e) => String -> Eff e ProcessLogger
-traceMsgProcessLogger = mkMsgProcessLogger (liftIO . putStrLn) 
+traceMsgProcessLogger = mkMsgProcessLogger traceL
 
 errorMsgProcessLogger :: (CommandIO e) => String -> Eff e ProcessLogger
 errorMsgProcessLogger = mkMsgProcessLogger errorL
@@ -178,8 +180,7 @@ mkMsgProcessLogger logFun prefix = do
       ( \logBytes ->
           logFun (prefix ++ ": " ++ Text.unpack logBytes)
       )
-  return (MkProcessLogger (      
-                            -- CL.chunksOfCE 64  .| 
+
+  return (MkProcessLogger ( CB.lines .|     
                             CL.decodeUtf8LenientC      
-                               --   .| CL.linesUnboundedC 
-                                  .| CL.mapM_ (liftIO . logIO)))
+                          .| CL.mapM_ (liftIO . logIO)))
