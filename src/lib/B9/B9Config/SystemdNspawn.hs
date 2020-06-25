@@ -4,6 +4,7 @@ module B9.B9Config.SystemdNspawn
     parseSystemdNspawnConfig,
     SystemdNspawnConfig (..),
     systemdNspawnCapabilities,
+    systemdNspawnUseSudo,
   )
 where
 
@@ -14,10 +15,14 @@ import Data.ConfigFile.B9Extras
 data SystemdNspawnConfig
   = SystemdNspawnConfig
       { _systemdNspawnCapabilities :: [ContainerCapability]
+      , _systemdNspawnUseSudo :: Bool
       }
   deriving (Read, Show, Eq)
 
 makeLenses ''SystemdNspawnConfig
+
+useSudoK :: String
+useSudoK = "use_sudo"
 
 defaultSystemdNspawnConfig :: SystemdNspawnConfig
 defaultSystemdNspawnConfig =
@@ -32,6 +37,7 @@ defaultSystemdNspawnConfig =
       CAP_SYS_PTRACE,
       CAP_SYS_MODULE
     ]
+    True
 
 cfgFileSection :: String
 cfgFileSection = "systemdNspawn"
@@ -40,9 +46,12 @@ systemdNspawnConfigToCPDocument ::
   SystemdNspawnConfig -> CPDocument -> Either CPError CPDocument
 systemdNspawnConfigToCPDocument c cp = do
   cp1 <- addSectionCP cp cfgFileSection
-  containerCapsToCPDocument cp1 cfgFileSection $
+  cp2 <- setShowCP cp1 cfgFileSection useSudoK $ _systemdNspawnUseSudo c
+  containerCapsToCPDocument cp2 cfgFileSection $
     _systemdNspawnCapabilities c
 
 parseSystemdNspawnConfig :: CPDocument -> Either CPError SystemdNspawnConfig
 parseSystemdNspawnConfig cp =
-  SystemdNspawnConfig <$> parseContainerCapabilities cp cfgFileSection
+  let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
+      getr = readCP cp cfgFileSection
+  in SystemdNspawnConfig <$> parseContainerCapabilities cp cfgFileSection  <*> getr useSudoK

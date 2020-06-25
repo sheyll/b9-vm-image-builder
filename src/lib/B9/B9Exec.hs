@@ -11,26 +11,30 @@ module B9.B9Exec
   )
 where
 
+import System.IO (hSetBuffering, BufferMode(LineBuffering))
 import B9.B9Config
 import B9.B9Error
 import B9.B9Logging
 import Control.Concurrent
 import Control.Concurrent.Async (Concurrently (..), race)
 import Control.Eff
+import qualified Control.Exception as ExcIO
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control (embed_)
 import qualified Data.ByteString as Strict
+-- import qualified Data.ByteString.Lazy as Lazy
 import Data.Conduit
   ( (.|),
     ConduitT,
     Void,
     runConduit,
   )
+import qualified Data.Conduit.Binary      as CB
+import qualified Conduit as CL
 import qualified Data.Conduit.List as CL
 import Data.Conduit.Process
 import Data.Functor ()
-import Data.Hashable
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Encoding.Error as Text
@@ -96,23 +100,24 @@ cmdWithStdIn toStdOut cmdStr = do
       liftIO $ exitWith ec
 
 -- | Run a shell command defined by a string and optionally interrupt the command
--- after a given time has elapsed. 
--- If the shell command did not exit with 'ExitSuccess', or the timer elapsed, 
+-- after a given time has elapsed.
+-- If the shell command did not exit with 'ExitSuccess', or the timer elapsed,
 -- a 'B9Error' is thrown.
 --
 -- This is only useful for non-interactive commands.
 --
 -- @since 1.0.0
-hostCmd :: (CommandIO e, Member ExcB9 e) => String -> Maybe CommandTimeout -> Eff e ()
+hostCmd :: (CommandIO e, Member ExcB9 e) => String -> Maybe CommandTimeout -> Eff e Bool
 hostCmd cmdStr timeout = do
   res <- hostCmdEither cmdStr timeout
-  case res of 
-    Left e -> 
+  case res of
+    Left e ->
       throwB9Error ("Command timed out: " ++ show cmdStr ++ " " ++ show e)
-    Right (ExitFailure ec) -> 
-      throwB9Error ("Command exited with error code: " ++ show cmdStr ++ " " ++ show ec)
+    Right (ExitFailure ec) -> do
+      errorL ("Command exited with error code: " ++ show cmdStr ++ " " ++ show ec)
+      return False
     Right ExitSuccess ->
-      return ()
+      return True
 
 -- | Run a shell command defined by a string and optionally interrupt the command
 -- after a given time has elapsed.
@@ -122,28 +127,35 @@ hostCmd cmdStr timeout = do
 hostCmdEither ::
   (CommandIO e) => String -> Maybe CommandTimeout -> Eff e (Either CommandTimeout ExitCode)
 hostCmdEither cmdStr timeout = do
-  let tag = "[" ++ show (hash cmdStr) ++ "]"
+  let tag = "[" ++ printHash cmdStr ++ "]"
   traceL $ "COMMAND " ++ tag ++ ": " ++ cmdStr
   (ClosedStream, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
+  liftIO $ do 
+    -- hSetBuffering cpOut LineBuffering
+    hSetBuffering cpErr LineBuffering
   traceLC <- traceMsgProcessLogger tag
   errorLC <- errorMsgProcessLogger tag
   let timer t@(CommandTimeout micros) = do
         threadDelay micros
         return t
       runCmd =
-        runConcurrently $
-          Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
-            *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
-            *> Concurrently (waitForStreamingProcess cph)
+        ExcIO.catch -- TODO
+         (runConcurrently 
+           (Concurrently (putStrLn "XXXXXXXXXXXXXXXXXXXXXXXX" >> runConduit (cpOut .| (CL.mapM_ (\b -> putStrLn $ tag ++ ": " ++ show b))))
+            *> Concurrently (runConduit (CL.sourceHandle cpErr .| runProcessLogger errorLC))
+            *> Concurrently (waitForStreamingProcess cph)))
+        (\(e :: ExcIO.SomeException) -> do 
+            putStrLn ("COMMAND " ++ tag++ " interrupted: " ++ show e)
+            return (ExitFailure 666))
   e <- liftIO (maybe (fmap Right) (race . timer) timeout runCmd)
   closeStreamingProcessHandle cph
   case e of
     Left _ ->
-      errorL $ "COMMAND TIMED OUT " ++ tag ++ ": " ++ cmdStr
+      errorL $ "COMMAND TIMED OUT " ++ tag
     Right ExitSuccess ->
-      traceL $ "COMMAND FINISHED " ++ tag ++ ": " ++ cmdStr
+      traceL $ "COMMAND FINISHED " ++ tag
     Right (ExitFailure ec) ->
-      errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag ++ ": " ++ cmdStr
+      errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
   return e
 
 data CommandTimeout = CommandTimeout Int
@@ -154,19 +166,20 @@ newtype ProcessLogger
       {runProcessLogger :: ConduitT Strict.ByteString Void IO ()}
 
 traceMsgProcessLogger :: (CommandIO e) => String -> Eff e ProcessLogger
-traceMsgProcessLogger prefix = do
-  traceLIO <-
-    embed_
-      ( \logBytes ->
-          traceL (prefix ++ ": " ++ Text.unpack (Text.decodeUtf8With Text.lenientDecode logBytes))
-      )
-  return (MkProcessLogger (CL.mapM_ (liftIO . traceLIO)))
+traceMsgProcessLogger = mkMsgProcessLogger (liftIO . putStrLn) 
 
 errorMsgProcessLogger :: (CommandIO e) => String -> Eff e ProcessLogger
-errorMsgProcessLogger prefix = do
-  errorLIO <-
+errorMsgProcessLogger = mkMsgProcessLogger errorL
+
+mkMsgProcessLogger :: (CommandIO e) => (String -> Eff e ()) -> String -> Eff e ProcessLogger 
+mkMsgProcessLogger logFun prefix = do
+  logIO <-
     embed_
       ( \logBytes ->
-          errorL (prefix ++ ": " ++ Text.unpack (Text.decodeUtf8With Text.lenientDecode logBytes))
+          logFun (prefix ++ ": " ++ Text.unpack logBytes)
       )
-  return (MkProcessLogger (CL.mapM_ (liftIO . errorLIO)))
+  return (MkProcessLogger (      
+                            -- CL.chunksOfCE 64  .| 
+                            CL.decodeUtf8LenientC      
+                               --   .| CL.linesUnboundedC 
+                                  .| CL.mapM_ (liftIO . logIO)))

@@ -9,6 +9,6 @@ Artifact (IID "test-libvirt")
     X86_64
     [SharedDirectoryRO "test-share-ro" (MountPoint "/mnt/test-share-ro")]
     (Verbosity Debug [
-       Run "cp" ["/mnt/test-share-ro/test", "/test-2-passed"]
-     , Run "touch" ["/test-1-passed"]])))
+       Run "/bin/cp" ["/mnt/test-share-ro/test", "/test-2-passed"]
+     , Run "/bin/touch" ["/test-1-passed"]])))
 

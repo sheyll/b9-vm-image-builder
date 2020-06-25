@@ -1,0 +1,23 @@
+Artifact (IID "test-max") 
+ (VmImages 
+  [ImageTarget 
+    (LocalFile (Image "max-out.vmdk" Vmdk Ext4) KeepSize)
+    (SourceImage (Image "max-in.qcow2" QCow2 Ext4) NoPT KeepSize)
+    (MountPoint "/")
+  , ImageTarget 
+    (LocalFile (Image "max-data-out.vmdk" Vmdk Ext4) KeepSize)
+    (EmptyImage "data" Ext4 Raw (ImageSize 64 GB))
+    (MountPoint "/data")
+  ]
+  (VmScript 
+    X86_64
+    [SharedDirectoryRO "test-share-max" (MountPoint "/mnt/test-share-max")]
+    (Verbosity Debug [
+      Run "source /etc/profile" []
+     , Run "export PATH=$$PATH:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin" []
+     , Run "cp" ["/mnt/test-share-max/hosts", "/etc/hosts"] 
+     , Run "yum -y update" []
+     , Run "yum install -y docker" []
+     ]
+     )))
+

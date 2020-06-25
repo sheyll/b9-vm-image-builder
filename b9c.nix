@@ -4,6 +4,8 @@
  openssh, qemu, rsync,
  nix-gitignore,
  haskell,
+ systemd, 
+ podman,
  e2fsprogs, xorriso, bash, curl,
  coreutils, dosfstools, mtools}:
 
@@ -15,6 +17,7 @@ let
   nonHaskellBuildInputs =
     [cdrkit libvirt
      openssh qemu rsync docker
+     podman systemd
      e2fsprogs xorriso bash curl
      coreutils dosfstools mtools];
 

@@ -1,7 +1,11 @@
-with (import <nixos> {});
+let 
+  b9c = (import ../default.nix {}).b9c;
+  pkgs = import ../nix/pkgs.nix {};
+  exampleRunner = ./runExamples.sh;
+in
+  pkgs.writeScriptBin "exampleRunner" ''
+    #!/usr/bin/env bash
+    set -ex
 
-mkShell {
-  buildInputs = [(callPackage ../b9c.nix {})];
-
-}
-
+    ${exampleRunner} ${b9c}/bin/b9c
+'' 

@@ -23,4 +23,4 @@ result*
 *.raw
 *.qcow2
 *.tar
-
+*.vmdk

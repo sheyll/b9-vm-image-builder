@@ -97,7 +97,7 @@ runVmScript backendCfg (IID iid) imageTargets buildImages instanceDir vmScript =
       errorL "The containerized build failed!"
       return False
     handleErrors (Right True) = do
-      traceL "The containerized build was successfull."
+      traceL "The containerized build was successful."
       return True
     handleErrors (Left err) =
       errorExitL ("Failed to complete the containerized build: " ++ show err)

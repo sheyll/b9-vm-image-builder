@@ -5,7 +5,7 @@ module B9.SystemdNspawn
 where
 
 import B9.B9Config
-  ( ContainerCapability,
+  ( 
     getB9Config,
     systemdNspawnConfigs,
   )
@@ -20,20 +20,19 @@ import B9.ExecEnv
 import B9.ShellScript
 import Control.Eff
 import Control.Lens (view)
+import Control.Monad (when)
 import Control.Monad.IO.Class
-  ( MonadIO,
-    liftIO,
+  ( liftIO,
   )
-import Data.Char (toLower)
+import Data.Foldable (traverse_)
+import Data.List (intercalate, partition)
 import System.Directory
 import System.FilePath
-import System.IO.B9Extras
-  ( UUID (),
-    randomUUID,
-  )
 import Text.Printf (printf)
 
 newtype SystemdNspawn = SystemdNspawn SystemdNspawnConfig
+
+type SudoPrepender = String -> String
 
 instance Backend SystemdNspawn where
   getBackendConfig _ =
@@ -45,65 +44,183 @@ instance Backend SystemdNspawn where
     if emptyScript scriptIn
       then return True
       else do
-        containerMounts <- prepareContainerBuild env
+        let sudo = if _systemdNspawnUseSudo dCfg then  ("sudo " ++) else id
+        containerBuildDirs <- createContainerBuildRootDir
+        containerMounts <- mountLoopbackImages sudo env containerBuildDirs
         finallyB9
           ( do
-              bootScript <- prepareBootScript containerMounts scriptIn
-              execBuild containerMounts bootScript dCfg
+              bootScript <- prepareBootScript containerBuildDirs scriptIn
+              execBuild sudo containerMounts (envSharedDirectories env) bootScript dCfg
           )
-          (cleanupContainerBuild containerMounts)
+          (do 
+              umountLoopbackImages sudo containerMounts
+              removeContainerBuildRootDir sudo containerBuildDirs)
 
-prepareContainerBuild ::
+
+createContainerBuildRootDir ::
+  (Member BuildInfoReader e, Member ExcB9 e, CommandIO e) => Eff e ContainerBuildDirectories
+createContainerBuildRootDir = do
+  buildD <- getBuildDir
+  let loopbackMountDir = root </> "loopback_mounts"
+      root = buildD </> "container_build_root"
+  liftIO $ do
+    createDirectoryIfMissing True root
+    createDirectoryIfMissing True loopbackMountDir
+  let res = ContainerBuildDirectories {containerBuildRoot = root, containerLoopbackMountRoot = loopbackMountDir}
+  traceL ("Created container build directories: " ++ show res)
+  return res
+
+data ContainerBuildDirectories
+  = ContainerBuildDirectories
+      { containerBuildRoot :: FilePath,
+        containerLoopbackMountRoot :: FilePath
+      }
+  deriving (Show)
+
+mountLoopbackImages ::
   (Member BuildInfoReader e, Member ExcB9 e, CommandIO e) =>
+  SudoPrepender ->
   ExecEnv ->
+  ContainerBuildDirectories ->
   Eff e ContainerMounts
-prepareContainerBuild e = do
-  -- Create the directories etc 
-  let imgMounts = envImageMounts e
-  case filter ((== MountPoint "/") . snd) imgMounts of
-    [(rootImg,_)] ->     
-      error "TODO"
-    [] ->
-      throwB9Error "A containerized build requires that a disk image for the root-, i.e. the '/' directory is configured."     
-    rootImgs ->
+mountLoopbackImages sudo e containerDirs = do
+  let imgMounts0 = [(img, mountPoint) | (img, MountPoint mountPoint) <- envImageMounts e]
+      imgMounts = [(imgPath, mountPoint) | (Image imgPath _ _, mountPoint) <- imgMounts0]
+      invalidImages = [x | x@(Image _ t _, _) <- imgMounts0, t /= Raw]
+  when
+    (not (null invalidImages))
+    (throwB9Error ("Internal Error: Only 'raw' disk images can be used for container builds, and these images were supposed to be automatically converted: " ++ show invalidImages))
+  case partition ((== "/") . snd) imgMounts of
+    ([rootImg], otherImgs) -> do
+      rootMount <- mountLoopback rootImg
+      otherMounts <- traverse mountLoopback otherImgs
+      return (ContainerMounts (Right rootMount) otherMounts)
+    ([], _) ->
+      throwB9Error "A containerized build requires that a disk image for the root-, i.e. the '/' directory is configured."
+    (rootImgs, _) ->
       throwB9Error ("A containerized build requires that only one disk image for the root-, i.e. the '/' directory, instead these were given: " ++ show rootImgs)
-     
-      
+  where
+    mountLoopback (imgPath, containerMountPoint) = do
+      let hostMountPoint =
+            containerLoopbackMountRoot containerDirs
+              </> printHash (imgPath, containerMountPoint)
+      liftIO $ createDirectoryIfMissing True hostMountPoint
 
-prepareBootScript :: 
-  (Member ExcB9 e, CommandIO e) => 
-  ContainerMounts -> 
-  Script -> 
-  Eff e BootScript
-prepareBootScript = error "TODO"
+      hostCmd (sudo (printf "mount -o loop '%s' '%s'" imgPath hostMountPoint)) timeout
+      return (LoopbackMount {loopbackHost = hostMountPoint, loopbackContainer = containerMountPoint})
 
-execBuild :: 
-  (Member ExcB9 e, CommandIO e) => 
-  ContainerMounts -> 
-  BootScript -> 
-  w -> 
-  Eff e Bool
-execBuild containerMounts bootScript dCfg = error "TODO"
-
-cleanupContainerBuild :: CommandIO e => ContainerMounts -> Eff e ()
-cleanupContainerBuild = error "TODO"
-
-data BootScript = BootScript
+newtype ContainerRootImage = 
+  ContainerRootImage FilePath
+  deriving Show
 
 data ContainerMounts
-  = MkContainerMounts
-      { containerRootImage :: Either LoopbackMount Image,
+  = ContainerMounts
+      { containerRootImage :: Either ContainerRootImage LoopbackMount,
         containerLoopbackMounts :: [LoopbackMount]
       }
   deriving (Show)
 
-newtype LoopbackMount = LoopbackMount (Mounted (Mounted Image))
+data LoopbackMount = LoopbackMount {loopbackHost :: FilePath, loopbackContainer :: FilePath}
   deriving (Show)
 
-loopbackMount :: FilePath -> FilePath -> Image -> LoopbackMount
-loopbackMount containerMountPoint hostLoopbackMountPoint rawImg =
-  LoopbackMount ((rawImg, MountPoint hostLoopbackMountPoint), MountPoint containerMountPoint)
+prepareBootScript ::
+  (Member ExcB9 e, CommandIO e) =>
+  ContainerBuildDirectories ->
+  Script ->
+  Eff e BootScript
+prepareBootScript containerDirs script = do
+  let bs =
+        BootScript
+          { bootScriptHostDir = containerBuildRoot containerDirs </> "boot_script",
+            bootScriptContainerDir = "/mnt/boot_script",
+            bootScriptContainerCommand = bootScriptContainerDir bs </> scriptFile
+          }
+      scriptFile = "run.sh"
+      scriptEnv =
+        Begin
+          [ 
+            Run "export" ["HOME=/root"],
+            Run "export" ["USER=root"],
+            -- IgnoreErrors True [Run "source" ["/etc/profile"]],
+            script
+          ]
+  liftIO $ do
+    createDirectoryIfMissing True (bootScriptHostDir bs)
+    writeSh (bootScriptHostDir bs </> scriptFile) scriptEnv
+  traceL ("wrote script: \n" ++ show scriptEnv)
+  traceL ("created boot-script: " ++ show bs)
+  return bs
 
-rootLoopbackMount :: FilePath -> Image -> LoopbackMount
-rootLoopbackMount hostLoopbackMountPoint rawImg =
-  loopbackMount "/" hostLoopbackMountPoint rawImg
+data BootScript
+  = BootScript
+      { bootScriptHostDir :: FilePath,
+        bootScriptContainerDir :: FilePath,
+        bootScriptContainerCommand :: String
+      }
+  deriving (Show)
+
+execBuild ::
+  (Member ExcB9 e, CommandIO e) =>
+  SudoPrepender ->
+  ContainerMounts ->
+  [SharedDirectory] ->
+  BootScript ->
+  SystemdNspawnConfig ->
+  Eff e Bool
+execBuild sudo containerMounts sharedDirs bootScript dCfg = do 
+  let systemdCmd = 
+              unwords 
+                (["systemd-nspawn", "--console=pipe"] 
+                ++ rootImageOptions 
+                ++ capabilityOptions 
+                ++ bindMounts 
+                ++ execOptions)
+      rootImageOptions = 
+        case containerRootImage containerMounts of 
+         Left (ContainerRootImage imgPath) ->
+           ["-i", imgPath]     
+         Right loopbackMounted ->   
+           ["-D", loopbackHost loopbackMounted]     
+      capabilityOptions = 
+        case _systemdNspawnCapabilities dCfg of 
+          [] -> []
+          caps -> ["--capability=" ++ intercalate "," (map show caps)]
+      bindMounts = 
+        map mkBind loopbackMounts 
+        ++ map mkBind sharedDirMounts
+        ++ map mkBindRo sharedDirMountsRo
+        ++ [mkBindRo (bootScriptHostDir bootScript, bootScriptContainerDir bootScript)]
+        where 
+          mkBind (hostDir, containerDir) = "--bind=" ++ hostDir ++ ":" ++ containerDir
+          mkBindRo (hostDir, containerDir) = "--bind-ro=" ++ hostDir ++ ":" ++ containerDir
+          loopbackMounts = [(h, c) | LoopbackMount {loopbackHost = h, loopbackContainer = c}
+                              <- containerLoopbackMounts containerMounts ]
+          sharedDirMounts = [(h, c) | SharedDirectory h (MountPoint c) <- sharedDirs ]
+          sharedDirMountsRo = [(h, c) | SharedDirectoryRO h (MountPoint c) <- sharedDirs]
+      execOptions = ["/bin/sh", bootScriptContainerCommand bootScript]
+  traceL ("executing systemd-nspawn container build")
+  hostCmd (sudo systemdCmd) Nothing -- TODO specify timeout
+
+
+umountLoopbackImages :: forall e. (Member ExcB9 e, CommandIO e) => SudoPrepender -> ContainerMounts -> Eff e ()
+umountLoopbackImages sudo c = do
+  case containerRootImage c of 
+    Left _ -> return ()
+    Right r -> umount r 
+  traverse_ umount (containerLoopbackMounts c)
+  where
+    umount :: LoopbackMount -> Eff e ()
+    umount l = do
+      traceL $ "unmounting: " ++ show l
+      res <- hostCmd (sudo (printf "umount '%s'" (loopbackHost l))) timeout
+      when (not res) (errorL ("failed to unmount: " ++ show l))
+
+removeContainerBuildRootDir :: forall e. (Member ExcB9 e, CommandIO e) => SudoPrepender -> ContainerBuildDirectories -> Eff e ()
+removeContainerBuildRootDir sudo containerBuildDirs = do 
+  let target = containerBuildRoot containerBuildDirs 
+  traceL $ "removing: " ++ target
+  res <- hostCmd (sudo (printf "rm -rf '%s'" target)) timeout
+  when (not res) (errorL ("failed to remove: " ++ target))
+
+timeout :: Maybe CommandTimeout
+timeout = Just (CommandTimeout 10000000)

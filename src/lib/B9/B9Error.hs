@@ -9,6 +9,7 @@ module B9.B9Error
     throwB9Error_,
     errorOnException,
     ExcB9,
+    WithIoExceptions,
     runExcB9,
     B9Error (MkB9Error),
     fromB9Error,
@@ -34,6 +35,12 @@ import Data.String (IsString (..))
 --
 -- @since 0.5.64
 type ExcB9 = Exc SomeException
+
+-- | Constraint alias for the exception effect that allows to
+-- throw 'SomeException'.
+--
+-- @since 1.0.0
+type WithIoExceptions e = SetMember Exc (Exc SomeException) e
 
 -- | This is a simple runtime exception to indicate that B9 code encountered
 -- some exceptional event.
@@ -102,4 +109,9 @@ catchB9ErrorAsEither x = catchB9Error (Right <$> x) (pure . Left)
 -- @since 1.0.0
 finallyB9 :: Member ExcB9 e => Eff e a -> Eff e () -> Eff e a
 finallyB9 mainAction cleanupAction =
-  catchB9Error mainAction (\e -> cleanupAction >> throwSomeException e)
+  catchB9Error 
+    (do 
+        res <- mainAction 
+        cleanupAction 
+        return res)
+    (\e -> cleanupAction >> throwSomeException e)

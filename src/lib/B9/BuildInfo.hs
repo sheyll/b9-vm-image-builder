@@ -92,6 +92,7 @@ withBuildInfo action = withRootDir $ do
         (projectRoot ?~ root)
         (addLocalStringBinding ("projectRoot", root) f)
     generateBuildId buildDate = do
+      -- TODO generate a proper, reproducable build id!
       unqiueBuildDir <- _uniqueBuildDirs <$> getB9Config
       cfgHash <- hash . show <$> getB9Config
       if unqiueBuildDir
@@ -104,6 +105,7 @@ withBuildInfo action = withRootDir $ do
         bracket (createBuildDir root) (removeBuildDir cfg) (runInIO . f)
       where
         createBuildDir root = do
+          -- TODO allow config option to enable build dirs outside of the projectRoot
           let buildDir = case root of
                 Just r -> r </> "BUILD-" ++ buildId
                 Nothing -> "BUILD-" ++ buildId
