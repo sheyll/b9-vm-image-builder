@@ -40,7 +40,7 @@ data SystemdNspawnConsole
 instance Show SystemdNspawnConsole where
   show x = case x of
     SystemdNspawnInteractive -> "interactive"
-    SystemdNspawnReadOnly -> "readonly"
+    SystemdNspawnReadOnly -> "read-only"
     SystemdNspawnPassive -> "passive"
     SystemdNspawnPipe -> "pipe"
 
@@ -50,7 +50,7 @@ instance Read SystemdNspawnConsole where
       Ident "interactive" <- lexP
       return SystemdNspawnInteractive
       +++ do
-        Ident "readonly" <- lexP
+        Ident "read-only" <- lexP
         return SystemdNspawnReadOnly
       +++ do
         Ident "passive" <- lexP

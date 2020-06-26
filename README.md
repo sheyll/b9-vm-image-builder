@@ -398,7 +398,7 @@ This example is the current default configuration:
     network: Nothing
 
     [systemdNspawn]
-    console: readonly
+    console: read-only
     executable: Nothing
     extra_args: Nothing
     guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
@@ -501,6 +501,8 @@ _TODO document this option._
 
 ### The `[podman]` Section
 
+**Since: 1.0.0**
+
 #### `guest_capabilities`
 
 * Default: `[CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]`
@@ -515,11 +517,18 @@ _TODO document this option._
 
 ### The `[systemdNspawn]` Section 
 
+**Since: 1.0.0**
+
 #### `console`
 
-* Default: `readonly`
+* Default: `read-only`
+* Valid Values:
+   * `read-only`
+   * `interactive`
+   * `passive`
+   * `pipe`
 
-_TODO document this option._
+This corresponds to the `--console=<...>` parameter to `systemd-nspawn`.
 
 #### `executable`
 
@@ -552,6 +561,8 @@ _TODO document this option._
 _TODO document this option._
 
 ### The `[docker]` Section
+
+**Since: 1.0.0**
 
 #### `guest_capabilities`
 
