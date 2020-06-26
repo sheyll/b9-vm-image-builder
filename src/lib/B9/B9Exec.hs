@@ -7,7 +7,9 @@ module B9.B9Exec
   ( cmd,
     hostCmdEither,
     hostCmd,
+    hostCmdStdIn,
     CommandTimeout (..),
+    HostCommandStdin (..),
   )
 where
 
@@ -107,9 +109,16 @@ cmdWithStdIn toStdOut cmdStr = do
 -- This is only useful for non-interactive commands.
 --
 -- @since 1.0.0
-hostCmd :: (CommandIO e, Member ExcB9 e) => String -> Maybe CommandTimeout -> Eff e Bool
+hostCmd ::
+  (CommandIO e, Member ExcB9 e) =>
+  -- | The shell command to execute.
+  String ->
+  -- | An optional 'CommandTimeout'
+  Maybe CommandTimeout ->
+  -- | An action that performs the shell command and returns 'True' on success
+  Eff e Bool
 hostCmd cmdStr timeout = do
-  res <- hostCmdEither cmdStr timeout
+  res <- hostCmdEither HostCommandNoStdin cmdStr timeout
   case res of
     Left e ->
       throwB9Error ("Command timed out: " ++ show cmdStr ++ " " ++ show e)
@@ -119,6 +128,44 @@ hostCmd cmdStr timeout = do
     Right ExitSuccess ->
       return True
 
+-- | Like 'hostCmd' but with std-input attached.
+--
+-- @since 1.0.0
+hostCmdStdIn ::
+  (CommandIO e, Member ExcB9 e) =>
+  -- | A 'HostCommandStdin' to define standard input.
+  -- If the value is 'HostCommandInheritStdin' then
+  -- **also stdout and stderr** will be redirected to
+  -- the 'Inherited' file descriptors.
+  HostCommandStdin ->
+  -- | The shell command to execute.
+  String ->
+  -- | An optional 'CommandTimeout'
+  Maybe CommandTimeout ->
+  -- | An action that performs the shell command and returns 'True' on success
+  Eff e Bool
+hostCmdStdIn hostStdIn cmdStr timeout = do
+  res <- hostCmdEither hostStdIn cmdStr timeout
+  case res of
+    Left e ->
+      throwB9Error ("Command timed out: " ++ show cmdStr ++ " " ++ show e)
+    Right (ExitFailure ec) -> do
+      errorL ("Command exited with error code: " ++ show cmdStr ++ " " ++ show ec)
+      return False
+    Right ExitSuccess ->
+      return True
+
+-- | Ways to process std-input.
+--
+-- @since 1.0.0
+data HostCommandStdin
+  = -- | Disbale std-in
+    HostCommandNoStdin
+  | -- | Inherit std-in
+    HostCommandInheritStdin
+  | -- | Produce std-in
+    HostCommandStdInConduit (ConduitT () Strict.ByteString IO ())
+
 -- | Run a shell command defined by a string and optionally interrupt the command
 -- after a given time has elapsed.
 -- This is only useful for non-interactive commands.
@@ -127,10 +174,17 @@ hostCmd cmdStr timeout = do
 hostCmdEither ::
   forall e.
   (CommandIO e) =>
+  -- | A 'HostCommandStdin' to define standard input.
+  -- If the value is 'HostCommandInheritStdin' then
+  -- **also stdout and stderr** will be redirected to
+  -- the 'Inherited' file descriptors.
+  HostCommandStdin ->
+  -- | The shell command to execute.
   String ->
+  -- | An optional 'CommandTimeout'
   Maybe CommandTimeout ->
   Eff e (Either CommandTimeout ExitCode)
-hostCmdEither cmdStr timeout = do
+hostCmdEither inputSource cmdStr timeout = do
   let tag = "[" ++ printHash cmdStr ++ "]"
   traceL $ "COMMAND " ++ tag ++ ": " ++ cmdStr
   control $ \runInIO ->
@@ -145,19 +199,35 @@ hostCmdEither cmdStr timeout = do
   where
     go :: String -> Eff e (Either CommandTimeout ExitCode)
     go tag = do
-      (ClosedStream, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
       traceLC <- traceMsgProcessLogger tag
       errorLC <- errorMsgProcessLogger tag
       let timer t@(CommandTimeout micros) = do
             threadDelay micros
             return t
-          runCmd =
-            ( runConcurrently
-                ( Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
-                    *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
-                    *> Concurrently (waitForStreamingProcess cph)
-                )
-            )
+      (cph, runCmd) <- case inputSource of
+        HostCommandNoStdin -> do
+          (ClosedStream, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
+          let runCmd =
+                runConcurrently
+                  ( Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
+                      *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
+                      *> Concurrently (waitForStreamingProcess cph)
+                  )
+          return (cph, runCmd)
+        HostCommandInheritStdin -> do
+          (Inherited, Inherited, Inherited, cph) <- streamingProcess (shell cmdStr)
+          let runCmd = waitForStreamingProcess cph
+          return (cph, runCmd)
+        HostCommandStdInConduit inputC -> do
+          (stdIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
+          let runCmd =
+                runConcurrently
+                  ( Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
+                      *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
+                      *> Concurrently (runConduit (inputC .| stdIn))
+                      *> Concurrently (waitForStreamingProcess cph)
+                  )
+          return (cph, runCmd)
       e <- liftIO (maybe (fmap Right) (race . timer) timeout runCmd)
       closeStreamingProcessHandle cph
       case e of

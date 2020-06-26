@@ -530,6 +530,10 @@ _TODO document this option._
 
 This corresponds to the `--console=<...>` parameter to `systemd-nspawn`.
 
+If the value is set to `interactive` the execution of 
+any `VmScript`s through `systemd-nspawn` will be _interactive_ 
+by using `stdin`, `stdout` and `stderr` of the `b9c` process.
+
 #### `executable`
 
 * Default: `Nothing`

@@ -16,6 +16,8 @@ where
 import B9.B9Config.Container
 import Control.Lens (makeLenses)
 import Data.ConfigFile.B9Extras
+import qualified Text.ParserCombinators.ReadP as ReadP
+import qualified Text.ParserCombinators.ReadPrec as ReadPrec
 import Text.Read
 
 -- TODO document b9 config file
@@ -49,9 +51,12 @@ instance Read SystemdNspawnConsole where
     do
       Ident "interactive" <- lexP
       return SystemdNspawnInteractive
-      +++ do
-        Ident "read-only" <- lexP
-        return SystemdNspawnReadOnly
+      +++ ReadPrec.lift
+        ( do
+            ReadP.skipSpaces
+            _ <- ReadP.string "read-only"
+            return SystemdNspawnReadOnly
+        )
       +++ do
         Ident "passive" <- lexP
         return SystemdNspawnPassive

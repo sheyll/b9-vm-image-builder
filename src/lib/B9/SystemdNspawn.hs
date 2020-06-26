@@ -209,7 +209,11 @@ execBuild sudo containerMounts sharedDirs bootScript dCfg = do
       execOptions = ["/bin/sh", bootScriptContainerCommand bootScript]
       timeout = (CommandTimeout . (* 1000000)) <$> _systemdNspawnMaxLifetimeSeconds dCfg
   traceL ("executing systemd-nspawn container build")
-  hostCmd (sudo systemdCmd) timeout
+  case _systemdNspawnConsole dCfg of
+    SystemdNspawnInteractive ->
+      hostCmdStdIn HostCommandInheritStdin (sudo systemdCmd) Nothing
+    _ ->
+      hostCmd (sudo systemdCmd) timeout
 
 umountLoopbackImages :: forall e. (Member ExcB9 e, CommandIO e) => SudoPrepender -> ContainerMounts -> Eff e ()
 umountLoopbackImages sudo c = do
