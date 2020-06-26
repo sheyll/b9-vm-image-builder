@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 1.0.0
+
+* Add `SystemdNspawn` support
+* Improve command execution
+* Improve nix build expressions
+
 ## 0.5.69.0
 
 * Add new `ImageResize` option `ShrinkToMinimumAndIncrease`
