@@ -61,3 +61,4 @@ containerCapsToCPDocument cp cfgFileSection c =
 parseContainerCapabilities :: CPDocument -> CPSectionSpec -> Either CPError [ContainerCapability]
 parseContainerCapabilities cp cfgFileSection =
   readCP cp cfgFileSection containerCapabilitiesK
+-- TODO make a generic container config data type

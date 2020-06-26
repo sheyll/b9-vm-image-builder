@@ -6,9 +6,9 @@
 
 **When version 2 is released of b9, all features listed here can be expected to work.**
 
-## What it can do
+## Quick-Start
 
-### Overview
+### Mission Statement
 
 **B9** is an executable and a Haskell library, that consumes a Haskell term describing 
 the generation of VM-Images. 
@@ -16,6 +16,136 @@ the generation of VM-Images.
 A few core `data` types form an EDSL, and  `B9` contains functions to `read` and `show` then. 
 
 Such a term can then be stored into a **text file** and is interpreted by a **command line invokation**. 
+
+### Installation 
+
+### Installation on NixOS
+
+* As **command line utility** in current directory:
+
+      $ nix-build -E 'import (fetchTarball https://github.com/sheyll/b9-vm-image-builder/archive/1.0.0.tar.gz) {}'
+    
+  Now the executable `b9c` is in `./result/bin/`:
+
+      $ result/bin/b9c      
+
+### Runtime dependencies
+
+To be able to use B9 install:
+
+* Linux
+* qemu
+* ext4 tools
+* genisoimage
+* mtools
+* vfat tools
+* ssh
+* rsync
+* bash
+* wget
+* sudo (optional)
+
+#### `LibVirtLXC` support
+
+* lxc
+* libvirt with lxc support (libvirt-driver-lxc, libvirt-daemon-lxc,...)
+* virsh
+
+B9 has been tested with libvirt version 1.2.12.
+
+Make sure that all neccessary daemons, e.g. `libvirtd.service`, `lxc.service`,..
+are active, that SELinux is configured correctly and that the `nbd` kernel
+module is loaded.
+
+If neccessary create a libvirt network configuration, e.g. by using
+the GUI front-end`virt-manager`.
+
+Depending upon the libvirt and lxc configuration of the system it might be
+nessary to allow the user, that will execute `b9c`, password-less `sudo` for
+these commands:
+
+* `virsh`
+* `rm`
+* `cat`
+* `cp`
+* `mv`
+
+#### For `SystemdNspawn` support
+
+* systemd
+
+#### For `Podman` support
+
+* podman 
+
+#### For `Docker` support
+
+* docker 
+
+
+After installing B9 (either from a binary package or by building from source)
+all its glory is availbe through a single executable called `b9c`.
+
+When `b9c` is started for the first time, it creates a configuration file in
+the users home directory called `~/.b9/b9.conf`. The path to that file can be
+changed using command line arguments. Execute:
+
+    b9c -h
+
+for a list of command line parameters and commands.
+
+`b9c` command line arguments always follow this pattern:
+
+    b9c <global-options> <command> <command-options> -- <build-script-extra-args>
+
+To enable B9 to work correctly on your machine edit the config file and make
+necessary adaptions.
+
+## General Overview 
+
+
+Use B9 to compile your software into a deployable set of Linux-VM- or
+configuration images, from a set of scripts and input files and templates.
+
+The main goal of this tool is to provide a build tool to increase automation and
+reduce redundancy when creating configured, ready-to-run VM-images.
+
+One big thing is that it can produce many machines and cloud-configs from a
+single build file, because build files can describe concrete as well as
+parameterized generators. It can create parameterized VM-Images by uploading
+(e.g. system-)files assembled by syntax aware template application and
+combination, all statically checked by during the build.
+
+This sets B9 apart from e.g. cloud-init or other configuration management
+systems that provide configuration through user provided dynamic script-programs,
+which rely on the user to contain correct error handling.
+
+The general idea is the same as in statically type programming languages: catch
+errors as early as possible without relying on the user to create a covering set
+of tests/error checks.
+
+Certain sacrifies were made; there might be a steep laerning curve, but you will
+eventually get there. The tool at hand works stable and reliable. 
+
+All builds happen in isolation, i.e. by default in random build directories, and
+are cleaned on failure. 
+
+Also, B9 does not modify cached images. 
+Work on VM-Images is always done on a copy of an image, and to speed
+things up, it is possible to explicitly use copy-on-write images.
+
+B9 creates bootable virtual machine images, without necessarily using
+virtualization itself.
+
+In essence B9 is a tool for _creation_, _configuration_ and _sharing_ of VM images and
+all peripheral artifacts, it creates:
+
+* VMDK/QCOW2/Raw VM images
+* Converted, extracted and resized copies of existing vm images
+* Empty VM images with extended 4 file system
+* Cloud-Config Images
+* Text files from template files with variable interpolation
+* Erlang OTP sys.config files
 
 ### Make VM Disk Images 
 
@@ -62,151 +192,7 @@ B9 uses a *`.ini` - style* configuration file.
 
 B9 uses `shake` so some degree of incremental build is available.
 
-## Installation 
-
-### Installation on NixOS
-
-* As **command line utility** in current directory:
-
-      $ nix-build -E 'import ((fetchTarball https://github.com/sheyll/b9-vm-image-builder/archive/0.5.tar.gz) + "/release.nix") {}'
-    
-  Now the executable `b9c` is in `./result/bin/`:
-
-      $ result/bin/b9c      
-
-### Runtime dependencies
-
-To be able to use B9 install:
-
-* Linux
-* lxc
-* libvirt with lxc support (libvirt-driver-lxc, libvirt-daemon-lxc,...)
-* virsh
-* qemu
-* ext4 tools
-* genisoimage
-* mtools
-* vfat tools
-* ssh
-* rsync
-* bash
-* wget
-* sudo
-
-B9 has been tested with libvirt version 1.2.12.
-
-Make sure that all neccessary daemons, e.g. `libvirtd.service`, `lxc.service`,..
-are active, that SELinux is configured correctly and that the `nbd` kernel
-module is loaded.
-
-If neccessary create a libvirt network configuration, e.g. by using
-the GUI front-end`virt-manager`.
-
-Depending upon the libvirt and lxc configuration of the system it might be
-nessary to allow the user, that will execute `b9c`, password-less `sudo` for
-these commands:
-
-* `virsh`
-* `rm`
-* `cat`
-* `cp`
-* `mv`
-
-After installing B9 (either from a binary package or by building from source)
-all its glory is availbe through a single executable called `b9c`.
-
-When `b9c` is started for the first time, it creates a configuration file in
-the users home directory called `~/.b9/b9.conf`. The path to that file can be
-changed using command line arguments. Execute:
-
-    b9c -h
-
-for a list of command line parameters and commands.
-
-`b9c` command line arguments always follow this pattern:
-
-    b9c <global-options> <command> <command-options> -- <build-script-extra-args>
-
-To enable B9 to work correctly on your machine edit the config file and make
-necessary adaptions.
-
-### B9 configuration file
-
-This is an example of a B9 configuration file, by default found in
-`~/.b9/b9.conf`:
-
-    [global]
-    # optional alternative directory for temporary build files. If 'Nothing'
-    # the current directory is used.
-    build_dir_root: Just "/home/sven/tmp"
-    environment_vars: []
-    exec_env: LibVirtLXC
-    keep_temp_dirs: False
-    # if set to 'Just "filename"
-    log_file: Nothing
-    profile_file: Nothing
-    unique_build_dirs: True
-    verbosity: Just LogInfo
-
-    [libvirt-lxc]
-    connection: lxc:///
-    emulator_path: /usr/lib/libvirt/libvirt_lxc
-    # contains `Just "libvirt-network-name"` or `Nothing` for your libvirt
-    # default network settings
-    network: Nothing
-    use_sudo: True
-    virsh_path: /usr/bin/virsh
-
-Some of the options can also be specified on the command line.
-
-
-## Goal of the project
-
-Use B9 to compile your software into a deployable set of Linux-VM- or
-configuration images, from a set of scripts and input files and templates.
-
-The main goal of this tool is to provide a build tool to increase automation and
-reduce redundancy when creating configured, ready-to-run VM-images.
-
-One big thing is that it can produce many machines and cloud-configs from a
-single build file, because build files can describe concrete as well as
-parameterized generators. It can create parameterized VM-Images by uploading
-(e.g. system-)files assembled by syntax aware template application and
-combination, all statically checked by during the build.
-
-This sets B9 apart from e.g. cloud-init or other configuration management
-systems that provide configuration through user provided dynamic script-programs,
-which rely on the user to contain correct error handling.
-
-The general idea is the same as in statically type programming languages: catch
-errors as early as possible without relying on the user to create a covering set
-of tests/error checks.
-
-Certain sacrifies were made; there might be a steep laerning curve, but you will
-eventually get there. The tool at hand works stable and reliable. 
-
-All builds happen in isolation, i.e. by default in random build directories, and
-are cleaned on failure. 
-
-Also, B9 does not modify cached images. 
-Work on VM-Images is always done on a copy of an image, and to speed
-things up, it is possible to explicitly use copy-on-write images.
-
-B9 creates bootable virtual machine images, without necessarily using
-virtualization itself.
-
-In essence B9 is a tool for _creation_, _configuration_ and _sharing_ of VM images and
-all peripheral artifacts, it creates:
-
-* VMDK/QCOW2/Raw VM images
-* Converted, extracted and resized copies of existing vm images
-* Empty VM images with extended 4 file system
-* Cloud-Config Images
-* Text files from template files with variable interpolation
-* Erlang OTP sys.config files
-
-
-## Writing B9 build files
+## B9 build files
 
 If you really need to write these file, you are basically f'ed.
 
@@ -372,3 +358,211 @@ and paste the raw contents of the config file in question in between.
     SharedDirectoryRO "../_common/upload" (MountPoint "/mnt/common")]
     (Begin [Run "dhclient" [],In "/mnt/build_root" [Run "./machine-" []],In
     "/mnt/common" [Run "./post_export.sh" []]])))
+
+## B9 Config File Reference
+
+This is an example of a B9 configuration file, by default found in
+`~/.b9/b9.conf` and uses the **ini-file** format.
+
+Some of the options can also be specified on the command line
+and in environment variables.
+
+A path to an alternative config file can given on the command lines.
+
+When the default config file does not exist, `b9c` will create it from 
+default values.
+
+
+This example is the current default configuration:
+
+    [global]
+    build_dir_root: Nothing
+    keep_temp_dirs: False
+    log_file: Nothing
+    max_cached_shared_images: Just 2
+    repository: Nothing
+    repository_cache: Just (InB9UserDir "repo-cache")
+    unique_build_dirs: True
+    verbosity: Just LogInfo
+
+    [libvirt-lxc]
+    connection: lxc:///
+    emulator_path: Just "/usr/lib/libvirt/libvirt_lxc"
+    guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
+    guest_ram_size: RamSize 1 GB
+    network: Nothing
+    use_sudo: True
+
+    [podman]
+    guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
+    network: Nothing
+
+    [systemdNspawn]
+    console: readonly
+    executable: Nothing
+    extra_args: Nothing
+    guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
+    max_lifetime_seconds: Just 14400
+    use_sudo: True
+
+    [docker]
+    guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
+    network: Nothing
+
+
+### The `[global]` Section
+
+
+#### `build_dir_root`: 
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+#### `keep_temp_dirs`: 
+
+* Default: `False`
+
+_TODO document this option._
+
+#### `log_file`: 
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+#### `max_cached_shared_images`: 
+
+* Default: `Just 2`
+
+_TODO document this option._
+
+#### `repository`: 
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+#### `repository_cache`: 
+
+* Default: `Just (InB9UserDir "repo-cache")`
+
+_TODO document this option._
+
+#### `unique_build_dirs`: 
+
+* Default: `True`
+
+_TODO document this option._
+
+#### `verbosity`: 
+
+* Default: `Just LogInfo`
+
+_TODO document this option._
+
+### The `[libvirt-lxc]` Section
+
+#### `connection`
+
+* Default: `lxc:///`
+
+_TODO document this option._
+
+#### `emulator_path`
+
+* Default: `Just "/usr/lib/libvirt/libvirt_lxc"`
+
+_TODO document this option._
+
+#### `guest_capabilities`
+
+* Default: `[CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]`
+
+_TODO document this option._
+
+#### `guest_ram_size`
+
+* Default: `RamSize 1 GB`
+
+_TODO document this option._
+
+#### `network`
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+#### `use_sudo`
+
+* Default: `True`
+
+_TODO document this option._
+
+### The `[podman]` Section
+
+#### `guest_capabilities`
+
+* Default: `[CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]`
+
+_TODO document this option._
+
+#### `network`
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+### The `[systemdNspawn]` Section 
+
+#### `console`
+
+* Default: `readonly`
+
+_TODO document this option._
+
+#### `executable`
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+#### `extra_args`
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+#### `guest_capabilities`
+
+* Default: `[CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]`
+
+_TODO document this option._
+
+#### `max_lifetime_seconds`
+
+* Default: `Just 14400`
+
+_TODO document this option._
+
+#### `use_sudo`
+
+* Default: `True`
+
+_TODO document this option._
+
+### The `[docker]` Section
+
+#### `guest_capabilities`
+
+* Default: `[CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]`
+
+_TODO document this option._
+
+#### `network`
+
+* Default: `Nothing`
+
+_TODO document this option._
+
+

@@ -12,12 +12,11 @@ module B9.B9Logging
     infoL,
     errorL,
     errorExitL,
-    printHash
+    printHash,
   )
 where
 
 import B9.B9Config
-import Data.Hashable 
 import B9.B9Error
 import Control.Eff
 import Control.Eff.Reader.Lazy
@@ -28,6 +27,7 @@ import Control.Monad.Trans.Control
     liftBaseWith,
     restoreM,
   )
+import Data.Hashable
 import Data.Maybe
 import Data.Time.Clock
 import Data.Time.Format
@@ -122,6 +122,5 @@ printLevel l = case l of
   LogDebug -> " DEBUG "
   LogTrace -> " TRACE "
 
-printHash :: Hashable a => a -> String 
+printHash :: Hashable a => a -> String
 printHash = printf "%x" . hash
-

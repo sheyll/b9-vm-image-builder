@@ -109,9 +109,10 @@ catchB9ErrorAsEither x = catchB9Error (Right <$> x) (pure . Left)
 -- @since 1.0.0
 finallyB9 :: Member ExcB9 e => Eff e a -> Eff e () -> Eff e a
 finallyB9 mainAction cleanupAction =
-  catchB9Error 
-    (do 
-        res <- mainAction 
-        cleanupAction 
-        return res)
+  catchB9Error
+    ( do
+        res <- mainAction
+        cleanupAction
+        return res
+    )
     (\e -> cleanupAction >> throwSomeException e)
