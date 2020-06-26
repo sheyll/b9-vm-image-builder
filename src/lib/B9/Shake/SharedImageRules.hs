@@ -94,5 +94,5 @@ data SharedImageCustomActionRule
       (B9ConfigOverride -> Action SharedImageBuildId)
   deriving (Typeable)
 
-errorSharedImageNotFound :: (HasCallStack, Monad m) => SharedImageName -> m a
+errorSharedImageNotFound :: (HasCallStack, MonadFail m) => SharedImageName -> m a
 errorSharedImageNotFound = fail . printf "Error: %s not found." . show
