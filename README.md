@@ -74,11 +74,11 @@ these commands:
 
 * systemd
 
-#### For `Podman` support
+#### For `Podman` support (TODO)
 
 * podman 
 
-#### For `Docker` support
+#### For `Docker` support (TODO)
 
 * docker 
 
@@ -177,7 +177,7 @@ all peripheral artifacts, it creates:
 
 The input files can be in:
 
-* DHALL format
+* Dhall format **TODO**
 * Haskell values interpreted by the `Read` instances.
 
 ### Usage as Library 

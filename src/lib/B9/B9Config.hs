@@ -309,10 +309,10 @@ runB9ConfigActionWithOverrides act cfg = do
             putStrLn ("creating a new config file with defaults at: " ++ c)
             return c
           Nothing ->
-            fail "Please provide a valid config file path."
+            error "Please provide a valid config file path."
   cp <- openOrCreateB9Config cfgPath
   case parseB9Config cp of
-    Left e -> fail (printf "Internal configuration load error, please report this: %s\n" (show e))
+    Left e -> error (printf "Internal configuration load error, please report this: %s\n" (show e))
     Right permanentConfigIn -> do
       let runtimeCfg = appEndo (cfg ^. customB9Config) permanentConfigIn
       (res, permanentB9ConfigUpdates) <-
@@ -325,7 +325,7 @@ runB9ConfigActionWithOverrides act cfg = do
       cpExt <-
         maybe
           (return Nothing)
-          (either (fail . printf "Internal configuration update error! Please report this: %s\n" . show) (return . Just))
+          (either (error . printf "Internal configuration update error! Please report this: %s\n" . show) (return . Just))
           cpExtErr
       mapM_ (writeB9CPDocument (cfg ^. customB9ConfigPath)) cpExt
       return res

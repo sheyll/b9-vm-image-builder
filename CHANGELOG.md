@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 1.0.1
+
+* Remove dhall
+* Cleanup `b9.cabal`
+* Replace `fail` with `error`
+
 ## 1.0.0
 
 * Add `SystemdNspawn` support

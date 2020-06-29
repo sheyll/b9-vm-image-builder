@@ -46,24 +46,18 @@ author:              Sven Heyll <svh@posteo.de>
 maintainer:          svh@posteo.de
 homepage:            https://github.com/sheyll/b9-vm-image-builder
 bug-reports:         https://github.com/sheyll/b9-vm-image-builder/issues
-copyright:           2015, 2016, 2017, 2018, 2019 Sven Heyll <svh@posteo.de>
+copyright:           2015, 2016, 2017, 2018, 2019, 2020 Sven Heyll <svh@posteo.de>
 category:            Development
 build-type:          Simple
 extra-source-files:  README.md
-                   , LICENSE
-                   , Setup.hs
-                   , b9.cabal
                    , .gitignore
-                   , prepare_release.sh
-                   , stack.yaml
-                   , .travis.yml
                    , CONTRIBUTORS
                    , CONTRIBUTING.md
                    , CODE_OF_CONDUCT.md
                    , CHANGELOG.md
 
 common b9Deps
-  build-depends:     base >= 4.13 && < 5
+  build-depends:     base >= 4.12 && < 5
                    , bytestring >= 0.10.8
                    , directory >= 1.3
                    , extensible-effects >= 5 && < 6
@@ -165,7 +159,7 @@ library
                    , boxes >= 0.1.4
                    , conduit >= 1.2
                    , conduit-extra >= 1.1
-                   , dhall >= 1
+                   -- , dhall >= 1 TODO
                    , exceptions >= 0.10
                    , filepath >= 1.4
                    , free >= 4.12

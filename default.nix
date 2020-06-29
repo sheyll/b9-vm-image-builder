@@ -2,11 +2,11 @@
 let 
   pkgsWithB9 = pkgs.extend (import ./overlay.nix);
 
-  shell = pkgsWithB9.haskellPackages.shellFor {
+  shell = pkgsWithB9.myHaskellPackages.shellFor {
     packages = p: [
       p.b9
     ];
-    buildInputs = with pkgsWithB9.haskellPackages; [
+    buildInputs = with pkgsWithB9.myHaskellPackages; [
       cabal-install
       hlint
       ghcid

@@ -61,8 +61,8 @@ spec = do
               let decimalStr =
                     unsafeRenderToText (show (decimal :: Integer) ++ ".")
               parsedTerm <- case parseErlTerm "test" decimalStr of
-                (Left e) -> fail e
-                (Right parsedTerm) -> return parsedTerm
+                Left e -> error e
+                Right parsedTerm -> return parsedTerm
               return (ErlNatural decimal == parsedTerm)
           )
       )
