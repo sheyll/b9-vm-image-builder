@@ -1,5 +1,22 @@
 # Changelog for B9
 
+## 1.1.0
+
+* Fix unintended deletion of images that are wrongly classified as obsolete.
+* Make the default timeout of 10s for several shell commands, like 
+  loopback mounting of disk images, configurable.
+* Change NIX expressions to use `haskellPackages`
+  instead of `myHaskellPackages`.
+* Add configuration options for __SystemdNspawn__:
+  * `setenv`: A comma seperated list of `key=value` pairs 
+    with environment variable assignments passed to the container
+  * `chdir`: An optional working directory to change to before
+    running the script in the container.
+  * `user`: An optional user to change to after entering the container.
+    The user must exist in the container image, e.g. in `/etc/passwd`.
+  * `hostname`: An optional hostname to use as the kernel hostname 
+    inside the container.
+
 ## 1.0.1
 
 * Remove dhall

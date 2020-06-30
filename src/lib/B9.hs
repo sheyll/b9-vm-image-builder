@@ -186,6 +186,7 @@ runRun (SharedImageName name) cmdAndArgs =
 runGcLocalRepoCache :: B9ConfigAction ()
 runGcLocalRepoCache = localB9Config (keepTempDirs .~ False) (runB9 impl)
   where
+-- TODO delete-too-many-revisions
     impl = do
       toDelete <-
         obsoleteSharedmages . map snd
@@ -197,23 +198,26 @@ runGcLocalRepoCache = localB9Config (keepTempDirs .~ False) (runB9 impl)
           infoFiles = sharedImageFileName <$> toDelete
           imgFiles = imageFileName . sharedImageImage <$> toDelete
       if null filesToDelete
-        then liftIO $ putStrLn "\n\nNO IMAGES TO DELETE\n"
+        then infoL "NO IMAGES TO DELETE"
         else liftIO $ do
           putStrLn "DELETING FILES:"
           putStrLn (unlines filesToDelete)
           mapM_ removeIfExists filesToDelete
       where
-        obsoleteSharedmages :: [SharedImage] -> [SharedImage]
-        obsoleteSharedmages =
-          concatMap (tail . reverse) . filter ((> 1) . length)
-            . groupBy
-              ((==) `on` sharedImageName)
         removeIfExists :: FilePath -> IO ()
         removeIfExists fileName = removeFile fileName `catch` handleExists
           where
             handleExists e
               | isDoesNotExistError e = return ()
               | otherwise = throwIO e
+
+-- TODO delete-too-many-revisions
+obsoleteSharedmages :: [SharedImage] -> [SharedImage]
+obsoleteSharedmages =
+  concatMap (tail . reverse) . filter ((> 1) . length)
+    . groupBy
+      ((==) `on` sharedImageName)
+
 
 -- | Clear the shared image cache for a remote. Note: The remote repository is
 -- specified in the 'B9Config'.

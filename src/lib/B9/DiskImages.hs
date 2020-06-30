@@ -7,6 +7,8 @@ import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Hashable
+import Data.Map (Map(..))
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.Semigroup as Sem
 import GHC.Generics (Generic)
@@ -275,6 +277,20 @@ fromSharedImageBuildId (SharedImageBuildId b) = b
 instance Ord SharedImage where
   compare (SharedImage n d b _ _) (SharedImage n' d' b' _ _) =
     compare n n' Sem.<> compare d d' Sem.<> compare b b'
+
+-- | Transform a list of 'SharedImage' values into a 'Map' that associates 
+-- each 'SharedImageName' with a 'Set' of the actual images with that name.
+--
+-- The 'Set' contains values of type  @'SharedImage'@. 
+--
+-- The 'Ord' instance of 'SharedImage' sorts by name first and then by 
+-- 'sharedImageDate', since the values in a 'Set' share the same 'sharedImageName',
+-- they are effectively orderd by build date, which is useful the shared image cleanup.
+-- 
+-- @since 1.1.0
+sharedImagesToMap :: [SharedImage] -> Map SharedImageName (Set SharedImage)
+sharedImagesToMap _ = error "IMPLEMENT ME"
+
 
 -- * Constructor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'

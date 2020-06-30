@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                b9
-version:             1.0.1
+version:             1.1.0
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -160,6 +160,7 @@ library
                    , conduit >= 1.2
                    , conduit-extra >= 1.1
                    -- , dhall >= 1 TODO
+                   , containers 
                    , exceptions >= 0.10
                    , filepath >= 1.4
                    , free >= 4.12
@@ -213,6 +214,7 @@ test-suite spec
                    , b9
                    , aeson >= 1.0
                    , binary >= 0.8 && < 0.9
+                   , containers
                    , hspec
                    , hspec-expectations
                    , unordered-containers >= 0.2

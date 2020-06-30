@@ -447,6 +447,8 @@ shareImage buildImg sname@(SharedImageName name) = do
   pushToSelectedRepo sharedImage
   return sharedImage
 
+-- TODO Move the functions below to RepositoryIO???
+
 -- | Return a 'SharedImage' with the current build data and build id from the
 -- name and disk image.
 getSharedImageFromImageInfo ::
@@ -482,14 +484,14 @@ createSharedImageInCache img sname@(SharedImageName name) = do
 -- selected repository from the cache.
 pushSharedImageLatestVersion :: IsB9 e => SharedImageName -> Eff e ()
 pushSharedImageLatestVersion name@(SharedImageName imgName) =
-  getLatestSharedImageByNameFromCache name
+  getSharedImageVersionsFromCache name
     >>= maybe
       (errorExitL (printf "Nothing found for %s." (show imgName)))
       ( \sharedImage -> do
           dbgL (printf "PUSHING '%s'" (ppShow sharedImage))
           pushToSelectedRepo sharedImage
           infoL (printf "PUSHED '%s'" imgName)
-      )
+      ) . listToMaybe
 
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo :: IsB9 e => SharedImage -> Eff e ()
@@ -555,24 +557,43 @@ pullLatestImage name@(SharedImageName dbgName) = do
 -- from the local cache.
 getLatestImageByName :: IsB9 e => SharedImageName -> Eff e (Maybe Image)
 getLatestImageByName name = do
-  sharedImage <- getLatestSharedImageByNameFromCache name
+  sharedImage <- getSharedImageVersionsFromCache name
   cacheDir <- getSharedImagesCacheDir
-  let image = changeImageDirectory cacheDir . sharedImageImage <$> sharedImage
+  let image = changeImageDirectory cacheDir . sharedImageImage <$> listToMaybe sharedImage
   case image of
     Just i -> dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show i))
     Nothing -> errorL (printf "SOURCE IMAGE '%s' NOT FOUND" (show name))
   return image
 
--- | Return the latest version of a shared image named 'name' from the local cache.
-getLatestSharedImageByNameFromCache ::
-  IsB9 e => SharedImageName -> Eff e (Maybe SharedImage)
-getLatestSharedImageByNameFromCache name@(SharedImageName dbgName) = do
+-- | Return the versions of a shared image named 'name' from the local cache.
+--
+-- @since 1.1.0
+getSharedImageVersionsFromCache ::
+  IsB9 e => SharedImageName -> Eff e [SharedImage]
+getSharedImageVersionsFromCache name@(SharedImageName dbgName) = do
   imgs <- lookupSharedImages (== Cache) ((== name) . sharedImageName)
-  case reverse imgs of
-    (Cache, sharedImage) : _rest -> return (Just sharedImage)
-    _ -> do
-      errorL (printf "No image(s) named '%s' found." dbgName)
-      return Nothing
+  return (reverse (sort (map snd imgs)))
+
+
+-- | Return the latest of a list of images.
+--
+-- @since 1.1.0
+takeLatestSharedImages :: 
+
+-- | Find shared images and the associated repos from two predicates. The result
+-- is the concatenated result of the sorted shared images satisfying 'imgPred'.
+lookupSharedImages ::
+  IsB9 e =>
+  (Repository -> Bool) ->
+  (SharedImage -> Bool) ->
+  Eff e [(Repository, SharedImage)]
+lookupSharedImages repoPred imgPred = do
+  xs <- getSharedImages
+  let rs = [(r, s) | (r, ss) <- xs, s <- ss]
+      matchingRepo = filter (repoPred . fst) rs
+      matchingImg = filter (imgPred . snd) matchingRepo
+      sorted = sortBy (compare `on` snd) matchingImg
+  return (mconcat (pure <$> sorted))
 
 -- | Return a list of all existing sharedImages from cached repositories.
 getSharedImages :: IsB9 e => Eff e [(Repository, [SharedImage])]
@@ -600,21 +621,6 @@ getSharedImages = do
           return Nothing
         Right c -> return (Just c)
 
--- | Find shared images and the associated repos from two predicates. The result
--- is the concatenated result of the sorted shared images satisfying 'imgPred'.
-lookupSharedImages ::
-  IsB9 e =>
-  (Repository -> Bool) ->
-  (SharedImage -> Bool) ->
-  Eff e [(Repository, SharedImage)]
-lookupSharedImages repoPred imgPred = do
-  xs <- getSharedImages
-  let rs = [(r, s) | (r, ss) <- xs, s <- ss]
-      matchingRepo = filter (repoPred . fst) rs
-      matchingImg = filter (imgPred . snd) matchingRepo
-      sorted = sortBy (compare `on` snd) matchingImg
-  return (mconcat (pure <$> sorted))
-
 -- | Return either all remote repos or just the single selected repo.
 getSelectedRepos :: IsB9 e => Eff e [RemoteRepo]
 getSelectedRepos = do
@@ -635,6 +641,7 @@ getSharedImagesCacheDir = do
 -- images with the given name from the local cache.
 cleanOldSharedImageRevisionsFromCache :: IsB9 e => SharedImageName -> Eff e ()
 cleanOldSharedImageRevisionsFromCache sn = do
+-- TODO delete-too-many-revisions
   b9Cfg <- getConfig
   forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
     toDelete <- take maxRevisions <$> newestSharedImages
@@ -661,3 +668,4 @@ cleanOldSharedImageRevisionsFromCache sn = do
         handleExists e
           | isDoesNotExistError e = return ()
           | otherwise = throwIO e
+
