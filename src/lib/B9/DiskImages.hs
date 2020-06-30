@@ -291,6 +291,13 @@ instance Ord SharedImage where
 sharedImagesToMap :: [SharedImage] -> Map SharedImageName (Set SharedImage)
 sharedImagesToMap _ = error "IMPLEMENT ME"
 
+-- | Return the 'SharedImage' with the highest 'sharedImageDate'.
+--
+-- @since 1.1.0
+takeLatestSharedImage :: [SharedImage] -> Maybe SharedImage
+takeLatestSharedImage ss = do
+  let sm = sharedImagesToMap ss
+  Map.lookup 
 
 -- * Constructor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'

@@ -574,12 +574,6 @@ getSharedImageVersionsFromCache name@(SharedImageName dbgName) = do
   imgs <- lookupSharedImages (== Cache) ((== name) . sharedImageName)
   return (reverse (sort (map snd imgs)))
 
-
--- | Return the latest of a list of images.
---
--- @since 1.1.0
-takeLatestSharedImages :: 
-
 -- | Find shared images and the associated repos from two predicates. The result
 -- is the concatenated result of the sorted shared images satisfying 'imgPred'.
 lookupSharedImages ::
@@ -645,6 +639,13 @@ cleanOldSharedImageRevisionsFromCache sn = do
   b9Cfg <- getConfig
   forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
     toDelete <- take maxRevisions <$> newestSharedImages
+
+
+
+
+
+
+
     imgDir <- getSharedImagesCacheDir
     let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
         infoFiles = sharedImageFileName <$> toDelete
