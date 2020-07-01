@@ -209,6 +209,7 @@ test-suite spec
                    , B9.Content.YamlObjectSpec
                    , B9.DiskImagesSpec
                    , B9.EnvironmentSpec
+                   , B9.RepositoryIOSpec
                    , Paths_b9
   build-depends:     QuickCheck >= 2.5
                    , b9

@@ -3,6 +3,7 @@ module System.IO.B9Extras
   ( SystemPath (..),
     overSystemPath,
     resolve,
+    ensureSystemPath,
     ensureDir,
     getDirectoryFiles,
     prettyPrintToFile,
@@ -75,6 +76,13 @@ getDirectoryFiles dir = do
   entries <- liftIO (getDirectoryContents dir)
   fileEntries <- mapM (liftIO . doesFileExist . (dir </>)) entries
   return (snd <$> filter fst (fileEntries `zip` entries))
+
+-- | Create all missing parent directories of a file path.
+--
+-- @since 1.1.0
+ensureSystemPath :: MonadIO m => SystemPath -> m ()
+ensureSystemPath = 
+  resolve >=> liftIO . createDirectoryIfMissing True 
 
 -- | Create all missing parent directories of a file path.
 -- Note that the file path is assumed to be of a regular file, and
