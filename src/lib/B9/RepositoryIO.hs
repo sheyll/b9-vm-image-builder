@@ -15,6 +15,7 @@ module B9.RepositoryIO
     pullRemoteRepos,
     pullLatestImage,
     cleanOldSharedImageRevisionsFromCache,
+    cleanLocalRepoCache,
     pushToSelectedRepo,  
     pushSharedImageLatestVersion,
     getLatestImageByName,
@@ -309,6 +310,41 @@ cleanOldSharedImageRevisionsFromCache _sn = do
   b9Cfg <- getConfig
   forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \_maxRevisions -> do
     error "TODO"    
+
+-- | Clean all obsolete images in the local image cache.
+-- 
+-- @since 1.1.0
+cleanLocalRepoCache :: Eff e ()
+cleanLocalRepoCache = do
+  error "IMPLEMENT ME"
+--      toDelete <-
+--        obsoleteSharedmages . map snd
+--          <$> lookupSharedImages
+--            (== Cache)
+--            (const True)
+--      imgDir <- getSharedImagesCacheDir
+--      let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
+--          infoFiles = sharedImageFileName <$> toDelete
+--          imgFiles = imageFileName . sharedImageImage <$> toDelete
+--      if null filesToDelete
+--        then infoL "NO IMAGES TO DELETE"
+--        else liftIO $ do
+--          putStrLn "DELETING FILES:"
+--          putStrLn (unlines filesToDelete)
+--          mapM_ removeIfExists filesToDelete
+--      where
+--        removeIfExists :: FilePath -> IO ()
+--        removeIfExists fileName = removeFile fileName `catch` handleExists
+--          where
+--            handleExists e
+--              | isDoesNotExistError e = return ()
+--              | otherwise = throwIO e
+--        -- TODO delete-too-many-revisions
+--        obsoleteSharedmages :: [SharedImage] -> [SharedImage]
+--        obsoleteSharedmages =
+--          concatMap (tail . reverse) . filter ((> 1) . length)
+--            . groupBy
+--              ((==) `on` sharedImageName)
 
 -- | Publish the latest version of a shared image identified by name to the
 -- selected repository from the cache.

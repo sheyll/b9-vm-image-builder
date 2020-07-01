@@ -56,10 +56,6 @@ import B9.Text as X
 import B9.Vm as X
 import B9.VmBuilder as X
 import Control.Applicative as X
-import Control.Exception
-  ( catch,
-    throwIO,
-  )
 import Control.Lens as X
   ( (%~),
     (&),
@@ -74,13 +70,11 @@ import Control.Monad.Reader as X
     ask,
     local,
   )
-import Data.Function (on)
 import Data.List as X
 import Data.Maybe as X
 import Data.Monoid as X
 import Data.Version as X
 import Paths_b9 (version)
-import System.Directory (removeFile)
 import System.Exit as X
   ( ExitCode (..),
     exitWith,
@@ -93,7 +87,6 @@ import System.FilePath as X
     takeFileName,
   )
 import System.IO.B9Extras as X
-import System.IO.Error (isDoesNotExistError)
 import Text.Printf as X
   ( printf,
   )
@@ -184,40 +177,9 @@ runRun (SharedImageName name) cmdAndArgs =
 
 -- | Delete all obsolete versions of all 'SharedImageName's.
 runGcLocalRepoCache :: B9ConfigAction ()
-runGcLocalRepoCache = localB9Config (keepTempDirs .~ False) (runB9 impl)
-  where
--- TODO delete-too-many-revisions
-    impl = do
-      toDelete <-
-        obsoleteSharedmages . map snd
-          <$> lookupSharedImages
-            (== Cache)
-            (const True)
-      imgDir <- getSharedImagesCacheDir
-      let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
-          infoFiles = sharedImageFileName <$> toDelete
-          imgFiles = imageFileName . sharedImageImage <$> toDelete
-      if null filesToDelete
-        then infoL "NO IMAGES TO DELETE"
-        else liftIO $ do
-          putStrLn "DELETING FILES:"
-          putStrLn (unlines filesToDelete)
-          mapM_ removeIfExists filesToDelete
-      where
-        removeIfExists :: FilePath -> IO ()
-        removeIfExists fileName = removeFile fileName `catch` handleExists
-          where
-            handleExists e
-              | isDoesNotExistError e = return ()
-              | otherwise = throwIO e
+runGcLocalRepoCache = localB9Config (keepTempDirs .~ False) (runB9 cleanLocalRepoCache)
 
 -- TODO delete-too-many-revisions
-obsoleteSharedmages :: [SharedImage] -> [SharedImage]
-obsoleteSharedmages =
-  concatMap (tail . reverse) . filter ((> 1) . length)
-    . groupBy
-      ((==) `on` sharedImageName)
-
 
 -- | Clear the shared image cache for a remote. Note: The remote repository is
 -- specified in the 'B9Config'.

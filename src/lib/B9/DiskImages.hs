@@ -7,10 +7,8 @@ import Control.Parallel.Strategies
 import Data.Binary
 import Data.Data
 import Data.Hashable
-import Data.Map (Map(..))
-import qualified Data.Map as Map
-import Data.Set (Set(..))
-import qualified Data.Set as Set
+import Data.Map (Map)
+import Data.Set (Set)
 import Data.Maybe
 import Data.Semigroup as Sem
 import GHC.Generics (Generic)
@@ -297,8 +295,7 @@ sharedImagesToMap _ = error "IMPLEMENT ME"
 --
 -- @since 1.1.0
 takeLatestSharedImage :: [SharedImage] -> Maybe SharedImage
-takeLatestSharedImage ss = do
-  let sm = sharedImagesToMap ss
+takeLatestSharedImage _ss = do
   error "IMPLEMENT ME"
 
 -- * Constructor and accessors for 'Image' 'ImageTarget' 'ImageSource'

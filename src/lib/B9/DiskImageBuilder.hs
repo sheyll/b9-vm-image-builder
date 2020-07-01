@@ -28,14 +28,11 @@ import B9.BuildInfo
 import B9.DiskImages
 import B9.Environment
 import qualified B9.PartitionTable as P
-import B9.Repository
 import B9.RepositoryIO
 import Control.Eff
-import Control.Exception
 import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Function
 import Data.Generics.Aliases
 import Data.Generics.Schemes
 import Data.List
@@ -44,14 +41,12 @@ import GHC.Stack
 import System.Directory
 import System.FilePath
 import System.IO.B9Extras
-  ( consult,
+  (
     ensureDir,
     prettyPrintToFile,
   )
-import System.IO.Error (isDoesNotExistError)
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
-import qualified B9.Internal.SharedImages as Internal 
 
 
 -- -- | Convert relative file paths of images, sources and mounted host directories
