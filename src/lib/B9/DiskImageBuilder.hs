@@ -638,35 +638,34 @@ cleanOldSharedImageRevisionsFromCache sn = do
 -- TODO delete-too-many-revisions
   b9Cfg <- getConfig
   forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
-    toDelete <- take maxRevisions <$> newestSharedImages
-
-
-
-
-
-
-
-    imgDir <- getSharedImagesCacheDir
-    let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
-        infoFiles = sharedImageFileName <$> toDelete
-        imgFiles = imageFileName . sharedImageImage <$> toDelete
-    unless (null filesToDelete) $ do
-      traceL
-        ( printf
-            "DELETING %d OBSOLETE REVISIONS OF: %s"
-            (length filesToDelete)
-            (show sn)
-        )
-      mapM_ traceL filesToDelete
-      mapM_ removeIfExists filesToDelete
-  where
-    newestSharedImages :: IsB9 e => Eff e [SharedImage]
-    newestSharedImages =
-      reverse . map snd
-        <$> lookupSharedImages (== Cache) ((sn ==) . sharedImageName)
-    removeIfExists fileName = liftIO $ removeFile fileName `catch` handleExists
-      where
-        handleExists e
-          | isDoesNotExistError e = return ()
-          | otherwise = throwIO e
-
+    error "TODO"    
+--    
+--
+--
+--
+--
+--
+--    imgDir <- getSharedImagesCacheDir
+--    let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
+--        infoFiles = sharedImageFileName <$> toDelete
+--        imgFiles = imageFileName . sharedImageImage <$> toDelete
+--    unless (null filesToDelete) $ do
+--      traceL
+--        ( printf
+--            "DELETING %d OBSOLETE REVISIONS OF: %s"
+--            (length filesToDelete)
+--            (show sn)
+--        )
+--      mapM_ traceL filesToDelete
+--      mapM_ removeIfExists filesToDelete
+--  where
+--    newestSharedImages :: IsB9 e => Eff e [SharedImage]
+--    newestSharedImages =
+--      reverse . map snd
+--        <$> lookupSharedImages (== Cache) ((sn ==) . sharedImageName)
+--    removeIfExists fileName = liftIO $ removeFile fileName `catch` handleExists
+--      where
+--        handleExists e
+--          | isDoesNotExistError e = return ()
+--          | otherwise = throwIO e
+--
