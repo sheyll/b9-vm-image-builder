@@ -130,6 +130,7 @@ library
                    , B9.Docker
                    , B9.Environment
                    , B9.ExecEnv
+                   , B9.Internal.SharedImages
                    , B9.LibVirtLXC
                    , B9.MBR
                    , B9.PartitionTable
