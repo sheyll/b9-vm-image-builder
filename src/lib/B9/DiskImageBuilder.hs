@@ -30,6 +30,7 @@ import B9.Environment
 import qualified B9.PartitionTable as P
 import B9.RepositoryIO
 import Control.Eff
+import qualified Control.Exception as IO
 import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.IO.Class
@@ -37,21 +38,17 @@ import Data.Generics.Aliases
 import Data.Generics.Schemes
 import Data.List
 import Data.Maybe
+import qualified Foreign.C.Error as IO
+import qualified GHC.IO.Exception as IO
 import GHC.Stack
+import System.Directory
 import System.FilePath
 import System.IO.B9Extras
-  (
-    ensureDir,
+  ( ensureDir,
     prettyPrintToFile,
   )
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
-import System.Directory
-import qualified Control.Exception as IO
-import qualified           GHC.IO.Exception as IO
-import qualified          Foreign.C.Error as IO
-
-
 
 -- -- | Convert relative file paths of images, sources and mounted host directories
 -- -- to absolute paths relative to '_projectRoot'.
@@ -395,13 +392,12 @@ convert doMove (Image imgIn fmtIn _) (Image imgOut fmtOut _)
   | doMove && fmtIn == fmtOut = do
     ensureDir imgOut
     dbgL (printf "Moving '%s' to '%s'" imgIn imgOut)
-    liftIO $ do 
-      let exdev e = 
+    liftIO $ do
+      let exdev e =
             if IO.ioe_errno e == Just ((\(IO.Errno a) -> a) IO.eXDEV)
               then copyFile imgIn imgOut >> removeFile imgIn
               else IO.throw e
       renameFile imgIn imgOut `IO.catch` exdev
-    
   | otherwise = do
     ensureDir imgOut
     dbgL
@@ -479,7 +475,7 @@ createSharedImageInCache img sname@(SharedImageName name) = do
   dbgL (printf "CREATED SHARED IMAGE IN CACHE '%s'" (ppShow sharedImg))
   cleanOldSharedImageRevisionsFromCache sname
   return sharedImg
---    
+--
 --
 --
 --

@@ -81,8 +81,8 @@ getDirectoryFiles dir = do
 --
 -- @since 1.1.0
 ensureSystemPath :: MonadIO m => SystemPath -> m ()
-ensureSystemPath = 
-  resolve >=> liftIO . createDirectoryIfMissing True 
+ensureSystemPath =
+  resolve >=> liftIO . createDirectoryIfMissing True
 
 -- | Create all missing parent directories of a file path.
 -- Note that the file path is assumed to be of a regular file, and
