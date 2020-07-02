@@ -5,8 +5,7 @@ module B9.Podman
 where
 
 import B9.B9Config
-  ( 
-    getB9Config,
+  ( getB9Config,
     podmanConfigs,
   )
 import B9.B9Config.Podman as X

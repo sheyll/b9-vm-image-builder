@@ -5,8 +5,7 @@ module B9.Docker
 where
 
 import B9.B9Config
-  (
-    dockerConfigs,
+  ( dockerConfigs,
     getB9Config,
   )
 import B9.B9Config.Docker as X

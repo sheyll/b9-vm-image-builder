@@ -11,6 +11,8 @@ module B9.Repository
     withSelectedRemoteRepo,
     getSelectedRemoteRepo,
     SelectedRemoteRepoReader,
+    Repository (..),
+    toRemoteRepository,
     SelectedRemoteRepo (..),
     initRemoteRepo,
     cleanRemoteRepo,
@@ -18,11 +20,15 @@ module B9.Repository
     remoteRepoCacheDir,
     localRepoDir,
     lookupRemoteRepo,
+    filterSharedImages,
+    lookupSharedImageVersionsFromCache,
+    maxSharedRepoImages,
     module X,
   )
 where
 
 import B9.B9Config
+import B9.DiskImages
 import B9.B9Config.Repository as X
 import B9.B9Error
 import Control.Eff
@@ -35,6 +41,20 @@ import System.Directory
 import System.FilePath
 import System.IO.B9Extras
 import Text.Printf
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
+
+
+data Repository
+  = Cache
+  | Remote String
+  deriving (Eq, Ord, Read, Show)
+
+-- | Convert a `RemoteRepo` down to a mere `Repository`
+toRemoteRepository :: RemoteRepo -> Repository
+toRemoteRepository = Remote . remoteRepoRepoId
 
 -- | Initialize the local repository cache directory and the 'RemoteRepo's.
 -- Run the given action with a 'B9Config' that contains the initialized
@@ -181,3 +201,40 @@ lookupRemoteRepo :: [RemoteRepo] -> String -> Maybe RemoteRepo
 lookupRemoteRepo repos repoId = lookup repoId repoIdRepoPairs
   where
     repoIdRepoPairs = map (\r@(RemoteRepo rid _ _ _ _) -> (rid, r)) repos
+
+-- | A 'Map' that maps 'Repository's to the 'SharedImage's they hold.
+--
+-- @since 1.1.0
+type RepoImagesMap = Map Repository (Set SharedImage) 
+
+-- | Filter the 'SharedImage's returned by 'getSharedImages'
+-- using a 'Repository'-, and a 'SharedImage' predicate.
+--
+-- @since 1.1.0
+filterSharedImages ::
+  (Repository -> Bool) ->
+  (SharedImage -> Bool) ->
+  RepoImagesMap ->
+  RepoImagesMap
+filterSharedImages repoPred imgPred = 
+  Map.map (Set.filter imgPred) 
+   . Map.filterWithKey (const . repoPred) 
+
+-- | Return the versions of a shared image named 'name' from the local cache.
+--
+-- @since 1.1.0
+lookupSharedImageVersionsFromCache ::
+  SharedImageName ->
+  RepoImagesMap ->
+  Set SharedImage
+lookupSharedImageVersionsFromCache name = 
+  fromMaybe Set.empty .
+  Map.lookup Cache . 
+  filterSharedImages (== Cache) ((== name) . sharedImageName) 
+
+-- | Return the maximum with regard to the 'Ord' instance of 'SharedImage' 
+-- from an 'RepoImagesMap'
+--
+-- @since 1.1.0
+maxSharedRepoImages :: RepoImagesMap -> Maybe (Repository, Image)
+maxSharedRepoImages = error "TODO"
