@@ -6,11 +6,14 @@ import B9.B9Config
 import B9.B9Monad
 import B9.BuildInfo
 import B9.DiskImages
+import B9.Repository
 import B9.RepositoryIO
 import B9.Vm
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
+import Data.Foldable
+import Data.List (sort)
 import System.Directory
 import System.IO.B9Extras
 import Test.Hspec
@@ -48,10 +51,11 @@ spec =
                             )
                     )
               sharedImages <-
+                sharedImagesInCache <$>
                 b9Build (noCleanupCfg cfgWithRepo) getSharedImages
               return (buildIds, sharedImages)
           let sharedImageBuildIds =
-                [(sharedImageName s, sharedImageBuildId s) | (Cache, cs) <- sharedImages, s <- cs]
+                sort [(sharedImageName s, sharedImageBuildId s) | s <- toList sharedImages]
           sharedImageBuildIds `shouldBe` buildIds
 
 noCleanupCfg :: B9Config -> B9Config

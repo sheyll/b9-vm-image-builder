@@ -223,7 +223,7 @@ pullRemoteRepos = do
 -- | Pull the latest version of an image, either from the selected remote
 -- repo or from the repo that has the latest version.
 pullLatestImage ::
-  (HasCallStack, Lifted IO e, CommandIO e, '[RepoCacheReader, SelectedRemoteRepoReader] <:: e) =>
+  (HasCallStack, Lifted IO e, CommandIO e, '[ExcB9, RepoCacheReader, SelectedRemoteRepoReader] <:: e) =>
   SharedImageName ->
   Eff e (Maybe SharedImageBuildId)
 pullLatestImage name@(SharedImageName dbgName) = do
@@ -234,7 +234,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
       hasName sharedImage = name == sharedImageName sharedImage
   candidates <- 
     filterSharedImages repoPredicate hasName <$> getSharedImages
-  case maxSharedRepoImages candidates of
+  case sharedRepoImagesMax candidates of
     Nothing ->
       do
         errorL
@@ -245,7 +245,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
           )
         return Nothing
     Just (Cache, image) ->  do
-      infoL (printf "NO NEED TO PULL '%s' THE NEWEST IMAGE IS ALREADY IN THE CACHE" dbgName)
+      errorExitL (printf "Unreachable code reached in `pullLastestImage`: '%s'  %s" dbgName (ppShow image))
     Just (Remote repoId, image) ->  do
       dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
       cacheDir <- getSharedImagesCacheDir
@@ -268,7 +268,7 @@ getLatestImageByName ::
   SharedImageName ->
   Eff e (Maybe Image)
 getLatestImageByName name = do
-  sharedImageRevisions <- lookupSharedImageVersionsFromCache name <$> getSharedImages
+  sharedImageRevisions <- lookupCachedImages name <$> getSharedImages
   cacheDir <- getSharedImagesCacheDir
   let image = 
         changeImageDirectory cacheDir . sharedImageImage <$> 
@@ -333,7 +333,7 @@ pushSharedImageLatestVersion ::
   SharedImageName ->
   Eff e ()
 pushSharedImageLatestVersion name@(SharedImageName imgName) =
-  getSharedImageVersionsFromCache name
+ lookupCachedImages name <$> getSharedImages 
     >>= maybe
       (errorExitL (printf "Nothing found for %s." (show imgName)))
       ( \sharedImage -> do
@@ -341,7 +341,7 @@ pushSharedImageLatestVersion name@(SharedImageName imgName) =
           pushToSelectedRepo sharedImage
           infoL (printf "PUSHED '%s'" imgName)
       )
-      . listToMaybe
+      . Set.lookupMax
 
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo ::

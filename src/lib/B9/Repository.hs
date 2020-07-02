@@ -21,8 +21,11 @@ module B9.Repository
     localRepoDir,
     lookupRemoteRepo,
     filterSharedImages,
-    lookupSharedImageVersionsFromCache,
-    maxSharedRepoImages,
+    lookupCachedImages,
+    sharedImagesInCache,
+    sharedImagesInRepo,
+    sharedRepoImagesMax,
+    allSharedImagesAllRepos,
     module X,
   )
 where
@@ -36,6 +39,7 @@ import Control.Eff.Reader.Lazy
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Foldable
 import Data.Maybe
 import System.Directory
 import System.FilePath
@@ -216,25 +220,44 @@ filterSharedImages ::
   (SharedImage -> Bool) ->
   RepoImagesMap ->
   RepoImagesMap
-filterSharedImages repoPred imgPred = 
+filterSharedImages repoPred imgPred = -- TODO: test
   Map.map (Set.filter imgPred) 
    . Map.filterWithKey (const . repoPred) 
 
 -- | Return the versions of a shared image named 'name' from the local cache.
 --
 -- @since 1.1.0
-lookupSharedImageVersionsFromCache ::
+lookupCachedImages ::
   SharedImageName ->
   RepoImagesMap ->
-  Set SharedImage
-lookupSharedImageVersionsFromCache name = 
-  fromMaybe Set.empty .
-  Map.lookup Cache . 
+  Set SharedImage  -- TODO: test
+lookupCachedImages name = 
+  sharedImagesInCache . 
   filterSharedImages (== Cache) ((== name) . sharedImageName) 
 
+-- | Get a 'Set' of all 'SharedImage's in all 'Repository's.
+--
+-- @since 1.1.0
+allSharedImagesAllRepos :: RepoImagesMap -> Set SharedImage
+allSharedImagesAllRepos = fold
+
+-- | Return the 'SharedImage's, that are contained in a 'Repository'.
+--
+-- @since 1.1.0
+sharedImagesInRepo :: Repository -> RepoImagesMap -> Set SharedImage
+sharedImagesInRepo repo = fromMaybe Set.empty . Map.lookup repo   -- TODO: test
+
+-- | Keep 'SharedImage's that are in the 'Cache' 'Repository'.
+--
+-- @since 1.1.0
+sharedImagesInCache ::
+  RepoImagesMap ->
+  Set SharedImage  -- TODO: test
+sharedImagesInCache = sharedImagesInRepo Cache  
 -- | Return the maximum with regard to the 'Ord' instance of 'SharedImage' 
 -- from an 'RepoImagesMap'
 --
 -- @since 1.1.0
-maxSharedRepoImages :: RepoImagesMap -> Maybe (Repository, Image)
-maxSharedRepoImages = error "TODO"
+sharedRepoImagesMax :: RepoImagesMap -> Maybe (Repository, SharedImage)
+sharedRepoImagesMax = error "TODO"  -- TODO: test
+

@@ -70,6 +70,7 @@ import Control.Monad.Reader as X
     ask,
     local,
   )
+import Data.Foldable (fold)
 import Data.List as X
 import Data.Maybe as X
 import Data.Monoid as X
@@ -93,6 +94,8 @@ import Text.Printf as X
 import Text.Show.Pretty as X
   ( ppShow,
   )
+
+import Data.Set (Set)
 
 -- | Return the cabal package version of the B9 library.
 b9Version :: Version
@@ -198,7 +201,7 @@ runGcRemoteRepoCache =
 -- | Print a list of shared images cached locally or remotely, if a remote
 -- repository was selected. Note: The remote repository is
 -- specified in the 'B9Config'.
-runListSharedImages :: B9ConfigAction [SharedImage]
+runListSharedImages :: B9ConfigAction (Set SharedImage)
 runListSharedImages =
   localB9Config
     (keepTempDirs .~ False)
@@ -222,13 +225,15 @@ runListSharedImages =
             unless (null allRepos) $ liftIO $ do
               putStrLn "\nAvailable remote repositories:"
               mapM_ (putStrLn . (" * " ++) . remoteRepoRepoId) allRepos
-            imgs <- lookupSharedImages repoPred (const True)
+            imgs <- fold . 
+                    filterSharedImages repoPred (const True) <$>
+                      getSharedImages
             if null imgs
               then liftIO $ putStrLn "\n\nNO SHARED IMAGES\n"
               else liftIO $ do
                 putStrLn ""
-                putStrLn $ prettyPrintSharedImages $ map snd imgs
-            return (map snd imgs)
+                putStrLn $ prettyPrintSharedImages imgs
+            return imgs
         )
     )
 
@@ -251,16 +256,9 @@ runLookupLocalSharedImage ::
   SharedImageName -> B9ConfigAction (Maybe SharedImageBuildId)
 runLookupLocalSharedImage n = runB9 $ do
   traceL (printf "Searching for cached image: %s" (show n))
-  imgs <- lookupSharedImages isAvailableOnLocalHost hasTheDesiredName
+  imgs <- lookupCachedImages n <$> getSharedImages
   traceL "Candidate images: "
-  traceL (printf "%s\n" (prettyPrintSharedImages (map snd imgs)))
-  let res = extractNewestImageFromResults imgs
+  traceL (printf "%s\n" (prettyPrintSharedImages imgs))
+  let res =  if null imgs then Nothing else Just (sharedImageBuildId (maximum imgs))
   traceL (printf "Returning result: %s" (show res))
   return res
-  where
-    extractNewestImageFromResults =
-      listToMaybe . map toBuildId . take 1 . reverse . map snd
-      where
-        toBuildId (SharedImage _ _ i _ _) = i
-    isAvailableOnLocalHost = (Cache ==)
-    hasTheDesiredName (SharedImage n' _ _ _ _) = n == n'

@@ -11,6 +11,7 @@ import Data.Map (Map)
 import Data.Maybe
 import Data.Semigroup as Sem
 import Data.Set (Set)
+import qualified Data.Set as Set
 import GHC.Generics (Generic)
 import System.FilePath
 import Test.Hspec (Spec, describe, it)
@@ -399,7 +400,7 @@ sharedImageBuildId :: SharedImage -> SharedImageBuildId
 sharedImageBuildId (SharedImage _ _ n _ _) = n
 
 -- | Print the contents of the shared image in one line
-prettyPrintSharedImages :: [SharedImage] -> String
+prettyPrintSharedImages :: Set SharedImage -> String
 prettyPrintSharedImages imgs = Boxes.render table
   where
     table = Boxes.hsep 1 Boxes.left cols
@@ -415,7 +416,7 @@ prettyPrintSharedImages imgs = Boxes.render table
             col title accessor =
               Boxes.text title Boxes.// Boxes.vcat Boxes.left cells
               where
-                cells = Boxes.text . accessor <$> imgs
+                cells = Boxes.text . accessor <$> Set.toList imgs
 
 -- | Return the disk image of an sharedImage
 sharedImageImage :: SharedImage -> Image
