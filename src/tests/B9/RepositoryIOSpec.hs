@@ -19,7 +19,7 @@ spec :: HasCallStack => Spec
 spec =
   describe "RepositoryIO" $ do
     describe "Without autmatic cleanup" $ do
-      it "contains an image that was built locally" $ do
+      it "contains all images that were built locally" $ do
         let 
           destinations = 
             [ ImageTarget 
