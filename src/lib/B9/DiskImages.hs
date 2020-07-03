@@ -18,6 +18,9 @@ import Test.Hspec (Spec, describe, it)
 import Test.QuickCheck
 import qualified Text.PrettyPrint.Boxes as Boxes
 import Text.Printf
+import Data.Time.Clock (secondsToDiffTime, diffTimeToPicoseconds, UTCTime(..))
+import Data.Time.Calendar (Day(ModifiedJulianDay))
+import Data.Time.Format (defaultTimeLocale, parseTimeOrError, formatTime)
 
 -- * Data types for disk image description, e.g. 'ImageTarget',
 -- 'ImageDestination', 'Image', 'MountPoint', 'SharedImage'
@@ -125,6 +128,10 @@ instance NFData Image
 data ImageType = Raw | QCow2 | Vmdk
   deriving (Eq, Read, Typeable, Data, Show, Generic)
 
+instance CoArbitrary ImageType
+
+instance Function ImageType
+
 instance Hashable ImageType
 
 instance Binary ImageType
@@ -134,6 +141,10 @@ instance NFData ImageType
 -- | The file systems that b9 can use and convert.
 data FileSystem = NoFileSystem | Ext4 | Ext4_64 | ISO9660 | VFAT
   deriving (Eq, Show, Read, Typeable, Data, Generic)
+
+instance Function FileSystem
+
+instance CoArbitrary FileSystem
 
 instance Hashable FileSystem
 
@@ -241,6 +252,20 @@ data SharedImage
       FileSystem
   deriving (Eq, Read, Show, Typeable, Data, Generic)
 
+instance Arbitrary SharedImage where 
+  arbitrary = 
+    SharedImage <$> 
+    smaller arbitrary <*>
+    smaller arbitrary <*>
+    smaller arbitrary <*>
+    smaller arbitrary <*>
+    smaller arbitrary
+
+
+instance CoArbitrary SharedImage
+
+instance Function SharedImage
+
 instance Hashable SharedImage
 
 instance Binary SharedImage
@@ -251,7 +276,11 @@ instance NFData SharedImage
 --   'Share'.  B9 always selects the newest version the shared image identified
 --   by that name when using a shared image as an 'ImageSource'. This is a
 --   wrapper around a string that identifies a 'SharedImage'
-newtype SharedImageName = SharedImageName String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData)
+newtype SharedImageName = 
+  SharedImageName String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
+
+instance Function SharedImageName where 
+  function = functionShow 
 
 -- | Get the String representation of a 'SharedImageName'.
 fromSharedImageName :: SharedImageName -> String
@@ -260,7 +289,26 @@ fromSharedImageName (SharedImageName b) = b
 -- | The exact time that build job __started__.
 --   This is a wrapper around a string contains the build date of a
 --   'SharedImage'; this is purely additional convenience and typesafety
-newtype SharedImageDate = SharedImageDate String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData)
+newtype SharedImageDate = 
+  SharedImageDate String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
+
+instance Function SharedImageDate where 
+  function = 
+    functionMap 
+      ( (\(UTCTime (ModifiedJulianDay d) dt) ->
+          (d, diffTimeToPicoseconds dt `div` 1000000000000)) .
+        parseTimeOrError False defaultTimeLocale "%F-%T" . 
+        (\(SharedImageDate d) -> d))
+      (SharedImageDate . 
+        (formatTime defaultTimeLocale "%F-%T") . 
+        (\(d,dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt)))
+
+instance Arbitrary SharedImageDate where 
+  arbitrary = 
+      SharedImageDate . 
+        (formatTime defaultTimeLocale "%F-%T") . 
+        (\(d,dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
+      <$> arbitrary  
 
 -- | Every B9 build running in a 'B9Monad'
 --   contains a random unique id that is generated once per build (no matter how
@@ -268,7 +316,13 @@ newtype SharedImageDate = SharedImageDate String deriving (Eq, Ord, Read, Show, 
 --   of the build that created the shared image instance.  This is A wrapper
 --   around a string contains the build id of a 'SharedImage'; this is purely
 --   additional convenience and typesafety
-newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData)
+newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
+
+instance Arbitrary SharedImageBuildId where 
+  arbitrary = SharedImageBuildId <$> arbitrary
+
+instance Function SharedImageBuildId where 
+  function = functionMap fromSharedImageBuildId SharedImageBuildId
 
 -- | Get the String representation of a 'SharedImageBuildId'.
 fromSharedImageBuildId :: SharedImageBuildId -> String

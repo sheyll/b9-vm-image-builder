@@ -76,8 +76,8 @@ withBuildInfo ::
   Eff (BuildInfoReader ': e) a ->
   Eff e a
 withBuildInfo action = withRootDir $ do
-  now <- lift getCurrentTime
-  let buildDate = formatTime undefined "%F-%T" now
+  now <- lift getCurrentTime -- TODO reproducability: make configurable how the build-date is generated, e.g. by using always 1970/01/01-00:01
+  let buildDate = formatTime undefined "%F-%T" now -- TODO make configurable how the build date is formatted
   buildId <- generateBuildId buildDate
   withBuildDir buildId (runImpl buildId buildDate now)
   where

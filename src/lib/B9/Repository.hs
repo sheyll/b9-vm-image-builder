@@ -49,12 +49,20 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-
+import GHC.Generics 
+import Test.QuickCheck 
 
 data Repository
   = Cache
-  | Remote String
-  deriving (Eq, Ord, Read, Show)
+  | Remote String -- TODO use a newtype
+  deriving (Eq, Ord, Read, Show, Generic)
+
+instance Arbitrary Repository where
+  arbitrary = 
+      oneof [ pure Cache, Remote <$> listOf1 arbitraryPrintableChar ]
+
+instance Function Repository 
+instance CoArbitrary Repository
 
 -- | Convert a `RemoteRepo` down to a mere `Repository`
 toRemoteRepository :: RemoteRepo -> Repository
