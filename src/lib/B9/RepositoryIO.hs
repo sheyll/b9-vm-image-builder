@@ -184,10 +184,10 @@ getSharedImages = do
       sharedImagesRootDirectory
       (FileExtension sharedImageFileExtension)
   foldrM
-    (\(repo, files) acc -> do 
-      imgs <- catMaybes <$> mapM consult' files
-      let imgSet = Set.fromList imgs
-      return (Map.insert repo imgSet acc)
+    ( \(repo, files) acc -> do
+        imgs <- catMaybes <$> mapM consult' files
+        let imgSet = Set.fromList imgs
+        return (Map.insert repo imgSet acc)
     )
     Map.empty
     reposAndFiles
@@ -232,8 +232,8 @@ pullLatestImage name@(SharedImageName dbgName) = do
       repoPredicate (Remote repoId) = repoId `elem` repoIds
       repoIds = map remoteRepoRepoId repos
       hasName sharedImage = name == sharedImageName sharedImage
-  candidates <- 
-    filterSharedImages repoPredicate hasName <$> getSharedImages
+  candidates <-
+    filterRepoImagesMap repoPredicate hasName <$> getSharedImages
   case sharedRepoImagesMax candidates of
     Nothing ->
       do
@@ -244,9 +244,9 @@ pullLatestImage name@(SharedImageName dbgName) = do
               (ppShow repoIds)
           )
         return Nothing
-    Just (Cache, image) ->  do
+    Just (Cache, image) -> do
       errorExitL (printf "Unreachable code reached in `pullLastestImage`: '%s'  %s" dbgName (ppShow image))
-    Just (Remote repoId, image) ->  do
+    Just (Remote repoId, image) -> do
       dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
       cacheDir <- getSharedImagesCacheDir
       let (Image imgFile' _imgType _fs) = sharedImageImage image
@@ -270,9 +270,9 @@ getLatestImageByName ::
 getLatestImageByName name = do
   sharedImageRevisions <- lookupCachedImages name <$> getSharedImages
   cacheDir <- getSharedImagesCacheDir
-  let image = 
-        changeImageDirectory cacheDir . sharedImageImage <$> 
-        Set.lookupMax sharedImageRevisions
+  let image =
+        changeImageDirectory cacheDir . sharedImageImage
+          <$> Set.lookupMax sharedImageRevisions
   case image of
     Just i -> dbgL (printf "USING SHARED SOURCE IMAGE '%s'" (show i))
     Nothing -> errorL (printf "SOURCE IMAGE '%s' NOT FOUND" (show name))
@@ -333,7 +333,7 @@ pushSharedImageLatestVersion ::
   SharedImageName ->
   Eff e ()
 pushSharedImageLatestVersion name@(SharedImageName imgName) =
- lookupCachedImages name <$> getSharedImages 
+  lookupCachedImages name <$> getSharedImages
     >>= maybe
       (errorExitL (printf "Nothing found for %s." (show imgName)))
       ( \sharedImage -> do

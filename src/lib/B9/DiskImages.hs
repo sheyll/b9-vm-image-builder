@@ -12,15 +12,15 @@ import Data.Maybe
 import Data.Semigroup as Sem
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time.Calendar (Day (ModifiedJulianDay))
+import Data.Time.Clock (UTCTime (..), diffTimeToPicoseconds, secondsToDiffTime)
+import Data.Time.Format (defaultTimeLocale, formatTime, parseTimeOrError)
 import GHC.Generics (Generic)
 import System.FilePath
 import Test.Hspec (Spec, describe, it)
 import Test.QuickCheck
 import qualified Text.PrettyPrint.Boxes as Boxes
 import Text.Printf
-import Data.Time.Clock (secondsToDiffTime, diffTimeToPicoseconds, UTCTime(..))
-import Data.Time.Calendar (Day(ModifiedJulianDay))
-import Data.Time.Format (defaultTimeLocale, parseTimeOrError, formatTime)
 
 -- * Data types for disk image description, e.g. 'ImageTarget',
 -- 'ImageDestination', 'Image', 'MountPoint', 'SharedImage'
@@ -252,15 +252,14 @@ data SharedImage
       FileSystem
   deriving (Eq, Read, Show, Typeable, Data, Generic)
 
-instance Arbitrary SharedImage where 
-  arbitrary = 
-    SharedImage <$> 
-    smaller arbitrary <*>
-    smaller arbitrary <*>
-    smaller arbitrary <*>
-    smaller arbitrary <*>
-    smaller arbitrary
-
+instance Arbitrary SharedImage where
+  arbitrary =
+    SharedImage
+      <$> smaller arbitrary
+      <*> smaller arbitrary
+      <*> smaller arbitrary
+      <*> smaller arbitrary
+      <*> smaller arbitrary
 
 instance CoArbitrary SharedImage
 
@@ -276,11 +275,12 @@ instance NFData SharedImage
 --   'Share'.  B9 always selects the newest version the shared image identified
 --   by that name when using a shared image as an 'ImageSource'. This is a
 --   wrapper around a string that identifies a 'SharedImage'
-newtype SharedImageName = 
-  SharedImageName String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
+newtype SharedImageName
+  = SharedImageName String
+  deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
 
-instance Function SharedImageName where 
-  function = functionShow 
+instance Function SharedImageName where
+  function = functionShow
 
 -- | Get the String representation of a 'SharedImageName'.
 fromSharedImageName :: SharedImageName -> String
@@ -289,26 +289,30 @@ fromSharedImageName (SharedImageName b) = b
 -- | The exact time that build job __started__.
 --   This is a wrapper around a string contains the build date of a
 --   'SharedImage'; this is purely additional convenience and typesafety
-newtype SharedImageDate = 
-  SharedImageDate String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
+newtype SharedImageDate
+  = SharedImageDate String
+  deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
 
-instance Function SharedImageDate where 
-  function = 
-    functionMap 
-      ( (\(UTCTime (ModifiedJulianDay d) dt) ->
-          (d, diffTimeToPicoseconds dt `div` 1000000000000)) .
-        parseTimeOrError False defaultTimeLocale "%F-%T" . 
-        (\(SharedImageDate d) -> d))
-      (SharedImageDate . 
-        (formatTime defaultTimeLocale "%F-%T") . 
-        (\(d,dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt)))
+instance Function SharedImageDate where
+  function =
+    functionMap
+      ( ( \(UTCTime (ModifiedJulianDay d) dt) ->
+            (d, diffTimeToPicoseconds dt `div` 1000000000000)
+        )
+          . parseTimeOrError False defaultTimeLocale "%F-%T"
+          . (\(SharedImageDate d) -> d)
+      )
+      ( SharedImageDate
+          . (formatTime defaultTimeLocale "%F-%T")
+          . (\(d, dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
+      )
 
-instance Arbitrary SharedImageDate where 
-  arbitrary = 
-      SharedImageDate . 
-        (formatTime defaultTimeLocale "%F-%T") . 
-        (\(d,dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
-      <$> arbitrary  
+instance Arbitrary SharedImageDate where
+  arbitrary =
+    SharedImageDate
+      . (formatTime defaultTimeLocale "%F-%T")
+      . (\(d, dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
+      <$> arbitrary
 
 -- | Every B9 build running in a 'B9Monad'
 --   contains a random unique id that is generated once per build (no matter how
@@ -318,10 +322,10 @@ instance Arbitrary SharedImageDate where
 --   additional convenience and typesafety
 newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
 
-instance Arbitrary SharedImageBuildId where 
+instance Arbitrary SharedImageBuildId where
   arbitrary = SharedImageBuildId <$> arbitrary
 
-instance Function SharedImageBuildId where 
+instance Function SharedImageBuildId where
   function = functionMap fromSharedImageBuildId SharedImageBuildId
 
 -- | Get the String representation of a 'SharedImageBuildId'.

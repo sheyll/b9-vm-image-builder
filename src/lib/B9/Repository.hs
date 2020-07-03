@@ -12,6 +12,7 @@ module B9.Repository
     getSelectedRemoteRepo,
     SelectedRemoteRepoReader,
     Repository (..),
+    RepoImagesMap,
     toRemoteRepository,
     SelectedRemoteRepo (..),
     initRemoteRepo,
@@ -20,37 +21,38 @@ module B9.Repository
     remoteRepoCacheDir,
     localRepoDir,
     lookupRemoteRepo,
-    filterSharedImages,
+    filterRepoImagesMap,
     lookupCachedImages,
-    sharedImagesInCache,
-    sharedImagesInRepo,
+    allCachedSharedImages,
+    allSharedImagesInRepo,
     sharedRepoImagesMax,
-    allSharedImagesAllRepos,
+    allSharedImages,
+    allRepositories,
     module X,
   )
 where
 
 import B9.B9Config
-import B9.DiskImages
 import B9.B9Config.Repository as X
 import B9.B9Error
+import B9.DiskImages
 import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Foldable
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe
+import Data.Set (Set)
+import qualified Data.Set as Set
+import GHC.Generics
 import System.Directory
 import System.FilePath
 import System.IO.B9Extras
+import Test.QuickCheck
 import Text.Printf
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
-import GHC.Generics 
-import Test.QuickCheck 
 
 data Repository
   = Cache
@@ -58,10 +60,11 @@ data Repository
   deriving (Eq, Ord, Read, Show, Generic)
 
 instance Arbitrary Repository where
-  arbitrary = 
-      oneof [ pure Cache, Remote <$> listOf1 arbitraryPrintableChar ]
+  arbitrary =
+    oneof [pure Cache, Remote <$> listOf1 (choose ('A', 'z'))]
 
-instance Function Repository 
+instance Function Repository
+
 instance CoArbitrary Repository
 
 -- | Convert a `RemoteRepo` down to a mere `Repository`
@@ -217,20 +220,20 @@ lookupRemoteRepo repos repoId = lookup repoId repoIdRepoPairs
 -- | A 'Map' that maps 'Repository's to the 'SharedImage's they hold.
 --
 -- @since 1.1.0
-type RepoImagesMap = Map Repository (Set SharedImage) 
+type RepoImagesMap = Map Repository (Set SharedImage)
 
 -- | Filter the 'SharedImage's returned by 'getSharedImages'
 -- using a 'Repository'-, and a 'SharedImage' predicate.
 --
 -- @since 1.1.0
-filterSharedImages ::
+filterRepoImagesMap ::
   (Repository -> Bool) ->
   (SharedImage -> Bool) ->
   RepoImagesMap ->
   RepoImagesMap
-filterSharedImages repoPred imgPred = -- TODO: test
-  Map.map (Set.filter imgPred) 
-   . Map.filterWithKey (const . repoPred) 
+filterRepoImagesMap repoPred imgPred =
+  Map.map (Set.filter imgPred)
+    . Map.filterWithKey (const . repoPred)
 
 -- | Return the versions of a shared image named 'name' from the local cache.
 --
@@ -238,34 +241,40 @@ filterSharedImages repoPred imgPred = -- TODO: test
 lookupCachedImages ::
   SharedImageName ->
   RepoImagesMap ->
-  Set SharedImage  -- TODO: test
-lookupCachedImages name = 
-  sharedImagesInCache . 
-  filterSharedImages (== Cache) ((== name) . sharedImageName) 
+  Set SharedImage -- TODO: test
+lookupCachedImages name =
+  allCachedSharedImages
+    . filterRepoImagesMap (== Cache) ((== name) . sharedImageName)
 
 -- | Get a 'Set' of all 'SharedImage's in all 'Repository's.
 --
 -- @since 1.1.0
-allSharedImagesAllRepos :: RepoImagesMap -> Set SharedImage
-allSharedImagesAllRepos = fold
+allSharedImages :: RepoImagesMap -> Set SharedImage
+allSharedImages = fold
 
 -- | Return the 'SharedImage's, that are contained in a 'Repository'.
 --
 -- @since 1.1.0
-sharedImagesInRepo :: Repository -> RepoImagesMap -> Set SharedImage
-sharedImagesInRepo repo = fromMaybe Set.empty . Map.lookup repo   -- TODO: test
+allSharedImagesInRepo :: Repository -> RepoImagesMap -> Set SharedImage
+allSharedImagesInRepo repo = fromMaybe Set.empty . Map.lookup repo -- TODO: test
 
 -- | Keep 'SharedImage's that are in the 'Cache' 'Repository'.
 --
 -- @since 1.1.0
-sharedImagesInCache ::
+allCachedSharedImages ::
   RepoImagesMap ->
-  Set SharedImage  -- TODO: test
-sharedImagesInCache = sharedImagesInRepo Cache  
--- | Return the maximum with regard to the 'Ord' instance of 'SharedImage' 
+  Set SharedImage -- TODO: test
+allCachedSharedImages = allSharedImagesInRepo Cache
+
+-- | Return the maximum with regard to the 'Ord' instance of 'SharedImage'
 -- from an 'RepoImagesMap'
 --
 -- @since 1.1.0
 sharedRepoImagesMax :: RepoImagesMap -> Maybe (Repository, SharedImage)
-sharedRepoImagesMax = error "TODO"  -- TODO: test
+sharedRepoImagesMax = error "TODO" -- TODO: test
 
+-- | Return a 'Set' of 'Repository' names from a 'RepoImagesMap'
+--
+-- @since 1.1.0
+allRepositories :: RepoImagesMap -> Set Repository
+allRepositories = Map.keysSet

@@ -74,6 +74,7 @@ import Data.Foldable (fold)
 import Data.List as X
 import Data.Maybe as X
 import Data.Monoid as X
+import Data.Set (Set)
 import Data.Version as X
 import Paths_b9 (version)
 import System.Exit as X
@@ -94,8 +95,6 @@ import Text.Printf as X
 import Text.Show.Pretty as X
   ( ppShow,
   )
-
-import Data.Set (Set)
 
 -- | Return the cabal package version of the B9 library.
 b9Version :: Version
@@ -225,9 +224,10 @@ runListSharedImages =
             unless (null allRepos) $ liftIO $ do
               putStrLn "\nAvailable remote repositories:"
               mapM_ (putStrLn . (" * " ++) . remoteRepoRepoId) allRepos
-            imgs <- fold . 
-                    filterSharedImages repoPred (const True) <$>
-                      getSharedImages
+            imgs <-
+              fold
+                . filterRepoImagesMap repoPred (const True)
+                <$> getSharedImages
             if null imgs
               then liftIO $ putStrLn "\n\nNO SHARED IMAGES\n"
               else liftIO $ do
@@ -259,6 +259,6 @@ runLookupLocalSharedImage n = runB9 $ do
   imgs <- lookupCachedImages n <$> getSharedImages
   traceL "Candidate images: "
   traceL (printf "%s\n" (prettyPrintSharedImages imgs))
-  let res =  if null imgs then Nothing else Just (sharedImageBuildId (maximum imgs))
+  let res = if null imgs then Nothing else Just (sharedImageBuildId (maximum imgs))
   traceL (printf "Returning result: %s" (show res))
   return res

@@ -1,5 +1,7 @@
-
-module B9.RepositoryIOSpec (spec) where
+module B9.RepositoryIOSpec
+  ( spec,
+  )
+where
 
 import B9.Artifact.Readable
 import B9.Artifact.Readable.Interpreter (assemble)
@@ -52,8 +54,8 @@ spec =
                             )
                     )
               sharedImages <-
-                sharedImagesInCache <$>
-                b9Build (noCleanupCfg cfgWithRepo) getSharedImages
+                allCachedSharedImages
+                  <$> b9Build (noCleanupCfg cfgWithRepo) getSharedImages
               return (buildIds, sharedImages)
           let sharedImageBuildIds =
                 sort [(sharedImageName s, sharedImageBuildId s) | s <- toList sharedImages]
