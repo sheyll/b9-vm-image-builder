@@ -15,8 +15,7 @@ import B9.Vm
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
-import Data.Foldable
-import Data.List (sort)
+import qualified Data.Set as Set
 import System.Directory
 import System.IO.B9Extras
 import Test.Hspec
@@ -37,9 +36,9 @@ spec =
                   )
                   | t <- ["testImg0", "testImg1", "testImg2"]
                 ]
-          (buildIds, sharedImages) <-
+          (sharedImagesExpected, sharedImagesActual) <-
             withTempRepo $ \cfgWithRepo -> do
-              buildIds <-
+              sharedImagesExpected <-
                 concat
                   <$> replicateM
                     3
@@ -50,16 +49,14 @@ spec =
                             (noCleanupCfg cfgWithRepo)
                             ( assemble
                                 (Artifact (IID "test") (VmImages [dest] NoVmScript))
-                                *> ((SharedImageName t,) . SharedImageBuildId <$> getBuildId)
+                                *> (SharedImage (SharedImageName t) <$> (SharedImageDate <$> getBuildDate) <*> (SharedImageBuildId <$> getBuildId) <*> pure Raw <*> pure Ext4)
                             )
                     )
-              sharedImages <-
+              sharedImagesActual <-
                 allCachedSharedImages
                   <$> b9Build (noCleanupCfg cfgWithRepo) getSharedImages
-              return (buildIds, sharedImages)
-          let sharedImageBuildIds =
-                sort [(sharedImageName s, sharedImageBuildId s) | s <- toList sharedImages]
-          sharedImageBuildIds `shouldBe` buildIds
+              return (sharedImagesExpected, sharedImagesActual)
+          sharedImagesActual `shouldBe` Set.fromList sharedImagesExpected
 
 noCleanupCfg :: B9Config -> B9Config
 noCleanupCfg c =
