@@ -24,8 +24,9 @@ module B9.Repository
     filterRepoImagesMap,
     lookupCachedImages,
     allCachedSharedImages,
+    allSharedImagesWithRepo,
+    maxSharedImageOfAllRepos,
     allSharedImagesInRepo,
-    sharedRepoImagesMax,
     allSharedImages,
     allRepositories,
     module X,
@@ -61,7 +62,10 @@ data Repository
 
 instance Arbitrary Repository where
   arbitrary =
-    oneof [pure Cache, Remote <$> listOf1 (choose ('A', 'z'))]
+    Test.QuickCheck.oneof
+      [ pure Cache,
+        Remote . printf "remote-repo-%0X" <$> choose (0, 31 :: Int)
+      ]
 
 instance Function Repository
 
@@ -241,10 +245,16 @@ filterRepoImagesMap repoPred imgPred =
 lookupCachedImages ::
   SharedImageName ->
   RepoImagesMap ->
-  Set SharedImage -- TODO: test
+  Set SharedImage
 lookupCachedImages name =
-  allCachedSharedImages
+  allSharedImages
     . filterRepoImagesMap (== Cache) ((== name) . sharedImageName)
+
+-- | Return a 'Set' of 'Repository' names from a 'RepoImagesMap'
+--
+-- @since 1.1.0
+allRepositories :: RepoImagesMap -> Set Repository
+allRepositories = Map.keysSet
 
 -- | Get a 'Set' of all 'SharedImage's in all 'Repository's.
 --
@@ -252,29 +262,33 @@ lookupCachedImages name =
 allSharedImages :: RepoImagesMap -> Set SharedImage
 allSharedImages = fold
 
+-- | Fetch all 'SharedImage's like 'allSharedImages' but attach
+-- the 'Repository' that the image belongs to.
+--
+-- Usage example: In combination with 'filterRepoImagesMap' to find
+-- the latest version of a certain image in all known repositories.
+--
+-- @since 1.1.0
+allSharedImagesWithRepo :: RepoImagesMap -> Set (SharedImage, Repository)
+allSharedImagesWithRepo = Map.foldMapWithKey (Set.map . flip (,))
+
+-- | Return the maximum with regard to the 'Ord' instance of 'SharedImage'
+-- from an 'RepoImagesMap'
+--
+-- @since 1.1.0
+maxSharedImageOfAllRepos :: RepoImagesMap -> Maybe (SharedImage, Repository)
+maxSharedImageOfAllRepos = Set.lookupMax . allSharedImagesWithRepo
+
 -- | Return the 'SharedImage's, that are contained in a 'Repository'.
 --
 -- @since 1.1.0
 allSharedImagesInRepo :: Repository -> RepoImagesMap -> Set SharedImage
-allSharedImagesInRepo repo = fromMaybe Set.empty . Map.lookup repo -- TODO: test
+allSharedImagesInRepo repo = fromMaybe Set.empty . Map.lookup repo
 
 -- | Keep 'SharedImage's that are in the 'Cache' 'Repository'.
 --
 -- @since 1.1.0
 allCachedSharedImages ::
   RepoImagesMap ->
-  Set SharedImage -- TODO: test
+  Set SharedImage
 allCachedSharedImages = allSharedImagesInRepo Cache
-
--- | Return the maximum with regard to the 'Ord' instance of 'SharedImage'
--- from an 'RepoImagesMap'
---
--- @since 1.1.0
-sharedRepoImagesMax :: RepoImagesMap -> Maybe (Repository, SharedImage)
-sharedRepoImagesMax = error "TODO" -- TODO: test
-
--- | Return a 'Set' of 'Repository' names from a 'RepoImagesMap'
---
--- @since 1.1.0
-allRepositories :: RepoImagesMap -> Set Repository
-allRepositories = Map.keysSet

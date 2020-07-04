@@ -234,7 +234,7 @@ pullLatestImage name@(SharedImageName dbgName) = do
       hasName sharedImage = name == sharedImageName sharedImage
   candidates <-
     filterRepoImagesMap repoPredicate hasName <$> getSharedImages
-  case sharedRepoImagesMax candidates of
+  case maxSharedImageOfAllRepos candidates of
     Nothing ->
       do
         errorL
@@ -244,9 +244,9 @@ pullLatestImage name@(SharedImageName dbgName) = do
               (ppShow repoIds)
           )
         return Nothing
-    Just (Cache, image) -> do
+    Just (image, Cache) -> do
       errorExitL (printf "Unreachable code reached in `pullLastestImage`: '%s'  %s" dbgName (ppShow image))
-    Just (Remote repoId, image) -> do
+    Just (image, Remote repoId) -> do
       dbgL (printf "PULLING SHARED IMAGE: '%s'" (ppShow image))
       cacheDir <- getSharedImagesCacheDir
       let (Image imgFile' _imgType _fs) = sharedImageImage image

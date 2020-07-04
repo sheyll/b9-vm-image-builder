@@ -279,9 +279,6 @@ newtype SharedImageName
   = SharedImageName String
   deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
 
-instance Function SharedImageName where
-  function = functionShow
-
 -- | Get the String representation of a 'SharedImageName'.
 fromSharedImageName :: SharedImageName -> String
 fromSharedImageName (SharedImageName b) = b
@@ -293,40 +290,16 @@ newtype SharedImageDate
   = SharedImageDate String
   deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
 
-instance Function SharedImageDate where
-  function =
-    functionMap
-      ( ( \(UTCTime (ModifiedJulianDay d) dt) ->
-            (d, diffTimeToPicoseconds dt `div` 1000000000000)
-        )
-          . parseTimeOrError False defaultTimeLocale "%F-%T"
-          . (\(SharedImageDate d) -> d)
-      )
-      ( SharedImageDate
-          . (formatTime defaultTimeLocale "%F-%T")
-          . (\(d, dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
-      )
-
-instance Arbitrary SharedImageDate where
-  arbitrary =
-    SharedImageDate
-      . (formatTime defaultTimeLocale "%F-%T")
-      . (\(d, dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
-      <$> arbitrary
-
 -- | Every B9 build running in a 'B9Monad'
 --   contains a random unique id that is generated once per build (no matter how
 --   many artifacts are created in that build) This field contains the build id
 --   of the build that created the shared image instance.  This is A wrapper
 --   around a string contains the build id of a 'SharedImage'; this is purely
 --   additional convenience and typesafety
-newtype SharedImageBuildId = SharedImageBuildId String deriving (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
-
-instance Arbitrary SharedImageBuildId where
-  arbitrary = SharedImageBuildId <$> arbitrary
-
-instance Function SharedImageBuildId where
-  function = functionMap fromSharedImageBuildId SharedImageBuildId
+newtype SharedImageBuildId
+  = SharedImageBuildId String
+  deriving
+    (Eq, Ord, Read, Show, Typeable, Data, Hashable, Binary, NFData, CoArbitrary)
 
 -- | Get the String representation of a 'SharedImageBuildId'.
 fromSharedImageBuildId :: SharedImageBuildId -> String
@@ -348,14 +321,14 @@ instance Ord SharedImage where
 --
 -- @since 1.1.0
 sharedImagesToMap :: [SharedImage] -> Map SharedImageName (Set SharedImage)
-sharedImagesToMap _ = error "IMPLEMENT ME"
+sharedImagesToMap _ = error "TODO IMPLEMENT ME"
 
 -- | Return the 'SharedImage' with the highest 'sharedImageDate'.
 --
 -- @since 1.1.0
 takeLatestSharedImage :: [SharedImage] -> Maybe SharedImage
 takeLatestSharedImage _ss = do
-  error "IMPLEMENT ME"
+  error "TODO IMPLEMENT ME"
 
 -- * Constructor and accessors for 'Image' 'ImageTarget' 'ImageSource'
 -- 'ImageDestination' and 'SharedImage'
@@ -612,8 +585,9 @@ instance Arbitrary ImageTarget where
 instance Arbitrary ImageSource where
   arbitrary =
     oneof
-      [ EmptyImage "img-label"
-          <$> smaller arbitrary
+      [ EmptyImage . printf "img-label-%0X"
+          <$> choose (0, 63 :: Int)
+          <*> smaller arbitrary
           <*> smaller arbitrary
           <*> smaller arbitrary,
         CopyOnWrite <$> smaller arbitrary,
@@ -650,11 +624,14 @@ instance Arbitrary ImageResize where
       ]
 
 instance Arbitrary Partition where
-  arbitrary = oneof [Partition <$> elements [0, 1, 2], pure NoPT]
+  arbitrary = oneof [Partition <$> choose (0, 2), pure NoPT]
 
 instance Arbitrary Image where
   arbitrary =
-    Image "img-file-name" <$> smaller arbitrary <*> smaller arbitrary
+    Image . printf "img-file-name-%0X"
+      <$> choose (0, 63 :: Int)
+      <*> smaller arbitrary
+      <*> smaller arbitrary
 
 instance Arbitrary FileSystem where
   arbitrary = elements [Ext4]
@@ -671,9 +648,40 @@ instance Arbitrary SizeUnit where
 instance Arbitrary SharedImageName where
   arbitrary = SharedImageName <$> arbitrarySharedImageName
 
+instance Function SharedImageName where
+  function = functionShow
+
 arbitrarySharedImageName :: Gen String
 arbitrarySharedImageName =
-  elements [printf "arbitrary-shared-img-name-%d" x | x <- [0 :: Int .. 3]]
+  printf "shared-img-%0X" <$> choose (0, 63 :: Int)
+
+instance Arbitrary SharedImageBuildId where
+  arbitrary = do
+    SharedImageBuildId . printf "shared-img-build-id-%0X" <$> choose (0, maxBound `div` 1024 :: Int)
+
+instance Function SharedImageBuildId where
+  function = functionMap fromSharedImageBuildId SharedImageBuildId
+
+instance Function SharedImageDate where
+  function =
+    functionMap
+      ( ( \(UTCTime (ModifiedJulianDay d) dt) ->
+            (d, diffTimeToPicoseconds dt `div` 1000000000000)
+        )
+          . parseTimeOrError False defaultTimeLocale "%F-%T"
+          . (\(SharedImageDate d) -> d)
+      )
+      ( SharedImageDate
+          . (formatTime defaultTimeLocale "%F-%T")
+          . (\(d, dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
+      )
+
+instance Arbitrary SharedImageDate where
+  arbitrary =
+    SharedImageDate
+      . (formatTime defaultTimeLocale "%F-%T")
+      . (\(d, dt) -> UTCTime (ModifiedJulianDay d) (secondsToDiffTime dt))
+      <$> arbitrary
 
 unitTests :: Spec
 unitTests =
