@@ -27,6 +27,7 @@ import Control.Exception
     displayException,
     toException,
   )
+import qualified Control.Exception as IOExc
 import Control.Monad
 import Data.String (IsString (..))
 
@@ -63,8 +64,8 @@ runExcB9 = runError
 -- | Run an `ExcB9` and rethrow the exception with `error`.
 --
 -- @since 0.5.64
-errorOnException :: Eff (ExcB9 ': e) a -> Eff e a
-errorOnException = runError >=> either (error . displayException) pure
+errorOnException :: Lifted IO e => Eff (ExcB9 ': e) a -> Eff e a
+errorOnException = runError >=> either (lift . IOExc.throw) pure
 
 -- | 'SomeException' wrapped into 'Exc'ecption 'Eff'ects
 --
