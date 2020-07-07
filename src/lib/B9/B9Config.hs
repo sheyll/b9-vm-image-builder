@@ -25,6 +25,7 @@ module B9.B9Config
     podmanConfigs,
     systemdNspawnConfigs,
     remoteRepos,
+    maxLocalSharedImageRevisionsK,
     maxLocalSharedImageRevisions,
     B9ConfigOverride (..),
     noB9ConfigOverride,

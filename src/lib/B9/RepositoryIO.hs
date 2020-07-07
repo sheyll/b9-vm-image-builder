@@ -4,6 +4,7 @@ module B9.RepositoryIO
   ( repoSearch, -- internal
     pushToRepo, -- internal
     pullFromRepo, -- internal
+    withRemoteRepos,
     pullGlob,
     FilePathGlob (..),
     getSharedImages,
@@ -16,19 +17,23 @@ module B9.RepositoryIO
     pushToSelectedRepo,
     pushSharedImageLatestVersion,
     getLatestImageByName,
+    -- initRemoteRepo,
+    cleanRemoteRepo,
+    remoteRepoCheckSshPrivKey,
   )
 where
 
-import B9.B9Config (B9ConfigReader, getConfig, getRemoteRepos, maxLocalSharedImageRevisions)
+import B9.B9Config
 import B9.B9Error
 import B9.B9Exec
 import B9.B9Logging
 import B9.DiskImages
 import B9.Repository
 import Control.Eff
+import Control.Eff.Reader.Lazy
 import Control.Exception
-import Control.Lens ((^.))
-import Control.Monad (forM_, when)
+import Control.Lens ((.~), (^.))
+import Control.Monad (unless, forM_, when)
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.List
@@ -40,10 +45,71 @@ import qualified Data.Set as Set
 import GHC.Stack
 import System.Directory
 import System.FilePath
-import System.IO.B9Extras (consult, ensureDir)
+import System.IO.Error (isDoesNotExistError)
+import System.IO.B9Extras (resolve, SystemPath, consult, ensureDir)
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
 
+-- | Initialize the local repository cache directory and the 'RemoteRepo's.
+-- Run the given action with a 'B9Config' that contains the initialized
+-- repositories in '_remoteRepos'.
+--
+-- @since 0.5.65
+withRemoteRepos ::
+  (Member B9ConfigReader e, Lifted IO e) =>
+  Eff (RepoCacheReader ': e) a ->
+  Eff e a
+withRemoteRepos f = do
+  cfg <- getB9Config
+  repoCache <-
+    lift
+      (initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg)))
+  remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
+  let setRemoteRepos = remoteRepos .~ remoteRepos'
+  localB9Config setRemoteRepos (runReader repoCache f)
+
+-- | Initialize the local repository cache directory.
+initRepoCache :: MonadIO m => SystemPath -> m RepoCache
+initRepoCache repoDirSystemPath = do
+  repoDir <- resolve repoDirSystemPath
+  ensureDir (repoDir ++ "/")
+  return (RepoCache repoDir)
+
+-- | Check for existance of priv-key and make it an absolute path.
+remoteRepoCheckSshPrivKey :: MonadIO m => RemoteRepo -> m RemoteRepo
+remoteRepoCheckSshPrivKey (RemoteRepo rId rp (SshPrivKey keyFile) h u) = do
+  exists <- liftIO (doesFileExist keyFile)
+  keyFile' <- liftIO (canonicalizePath keyFile)
+  unless
+    exists
+    ( error
+        (printf "SSH Key file '%s' for repository '%s' is missing." keyFile' rId)
+    )
+  return (RemoteRepo rId rp (SshPrivKey keyFile') h u)
+
+-- | Initialize the repository; load the corresponding settings from the config
+-- file, check that the priv key exists and create the correspondig cache
+-- directory.
+initRemoteRepo :: MonadIO m => RepoCache -> RemoteRepo -> m RemoteRepo
+initRemoteRepo cache repo = do
+  -- TODO logging traceL $ printf "Initializing remote repo: %s" (remoteRepoRepoId repo)
+  repo' <- remoteRepoCheckSshPrivKey repo
+  let (RemoteRepo repoId _ _ _ _) = repo'
+  ensureDir (remoteRepoCacheDir cache repoId ++ "/")
+  return repo'
+
+-- | Empty the repository; load the corresponding settings from the config
+-- file, check that the priv key exists and create the correspondig cache
+-- directory.
+cleanRemoteRepo :: MonadIO m => RepoCache -> RemoteRepo -> m ()
+cleanRemoteRepo cache repo = do
+  let repoId = remoteRepoRepoId repo
+      repoDir = remoteRepoCacheDir cache repoId ++ "/"
+  -- TODO logging infoL $ printf "Cleaning remote repo: %s" repoId
+  ensureDir repoDir
+  -- TODO logging traceL $ printf "Deleting directory: %s" repoDir
+  liftIO $ removeDirectoryRecursive repoDir
+  ensureDir repoDir
 -- | Find files which are in 'subDir' and match 'glob' in the repository
 -- cache. NOTE: This operates on the repository cache, but does not enforce a
 -- repository cache update.
@@ -55,9 +121,8 @@ repoSearch ::
   Eff e [(Repository, [FilePath])]
 repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
   where
-    remoteRepoMatches = do
-      remoteRepos <- getRemoteRepos
-      mapM remoteRepoSearch remoteRepos
+    remoteRepoMatches =
+      getRemoteRepos >>= mapM remoteRepoSearch
     localMatches :: Eff e (Repository, [FilePath])
     localMatches = do
       cache <- getRepoCache
@@ -282,13 +347,35 @@ getLatestImageByName name = do
 -- do nothing or delete all but the configured number of most recent shared
 -- images with the given name from the local cache.
 cleanOldSharedImageRevisionsFromCache ::
-  ('[B9ConfigReader, RepoCacheReader] <:: e, Lifted IO e, CommandIO e) =>
+  ('[B9ConfigReader, RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
   SharedImageName ->
   Eff e ()
-cleanOldSharedImageRevisionsFromCache _sn = do
+cleanOldSharedImageRevisionsFromCache sn = do
   b9Cfg <- getConfig
-  forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \_maxRevisions -> do
-    error "TODO"
+  forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
+    when (maxRevisions < 1)
+      (throwB9Error_ 
+        (printf "Invalid maximum local shared images revision configuration value: %d. Please change the [global] '%s' key in the B9 configuration file to 'Just x' with 'x > 0', or to 'Nothing'." 
+          maxRevisions maxLocalSharedImageRevisionsK))
+    allRevisions <- lookupCachedImages sn <$> getSharedImages 
+    let toDelete = toList (Set.drop maxRevisions allRevisions)
+    imgDir <- getSharedImagesCacheDir
+    let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
+        infoFiles = sharedImageFileName <$> toDelete
+        imgFiles = imageFileName . sharedImageImage <$> toDelete
+    if null filesToDelete
+      then infoL "NO IMAGES TO DELETE"
+      else liftIO $ do
+        putStrLn "DELETING FILES:"
+        putStrLn (unlines filesToDelete)
+        mapM_ removeIfExists filesToDelete
+    where
+      removeIfExists :: FilePath -> IO ()
+      removeIfExists fileName = removeFile fileName `catch` handleExists
+        where
+          handleExists e
+            | isDoesNotExistError e = return ()
+            | otherwise = throwIO e
 
 -- | Clean all obsolete images in the local image cache.
 --

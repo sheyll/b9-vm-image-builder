@@ -4,10 +4,8 @@
 -- shall interfere with each other. This is accomplished by refraining from
 -- automatic cache updates from/to remote repositories.
 module B9.Repository
-  ( initRepoCache,
-    RepoCacheReader,
+  ( RepoCacheReader,
     getRepoCache,
-    withRemoteRepos,
     withSelectedRemoteRepo,
     getSelectedRemoteRepo,
     SelectedRemoteRepoReader,
@@ -15,9 +13,6 @@ module B9.Repository
     RepoImagesMap,
     toRemoteRepository,
     SelectedRemoteRepo (..),
-    initRemoteRepo,
-    cleanRemoteRepo,
-    remoteRepoCheckSshPrivKey,
     remoteRepoCacheDir,
     localRepoDir,
     lookupRemoteRepo,
@@ -39,9 +34,6 @@ import B9.B9Error
 import B9.DiskImages
 import Control.Eff
 import Control.Eff.Reader.Lazy
-import Control.Lens
-import Control.Monad
-import Control.Monad.IO.Class
 import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -49,9 +41,7 @@ import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import GHC.Generics
-import System.Directory
 import System.FilePath
-import System.IO.B9Extras
 import Test.QuickCheck
 import Text.Printf
 
@@ -75,23 +65,6 @@ instance CoArbitrary Repository
 toRemoteRepository :: RemoteRepo -> Repository
 toRemoteRepository = Remote . remoteRepoRepoId
 
--- | Initialize the local repository cache directory and the 'RemoteRepo's.
--- Run the given action with a 'B9Config' that contains the initialized
--- repositories in '_remoteRepos'.
---
--- @since 0.5.65
-withRemoteRepos ::
-  (Member B9ConfigReader e, Lifted IO e) =>
-  Eff (RepoCacheReader ': e) a ->
-  Eff e a
-withRemoteRepos f = do
-  cfg <- getB9Config
-  repoCache <-
-    lift
-      (initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg)))
-  remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
-  let setRemoteRepos = remoteRepos .~ remoteRepos'
-  localB9Config setRemoteRepos (runReader repoCache f)
 
 -- | Alias for a 'Reader' 'Eff'ect that reads a list of 'RemoteRepo's.
 --
@@ -150,48 +123,6 @@ getSelectedRemoteRepo ::
   Member SelectedRemoteRepoReader e => Eff e SelectedRemoteRepo
 getSelectedRemoteRepo = ask
 
--- | Initialize the local repository cache directory.
-initRepoCache :: MonadIO m => SystemPath -> m RepoCache
-initRepoCache repoDirSystemPath = do
-  repoDir <- resolve repoDirSystemPath
-  ensureDir (repoDir ++ "/")
-  return (RepoCache repoDir)
-
--- | Check for existance of priv-key and make it an absolute path.
-remoteRepoCheckSshPrivKey :: MonadIO m => RemoteRepo -> m RemoteRepo
-remoteRepoCheckSshPrivKey (RemoteRepo rId rp (SshPrivKey keyFile) h u) = do
-  exists <- liftIO (doesFileExist keyFile)
-  keyFile' <- liftIO (canonicalizePath keyFile)
-  unless
-    exists
-    ( error
-        (printf "SSH Key file '%s' for repository '%s' is missing." keyFile' rId)
-    )
-  return (RemoteRepo rId rp (SshPrivKey keyFile') h u)
-
--- | Initialize the repository; load the corresponding settings from the config
--- file, check that the priv key exists and create the correspondig cache
--- directory.
-initRemoteRepo :: MonadIO m => RepoCache -> RemoteRepo -> m RemoteRepo
-initRemoteRepo cache repo = do
-  -- TODO logging traceL $ printf "Initializing remote repo: %s" (remoteRepoRepoId repo)
-  repo' <- remoteRepoCheckSshPrivKey repo
-  let (RemoteRepo repoId _ _ _ _) = repo'
-  ensureDir (remoteRepoCacheDir cache repoId ++ "/")
-  return repo'
-
--- | Empty the repository; load the corresponding settings from the config
--- file, check that the priv key exists and create the correspondig cache
--- directory.
-cleanRemoteRepo :: MonadIO m => RepoCache -> RemoteRepo -> m ()
-cleanRemoteRepo cache repo = do
-  let repoId = remoteRepoRepoId repo
-      repoDir = remoteRepoCacheDir cache repoId ++ "/"
-  -- TODO logging infoL $ printf "Cleaning remote repo: %s" repoId
-  ensureDir repoDir
-  -- TODO logging traceL $ printf "Deleting directory: %s" repoDir
-  liftIO $ removeDirectoryRecursive repoDir
-  ensureDir repoDir
 
 -- | Return the cache directory for a remote repository relative to the root
 -- cache dir.

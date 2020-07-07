@@ -24,7 +24,6 @@ import Control.Eff.Exception as Eff
 import Control.Exception
   ( Exception,
     SomeException,
-    displayException,
     toException,
   )
 import qualified Control.Exception as IOExc

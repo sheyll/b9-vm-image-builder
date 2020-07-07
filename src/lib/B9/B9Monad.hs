@@ -12,6 +12,7 @@ import B9.B9Logging
 import B9.BuildInfo
 import B9.Environment
 import B9.Repository
+import B9.RepositoryIO
 import Control.Eff
 import Data.Functor ()
 import GHC.Stack
