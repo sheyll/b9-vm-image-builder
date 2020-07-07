@@ -24,6 +24,9 @@ module B9.Repository
     allSharedImagesInRepo,
     allSharedImages,
     allRepositories,
+    groupBySharedImageName,
+    keepNLatestSharedImages,
+    dropAllButNLatestSharedImages,
     module X,
   )
 where
@@ -64,7 +67,6 @@ instance CoArbitrary Repository
 -- | Convert a `RemoteRepo` down to a mere `Repository`
 toRemoteRepository :: RemoteRepo -> Repository
 toRemoteRepository = Remote . remoteRepoRepoId
-
 
 -- | Alias for a 'Reader' 'Eff'ect that reads a list of 'RemoteRepo's.
 --
@@ -122,7 +124,6 @@ type SelectedRemoteRepoReader = Reader SelectedRemoteRepo
 getSelectedRemoteRepo ::
   Member SelectedRemoteRepoReader e => Eff e SelectedRemoteRepo
 getSelectedRemoteRepo = ask
-
 
 -- | Return the cache directory for a remote repository relative to the root
 -- cache dir.
@@ -223,3 +224,97 @@ allCachedSharedImages ::
   RepoImagesMap ->
   Set SharedImage
 allCachedSharedImages = allSharedImagesInRepo Cache
+
+-- | Take a subset that contains the @n@
+-- latest versions of 'SharedImage's with the same name.
+--
+-- For example, if the input contains:
+--
+-- @@@
+-- fromList
+-- [ SharedImage "foo" "2020-07-07 13:34:31"
+-- , SharedImage "foo" "2020-07-07 13:34:32"
+-- , SharedImage "foo" "2020-07-07 13:34:33"
+-- , SharedImage "bar" "2020-07-07 13:34:34"
+-- , SharedImage "bar" "2020-07-07 13:34:35"
+-- , SharedImage "bar" "2020-07-07 13:34:36"
+-- ]
+-- @@@
+--
+-- The output of @keepNLatestSharedImages 2@ will be:
+--
+-- @@@
+-- fromList
+-- [ SharedImage "foo" "2020-07-07 13:34:32"
+-- , SharedImage "foo" "2020-07-07 13:34:33"
+-- , SharedImage "bar" "2020-07-07 13:34:35"
+-- , SharedImage "bar" "2020-07-07 13:34:36"
+-- ]
+-- @@@
+--
+-- @since 1.1.0
+keepNLatestSharedImages :: Int -> Set SharedImage -> Set SharedImage
+keepNLatestSharedImages n =
+  fold
+    . Map.map
+      ( \s ->
+          let nOld = max 0 (length s - n)
+           in Set.drop nOld s
+      )
+    . groupBySharedImageName
+
+-- | Take a subset that contains obsolete images.
+--
+-- Do the opposite of 'keepNLatestSharedImages',
+-- and return all **but** the @n@
+-- latest versions of 'SharedImage's with the same name.
+--
+-- For example, if the input contains:
+--
+-- @@@
+-- fromList
+-- [ SharedImage "foo" "2020-07-07 13:34:31"
+-- , SharedImage "foo" "2020-07-07 13:34:32"
+-- , SharedImage "foo" "2020-07-07 13:34:33"
+-- , SharedImage "bar" "2020-07-07 13:34:34"
+-- , SharedImage "bar" "2020-07-07 13:34:35"
+-- , SharedImage "bar" "2020-07-07 13:34:36"
+-- ]
+-- @@@
+--
+-- The output of @keepNLatestSharedImages 2@ will be:
+--
+-- @@@
+-- fromList
+-- [ SharedImage "foo" "2020-07-07 13:34:31"
+-- , SharedImage "bar" "2020-07-07 13:34:34"
+-- ]
+-- @@@
+--
+-- @since 1.1.0
+dropAllButNLatestSharedImages :: Int -> Set SharedImage -> Set SharedImage
+dropAllButNLatestSharedImages n =
+  fold
+    . Map.map
+      ( \s ->
+          let nOld = max 0 (length s - n)
+           in Set.take nOld s
+      )
+    . groupBySharedImageName
+
+-- | Group by 'SharedImageName'.
+--
+-- @since 1.1.0
+groupBySharedImageName :: Set SharedImage -> Map SharedImageName (Set SharedImage)
+groupBySharedImageName =
+  foldr
+    ( \img ->
+        Map.alter
+          ( Just
+              . maybe
+                (Set.singleton img)
+                (Set.insert img)
+          )
+          (sharedImageName img)
+    )
+    Map.empty

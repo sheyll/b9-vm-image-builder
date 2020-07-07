@@ -17,6 +17,7 @@ import B9.Repository
 import Data.Foldable (any)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Semigroup (Arg (..))
 import qualified Data.Set as Set
 import Test.Hspec
 import Test.QuickCheck
@@ -27,20 +28,94 @@ spec =
     "Repository"
     ( do
         describe
+          "dropAllButNLatestSharedImages"
+          ( do
+              it
+                "returns a set that is disjunct with the result of keepNLatestSharedImages"
+                ( property
+                    ( \(Positive n) sharedImages ->
+                        let dropped = dropAllButNLatestSharedImages n sharedImages
+                            kept = keepNLatestSharedImages n sharedImages
+                         in dropped `Set.disjoint` kept
+                    )
+                )
+              it
+                "returns a set with at most n * number of unique names entries, for all n >= 0"
+                ( property
+                    ( \(Positive n) sharedImages ->
+                        let actual = keepNLatestSharedImages n sharedImages
+                            noUniqueNames =
+                              Set.size (Set.map sharedImageName sharedImages)
+                         in Set.size actual <= n * noUniqueNames
+                    )
+                )
+          )
+        describe
+          "keepNLatestSharedImages"
+          ( do
+              it
+                "returns a set with a plausible number of elements"
+                ( property
+                    ( \n sharedImages ->
+                        let actual = keepNLatestSharedImages n sharedImages
+                            noUniqueNames =
+                              Set.size (Set.map sharedImageName sharedImages)
+                         in label
+                              "number of output elements < (max 0 n) * number of unqiue image names"
+                              (Set.size actual <= max 0 n * noUniqueNames)
+                              .&&. classify
+                                (n > 0)
+                                "n > 0"
+                                ( n > 0
+                                    ==> label
+                                      "the output contains as many sharedImageNames as the input"
+                                      (Set.size (Set.map sharedImageName actual) === noUniqueNames)
+                                    .&&. label
+                                      "keepNLatestSharedImages with n == 1 returns exactly as many elements as there are unique names"
+                                      (Set.size (keepNLatestSharedImages 1 sharedImages) === noUniqueNames)
+                                    .&&. label
+                                      "the newest entry in the output is the newest entry in the input"
+                                      (Set.lookupMax actual === Set.lookupMax sharedImages)
+                                )
+                    )
+                )
+              it
+                "returns the input unaltered if n >= number of input images"
+                ( property
+                    ( \(Positive n) sharedImages ->
+                        let actual = keepNLatestSharedImages n sharedImages
+                         in n >= Set.size sharedImages ==> sharedImages === actual
+                    )
+                )
+              it
+                "returns a set with at most n * number of unique names entries, for all n >= 0"
+                ( property
+                    ( \(Positive n) sharedImages ->
+                        let actual = keepNLatestSharedImages n sharedImages
+                            noUniqueNames =
+                              Set.size (Set.map sharedImageName sharedImages)
+                         in Set.size actual <= n * noUniqueNames
+                    )
+                )
+          )
+        describe
           "filterRepoImagesMap"
           ( do
               it
                 "returns all- and only repos matching the repo predicate"
-                (property filterRepoImagesMapReturnsAllAndOnlyReposSatisfieingTheFilterPredicate)
+                (property (withMaxSuccess 20 filterRepoImagesMapReturnsAllAndOnlyReposSatisfieingTheFilterPredicate))
               it
                 "returns all- and only images matching the image predicate"
-                (property filterRepoImagesMapReturnsAllAndOnlyImagesSatisfieingTheFilterPredicate)
+                (property (withMaxSuccess 20 filterRepoImagesMapReturnsAllAndOnlyImagesSatisfieingTheFilterPredicate))
               it "is idempotent" $
                 property
-                  ( \(Fun _ repoPred) (Fun _ p) repoImgMap ->
-                      let expected = filterRepoImagesMap repoPred p repoImgMap
-                          actual = filterRepoImagesMap repoPred p expected
-                       in expected === actual
+                  ( withMaxSuccess
+                      20
+                      ( \(Fun _ repoPred) (Fun _ p) repoImgMap ->
+                          let expected = filterRepoImagesMap repoPred p repoImgMap
+                              actual = filterRepoImagesMap repoPred p expected
+                           in expected === actual
+                      )
                   )
           )
         describe

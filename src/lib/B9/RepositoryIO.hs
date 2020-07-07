@@ -33,7 +33,7 @@ import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Exception
 import Control.Lens ((.~), (^.))
-import Control.Monad (unless, forM_, when)
+import Control.Monad (forM_, unless, when)
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.List
@@ -45,8 +45,8 @@ import qualified Data.Set as Set
 import GHC.Stack
 import System.Directory
 import System.FilePath
+import System.IO.B9Extras (SystemPath, consult, ensureDir, resolve)
 import System.IO.Error (isDoesNotExistError)
-import System.IO.B9Extras (resolve, SystemPath, consult, ensureDir)
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
 
@@ -110,6 +110,7 @@ cleanRemoteRepo cache repo = do
   -- TODO logging traceL $ printf "Deleting directory: %s" repoDir
   liftIO $ removeDirectoryRecursive repoDir
   ensureDir repoDir
+
 -- | Find files which are in 'subDir' and match 'glob' in the repository
 -- cache. NOTE: This operates on the repository cache, but does not enforce a
 -- repository cache update.
@@ -353,12 +354,17 @@ cleanOldSharedImageRevisionsFromCache ::
 cleanOldSharedImageRevisionsFromCache sn = do
   b9Cfg <- getConfig
   forM_ (b9Cfg ^. maxLocalSharedImageRevisions) $ \maxRevisions -> do
-    when (maxRevisions < 1)
-      (throwB9Error_ 
-        (printf "Invalid maximum local shared images revision configuration value: %d. Please change the [global] '%s' key in the B9 configuration file to 'Just x' with 'x > 0', or to 'Nothing'." 
-          maxRevisions maxLocalSharedImageRevisionsK))
-    allRevisions <- lookupCachedImages sn <$> getSharedImages 
-    let toDelete = toList (Set.drop maxRevisions allRevisions)
+    when
+      (maxRevisions < 1)
+      ( throwB9Error_
+          ( printf
+              "Invalid maximum local shared images revision configuration value: %d. Please change the [global] '%s' key in the B9 configuration file to 'Just x' with 'x > 0', or to 'Nothing'."
+              maxRevisions
+              maxLocalSharedImageRevisionsK
+          )
+      )
+    allRevisions <- lookupCachedImages sn <$> getSharedImages
+    let toDelete = toList (dropAllButNLatestSharedImages maxRevisions allRevisions)
     imgDir <- getSharedImagesCacheDir
     let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
         infoFiles = sharedImageFileName <$> toDelete
@@ -369,13 +375,13 @@ cleanOldSharedImageRevisionsFromCache sn = do
         putStrLn "DELETING FILES:"
         putStrLn (unlines filesToDelete)
         mapM_ removeIfExists filesToDelete
-    where
-      removeIfExists :: FilePath -> IO ()
-      removeIfExists fileName = removeFile fileName `catch` handleExists
-        where
-          handleExists e
-            | isDoesNotExistError e = return ()
-            | otherwise = throwIO e
+  where
+    removeIfExists :: FilePath -> IO ()
+    removeIfExists fileName = removeFile fileName `catch` handleExists
+      where
+        handleExists e
+          | isDoesNotExistError e = return ()
+          | otherwise = throwIO e
 
 -- | Clean all obsolete images in the local image cache.
 --
