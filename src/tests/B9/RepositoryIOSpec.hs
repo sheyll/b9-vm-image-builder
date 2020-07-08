@@ -16,11 +16,9 @@ import B9.Vm
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
-import Data.Foldable (fold)
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
+import System.FilePath
+import System.Environment
 import System.Directory
 import System.IO.B9Extras
 import Test.Hspec
@@ -30,7 +28,7 @@ spec :: HasCallStack => Spec
 spec =
   describe "RepositoryIO" $ do
     let shareAndLookupTestImages mkCfg =
-          withTempRepo $ \cfgWithRepo -> do
+          withTempBuildDirs $ \cfgWithRepo -> do
             let cfg = mkCfg cfgWithRepo
             sharedImagesExpected <- concat <$> replicateM 3 (shareTestImages cfg)
             sharedImagesActual <- allCachedSharedImages <$> b9Build cfg getSharedImages
@@ -92,25 +90,42 @@ cleanupAfterBuildCfg :: Int -> B9Config -> B9Config
 cleanupAfterBuildCfg n c =
   c {_maxLocalSharedImageRevisions = Just n}
 
-b9Build :: HasCallStack => B9Config -> B9 a -> IO a
-b9Build cfg e =
-  runB9ConfigAction
-    ( localB9Config
-        (const cfg)
-        (runB9 e)
-    )
+b9Build :: HasCallStack => B9ConfigOverride -> B9 a -> IO a
+b9Build cfg effect =
+  runB9ConfigActionWithOverrides 
+      (runB9 effect)
+      cfg
 
-withTempRepo :: HasCallStack => (B9Config -> IO a) -> IO a
-withTempRepo k =
+withTempBuildDirs :: HasCallStack => (B9ConfigOverride -> IO a) -> IO a
+withTempBuildDirs k =
   bracket acquire release use
   where
     acquire = do
-      repoRelPath <- printf "RepositoryIOSpec-test-repo-%U" <$> randomUUID
-      let tmpRepoPath = InTempDir repoRelPath
+      nixOutDirEnv <- lookupEnv "NIX_BUILD_TOP"
+      let rootDir = maybe InTempDir (((.) . (.)) Path (</>)) nixOutDirEnv 
+      repoRelPath <- printf "testsRepositoryIOSpec-test-repo-%U" <$> randomUUID
+      buildRelPath <- printf "RepositoryIOSpec-root-%U" <$> randomUUID
+      cfgRelPath <- printf "RepositoryIOSpec-b9cfg-%U" <$> randomUUID
+      let tmpRepoPath = rootDir ("tests" </> repoRelPath)
+          tmpBuildPath = rootDir ("tests" </> buildRelPath)
+          tmpCfgPath = rootDir ("tests" </> cfgRelPath)
       ensureSystemPath tmpRepoPath
-      return tmpRepoPath
-    release =
-      removePathForcibly <=< resolve
-    use tmpRepoPath =
-      let cfg = defaultB9Config {_repositoryCache = Just tmpRepoPath}
-       in k cfg
+      ensureSystemPath tmpBuildPath
+      ensureSystemPath tmpCfgPath
+      tmpBuildPathFileName <- resolve tmpBuildPath
+      return (tmpRepoPath, tmpBuildPathFileName, tmpCfgPath)
+    release (tmpRepoPath, tmpBuildPathFileName, tmpCfgPath) = do
+      let cleanupTmpPath = removePathForcibly <=< resolve
+      cleanupTmpPath tmpRepoPath 
+      cleanupTmpPath tmpCfgPath 
+      removePathForcibly tmpBuildPathFileName
+    use (tmpRepoPath, tmpBuildPathFileName, tmpCfgPath) =
+      let cfg = 
+                defaultB9Config {_repositoryCache = Just tmpRepoPath
+                                ,_projectRoot = Just tmpBuildPathFileName}
+          oCfg = overrideB9Config (const cfg) 
+                  (overrideWorkingDirectory tmpBuildPathFileName
+                    (overrideB9ConfigPath tmpCfgPath
+                    noB9ConfigOverride
+                  ))
+       in k oCfg

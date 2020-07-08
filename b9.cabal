@@ -217,6 +217,7 @@ test-suite spec
                    , aeson >= 1.0
                    , binary >= 0.8 && < 0.9
                    , containers
+                   , filepath
                    , hspec
                    , hspec-expectations
                    , unordered-containers >= 0.2
