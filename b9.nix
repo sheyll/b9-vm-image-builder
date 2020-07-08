@@ -1,5 +1,12 @@
 {haskellPackages,
- nix-gitignore
+ cdrkit, docker, libvirt,
+ openssh, qemu, rsync,
+ nix-gitignore,
+ systemd, 
+ podman,
+ e2fsprogs, xorriso, curl,
+ dosfstools, mtools,
+haskell
  }:
 
 let
@@ -7,4 +14,12 @@ let
   cleanSrc = cleanSrcGitIgnore ./.;
 
 in 
-  haskellPackages.callCabal2nix "b9" cleanSrc {}
+  haskell.lib.addBuildTools (haskellPackages.callCabal2nix "b9" cleanSrc {}) [
+    qemu cdrkit docker libvirt
+    openssh qemu rsync
+    systemd 
+    podman
+    e2fsprogs xorriso curl
+    dosfstools mtools
+  ]
+

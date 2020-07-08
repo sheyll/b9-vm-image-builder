@@ -128,7 +128,8 @@ globals =
        in B9ConfigOverride
             { _customB9ConfigPath = Path <$> cfg,
               _customB9Config = b9cfg,
-              _customEnvironment = mempty
+              _customEnvironment = mempty,
+              _customDefaulB9ConfigPath = Nothing
             }
 
 cmds :: Parser (B9ConfigAction ())

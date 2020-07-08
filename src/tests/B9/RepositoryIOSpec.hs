@@ -3,6 +3,7 @@ module B9.RepositoryIOSpec
   )
 where
 
+import B9 (ppShow)
 import B9.Artifact.Readable
 import B9.Artifact.Readable.Interpreter (assemble)
 import B9.B9Config
@@ -29,7 +30,8 @@ spec =
   describe "RepositoryIO" $ do
     let shareAndLookupTestImages mkCfg =
           withTempBuildDirs $ \cfgWithRepo -> do
-            let cfg = mkCfg cfgWithRepo
+            let cfg = overrideB9Config mkCfg cfgWithRepo 
+            putStrLn (ppShow cfg)
             sharedImagesExpected <- concat <$> replicateM 3 (shareTestImages cfg)
             sharedImagesActual <- allCachedSharedImages <$> b9Build cfg getSharedImages
             return (sharedImagesExpected, sharedImagesActual)
@@ -101,7 +103,7 @@ withTempBuildDirs k =
   bracket acquire release use
   where
     acquire = do
-      nixOutDirEnv <- lookupEnv "NIX_BUILD_TOP"
+      nixOutDirEnv <- lookupEnv "NIX_BUILD_TOP" -- TODO remove all this, using the TMPDIR is enough
       let rootDir = maybe InTempDir (((.) . (.)) Path (</>)) nixOutDirEnv 
       repoRelPath <- printf "testsRepositoryIOSpec-test-repo-%U" <$> randomUUID
       buildRelPath <- printf "RepositoryIOSpec-root-%U" <$> randomUUID
@@ -111,7 +113,6 @@ withTempBuildDirs k =
           tmpCfgPath = rootDir ("tests" </> cfgRelPath)
       ensureSystemPath tmpRepoPath
       ensureSystemPath tmpBuildPath
-      ensureSystemPath tmpCfgPath
       tmpBuildPathFileName <- resolve tmpBuildPath
       return (tmpRepoPath, tmpBuildPathFileName, tmpCfgPath)
     release (tmpRepoPath, tmpBuildPathFileName, tmpCfgPath) = do
@@ -120,12 +121,12 @@ withTempBuildDirs k =
       cleanupTmpPath tmpCfgPath 
       removePathForcibly tmpBuildPathFileName
     use (tmpRepoPath, tmpBuildPathFileName, tmpCfgPath) =
-      let cfg = 
-                defaultB9Config {_repositoryCache = Just tmpRepoPath
-                                ,_projectRoot = Just tmpBuildPathFileName}
-          oCfg = overrideB9Config (const cfg) 
+      let mkCfg cfgIn = 
+                cfgIn {_repositoryCache = Just tmpRepoPath
+                      ,_projectRoot = Just tmpBuildPathFileName}
+          oCfg = overrideB9Config mkCfg 
                   (overrideWorkingDirectory tmpBuildPathFileName
-                    (overrideB9ConfigPath tmpCfgPath
+                    (overrideDefaultB9ConfigPath tmpCfgPath
                     noB9ConfigOverride
                   ))
        in k oCfg

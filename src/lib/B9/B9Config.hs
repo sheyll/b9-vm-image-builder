@@ -37,7 +37,9 @@ module B9.B9Config
     customB9Config,
     customB9ConfigPath,
     customEnvironment,
+    customDefaulB9ConfigPath,
     overrideB9ConfigPath,
+    overrideDefaultB9ConfigPath,
     overrideB9Config,
     overrideWorkingDirectory,
     overrideVerbosity,
@@ -212,7 +214,8 @@ data B9ConfigOverride
   = B9ConfigOverride
       { _customB9ConfigPath :: Maybe SystemPath,
         _customB9Config :: Endo B9Config,
-        _customEnvironment :: Environment
+        _customEnvironment :: Environment,
+        _customDefaulB9ConfigPath :: Maybe SystemPath
       }
 
 instance Show B9ConfigOverride where
@@ -220,13 +223,14 @@ instance Show B9ConfigOverride where
     unlines
       [ "config file path:    " ++ show (_customB9ConfigPath x),
         "config modification: " ++ show (appEndo (_customB9Config x) mempty),
-        "environment:         " ++ show (_customEnvironment x)
+        "environment:         " ++ show (_customEnvironment x),
+        "default config file: " ++ show (_customDefaulB9ConfigPath x)
       ]
 
 -- | An empty default 'B9ConfigOverride' value, that will neither apply any
 -- additional 'B9Config' nor change the path of the configuration file.
 noB9ConfigOverride :: B9ConfigOverride
-noB9ConfigOverride = B9ConfigOverride Nothing mempty mempty
+noB9ConfigOverride = B9ConfigOverride Nothing mempty mempty Nothing
 
 makeLenses ''B9Config
 
@@ -239,6 +243,12 @@ overrideB9ConfigPath p = customB9ConfigPath ?~ p
 -- | Modify the runtime configuration.
 overrideB9Config :: (B9Config -> B9Config) -> B9ConfigOverride -> B9ConfigOverride
 overrideB9Config e = customB9Config <>~ Endo e
+
+-- | Convenience utility to override the *default* B9 configuration file path.
+--
+-- @since 1.1.0
+overrideDefaultB9ConfigPath :: SystemPath -> B9ConfigOverride -> B9ConfigOverride
+overrideDefaultB9ConfigPath p = customDefaulB9ConfigPath ?~ p
 
 -- | Define the current working directory to be used when building.
 overrideWorkingDirectory :: FilePath -> B9ConfigOverride -> B9ConfigOverride
@@ -287,8 +297,8 @@ modifyPermanentConfig = tell
 -- @since 0.5.65
 runB9ConfigActionWithOverrides :: HasCallStack => B9ConfigAction a -> B9ConfigOverride -> IO a
 runB9ConfigActionWithOverrides act cfg = do
-  configuredCfgPaths <- traverse resolve (cfg ^. customB9ConfigPath)
-  defCfgPath <- resolve defaultB9ConfigFile
+  configuredCfgPaths <- traverse resolve (cfg ^. customB9ConfigPath)  
+  defCfgPath <- resolve (fromMaybe defaultB9ConfigFile (cfg ^. customDefaulB9ConfigPath))
   let (Version myVer _) = My.version
       appendVersionVariations name =
         (\v' -> name <.> showVersion (makeVersion v')) <$> reverse (inits myVer)
