@@ -2,14 +2,6 @@
 
 ## 1.1.0
 
-* Use the `SharedImageName` for hash calculations, to prevent multiple
-  shared images sharing a single `SharedImageBuildId` as in this example:
-
-```
-prod-el7.centos-19.1.4 2020-03-30-09:30:14 3A870EB586731FA8                 
-prod-el7.centos-19.1.5 2020-04-09-18:08:04 3A870EB586731FA8                 
-```
-
 * Fix unintended deletion of images that are wrongly classified as obsolete.
 * Make the default timeout of 10s for several shell commands, like 
   loopback mounting of disk images, configurable.

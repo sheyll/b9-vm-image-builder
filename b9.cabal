@@ -64,6 +64,7 @@ common b9Deps
                    , hspec
                    , hspec-expectations
                    , lens >= 4
+                   , shake >= 0.17.6 && < 0.19
                    , text >= 1.2
 
 common b9Extensions
@@ -174,7 +175,6 @@ library
                    , pretty-show >= 1.6
                    , process >= 1.4
                    , random >= 1.1
-                   , shake >= 0.17.6 && < 0.19
                    , syb >= 0.6
                    , tagged >= 0.8 && < 0.9
                    , template >= 0.2
@@ -203,14 +203,15 @@ test-suite spec
   hs-source-dirs:    src/tests
   main-is:           Spec.hs
   autogen-modules:   Paths_b9
-  other-modules:     B9.Content.ErlTermsSpec
-                   , B9.ArtifactGeneratorImplSpec
+  other-modules:     B9.ArtifactGeneratorImplSpec
+                   , B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec
                    , B9.DiskImagesSpec
                    , B9.EnvironmentSpec
                    , B9.RepositoryIOSpec
                    , B9.RepositorySpec
+                   , B9.Shake.SharedImageRulesSpec
                    , Paths_b9
   build-depends:     QuickCheck >= 2.5
                    , b9
