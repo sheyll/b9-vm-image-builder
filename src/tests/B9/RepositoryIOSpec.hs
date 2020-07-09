@@ -8,6 +8,7 @@ import B9.Artifact.Readable
 import B9.Artifact.Readable.Interpreter (assemble)
 import B9.B9Config
 import B9.B9Error
+import B9.B9Logging
 import B9.B9Monad
 import B9.BuildInfo
 import B9.DiskImages
@@ -35,7 +36,11 @@ spec = do
               buildCfg = overrideB9Config noCleanupCfg cfgWithRepo 
           x <- buildAction buildCfg 
           y <- allCachedSharedImages 
-                <$> b9Build cfg (cleanLocalRepoCache *> getSharedImages)
+                <$> b9Build cfg 
+                      (  cleanLocalRepoCache 
+                      *> infoL "SEARCHING FOR SHARED IMAGES" 
+                      *> getSharedImages
+                      )
           return (x, y)
       shareAndLookupTestImages mkCfg =
         withTempBuildDirs $ \cfgWithRepo -> do
@@ -71,10 +76,10 @@ spec = do
                          <*> pure Ext4
                      )
               )
-  describe "shared image cache cleanup" $ do
+  describe "shared_image_cache_cleanup" $ do
     context "_maxLocalSharedImageRevisions == Nothing" $ do
       context "no images in cache" $ do
-        it "doesn't crash" $
+        it "does nothing and returns no error" $
           cleanCacheAndLookupImages noCleanupCfg (const (return ())) 
           >>= (`shouldBe` mempty) . snd
       context "two images names with each three versions" $ do
@@ -83,7 +88,7 @@ spec = do
           >>= (`shouldBe` mempty) . snd
     context "_maxLocalSharedImageRevisions == Just 1" $ do
       context "no images in cache" $ do
-        it "doesn't crash" $
+        it "does nothing and returns no error" $
           cleanCacheAndLookupImages 
             (cleanupAfterBuildCfg 1) 
             (const (return ())) 
@@ -93,8 +98,13 @@ spec = do
           (generatedImages, actual) <- 
             cleanCacheAndLookupImages 
               (cleanupAfterBuildCfg 1) 
-              shareTestImages 
-          let expected = fold (Map.map (Set.drop 2) (groupBySharedImageName (Set.fromList generatedImages)))
+              (\c -> shareTestImages c *> 
+                       (b9Build c (allCachedSharedImages <$> getSharedImages)))
+          let expected = 
+                fold 
+                  (Map.map 
+                    (Set.drop 2) 
+                    (groupBySharedImageName generatedImages))
           actual `shouldBe` expected 
   -- TODO describe "pull shared images" $ do
   describe "create & share images" $ do

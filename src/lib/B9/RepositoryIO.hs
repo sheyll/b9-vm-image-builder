@@ -33,7 +33,7 @@ import B9.Repository
 import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Exception
-import Control.Lens ((.~), (^.))
+import Control.Lens ((.~), (^.), view)
 import Control.Monad (forM_, unless, when)
 import Control.Monad.IO.Class
 import Data.Foldable
@@ -364,53 +364,38 @@ cleanOldSharedImageRevisionsFromCache sn = do
           )
       )
     allRevisions <- lookupCachedImages sn <$> getSharedImages
-    let toDelete = toList (dropAllButNLatestSharedImages maxRevisions allRevisions)
-    imgDir <- getSharedImagesCacheDir
-    let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
-        infoFiles = sharedImageFileName <$> toDelete
-        imgFiles = imageFileName . sharedImageImage <$> toDelete
-    if null filesToDelete
-      then infoL "NO IMAGES TO DELETE"
-      else liftIO $ do
-        putStrLn "DELETING FILES:"
-        putStrLn (unlines filesToDelete)
-        mapM_ removeIfExists filesToDelete
+    let toDelete = dropAllButNLatestSharedImages maxRevisions allRevisions
+    removeCachedSharedImages toDelete
 
 -- | Clean all obsolete images in the local image cache.
 --
 -- @since 1.1.0
-cleanLocalRepoCache :: Eff e ()
+cleanLocalRepoCache :: 
+    ('[B9ConfigReader, RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
+    Eff e ()
 cleanLocalRepoCache = do
+  allCached <- allCachedSharedImages <$> getSharedImages
+  maxRevConfig <- view maxLocalSharedImageRevisions <$> getConfig
+  let maxRev = maybe 0 (max 0) maxRevConfig 
+      byName = groupBySharedImageName allCached 
+      toKeep = 
+        fold 
+          (Map.map 
+            (keepNLatestSharedImages maxRev) 
+            byName)
+      toDelete = 
+        fold 
+          (Map.map 
+            (dropAllButNLatestSharedImages maxRev) 
+            byName)
+  infoL "ALL CACHED IMAGES:"
+  forM_ allCached (infoL . show)
+  infoL ("CACHED " ++ maybe "" (("("++) . (++ ") ") . show) maxRevConfig ++ "IMAGES TO KEEP:")
+  forM_ toKeep (infoL . show)
+  infoL "CACHED IMAGES TO DELETE:"
+  forM_ toDelete (infoL . show)
+  removeCachedSharedImages toDelete
   return ()
-
---      toDelete <-
---        obsoleteSharedmages . map snd
---          <$> lookupSharedImages
---            (== Cache)
---            (const True)
---      imgDir <- getSharedImagesCacheDir
---      let filesToDelete = (imgDir </>) <$> (infoFiles ++ imgFiles)
---          infoFiles = sharedImageFileName <$> toDelete
---          imgFiles = imageFileName . sharedImageImage <$> toDelete
---      if null filesToDelete
---        then infoL "NO IMAGES TO DELETE"
---        else liftIO $ do
---          putStrLn "DELETING FILES:"
---          putStrLn (unlines filesToDelete)
---          mapM_ removeIfExists filesToDelete
---      where
---        removeIfExists :: FilePath -> IO ()
---        removeIfExists fileName = removeFile fileName `catch` handleExists
---          where
---            handleExists e
---              | isDoesNotExistError e = return ()
---              | otherwise = throwIO e
---        -- TODO delete-too-many-revisions
---        obsoleteSharedmages :: [SharedImage] -> [SharedImage]
---        obsoleteSharedmages =
---          concatMap (tail . reverse) . filter ((> 1) . length)
---            . groupBy
---              ((==) `on` sharedImageName)
 
 -- | Publish the latest version of a shared image identified by name to the
 -- selected repository from the cache.
@@ -460,3 +445,18 @@ getSharedImagesCacheDir :: '[RepoCacheReader] <:: e => Eff e FilePath
 getSharedImagesCacheDir = do
   cacheDir <- localRepoDir <$> getRepoCache
   return (cacheDir </> sharedImagesRootDirectory)
+
+removeCachedSharedImages :: (CommandIO e, Member (Reader B9Config) e, Member (Reader Logger) e, Member (Reader RepoCache) e) => Set SharedImage -> Eff e ()
+removeCachedSharedImages toDelete = 
+  do 
+     imgDir <- getSharedImagesCacheDir
+     let filesToDelete = Set.map (imgDir </>) (infoFiles <> imgFiles)
+         infoFiles = Set.map sharedImageFileName toDelete
+         imgFiles = Set.map (imageFileName . sharedImageImage) toDelete
+     if Set.null filesToDelete
+       then infoL "NO IMAGES TO DELETE"
+       else do
+         infoL "DELETING FILES:"
+         forM_ filesToDelete (infoL . show) 
+         liftIO (mapM_ removeIfExists filesToDelete)
+

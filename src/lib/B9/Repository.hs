@@ -318,3 +318,4 @@ groupBySharedImageName =
           (sharedImageName img)
     )
     Map.empty
+
