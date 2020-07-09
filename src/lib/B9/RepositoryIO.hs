@@ -26,6 +26,7 @@ where
 import B9.B9Config
 import B9.B9Error
 import B9.B9Exec
+import System.IO.B9Extras
 import B9.B9Logging
 import B9.DiskImages
 import B9.Repository
@@ -46,7 +47,6 @@ import GHC.Stack
 import System.Directory
 import System.FilePath
 import System.IO.B9Extras (SystemPath, consult, ensureDir, resolve)
-import System.IO.Error (isDoesNotExistError)
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
 
@@ -375,13 +375,6 @@ cleanOldSharedImageRevisionsFromCache sn = do
         putStrLn "DELETING FILES:"
         putStrLn (unlines filesToDelete)
         mapM_ removeIfExists filesToDelete
-  where
-    removeIfExists :: FilePath -> IO ()
-    removeIfExists fileName = removeFile fileName `catch` handleExists
-      where
-        handleExists e
-          | isDoesNotExistError e = return ()
-          | otherwise = throwIO e
 
 -- | Clean all obsolete images in the local image cache.
 --

@@ -18,6 +18,8 @@ import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
 import qualified Data.Set as Set
+import qualified Data.Map as Map
+import Data.Foldable
 import System.Directory
 import System.Environment
 import System.FilePath
@@ -87,9 +89,13 @@ spec = do
             (const (return ())) 
             >>= (`shouldBe` mempty) . snd
       context "two images names with each three versions" $ do
-        it "retains the latest images (somehow they must procreate, right? ;)" $
-          cleanCacheAndLookupImages noCleanupCfg shareTestImages 
-          >>= (`shouldBe` mempty) . snd
+        it "retains the latest image of each subset with the same name (somehow they must procreate, right? ;)" $ do
+          (generatedImages, actual) <- 
+            cleanCacheAndLookupImages 
+              (cleanupAfterBuildCfg 1) 
+              shareTestImages 
+          let expected = fold (Map.map (Set.drop 2) (groupBySharedImageName (Set.fromList generatedImages)))
+          actual `shouldBe` expected 
   -- TODO describe "pull shared images" $ do
   describe "create & share images" $ do
     describe "Without autmatic cleanup"

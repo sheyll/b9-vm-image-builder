@@ -11,6 +11,7 @@ module System.IO.B9Extras
     ConsultException (..),
     randomUUID,
     UUID (),
+    removeIfExists,
   )
 where
 
@@ -144,3 +145,11 @@ randomUUID =
                 <*> randomIO
             )
     )
+
+removeIfExists :: FilePath -> IO ()
+removeIfExists fileName = removeFile fileName `catch` handleExists
+  where
+    handleExists e
+      | isDoesNotExistError e = return ()
+      | otherwise = throwIO e
+
