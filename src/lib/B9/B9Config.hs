@@ -297,7 +297,7 @@ modifyPermanentConfig = tell
 -- @since 0.5.65
 runB9ConfigActionWithOverrides :: HasCallStack => B9ConfigAction a -> B9ConfigOverride -> IO a
 runB9ConfigActionWithOverrides act cfg = do
-  configuredCfgPaths <- traverse resolve (cfg ^. customB9ConfigPath)  
+  configuredCfgPaths <- traverse resolve (cfg ^. customB9ConfigPath)
   defCfgPath <- resolve (fromMaybe defaultB9ConfigFile (cfg ^. customDefaulB9ConfigPath))
   let (Version myVer _) = My.version
       appendVersionVariations name =

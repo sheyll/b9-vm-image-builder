@@ -388,7 +388,7 @@ cleanOldSharedImageRevisionsFromCache sn = do
 -- @since 1.1.0
 cleanLocalRepoCache :: Eff e ()
 cleanLocalRepoCache = do
-  error "IMPLEMENT ME"
+  return ()
 
 --      toDelete <-
 --        obsoleteSharedmages . map snd
