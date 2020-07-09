@@ -1,4 +1,4 @@
-{lib, myHaskellPackages, stdenv,
+{lib, haskellPackages, stdenv,
  makeWrapper,
  cdrkit, docker, libvirt,
  openssh, qemu, rsync,
@@ -10,7 +10,7 @@
  coreutils, dosfstools, mtools}:
 
 let
-  b9Unwrapped = myHaskellPackages.b9;
+  b9Unwrapped = haskellPackages.b9;
 
   b9Static = haskell.lib.justStaticExecutables b9Unwrapped;
 

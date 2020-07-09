@@ -4,7 +4,7 @@ with
   overlay = self: super:
   { 
     niv = import ./sources.nix {};
-    myHaskellPackages = super.haskellPackages.override (old: {
+    haskellPackages = super.haskellPackages.override (old: {
       overrides = self.lib.composeExtensions (old.overrides or (_: _: {}))
         (hself: hsuper: 
         {
