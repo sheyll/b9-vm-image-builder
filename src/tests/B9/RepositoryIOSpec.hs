@@ -158,7 +158,7 @@ withTempBuildDirs k =
   bracket acquire release use
   where
     acquire = do
-      nixOutDirEnv <- lookupEnv "NIX_BUILD_TOP" -- TODO remove all this, using the TMPDIR is enough
+      nixOutDirEnv <- lookupEnv "NIX_BUILD_TOP"
       let rootDir = maybe InTempDir (((.) . (.)) Path (</>)) nixOutDirEnv
       repoRelPath <- printf "testsRepositoryIOSpec-test-repo-%U" <$> randomUUID
       buildRelPath <- printf "RepositoryIOSpec-root-%U" <$> randomUUID

@@ -106,7 +106,11 @@ mountLoopbackImages sudo e containerDirs = do
               </> printHash (imgPath, containerMountPoint)
       liftIO $ createDirectoryIfMissing True hostMountPoint
       hostCmd (sudo (printf "mount -o loop '%s' '%s'" imgPath hostMountPoint)) timeoutFastCmd
-      return (LoopbackMount {loopbackHost = hostMountPoint, loopbackContainer = containerMountPoint})
+      return 
+        (LoopbackMount {
+          loopbackHost = hostMountPoint, 
+          loopbackContainer = containerMountPoint
+         })
 
 newtype ContainerRootImage
   = ContainerRootImage FilePath
@@ -215,7 +219,12 @@ execBuild sudo containerMounts sharedDirs bootScript dCfg = do
     _ ->
       hostCmd (sudo systemdCmd) timeout
 
-umountLoopbackImages :: forall e. (Member ExcB9 e, CommandIO e) => SudoPrepender -> ContainerMounts -> Eff e ()
+umountLoopbackImages :: 
+  forall e. 
+  (Member ExcB9 e, CommandIO e) => 
+  SudoPrepender -> 
+  ContainerMounts -> 
+  Eff e ()
 umountLoopbackImages sudo c = do
   case containerRootImage c of
     Left _ -> return ()
@@ -228,7 +237,11 @@ umountLoopbackImages sudo c = do
       res <- hostCmd (sudo (printf "umount '%s'" (loopbackHost l))) timeoutFastCmd
       when (not res) (errorL ("failed to unmount: " ++ show l))
 
-removeContainerBuildRootDir :: forall e. (Member ExcB9 e, CommandIO e) => SudoPrepender -> ContainerBuildDirectories -> Eff e ()
+removeContainerBuildRootDir :: 
+  forall e. (Member ExcB9 e, CommandIO e) => 
+  SudoPrepender -> 
+  ContainerBuildDirectories -> 
+  Eff e ()
 removeContainerBuildRootDir sudo containerBuildDirs = do
   let target = containerBuildRoot containerBuildDirs
   traceL $ "removing: " ++ target

@@ -348,7 +348,7 @@ getLatestImageByName name = do
 -- do nothing or delete all but the configured number of most recent shared
 -- images with the given name from the local cache.
 cleanOldSharedImageRevisionsFromCache ::
-  ('[B9ConfigReader, RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
+  ('[RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
   SharedImageName ->
   Eff e ()
 cleanOldSharedImageRevisionsFromCache sn = do
@@ -371,7 +371,7 @@ cleanOldSharedImageRevisionsFromCache sn = do
 --
 -- @since 1.1.0
 cleanLocalRepoCache :: 
-    ('[B9ConfigReader, RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
+    ('[RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
     Eff e ()
 cleanLocalRepoCache = do
   allCached <- allCachedSharedImages <$> getSharedImages
@@ -416,7 +416,7 @@ pushSharedImageLatestVersion name@(SharedImageName imgName) =
 
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo ::
-  (Lifted IO e, CommandIO e, '[B9ConfigReader, LoggerReader, RepoCacheReader, SelectedRemoteRepoReader] <:: e) =>
+  (Lifted IO e, CommandIO e, '[RepoCacheReader, SelectedRemoteRepoReader] <:: e) =>
   SharedImage ->
   Eff e ()
 pushToSelectedRepo i = do
@@ -446,7 +446,7 @@ getSharedImagesCacheDir = do
   cacheDir <- localRepoDir <$> getRepoCache
   return (cacheDir </> sharedImagesRootDirectory)
 
-removeCachedSharedImages :: (CommandIO e, Member (Reader B9Config) e, Member (Reader Logger) e, Member (Reader RepoCache) e) => Set SharedImage -> Eff e ()
+removeCachedSharedImages :: (CommandIO e, Member (Reader RepoCache) e) => Set SharedImage -> Eff e ()
 removeCachedSharedImages toDelete = 
   do 
      imgDir <- getSharedImagesCacheDir

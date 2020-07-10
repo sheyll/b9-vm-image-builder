@@ -3,8 +3,13 @@
 ## 1.1.0
 
 * Fix unintended deletion of images that are wrongly classified as obsolete.
-* Make the default timeout of 10s for several shell commands, like 
-  loopback mounting of disk images, configurable.
+* Introduce a configuration parameter to specify an optional **timeout factor**.
+  Since the introduction of __SystemdNspawn__ support, most invokation of 
+  external system commands, e.g. `mount`, are guarded by short timeouts.
+  During testing I discovered that some systems are just slower and might 
+  run into a timeout.
+  To mitigate that, a user can now configure a **timeout factor** that is 
+  applied to the internal, hard-coded time values.
 * Change NIX expressions to use `haskellPackages`
   instead of `myHaskellPackages`.
 * Add configuration options for __SystemdNspawn__:

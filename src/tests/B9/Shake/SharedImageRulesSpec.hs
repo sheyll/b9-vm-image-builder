@@ -3,25 +3,18 @@ module B9.Shake.SharedImageRulesSpec
   )
 where
 
-import B9 (ppShow)
 import B9.Artifact.Readable
 import B9.Artifact.Readable.Interpreter (assemble)
 import B9.B9Config
-import B9.B9Error
-import B9.B9Logging
 import B9.B9Monad
-import B9.BuildInfo
 import B9.DiskImages
 import B9.Repository
 import B9.RepositoryIO
 import B9.Shake.SharedImageRules
 import B9.Vm
-import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
 import qualified Data.Set as Set
-import qualified Data.Map as Map
-import Data.Foldable
 import System.Directory
 import System.Environment
 import System.FilePath
