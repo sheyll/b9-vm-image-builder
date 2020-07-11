@@ -23,7 +23,6 @@ import Control.Concurrent
 import Control.Concurrent.Async (Concurrently (..), race)
 import Control.Eff
 import qualified Control.Exception as ExcIO
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control (control, embed_, restoreM)
 import qualified Data.ByteString as Strict
@@ -38,10 +37,8 @@ import qualified Data.Conduit.List as CL
 import Data.Conduit.Process
 import Data.Functor ()
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
-import qualified Data.Text.Encoding.Error as Text
 import System.Exit
-import Text.Printf
+import GHC.Stack
 
 -- | Execute the given shell command.
 --
@@ -55,51 +52,20 @@ import Text.Printf
 -- exit code.
 --
 -- @since 0.5.65
-cmd :: CommandIO e => String -> Eff e ()
+cmd :: (HasCallStack, Member ExcB9 e, CommandIO e)
+  => String -> Eff e ()
 cmd str = do
   inheritStdIn <- isInteractive
-  if inheritStdIn then interactiveCmd str else nonInteractiveCmd str
-
-interactiveCmd :: forall e. CommandIO e => String -> Eff e ()
-interactiveCmd str = void (cmdWithStdIn True str :: Eff e Inherited)
-
-nonInteractiveCmd :: forall e. CommandIO e => String -> Eff e ()
--- TODO if we use 'ClosedStream' we get an error from 'virsh console'
--- complaining about a missing controlling tty. Original source line:
--- nonInteractiveCmd str = void (cmdWithStdIn False str :: B9 ClosedStream)
-nonInteractiveCmd str = void (cmdWithStdIn False str :: Eff e Inherited)
-
-cmdWithStdIn ::
-  (CommandIO e, InputSource stdin) => Bool -> String -> Eff e stdin
-cmdWithStdIn toStdOut cmdStr = do
-  traceL $ "COMMAND: " ++ cmdStr
-  traceLIO <-
-    embed_
-      (traceL . Text.unpack . Text.decodeUtf8With Text.lenientDecode)
-  errorLIO <-
-    embed_
-      (errorL . Text.unpack . Text.decodeUtf8With Text.lenientDecode)
-  let errorLC = CL.mapM_ (liftIO . errorLIO)
-  let traceLC =
-        if toStdOut
-          then CL.mapM_ Strict.putStr
-          else CL.mapM_ (liftIO . traceLIO)
-  (cpIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
-  e <-
-    liftIO
-      $ runConcurrently
-      $ Concurrently (runConduit (cpOut .| traceLC))
-        *> Concurrently (runConduit (cpErr .| errorLC))
-        *> Concurrently (waitForStreamingProcess cph)
-  closeStreamingProcessHandle cph
-  checkExitCode e
-  return cpIn
-  where
-    checkExitCode ExitSuccess =
-      traceL $ printf "COMMAND '%s' exited with exit code: 0" cmdStr
-    checkExitCode ec@(ExitFailure e) = do
-      errorL $ printf "COMMAND '%s' exited with exit code: %i" cmdStr e
-      liftIO $ exitWith ec
+  ok <- 
+    if inheritStdIn then      
+     hostCmdEither HostCommandInheritStdin str Nothing
+    else
+     hostCmdEither HostCommandNoStdin str Nothing
+  case ok of
+    Right _ -> 
+      return ()
+    Left e ->
+      errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
 
 -- | Run a shell command defined by a string and optionally interrupt the command
 -- after a given time has elapsed.
@@ -192,7 +158,7 @@ hostCmdEither inputSource cmdStr timeout = do
       ExcIO.catch
         (runInIO (go tag))
         ( \(e :: ExcIO.SomeException) -> do
-            putStrLn ("COMMAND " ++ tag ++ " interrupted: " ++ show e)
+            runInIO (errorL ("COMMAND " ++ tag ++ " interrupted: " ++ show e))
             runInIO (return (Right (ExitFailure 126) :: Either CommandTimeout ExitCode))
         )
       >>= restoreM
@@ -201,7 +167,7 @@ hostCmdEither inputSource cmdStr timeout = do
     go tag = do
       traceLC <- traceMsgProcessLogger tag
       errorLC <- errorMsgProcessLogger tag
-      let timer t@(CommandTimeout micros) = do
+      let timer t@(CommandTimeoutMicroSeconds micros) = do
             threadDelay micros
             return t
       (cph, runCmd) <- case inputSource of
@@ -239,7 +205,7 @@ hostCmdEither inputSource cmdStr timeout = do
           errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
       return e
 
-data CommandTimeout = CommandTimeout Int
+data CommandTimeout = CommandTimeoutMicroSeconds Int
   deriving (Show)
 
 newtype ProcessLogger

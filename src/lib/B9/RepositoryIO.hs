@@ -145,14 +145,14 @@ repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
       return ((dir </>) <$> filter (matchGlob glob) files)
 
 -- | Push a file from the cache to a remote repository
-pushToRepo :: (CommandIO e) => RemoteRepo -> FilePath -> FilePath -> Eff e ()
+pushToRepo :: (Member ExcB9 e, CommandIO e) => RemoteRepo -> FilePath -> FilePath -> Eff e ()
 pushToRepo repo@(RemoteRepo repoId _ _ _ _) src dest = do
   dbgL (printf "PUSHING '%s' TO REPO '%s'" (takeFileName src) repoId)
   cmd (repoEnsureDirCmd repo dest)
   cmd (pushCmd repo src dest)
 
 -- | Pull a file from a remote repository to cache
-pullFromRepo :: (CommandIO e) => RemoteRepo -> FilePath -> FilePath -> Eff e ()
+pullFromRepo :: (Member ExcB9 e, CommandIO e) => RemoteRepo -> FilePath -> FilePath -> Eff e ()
 pullFromRepo repo@(RemoteRepo repoId rootDir _key (SshRemoteHost (host, _port)) (SshRemoteUser user)) src dest =
   do
     dbgL (printf "PULLING '%s' FROM REPO '%s'" (takeFileName src) repoId)
@@ -168,7 +168,7 @@ pullFromRepo repo@(RemoteRepo repoId rootDir _key (SshRemoteHost (host, _port)) 
 
 -- | Push a file from the cache to a remote repository
 pullGlob ::
-  (CommandIO e, Member RepoCacheReader e) =>
+  (Member ExcB9 e, CommandIO e, Member RepoCacheReader e) =>
   FilePath ->
   FilePathGlob ->
   RemoteRepo ->
@@ -275,7 +275,7 @@ getSharedImages = do
 
 -- | Pull metadata files from all remote repositories.
 pullRemoteRepos ::
-  (HasCallStack, Lifted IO e, CommandIO e, '[SelectedRemoteRepoReader, RepoCacheReader] <:: e) =>
+  (HasCallStack, Member ExcB9 e, Lifted IO e, CommandIO e, '[SelectedRemoteRepoReader, RepoCacheReader] <:: e) =>
   Eff e ()
 pullRemoteRepos = do
   repos <- getSelectedRepos
@@ -416,7 +416,7 @@ pushSharedImageLatestVersion name@(SharedImageName imgName) =
 
 -- | Upload a shared image from the cache to a selected remote repository
 pushToSelectedRepo ::
-  (Lifted IO e, CommandIO e, '[RepoCacheReader, SelectedRemoteRepoReader] <:: e) =>
+  (Member ExcB9 e, Lifted IO e, CommandIO e, '[RepoCacheReader, SelectedRemoteRepoReader] <:: e) =>
   SharedImage ->
   Eff e ()
 pushToSelectedRepo i = do

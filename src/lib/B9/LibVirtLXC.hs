@@ -12,6 +12,7 @@ import B9.B9Config
     libVirtLXCConfigs,
   )
 import B9.B9Config.LibVirtLXC as X
+import B9.B9Error
 import B9.B9Exec
 import B9.B9Logging
 import B9.BuildInfo
@@ -77,7 +78,7 @@ successMarkerCmd scriptDirGuest =
 successMarkerFile :: [Char]
 successMarkerFile = "SUCCESS"
 
-execute :: (CommandIO e, Member B9ConfigReader e) => Context -> Eff e Bool
+execute :: (Member ExcB9 e, CommandIO e, Member B9ConfigReader e) => Context -> Eff e Bool
 execute (Context scriptDirHost _uuid domainFile cfg) = do
   cmd $ printf "%s create '%s' --console --autodestroy" virshCommand domainFile
   -- cmd $ printf "%s console %U" virsh uuid

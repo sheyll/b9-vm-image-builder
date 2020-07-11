@@ -211,7 +211,7 @@ execBuild sudo containerMounts sharedDirs bootScript dCfg = do
           sharedDirMountsRo = [(h, c) | SharedDirectoryRO h (MountPoint c) <- sharedDirs]
       extraArgs = maybe [] (: []) (_systemdNspawnExtraArgs dCfg)
       execOptions = ["/bin/sh", bootScriptContainerCommand bootScript]
-      timeout = (CommandTimeout . (* 1000000)) <$> _systemdNspawnMaxLifetimeSeconds dCfg
+      timeout = (CommandTimeoutMicroSeconds . (* 1000000)) <$> _systemdNspawnMaxLifetimeSeconds dCfg
   traceL ("executing systemd-nspawn container build")
   case _systemdNspawnConsole dCfg of
     SystemdNspawnInteractive ->
@@ -249,4 +249,4 @@ removeContainerBuildRootDir sudo containerBuildDirs = do
   when (not res) (errorL ("failed to remove: " ++ target))
 
 timeoutFastCmd :: Maybe CommandTimeout
-timeoutFastCmd = Just (CommandTimeout 10000000)
+timeoutFastCmd = Just (CommandTimeoutMicroSeconds 10000000)
