@@ -5,64 +5,182 @@ module B9.B9ExecSpec
   )
 where
 
-import B9 (ppShow)
-import B9.Artifact.Readable
-import B9.Artifact.Readable.Interpreter (assemble)
 import B9.B9Config
 import B9.B9Error
 import B9.B9Exec
-import B9.B9Logging
 import B9.B9Monad
-import B9.BuildInfo
-import B9.DiskImages
-import B9.Repository
-import B9.RepositoryIO
-import B9.Vm
-import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
-import Data.Foldable
-import qualified Data.Map as Map
-import qualified Data.Set as Set
 import System.Directory
 import System.Environment
+import System.Exit
 import System.FilePath
 import System.IO.B9Extras
 import Test.Hspec
 import Text.Printf
 
 spec :: HasCallStack => Spec
-spec =
-  context "varying_default_timeout_config" $ do
-    describe "Nothing" $ do
-      describe
-        "cmd"
-        ( it
-            "does not crash if a command is stuck for more than one second"
-            ( cmdWrapper Nothing "sleep 1" `shouldReturn` ()
-            )
-        )
-    describe "Just one_second" $ do
-      let timeout = 1
-      describe
-        ""
-        ( it
-            "crashes if a command is stuck for more than one second"
-            ( ( cmdWrapper (Just timeout) (printf "sleep %d" (1 + timeout))
-                  `shouldThrow` (const True :: Selector B9Error)
-              )
-            )
-        )
+spec = do
+  context
+    "timeout_factor is Nothing"
+    ( do
+        let tf = Nothing
+        context
+          "default_timeout_seconds is Nothing "
+          ( do
+              let t = Nothing
+              context
+                "commands finish in time"
+                ( do
+                    context
+                      "cmd"
+                      (it "returns" (cmdWrapper t tf "sleep 1" `shouldReturn` ()))
+                    context
+                      "hostCmd without timeout"
+                      ( it
+                          "returns Right True"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" Nothing)
+                              `shouldReturn` Right ExitSuccess
+                          )
+                      )
+                    context
+                      "hostCmd with timeout"
+                      ( it
+                          "returns Right True"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" (Just (TimeoutMicros 2_000_000)))
+                              `shouldReturn` Right ExitSuccess
+                          )
+                      )
+                )
+              context
+                "commands take too long"
+                ( context
+                    "hostCmd with timeout"
+                    ( it
+                        "it returns an error"
+                        ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" (Just (TimeoutMicros 100_000)))
+                            `shouldReturn` Left (TimeoutMicros 100_000)
+                        )
+                    )
+                )
+          )
+        context
+          "default_timeout_seconds is Just 1.5 second "
+          ( do
+              let t = Just (TimeoutMicros 1_500_000)
+              context
+                "commands finish in time"
+                ( do
+                    context
+                      "cmd"
+                      (it "returns" (cmdWrapper t tf "sleep 1" `shouldReturn` ()))
+                    context
+                      "hostCmd without timeout"
+                      ( it
+                          "returns Right True"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" Nothing)
+                              `shouldReturn` Right ExitSuccess
+                          )
+                      )
+                    context
+                      "hostCmd with timeout"
+                      ( it
+                          "returns Right True"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 2" (Just (TimeoutMicros 3_000_000)))
+                              `shouldReturn` Right ExitSuccess
+                          )
+                      )
+                )
+              context
+                "commands take too long"
+                ( do
+                    context
+                      "cmd"
+                      (it "throws in error" (cmdWrapper t tf "sleep 2" `shouldThrow` (const True :: Selector B9Error)))
+                    context
+                      "hostCmd without timeout"
+                      ( it
+                          "returns Left"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 2" Nothing)
+                              `shouldReturn` Left (TimeoutMicros 1_500_000)
+                          )
+                      )
+                    context
+                      "hostCmd with timeout"
+                      ( it
+                          "returns Left"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" (Just (TimeoutMicros 100_000)))
+                              `shouldReturn` Left (TimeoutMicros 100_000)
+                          )
+                      )
+                )
+          )
+    )
+  context
+    "timeout_factor is Just 2"
+    ( do
+        let tf = Just 2
+        context
+          "default_timeout_seconds is Just .75 seconds "
+          ( do
+              let t = Just (TimeoutMicros 750_000)
+              context
+                "commands finish in time"
+                ( do
+                    context
+                      "cmd"
+                      (it "returns" (cmdWrapper t tf "sleep 1" `shouldReturn` ()))
+                    context
+                      "hostCmd without timeout"
+                      ( it
+                          "returns Right True"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" Nothing)
+                              `shouldReturn` Right ExitSuccess
+                          )
+                      )
+                    context
+                      "hostCmd with timeout"
+                      ( it
+                          "returns Right True"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 2" (Just (TimeoutMicros 1_500_000)))
+                              `shouldReturn` Right ExitSuccess
+                          )
+                      )
+                )
+              context
+                "commands take too long"
+                ( do
+                    context
+                      "cmd"
+                      (it "throws in error" (cmdWrapper t tf "sleep 2" `shouldThrow` (const True :: Selector B9Error)))
+                    context
+                      "hostCmd without timeout"
+                      ( it
+                          "returns Left"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 2" Nothing)
+                              `shouldReturn` Left (TimeoutMicros 1_500_000)
+                          )
+                      )
+                    context
+                      "hostCmd with timeout"
+                      ( it
+                          "returns Left"
+                          ( b9Wrapper t tf (hostCmdEither HostCommandNoStdin "sleep 1" (Just (TimeoutMicros 100_000)))
+                              `shouldReturn` Left (TimeoutMicros 200_000)
+                          )
+                      )
+                )
+          )
+    )
 
-cmdWrapper :: HasCallStack => Maybe Int -> String -> IO ()
-cmdWrapper timeoutSeconds cmdStr =
-  withTempBuildDirs $ \cfgOverride -> do
-    let t = TimeoutMicros . (* 1_000_000) <$> timeoutSeconds
-        effect = cmd cmdStr
-        cfg = overrideDefaultTimeout t cfgOverride
-    runB9ConfigActionWithOverrides
-      (runB9 effect)
-      cfg
+cmdWrapper :: HasCallStack => Maybe Timeout -> Maybe Int -> String -> IO ()
+cmdWrapper t tf = b9Wrapper t tf . cmd
+
+b9Wrapper :: HasCallStack => Maybe Timeout -> Maybe Int -> B9 a -> IO a
+b9Wrapper t tf effect =
+  withTempBuildDirs $ \cfgOverride ->
+    let cfg = overrideTimeoutFactor tf (overrideDefaultTimeout t cfgOverride)
+     in runB9ConfigActionWithOverrides (runB9 effect) cfg
 
 withTempBuildDirs :: HasCallStack => (B9ConfigOverride -> IO a) -> IO a
 withTempBuildDirs k =

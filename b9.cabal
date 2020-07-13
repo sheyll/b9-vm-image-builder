@@ -204,6 +204,7 @@ test-suite spec
   main-is:           Spec.hs
   autogen-modules:   Paths_b9
   other-modules:     B9.ArtifactGeneratorImplSpec
+                   , B9.B9ExecSpec
                    , B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec
                    , B9.Content.YamlObjectSpec

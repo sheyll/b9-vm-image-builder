@@ -1,5 +1,21 @@
+# B9 Backlog
 
-# Release 1.0.0 Back-Log
+## 1.2.0 
+
+* Add configuration options for __SystemdNspawn__:
+  * `setenv`: A comma seperated list of `key=value` pairs 
+    with environment variable assignments passed to the container
+  * `chdir`: An optional working directory to change to before
+    running the script in the container.
+  * `user`: An optional user to change to after entering the container.
+    The user must exist in the container image, e.g. in `/etc/passwd`.
+  * `hostname`: An optional hostname to use as the kernel hostname 
+    inside the container.
+
+
+# Release 1.0.0 Back-Log 
+
+**DEPRECATED most of this was not in 1.0.0**
 
 * TODO What should go into 1.0.0?
 

@@ -29,6 +29,7 @@ module B9.B9Config
     podmanConfigs,
     systemdNspawnConfigs,
     remoteRepos,
+    timeoutFactor,
     maxLocalSharedImageRevisionsK,
     maxLocalSharedImageRevisions,
     B9ConfigOverride (..),
@@ -47,6 +48,7 @@ module B9.B9Config
     overrideB9Config,
     overrideWorkingDirectory,
     overrideDefaultTimeout,
+    overrideTimeoutFactor,
     overrideVerbosity,
     overrideKeepBuildDirs,
     defaultB9ConfigFile,
@@ -136,7 +138,8 @@ data B9Config
         _dockerConfigs :: Maybe DockerConfig,
         _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
         _remoteRepos :: [RemoteRepo],
-        _defaultTimeout :: Maybe Timeout
+        _defaultTimeout :: Maybe Timeout,
+        _timeoutFactor :: Maybe Int
       }
   deriving (Show, Eq)
 
@@ -157,12 +160,13 @@ instance Semigroup B9Config where
         _dockerConfigs = getLast ((mappend `on` (Last . _dockerConfigs)) c c'),
         _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
         _remoteRepos = (mappend `on` _remoteRepos) c c',
-        _defaultTimeout = getLast $ on mappend (Last . _defaultTimeout) c c'
+        _defaultTimeout = getLast $ on mappend (Last . _defaultTimeout) c c',
+        _timeoutFactor = getLast $ on mappend (Last . _timeoutFactor) c c'
       }
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing Nothing Nothing [] (Just (TimeoutMicros (60 * 60 * 1_000_000)))
+  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing Nothing Nothing [] (Just (TimeoutMicros (60 * 60 * 1_000_000))) Nothing
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -273,6 +277,12 @@ overrideWorkingDirectory p = overrideB9Config (projectRoot ?~ p)
 -- @since 1.1.0
 overrideDefaultTimeout :: Maybe Timeout -> B9ConfigOverride -> B9ConfigOverride
 overrideDefaultTimeout = overrideB9Config . Lens.set defaultTimeout
+
+-- | Define the timeout factor for external commands.
+--
+-- @since 1.1.0
+overrideTimeoutFactor :: Maybe Int -> B9ConfigOverride -> B9ConfigOverride
+overrideTimeoutFactor = overrideB9Config . Lens.set timeoutFactor
 
 -- | Overwrite the 'verbosity' settings in the configuration with those given.
 overrideVerbosity :: LogLevel -> B9ConfigOverride -> B9ConfigOverride
@@ -410,7 +420,8 @@ defaultB9Config =
       _libVirtLXCConfigs = Just defaultLibVirtLXCConfig,
       _dockerConfigs = Just defaultDockerConfig,
       _remoteRepos = [],
-      _defaultTimeout = Just (TimeoutMicros (3_600_000_000))
+      _defaultTimeout = Just (TimeoutMicros (3_600_000_000)),
+      _timeoutFactor = Nothing
     }
 
 defaultRepositoryCache :: SystemPath
@@ -446,6 +457,9 @@ repositoryK = "repository"
 defaultTimeoutK :: String
 defaultTimeoutK = "default_timeout_seconds"
 
+timeoutFactorK :: String
+timeoutFactorK = "timeout_factor"
+
 cfgFileSection :: String
 cfgFileSection = "global"
 
@@ -472,8 +486,9 @@ b9ConfigToCPDocument c = do
   cpC <- foldr (>=>) return (dockerConfigToCPDocument <$> _dockerConfigs c) cpB
   cpD <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpC
   cpE <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpD
-  cpFinal <- setShowCP cpE cfgFileSection repositoryK (_repository c)
-  setShowCP cpFinal cfgFileSection defaultTimeoutK (_defaultTimeout c)
+  cpF <- setShowCP cpE cfgFileSection repositoryK (_repository c)
+  cpFinal <- setShowCP cpF cfgFileSection defaultTimeoutK (_defaultTimeout c)
+  setShowCP cpFinal cfgFileSection timeoutFactorK (_timeoutFactor c)
 
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
 readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
@@ -494,6 +509,7 @@ parseB9Config cp =
         <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
         <*> parseRemoteRepos cp
         <*> pure (either (const Nothing) Just (parseDefaultTimeoutConfig cp))
+        <*> pure (either (const Nothing) Just (getr timeoutFactorK))
 
 parseDefaultTimeoutConfig :: CPDocument -> Either CPError Timeout
 parseDefaultTimeoutConfig cp = do

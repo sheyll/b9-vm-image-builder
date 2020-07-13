@@ -3,6 +3,8 @@
 ## 1.1.0
 
 * Fix unintended deletion of images that are wrongly classified as obsolete.
+* Add a configuration parameter for guarding operations, for which 
+  no timeout values was specified: `default_timeout_seconds`.  
 * Introduce a configuration parameter to specify an optional **timeout factor**.
   Since the introduction of __SystemdNspawn__ support, most invokation of 
   external system commands, e.g. `mount`, are guarded by short timeouts.
@@ -12,15 +14,6 @@
   applied to the internal, hard-coded time values.
 * Change NIX expressions to use `haskellPackages`
   instead of `myHaskellPackages`.
-* Add configuration options for __SystemdNspawn__:
-  * `setenv`: A comma seperated list of `key=value` pairs 
-    with environment variable assignments passed to the container
-  * `chdir`: An optional working directory to change to before
-    running the script in the container.
-  * `user`: An optional user to change to after entering the container.
-    The user must exist in the container image, e.g. in `/etc/passwd`.
-  * `hostname`: An optional hostname to use as the kernel hostname 
-    inside the container.
 
 ## 1.0.1
 

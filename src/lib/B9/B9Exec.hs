@@ -35,6 +35,7 @@ import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List as CL
 import Data.Conduit.Process
 import Data.Functor ()
+import Data.Maybe
 import qualified Data.Text as Text
 import GHC.Stack
 import System.Exit
@@ -151,21 +152,28 @@ hostCmdEither ::
   -- | An optional 'Timeout'
   Maybe Timeout ->
   Eff e (Either Timeout ExitCode)
-hostCmdEither inputSource cmdStr timeout = do
+hostCmdEither inputSource cmdStr timeoutArg = do
   let tag = "[" ++ printHash cmdStr ++ "]"
   traceL $ "COMMAND " ++ tag ++ ": " ++ cmdStr
+  tf <- fromMaybe 1 . view timeoutFactor <$> getB9Config
+  timeout <-
+    fmap (TimeoutMicros . \(TimeoutMicros t) -> tf * t)
+      <$> maybe
+        (view defaultTimeout <$> getB9Config)
+        (return . Just)
+        timeoutArg
   control $ \runInIO ->
     do
       ExcIO.catch
-        (runInIO (go tag))
+        (runInIO (go timeout tag))
         ( \(e :: ExcIO.SomeException) -> do
             runInIO (errorL ("COMMAND " ++ tag ++ " interrupted: " ++ show e))
             runInIO (return (Right (ExitFailure 126) :: Either Timeout ExitCode))
         )
       >>= restoreM
   where
-    go :: String -> Eff e (Either Timeout ExitCode)
-    go tag = do
+    go :: Maybe Timeout -> String -> Eff e (Either Timeout ExitCode)
+    go timeout tag = do
       traceLC <- traceMsgProcessLogger tag
       errorLC <- errorMsgProcessLogger tag
       let timer t@(TimeoutMicros micros) = do
