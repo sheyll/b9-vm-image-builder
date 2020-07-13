@@ -106,11 +106,12 @@ mountLoopbackImages sudo e containerDirs = do
               </> printHash (imgPath, containerMountPoint)
       liftIO $ createDirectoryIfMissing True hostMountPoint
       hostCmd (sudo (printf "mount -o loop '%s' '%s'" imgPath hostMountPoint)) timeoutFastCmd
-      return 
-        (LoopbackMount {
-          loopbackHost = hostMountPoint, 
-          loopbackContainer = containerMountPoint
-         })
+      return
+        ( LoopbackMount
+            { loopbackHost = hostMountPoint,
+              loopbackContainer = containerMountPoint
+            }
+        )
 
 newtype ContainerRootImage
   = ContainerRootImage FilePath
@@ -211,7 +212,7 @@ execBuild sudo containerMounts sharedDirs bootScript dCfg = do
           sharedDirMountsRo = [(h, c) | SharedDirectoryRO h (MountPoint c) <- sharedDirs]
       extraArgs = maybe [] (: []) (_systemdNspawnExtraArgs dCfg)
       execOptions = ["/bin/sh", bootScriptContainerCommand bootScript]
-      timeout = (CommandTimeoutMicroSeconds . (* 1000000)) <$> _systemdNspawnMaxLifetimeSeconds dCfg
+      timeout = (TimeoutMicros . (* 1000000)) <$> _systemdNspawnMaxLifetimeSeconds dCfg
   traceL ("executing systemd-nspawn container build")
   case _systemdNspawnConsole dCfg of
     SystemdNspawnInteractive ->
@@ -219,11 +220,11 @@ execBuild sudo containerMounts sharedDirs bootScript dCfg = do
     _ ->
       hostCmd (sudo systemdCmd) timeout
 
-umountLoopbackImages :: 
-  forall e. 
-  (Member ExcB9 e, CommandIO e) => 
-  SudoPrepender -> 
-  ContainerMounts -> 
+umountLoopbackImages ::
+  forall e.
+  (Member ExcB9 e, CommandIO e) =>
+  SudoPrepender ->
+  ContainerMounts ->
   Eff e ()
 umountLoopbackImages sudo c = do
   case containerRootImage c of
@@ -237,10 +238,11 @@ umountLoopbackImages sudo c = do
       res <- hostCmd (sudo (printf "umount '%s'" (loopbackHost l))) timeoutFastCmd
       when (not res) (errorL ("failed to unmount: " ++ show l))
 
-removeContainerBuildRootDir :: 
-  forall e. (Member ExcB9 e, CommandIO e) => 
-  SudoPrepender -> 
-  ContainerBuildDirectories -> 
+removeContainerBuildRootDir ::
+  forall e.
+  (Member ExcB9 e, CommandIO e) =>
+  SudoPrepender ->
+  ContainerBuildDirectories ->
   Eff e ()
 removeContainerBuildRootDir sudo containerBuildDirs = do
   let target = containerBuildRoot containerBuildDirs
@@ -248,5 +250,5 @@ removeContainerBuildRootDir sudo containerBuildDirs = do
   res <- hostCmd (sudo (printf "rm -rf '%s'" target)) timeoutFastCmd
   when (not res) (errorL ("failed to remove: " ++ target))
 
-timeoutFastCmd :: Maybe CommandTimeout
-timeoutFastCmd = Just (CommandTimeoutMicroSeconds 10000000)
+timeoutFastCmd :: Maybe Timeout
+timeoutFastCmd = Just (TimeoutMicros 10000000)

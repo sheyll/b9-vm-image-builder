@@ -1,8 +1,11 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 -- |
 -- Static B9 configuration. Read, write and merge configurable properties.
 -- The properties are independent of specific build targets.
 module B9.B9Config
   ( B9Config (..),
+    Timeout (..),
     runB9ConfigReader,
     B9ConfigReader,
     getB9Config,
@@ -20,6 +23,7 @@ module B9.B9Config
     repositoryCache,
     repository,
     interactive,
+    defaultTimeout,
     libVirtLXCConfigs,
     dockerConfigs,
     podmanConfigs,
@@ -42,6 +46,7 @@ module B9.B9Config
     overrideDefaultB9ConfigPath,
     overrideB9Config,
     overrideWorkingDirectory,
+    overrideDefaultTimeout,
     overrideVerbosity,
     overrideKeepBuildDirs,
     defaultB9ConfigFile,
@@ -100,6 +105,13 @@ import System.FilePath ((<.>))
 import System.IO.B9Extras (SystemPath (..), ensureDir, resolve)
 import Text.Printf (printf)
 
+-- | A way to specify a time intervall for example for the timeouts
+-- of system commands.
+--
+-- @since 1.1.0
+newtype Timeout = TimeoutMicros Int
+  deriving (Show, Eq, Ord, Read)
+
 data LogLevel
   = LogTrace
   | LogDebug
@@ -123,7 +135,8 @@ data B9Config
         _podmanConfigs :: Maybe PodmanConfig,
         _dockerConfigs :: Maybe DockerConfig,
         _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
-        _remoteRepos :: [RemoteRepo]
+        _remoteRepos :: [RemoteRepo],
+        _defaultTimeout :: Maybe Timeout
       }
   deriving (Show, Eq)
 
@@ -143,12 +156,13 @@ instance Semigroup B9Config where
         _podmanConfigs = getLast ((mappend `on` (Last . _podmanConfigs)) c c'),
         _dockerConfigs = getLast ((mappend `on` (Last . _dockerConfigs)) c c'),
         _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
-        _remoteRepos = (mappend `on` _remoteRepos) c c'
+        _remoteRepos = (mappend `on` _remoteRepos) c c',
+        _defaultTimeout = getLast $ on mappend (Last . _defaultTimeout) c c'
       }
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing Nothing Nothing []
+  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing Nothing Nothing [] (Just (TimeoutMicros (60 * 60 * 1_000_000)))
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -253,6 +267,12 @@ overrideDefaultB9ConfigPath p = customDefaulB9ConfigPath ?~ p
 -- | Define the current working directory to be used when building.
 overrideWorkingDirectory :: FilePath -> B9ConfigOverride -> B9ConfigOverride
 overrideWorkingDirectory p = overrideB9Config (projectRoot ?~ p)
+
+-- | Define the default timeout for external commands.
+--
+-- @since 1.1.0
+overrideDefaultTimeout :: Maybe Timeout -> B9ConfigOverride -> B9ConfigOverride
+overrideDefaultTimeout = overrideB9Config . Lens.set defaultTimeout
 
 -- | Overwrite the 'verbosity' settings in the configuration with those given.
 overrideVerbosity :: LogLevel -> B9ConfigOverride -> B9ConfigOverride
@@ -389,7 +409,8 @@ defaultB9Config =
       _podmanConfigs = Just defaultPodmanConfig,
       _libVirtLXCConfigs = Just defaultLibVirtLXCConfig,
       _dockerConfigs = Just defaultDockerConfig,
-      _remoteRepos = []
+      _remoteRepos = [],
+      _defaultTimeout = Just (TimeoutMicros (3_600_000_000))
     }
 
 defaultRepositoryCache :: SystemPath
@@ -422,6 +443,9 @@ maxLocalSharedImageRevisionsK = "max_cached_shared_images"
 repositoryK :: String
 repositoryK = "repository"
 
+defaultTimeoutK :: String
+defaultTimeoutK = "default_timeout_seconds"
+
 cfgFileSection :: String
 cfgFileSection = "global"
 
@@ -447,8 +471,9 @@ b9ConfigToCPDocument c = do
   cpB <- foldr (>=>) return (podmanConfigToCPDocument <$> _podmanConfigs c) cpA
   cpC <- foldr (>=>) return (dockerConfigToCPDocument <$> _dockerConfigs c) cpB
   cpD <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpC
-  cpFinal <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpD
-  setShowCP cpFinal cfgFileSection repositoryK (_repository c)
+  cpE <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpD
+  cpFinal <- setShowCP cpE cfgFileSection repositoryK (_repository c)
+  setShowCP cpFinal cfgFileSection defaultTimeoutK (_defaultTimeout c)
 
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
 readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
@@ -468,3 +493,10 @@ parseB9Config cp =
         <*> pure (either (const Nothing) Just (parseDockerConfig cp))
         <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
         <*> parseRemoteRepos cp
+        <*> pure (either (const Nothing) Just (parseDefaultTimeoutConfig cp))
+
+parseDefaultTimeoutConfig :: CPDocument -> Either CPError Timeout
+parseDefaultTimeoutConfig cp = do
+  seconds <- readCP cp cfgFileSection defaultTimeoutK
+  let mu = seconds * 1_000_000
+  return (TimeoutMicros mu)

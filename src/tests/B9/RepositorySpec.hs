@@ -17,7 +17,6 @@ import B9.Repository
 import Data.Foldable (any)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Semigroup (Arg (..))
 import qualified Data.Set as Set
 import Test.Hspec
 import Test.QuickCheck

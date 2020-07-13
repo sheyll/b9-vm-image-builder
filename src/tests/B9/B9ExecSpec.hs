@@ -1,4 +1,5 @@
 {-# LANGUAGE NumericUnderscores #-}
+
 module B9.B9ExecSpec
   ( spec,
   )
@@ -9,6 +10,7 @@ import B9.Artifact.Readable
 import B9.Artifact.Readable.Interpreter (assemble)
 import B9.B9Config
 import B9.B9Error
+import B9.B9Exec
 import B9.B9Logging
 import B9.B9Monad
 import B9.BuildInfo
@@ -19,9 +21,9 @@ import B9.Vm
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
-import qualified Data.Set as Set
-import qualified Data.Map as Map
 import Data.Foldable
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import System.Directory
 import System.Environment
 import System.FilePath
@@ -30,21 +32,34 @@ import Test.Hspec
 import Text.Printf
 
 spec :: HasCallStack => Spec
-spec = 
+spec =
   context "varying_default_timeout_config" $ do
-    describe "one_second" $ do
+    describe "Nothing" $ do
+      describe
+        "cmd"
+        ( it
+            "does not crash if a command is stuck for more than one second"
+            ( cmdWrapper Nothing "sleep 1" `shouldReturn` ()
+            )
+        )
+    describe "Just one_second" $ do
       let timeout = 1
-      describe "cmd" $ 
-        it "crashes if a command is stuck for more than one second" $ do 
-          cmdWrapper (Just timeout) (printf "sleep %d" (1 + timeout))
-          
+      describe
+        ""
+        ( it
+            "crashes if a command is stuck for more than one second"
+            ( ( cmdWrapper (Just timeout) (printf "sleep %d" (1 + timeout))
+                  `shouldThrow` (const True :: Selector B9Error)
+              )
+            )
+        )
 
 cmdWrapper :: HasCallStack => Maybe Int -> String -> IO ()
 cmdWrapper timeoutSeconds cmdStr =
-  withTempBuildDirs $ \cfgOverride -> do 
-    let t = (CommandTimeoutMicroSeconds . (* 1_000_000)) <$> timeoutSeconds
-        effect = cmd cmdStr 
-        cfg =  timeoutSeconds 
+  withTempBuildDirs $ \cfgOverride -> do
+    let t = TimeoutMicros . (* 1_000_000) <$> timeoutSeconds
+        effect = cmd cmdStr
+        cfg = overrideDefaultTimeout t cfgOverride
     runB9ConfigActionWithOverrides
       (runB9 effect)
       cfg

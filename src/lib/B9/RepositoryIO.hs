@@ -26,7 +26,6 @@ where
 import B9.B9Config
 import B9.B9Error
 import B9.B9Exec
-import System.IO.B9Extras
 import B9.B9Logging
 import B9.DiskImages
 import B9.Repository
@@ -46,6 +45,7 @@ import qualified Data.Set as Set
 import GHC.Stack
 import System.Directory
 import System.FilePath
+import System.IO.B9Extras
 import System.IO.B9Extras (SystemPath, consult, ensureDir, resolve)
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
@@ -370,27 +370,29 @@ cleanOldSharedImageRevisionsFromCache sn = do
 -- | Clean all obsolete images in the local image cache.
 --
 -- @since 1.1.0
-cleanLocalRepoCache :: 
-    ('[RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
-    Eff e ()
+cleanLocalRepoCache ::
+  ('[RepoCacheReader, ExcB9] <:: e, Lifted IO e, CommandIO e) =>
+  Eff e ()
 cleanLocalRepoCache = do
   allCached <- allCachedSharedImages <$> getSharedImages
   maxRevConfig <- view maxLocalSharedImageRevisions <$> getConfig
-  let maxRev = maybe 0 (max 0) maxRevConfig 
-      byName = groupBySharedImageName allCached 
-      toKeep = 
-        fold 
-          (Map.map 
-            (keepNLatestSharedImages maxRev) 
-            byName)
-      toDelete = 
-        fold 
-          (Map.map 
-            (dropAllButNLatestSharedImages maxRev) 
-            byName)
+  let maxRev = maybe 0 (max 0) maxRevConfig
+      byName = groupBySharedImageName allCached
+      toKeep =
+        fold
+          ( Map.map
+              (keepNLatestSharedImages maxRev)
+              byName
+          )
+      toDelete =
+        fold
+          ( Map.map
+              (dropAllButNLatestSharedImages maxRev)
+              byName
+          )
   infoL "ALL CACHED IMAGES:"
   forM_ allCached (infoL . show)
-  infoL ("CACHED " ++ maybe "" (("("++) . (++ ") ") . show) maxRevConfig ++ "IMAGES TO KEEP:")
+  infoL ("CACHED " ++ maybe "" (("(" ++) . (++ ") ") . show) maxRevConfig ++ "IMAGES TO KEEP:")
   forM_ toKeep (infoL . show)
   infoL "CACHED IMAGES TO DELETE:"
   forM_ toDelete (infoL . show)
@@ -447,16 +449,15 @@ getSharedImagesCacheDir = do
   return (cacheDir </> sharedImagesRootDirectory)
 
 removeCachedSharedImages :: (CommandIO e, Member (Reader RepoCache) e) => Set SharedImage -> Eff e ()
-removeCachedSharedImages toDelete = 
-  do 
-     imgDir <- getSharedImagesCacheDir
-     let filesToDelete = Set.map (imgDir </>) (infoFiles <> imgFiles)
-         infoFiles = Set.map sharedImageFileName toDelete
-         imgFiles = Set.map (imageFileName . sharedImageImage) toDelete
-     if Set.null filesToDelete
-       then infoL "NO IMAGES TO DELETE"
-       else do
-         infoL "DELETING FILES:"
-         forM_ filesToDelete (infoL . show) 
-         liftIO (mapM_ removeIfExists filesToDelete)
-
+removeCachedSharedImages toDelete =
+  do
+    imgDir <- getSharedImagesCacheDir
+    let filesToDelete = Set.map (imgDir </>) (infoFiles <> imgFiles)
+        infoFiles = Set.map sharedImageFileName toDelete
+        imgFiles = Set.map (imageFileName . sharedImageImage) toDelete
+    if Set.null filesToDelete
+      then infoL "NO IMAGES TO DELETE"
+      else do
+        infoL "DELETING FILES:"
+        forM_ filesToDelete (infoL . show)
+        liftIO (mapM_ removeIfExists filesToDelete)

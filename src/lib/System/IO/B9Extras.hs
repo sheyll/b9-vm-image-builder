@@ -24,8 +24,8 @@ import Data.Word
   )
 import System.Directory
 import System.FilePath
-import System.Random (randomIO)
 import System.IO.Error
+import System.Random (randomIO)
 import Text.Printf
 import Text.Read (readEither)
 import Text.Show.Pretty (ppShow)
@@ -153,4 +153,3 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
     handleExists e
       | isDoesNotExistError e = return ()
       | otherwise = throwIO e
-

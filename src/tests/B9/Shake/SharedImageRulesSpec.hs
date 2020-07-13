@@ -15,40 +15,45 @@ import B9.Vm
 import Control.Exception
 import Control.Monad
 import qualified Data.Set as Set
+import Development.Shake as Shake
 import System.Directory
 import System.Environment
 import System.FilePath
 import System.IO.B9Extras
 import Test.Hspec
 import Text.Printf
-import Development.Shake as Shake
-
 
 testShakeBuild :: B9ConfigOverride -> IO ()
-testShakeBuild cfg = shake shakeOptions $ do 
+testShakeBuild cfg = shake shakeOptions $ do
   enableSharedImageRules cfg
-  customSharedImageAction (SharedImageName "test") $ 
-            liftIO 
-            (b9Build
-              cfg
-              (void (assemble
-                  (Artifact (IID "test-image") 
-                    (VmImages 
-                      [ 
-                      ImageTarget
-                        (Share "test" Raw KeepSize)
-                        (EmptyImage "test" Ext4 Raw (ImageSize 10 MB))
-                        NotMounted
-                      ] 
-                      NoVmScript)))))
+  customSharedImageAction (SharedImageName "test") $
+    liftIO
+      ( b9Build
+          cfg
+          ( void
+              ( assemble
+                  ( Artifact
+                      (IID "test-image")
+                      ( VmImages
+                          [ ImageTarget
+                              (Share "test" Raw KeepSize)
+                              (EmptyImage "test" Ext4 Raw (ImageSize 10 MB))
+                              NotMounted
+                          ]
+                          NoVmScript
+                      )
+                  )
+              )
+          )
+      )
   action (needSharedImage (SharedImageName "test"))
 
 spec :: HasCallStack => Spec
 spec = do
-  context "missing shared image" $ do   
+  context "missing shared image" $ do
     it "builds a missing image" $ do
       withTempBuildDirs $ \cfg -> do
-        testShakeBuild cfg 
+        testShakeBuild cfg
         actualImages <- b9Build cfg (allCachedSharedImages <$> getSharedImages)
         Set.size actualImages `shouldBe` 1
 
@@ -97,6 +102,3 @@ withTempBuildDirs k =
                   )
               )
        in k oCfg
-
-
-

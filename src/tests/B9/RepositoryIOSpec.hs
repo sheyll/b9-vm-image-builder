@@ -18,9 +18,9 @@ import B9.Vm
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad
-import qualified Data.Set as Set
-import qualified Data.Map as Map
 import Data.Foldable
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import System.Directory
 import System.Environment
 import System.FilePath
@@ -33,95 +33,103 @@ spec = do
   let cleanCacheAndLookupImages mkCfg buildAction =
         withTempBuildDirs $ \cfgWithRepo -> do
           let cfg = overrideB9Config mkCfg cfgWithRepo
-              buildCfg = overrideB9Config noCleanupCfg cfgWithRepo 
-          x <- buildAction buildCfg 
-          y <- allCachedSharedImages 
-                <$> b9Build cfg 
-                      (  cleanLocalRepoCache 
-                      *> infoL "SEARCHING FOR SHARED IMAGES" 
-                      *> getSharedImages
-                      )
+              buildCfg = overrideB9Config noCleanupCfg cfgWithRepo
+          x <- buildAction buildCfg
+          y <-
+            allCachedSharedImages
+              <$> b9Build
+                cfg
+                ( cleanLocalRepoCache
+                    *> infoL "SEARCHING FOR SHARED IMAGES"
+                    *> getSharedImages
+                )
           return (x, y)
       shareAndLookupTestImages mkCfg =
         withTempBuildDirs $ \cfgWithRepo -> do
           let cfg = overrideB9Config mkCfg cfgWithRepo
           putStrLn (ppShow cfg)
-          sharedImagesExpected <- shareTestImages cfg 
-          sharedImagesActual <- allCachedSharedImages 
-            <$> b9Build cfg getSharedImages
+          sharedImagesExpected <- shareTestImages cfg
+          sharedImagesActual <-
+            allCachedSharedImages
+              <$> b9Build cfg getSharedImages
           return (sharedImagesExpected, sharedImagesActual)
       testBuilds3X2 =
-        replicate 3 
-        [ ( t,
-            ImageTarget
-              (Share t Raw KeepSize)
-              (EmptyImage t Ext4 Raw (ImageSize 10 MB))
-              NotMounted
-          )
-          | t <- ["testImg0", "testImg1"]
-        ]
-      shareTestImages cfg = fmap concat <$>
-       forM testBuilds3X2 $ \testTargets ->
-        do
-          threadDelay 1200000
-          forM testTargets $ \(t, dest) ->
-            b9Build
-              cfg
-              ( assemble
-                  (Artifact (IID t) (VmImages [dest] NoVmScript))
-                  *> ( SharedImage (SharedImageName t)
-                         <$> (SharedImageDate <$> getBuildDate)
-                         <*> (SharedImageBuildId <$> getBuildId)
-                         <*> pure Raw
-                         <*> pure Ext4
-                     )
-              )
+        replicate
+          3
+          [ ( t,
+              ImageTarget
+                (Share t Raw KeepSize)
+                (EmptyImage t Ext4 Raw (ImageSize 10 MB))
+                NotMounted
+            )
+            | t <- ["testImg0", "testImg1"]
+          ]
+      shareTestImages cfg = fmap concat
+        <$> forM testBuilds3X2
+        $ \testTargets ->
+          do
+            threadDelay 1200000
+            forM testTargets $ \(t, dest) ->
+              b9Build
+                cfg
+                ( assemble
+                    (Artifact (IID t) (VmImages [dest] NoVmScript))
+                    *> ( SharedImage (SharedImageName t)
+                           <$> (SharedImageDate <$> getBuildDate)
+                           <*> (SharedImageBuildId <$> getBuildId)
+                           <*> pure Raw
+                           <*> pure Ext4
+                       )
+                )
   describe "shared_image_cache_cleanup" $ do
     context "_maxLocalSharedImageRevisions == Nothing" $ do
       context "no images in cache" $ do
         it "does nothing and returns no error" $
-          cleanCacheAndLookupImages noCleanupCfg (const (return ())) 
-          >>= (`shouldBe` mempty) . snd
+          cleanCacheAndLookupImages noCleanupCfg (const (return ()))
+            >>= (`shouldBe` mempty) . snd
       context "two images names with each three versions" $ do
         it "removes ALL images" $
-          cleanCacheAndLookupImages noCleanupCfg shareTestImages 
-          >>= (`shouldBe` mempty) . snd
+          cleanCacheAndLookupImages noCleanupCfg shareTestImages
+            >>= (`shouldBe` mempty) . snd
     context "_maxLocalSharedImageRevisions == Just 1" $ do
       context "no images in cache" $ do
         it "does nothing and returns no error" $
-          cleanCacheAndLookupImages 
-            (cleanupAfterBuildCfg 1) 
-            (const (return ())) 
+          cleanCacheAndLookupImages
+            (cleanupAfterBuildCfg 1)
+            (const (return ()))
             >>= (`shouldBe` mempty) . snd
       context "two images names with each three versions" $ do
         it "retains the latest image of each subset with the same name (somehow they must procreate, right? ;)" $ do
-          (generatedImages, actual) <- 
-            cleanCacheAndLookupImages 
-              (cleanupAfterBuildCfg 1) 
-              (\c -> shareTestImages c *> 
-                       (b9Build c (allCachedSharedImages <$> getSharedImages)))
-          let expected = 
-                fold 
-                  (Map.map 
-                    (Set.drop 2) 
-                    (groupBySharedImageName generatedImages))
-          actual `shouldBe` expected 
+          (generatedImages, actual) <-
+            cleanCacheAndLookupImages
+              (cleanupAfterBuildCfg 1)
+              ( \c ->
+                  shareTestImages c
+                    *> (b9Build c (allCachedSharedImages <$> getSharedImages))
+              )
+          let expected =
+                fold
+                  ( Map.map
+                      (Set.drop 2)
+                      (groupBySharedImageName generatedImages)
+                  )
+          actual `shouldBe` expected
   -- TODO describe "pull shared images" $ do
   describe "create & share images" $ do
     describe "Without autmatic cleanup"
       $ it "returns all shared images that were built"
       $ do
-        (sharedImagesExpected, sharedImagesActual) 
-          <- shareAndLookupTestImages noCleanupCfg
+        (sharedImagesExpected, sharedImagesActual) <-
+          shareAndLookupTestImages noCleanupCfg
         sharedImagesActual `shouldBe` Set.fromList sharedImagesExpected
     describe "with automatic cleanup after build enabled in _maxLocalSharedImageRevisions" $ do
       describe "with an invalid parameter _maxLocalSharedImageRevisions == Just 0" $ do
         it "does nothing and exits with error" $
-          shareAndLookupTestImages (cleanupAfterBuildCfg (-1)) 
+          shareAndLookupTestImages (cleanupAfterBuildCfg (-1))
             `shouldThrow` (const True :: Selector SomeException)
       describe "with an invalid parameter _maxLocalSharedImageRevisions == Just -1" $ do
         it "does nothing and exits with error" $
-          shareAndLookupTestImages (cleanupAfterBuildCfg 0) 
+          shareAndLookupTestImages (cleanupAfterBuildCfg 0)
             `shouldThrow` (const True :: Selector B9Error)
       describe "with a valid parameter _maxLocalSharedImageRevisions == Just 1" $ do
         it "returns the latest of all shared images that were built" $ do

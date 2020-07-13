@@ -1,5 +1,3 @@
-{-# LANGUAGE Strict #-}
-
 -- | This modules contains support for external command execution.
 --
 -- @since 0.5.65
@@ -8,7 +6,7 @@ module B9.B9Exec
     hostCmdEither,
     hostCmd,
     hostCmdStdIn,
-    CommandTimeout (..),
+    Timeout (..),
     HostCommandStdin (..),
   )
 where
@@ -23,6 +21,7 @@ import Control.Concurrent
 import Control.Concurrent.Async (Concurrently (..), race)
 import Control.Eff
 import qualified Control.Exception as ExcIO
+import Control.Lens (view)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control (control, embed_, restoreM)
 import qualified Data.ByteString as Strict
@@ -37,8 +36,8 @@ import qualified Data.Conduit.List as CL
 import Data.Conduit.Process
 import Data.Functor ()
 import qualified Data.Text as Text
-import System.Exit
 import GHC.Stack
+import System.Exit
 
 -- | Execute the given shell command.
 --
@@ -52,17 +51,19 @@ import GHC.Stack
 -- exit code.
 --
 -- @since 0.5.65
-cmd :: (HasCallStack, Member ExcB9 e, CommandIO e)
-  => String -> Eff e ()
+cmd ::
+  (HasCallStack, Member ExcB9 e, CommandIO e) =>
+  String ->
+  Eff e ()
 cmd str = do
+  t <- view defaultTimeout <$> getB9Config
   inheritStdIn <- isInteractive
-  ok <- 
-    if inheritStdIn then      
-     hostCmdEither HostCommandInheritStdin str Nothing
-    else
-     hostCmdEither HostCommandNoStdin str Nothing
+  ok <-
+    if inheritStdIn
+      then hostCmdEither HostCommandInheritStdin str t
+      else hostCmdEither HostCommandNoStdin str t
   case ok of
-    Right _ -> 
+    Right _ ->
       return ()
     Left e ->
       errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
@@ -79,8 +80,8 @@ hostCmd ::
   (CommandIO e, Member ExcB9 e) =>
   -- | The shell command to execute.
   String ->
-  -- | An optional 'CommandTimeout'
-  Maybe CommandTimeout ->
+  -- | An optional 'Timeout'
+  Maybe Timeout ->
   -- | An action that performs the shell command and returns 'True' on success
   Eff e Bool
 hostCmd cmdStr timeout = do
@@ -106,8 +107,8 @@ hostCmdStdIn ::
   HostCommandStdin ->
   -- | The shell command to execute.
   String ->
-  -- | An optional 'CommandTimeout'
-  Maybe CommandTimeout ->
+  -- | An optional 'Timeout'
+  Maybe Timeout ->
   -- | An action that performs the shell command and returns 'True' on success
   Eff e Bool
 hostCmdStdIn hostStdIn cmdStr timeout = do
@@ -147,9 +148,9 @@ hostCmdEither ::
   HostCommandStdin ->
   -- | The shell command to execute.
   String ->
-  -- | An optional 'CommandTimeout'
-  Maybe CommandTimeout ->
-  Eff e (Either CommandTimeout ExitCode)
+  -- | An optional 'Timeout'
+  Maybe Timeout ->
+  Eff e (Either Timeout ExitCode)
 hostCmdEither inputSource cmdStr timeout = do
   let tag = "[" ++ printHash cmdStr ++ "]"
   traceL $ "COMMAND " ++ tag ++ ": " ++ cmdStr
@@ -159,15 +160,15 @@ hostCmdEither inputSource cmdStr timeout = do
         (runInIO (go tag))
         ( \(e :: ExcIO.SomeException) -> do
             runInIO (errorL ("COMMAND " ++ tag ++ " interrupted: " ++ show e))
-            runInIO (return (Right (ExitFailure 126) :: Either CommandTimeout ExitCode))
+            runInIO (return (Right (ExitFailure 126) :: Either Timeout ExitCode))
         )
       >>= restoreM
   where
-    go :: String -> Eff e (Either CommandTimeout ExitCode)
+    go :: String -> Eff e (Either Timeout ExitCode)
     go tag = do
       traceLC <- traceMsgProcessLogger tag
       errorLC <- errorMsgProcessLogger tag
-      let timer t@(CommandTimeoutMicroSeconds micros) = do
+      let timer t@(TimeoutMicros micros) = do
             threadDelay micros
             return t
       (cph, runCmd) <- case inputSource of
@@ -204,9 +205,6 @@ hostCmdEither inputSource cmdStr timeout = do
         Right (ExitFailure ec) ->
           errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
       return e
-
-data CommandTimeout = CommandTimeoutMicroSeconds Int
-  deriving (Show)
 
 newtype ProcessLogger
   = MkProcessLogger
