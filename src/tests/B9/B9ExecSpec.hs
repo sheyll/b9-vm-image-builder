@@ -1,3 +1,4 @@
+{-# LANGUAGE NumericUnderscores #-}
 module B9.B9ExecSpec
   ( spec,
   )
@@ -35,14 +36,15 @@ spec =
       let timeout = 1
       describe "cmd" $ 
         it "crashes if a command is stuck for more than one second" $ do 
-          cmdWrapper (Just )
+          cmdWrapper (Just timeout) (printf "sleep %d" (1 + timeout))
           
 
 cmdWrapper :: HasCallStack => Maybe Int -> String -> IO ()
 cmdWrapper timeoutSeconds cmdStr =
   withTempBuildDirs $ \cfgOverride -> do 
     let t = (CommandTimeoutMicroSeconds . (* 1_000_000)) <$> timeoutSeconds
-        effect = cmd  
+        effect = cmd cmdStr 
+        cfg =  timeoutSeconds 
     runB9ConfigActionWithOverrides
       (runB9 effect)
       cfg
