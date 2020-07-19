@@ -376,18 +376,20 @@ default values.
 This example is the current default configuration:
 
     [global]
-    build_dir_root: Nothing
+    build_dir_root: /foo/binary
     keep_temp_dirs: False
-    log_file: Nothing
-    max_cached_shared_images: Just 2
-    repository: Nothing
-    repository_cache: Just (InB9UserDir "repo-cache")
+    log_file: /tmp/b9.log
+    max_cached_shared_images: 2
+    repository: tilia
+    repository_cache: InB9UserDir "repo-cache"
     unique_build_dirs: True
-    verbosity: Just LogInfo
+    verbosity: LogInfo
+    default_timeout_seconds: 3600
+    timeout_factor: 4
 
     [libvirt-lxc]
     connection: lxc:///
-    emulator_path: Just "/usr/lib/libvirt/libvirt_lxc"
+    emulator_path: /usr/lib/libvirt/libvirt_lxc
     guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
     guest_ram_size: RamSize 1 GB
     network: Nothing
@@ -395,19 +397,19 @@ This example is the current default configuration:
 
     [podman]
     guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
-    network: Nothing
+    network: default
 
     [systemdNspawn]
     console: read-only
-    executable: Nothing
-    extra_args: Nothing
+    executable: /nix/store/bl92gd78ygdwmc94lrqy20ych0lrfis5-systemd-243.7/bin/systemd-nspawn
+    extra_args: "--user foo"
     guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
-    max_lifetime_seconds: Just 14400
+    max_lifetime_seconds: 14400
     use_sudo: True
 
     [docker]
     guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
-    network: Nothing
+    network: default 
 
 
 ### The `[global]` Section
@@ -460,6 +462,16 @@ _TODO document this option._
 * Default: `Just LogInfo`
 
 _TODO document this option._
+
+#### `default_timeout_seconds` 
+
+* optional default timeout, applied to all external calls:
+
+
+#### `timeout_factor`
+
+* optional factor(natural numbers) that every timeout value is multiplied by,
+  for slower systems.
 
 ### The `[libvirt-lxc]` Section
 

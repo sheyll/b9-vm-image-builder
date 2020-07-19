@@ -34,6 +34,7 @@ import Data.Time.Format
 import GHC.Stack
 import System.Directory
 import System.FilePath
+import System.IO.B9Extras
 import Text.Printf
 
 -- | Build meta information.
@@ -76,9 +77,9 @@ withBuildInfo ::
   Eff (BuildInfoReader ': e) a ->
   Eff e a
 withBuildInfo action = withRootDir $ do
-  now <- lift getCurrentTime -- TODO reproducability: make configurable how the build-date is generated, e.g. by using always 1970/01/01-00:01
+  now <- lift getCurrentTime
   let buildDate = formatTime undefined "%F-%T" now -- TODO make configurable how the build date is formatted
-  buildId <- generateBuildId buildDate
+  buildId <- generateBuildId 
   withBuildDir buildId (runImpl buildId buildDate now)
   where
     withRootDir f = do
@@ -91,12 +92,13 @@ withBuildInfo action = withRootDir $ do
       localB9Config
         (projectRoot ?~ root)
         (addLocalStringBinding ("projectRoot", root) f)
-    generateBuildId buildDate = do
+    generateBuildId = do
       -- TODO generate a proper, reproducable build id!
       unqiueBuildDir <- _uniqueBuildDirs <$> getB9Config
       cfgHash <- hash . show <$> getB9Config
+      actionHash <- hash . show <$> randomUUID -- TODO use the actual hash of the input
       if unqiueBuildDir
-        then return (printf "%08X-%08X" cfgHash (hash buildDate))
+        then return (printf "%08X-%08X" cfgHash (hash actionHash))
         else return (printf "%08X" cfgHash)
     withBuildDir buildId f = do
       root <- _projectRoot <$> getB9Config

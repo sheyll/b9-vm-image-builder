@@ -5,8 +5,6 @@ TAGS
 *.log
 *.profile
 BUILD*
-dist
-dist-newstyle
 OUT
 *.orig
 /.cabal-sandbox/
@@ -25,3 +23,4 @@ result*
 *.qcow2
 *.tar
 *.vmdk
+dist*

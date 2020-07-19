@@ -2,6 +2,11 @@
 
 ## 1.2.0 
 
+
+* Allow lookup of every external executable via environment variable:
+  `B9_PATH_xxxxx` where `xxxxx` the name of the tool reduced to alpha-numeric 
+  characters, e.g. for `systemd-nspawn` this will be `B9_PATH_systemdnspawn`
+
 * Add configuration options for __SystemdNspawn__:
   * `setenv`: A comma seperated list of `key=value` pairs 
     with environment variable assignments passed to the container
@@ -12,6 +17,9 @@
   * `hostname`: An optional hostname to use as the kernel hostname 
     inside the container.
 
+## 1.1.2
+
+* Allow specifying the `systemd-nspawn` executable path by environment variable.
 
 # Release 1.0.0 Back-Log 
 

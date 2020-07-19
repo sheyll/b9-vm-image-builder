@@ -18,6 +18,7 @@ where
 
 import B9.B9Config
 import B9.B9Error
+import B9.BuildInfo
 import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Monad
@@ -75,6 +76,10 @@ type CommandIO e =
     MonadIO (Eff e),
     Member LoggerReader e,
     Member B9ConfigReader e
+  )
+
+type CommandLogIO e =
+  ( CommandIO e, Member BuildInfoReader e
   )
 
 traceL :: CommandIO e => String -> Eff e ()
