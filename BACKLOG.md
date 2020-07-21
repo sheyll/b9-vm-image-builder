@@ -1,7 +1,6 @@
 # B9 Backlog
 
-## 1.2.0 
-
+## +0.1.0
 
 * Allow lookup of every external executable via environment variable:
   `B9_PATH_xxxxx` where `xxxxx` the name of the tool reduced to alpha-numeric 
@@ -17,7 +16,7 @@
   * `hostname`: An optional hostname to use as the kernel hostname 
     inside the container.
 
-## 1.1.3
+## +0.0.1
 
 * When `unique_build_dirs` __is disabled:__ 
   Form the build-id by hashing a product of:
@@ -26,9 +25,26 @@
    * the `Environment`
    * the `B9Configuration`
 
-## 1.1.2
+## +0.1.0
 
-* Allow specifying the `systemd-nspawn` executable path by environment variable.
+* Add support for rendering **nix-expressions** 
+
+## +0.1.0
+
+* Add support for `.dhall` for `.b9` content
+
+## +0.1.0
+
+* Add TAR build-env
+* Add Tar VmScript alternative
+
+## +0.1.0
+
+* Add docker/oci image import/export
+
+## +0.1.0
+
+* Add CHROOT build-env
 
 # Release 1.0.0 Back-Log 
 

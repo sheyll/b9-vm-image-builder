@@ -1,5 +1,8 @@
 # Changelog for B9
 
+## 1.2.0
+
+* Allow specifying the `systemd-nspawn` executable path by environment variable.
 
 ## 1.1.1
 
