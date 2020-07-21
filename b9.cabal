@@ -69,6 +69,7 @@ common b9Deps
                    , hspec == 2.7.*
                    , hspec-expectations == 0.8.*
                    , lens == 4.*
+                   , neat-interpolation >= 0.3 && < 1
                    , optparse-applicative >= 0.13 && < 1
                    , shake >= 0.17.6 && < 0.19
                    , text == 1.2.*
