@@ -3,6 +3,7 @@
 -- @since 0.5.65
 module B9.B9Exec
   ( cmd,
+    cmdInteractive,
     hostCmdEither,
     hostCmd,
     hostCmdStdIn,
@@ -14,8 +15,7 @@ where
 import B9.B9Config
 import B9.B9Error
 import B9.B9Logging
--- import qualified Data.ByteString.Lazy as Lazy
-
+import B9.BuildInfo (BuildInfoReader, isInteractive)
 import qualified Conduit as CL
 import Control.Concurrent
 import Control.Concurrent.Async (Concurrently (..), race)
@@ -51,6 +51,32 @@ import System.Exit
 -- If the command exists with non-zero exit code, the current process exists with the same
 -- exit code.
 --
+-- @since 2.0.0
+cmdInteractive ::
+  (HasCallStack, Member ExcB9 e, Member BuildInfoReader e, CommandIO e) =>
+  String ->
+  Eff e ()
+cmdInteractive str = do
+  t <- view defaultTimeout <$> getB9Config
+  inheritStdIn <- isInteractive
+  ok <-
+    if inheritStdIn
+      then hostCmdEither HostCommandInheritStdin str t
+      else hostCmdEither HostCommandNoStdin str t
+  case ok of
+    Right _ ->
+      return ()
+    Left e ->
+      errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
+
+-- | Execute the given shell command.
+--
+-- The command and the output is either logged to the logfile with 'traceL' or 'errorL' or
+-- written to stdout.
+--
+-- If the command exists with non-zero exit code, the current process exists with the same
+-- exit code.
+--
 -- @since 0.5.65
 cmd ::
   (HasCallStack, Member ExcB9 e, CommandIO e) =>
@@ -58,11 +84,7 @@ cmd ::
   Eff e ()
 cmd str = do
   t <- view defaultTimeout <$> getB9Config
-  inheritStdIn <- isInteractive
-  ok <-
-    if inheritStdIn
-      then hostCmdEither HostCommandInheritStdin str t
-      else hostCmdEither HostCommandNoStdin str t
+  ok <- hostCmdEither HostCommandNoStdin str t
   case ok of
     Right _ ->
       return ()

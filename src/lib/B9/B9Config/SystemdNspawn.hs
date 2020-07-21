@@ -84,7 +84,7 @@ instance Read SystemdNspawnConsole where
         return SystemdNspawnPassive
       +++ do
         Ident "pipe" <- lexP
-        return SystemdNspawnReadOnly
+        return SystemdNspawnPipe
 
 makeLenses ''SystemdNspawnConfig
 

@@ -75,6 +75,7 @@ import Data.List as X
 import Data.Maybe as X
 import Data.Monoid as X
 import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Version as X
 import Paths_b9 (version)
 import System.Exit as X
@@ -160,8 +161,8 @@ runPull mName =
 runRun :: SharedImageName -> [String] -> B9ConfigAction String
 runRun (SharedImageName name) cmdAndArgs =
   localB9Config
-    ((keepTempDirs .~ False) . (interactive .~ True))
-    (runB9 (buildArtifacts runCmdAndArgs))
+    ((keepTempDirs .~ False) . (verbosity .~ Just LogTrace))
+    (runB9Interactive (buildArtifacts runCmdAndArgs))
   where
     runCmdAndArgs =
       Artifact
@@ -245,8 +246,8 @@ runAddRepo repo = do
   modifyPermanentConfig
     ( Endo
         ( remoteRepos
-            %~ ( mappend [repo']
-                   . filter ((== remoteRepoRepoId repo') . remoteRepoRepoId)
+            %~ ( mappend (Set.singleton repo')
+                   . Set.filter ((== remoteRepoRepoId repo') . remoteRepoRepoId)
                )
         )
     )

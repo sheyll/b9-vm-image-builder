@@ -12,7 +12,7 @@ where
 
 import Data.ConfigFile.B9Extras
 import Data.Data
-import Data.List (isSuffixOf)
+import Data.List (isSuffixOf, sort)
 import Test.QuickCheck (Positive(..), Arbitrary(arbitrary), listOf1)
 import B9.QCUtil (smaller, arbitraryFilePath, arbitraryLetter)
 
@@ -26,7 +26,7 @@ data RemoteRepo
       SshPrivKey
       SshRemoteHost
       SshRemoteUser
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Typeable, Data, Eq, Ord)
 
 instance Arbitrary RemoteRepo where 
   arbitrary = RemoteRepo <$>
@@ -41,13 +41,13 @@ remoteRepoRepoId :: RemoteRepo -> String
 remoteRepoRepoId (RemoteRepo repoId _ _ _ _) = repoId
 
 newtype SshPrivKey = SshPrivKey FilePath
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Typeable, Data, Eq, Ord)
 
 instance Arbitrary SshPrivKey where 
   arbitrary = SshPrivKey <$> arbitraryFilePath
 
 newtype SshRemoteHost = SshRemoteHost (String, Int)
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Typeable, Data, Eq, Ord)
 
 instance Arbitrary SshRemoteHost where 
   arbitrary = do 
@@ -56,7 +56,7 @@ instance Arbitrary SshRemoteHost where
     pure (SshRemoteHost (h,p))
 
 newtype SshRemoteUser = SshRemoteUser String
-  deriving (Read, Show, Typeable, Data, Eq)
+  deriving (Read, Show, Typeable, Data, Eq, Ord)
 
 instance Arbitrary SshRemoteUser where 
   arbitrary = SshRemoteUser <$> smaller (listOf1 arbitraryLetter)
@@ -79,7 +79,7 @@ remoteRepoToCPDocument repo cpIn = cpWithRepo
 -- | Load a repository from a configuration file that has been written by
 -- 'writeRepositoryToB9Config'.
 parseRemoteRepos :: CPDocument -> Either CPError [RemoteRepo]
-parseRemoteRepos cp = traverse parseRepoSection repoSections
+parseRemoteRepos cp = sort <$> traverse parseRepoSection repoSections
   where
     repoSections = filter (repoSectionSuffix `isSuffixOf`) (sectionsCP cp)
     parseRepoSection section = parseResult

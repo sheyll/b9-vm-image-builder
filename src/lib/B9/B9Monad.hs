@@ -1,5 +1,6 @@
 module B9.B9Monad
   ( runB9,
+    runB9Interactive,
     B9,
     B9Eff,
     IsB9,
@@ -53,7 +54,21 @@ type IsB9 e = (HasCallStack, Lifted IO e, CommandIO e, B9Eff <:: e)
 --
 -- @since 0.5.65
 runB9 :: HasCallStack => B9 a -> B9ConfigAction a
-runB9 action = do
+runB9 = runB9Full False
+
+-- | Execute a 'B9' effect like 'runB9' but run 
+-- external commands, such as `systemd-nspawn`, 
+-- /interactively/.
+--
+-- When run /interactively/, the stdin/stdout of 
+-- certain commands is inherited from the main process.
+--
+-- @since 2.0.0
+runB9Interactive :: HasCallStack => B9 a -> B9ConfigAction a
+runB9Interactive = runB9Full True
+
+runB9Full :: HasCallStack => Bool -> B9 a -> B9ConfigAction a
+runB9Full interactive action = do
   cfg <- getB9Config
   env <- askEnvironment
   lift
@@ -62,8 +77,11 @@ runB9 action = do
         . runEnvironmentReader env
         . runB9ConfigReader cfg
         . withLogger
-        . withBuildInfo
+        . withBuildInfo interactive
         . withRemoteRepos
         . withSelectedRemoteRepo
         $ action
     )
+
+    
+    

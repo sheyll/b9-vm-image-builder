@@ -1,6 +1,22 @@
 # Changelog for B9
 
-## 1.1.2
+## 2.0.0
+
+### Breaking Changes
+
+* Move the `interactive` flag from the `B9Config` to the `BuildInfo`
+  * `isInteractive` now requires the `BuildInfoReader` effect 
+  * Add the `runB9Interactive` function, that can by used to 
+    make the `bsIsInteractive` field in `BuildInfo` `True`
+  * Add the `cmdInteractive` function, that executes a command 
+    with inherited stdin/stdout if `runB9Interactive` was called.
+  * Remove the interactivity functionality from the `cmd` function   
+
+### Minor Changes
+
+* Fix bug in the parsing of `console` key in the `systemd-nspawn` 
+  configuration section: When a user specifies `console: pipe` 
+  this effects will be the same as if `console: read-only` was specified.
 
 * Fix bug where the timeout factor configuration option given in a 
   configuration file is ignored.

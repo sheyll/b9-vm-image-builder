@@ -64,7 +64,7 @@ withRemoteRepos f = do
   repoCache <-
     lift
       (initRepoCache (fromMaybe defaultRepositoryCache (_repositoryCache cfg)))
-  remoteRepos' <- mapM (initRemoteRepo repoCache) (_remoteRepos cfg)
+  remoteRepos' <- Set.fromList <$> mapM (initRemoteRepo repoCache) (toList (_remoteRepos cfg))
   let setRemoteRepos = remoteRepos .~ remoteRepos'
   localB9Config setRemoteRepos (runReader repoCache f)
 
@@ -123,7 +123,7 @@ repoSearch ::
 repoSearch subDir glob = (:) <$> localMatches <*> remoteRepoMatches
   where
     remoteRepoMatches =
-      getRemoteRepos >>= mapM remoteRepoSearch
+      getRemoteRepos >>= mapM remoteRepoSearch . toList
     localMatches :: Eff e (Repository, [FilePath])
     localMatches = do
       cache <- getRepoCache
@@ -295,8 +295,8 @@ pullLatestImage ::
 pullLatestImage name@(SharedImageName dbgName) = do
   repos <- getSelectedRepos
   let repoPredicate Cache = False
-      repoPredicate (Remote repoId) = repoId `elem` repoIds
-      repoIds = map remoteRepoRepoId repos
+      repoPredicate (Remote repoId) = repoId `Set.member` repoIds
+      repoIds = Set.map remoteRepoRepoId repos
       hasName sharedImage = name == sharedImageName sharedImage
   candidates <-
     filterRepoImagesMap repoPredicate hasName <$> getSharedImages
@@ -434,11 +434,11 @@ pushToSelectedRepo i = do
     pushToRepo (fromJust r) cachedInfoFile repoInfoFile
 
 -- | Return either all remote repos or just the single selected repo.
-getSelectedRepos :: '[B9ConfigReader, SelectedRemoteRepoReader] <:: e => Eff e [RemoteRepo]
+getSelectedRepos :: '[B9ConfigReader, SelectedRemoteRepoReader] <:: e => Eff e (Set RemoteRepo)
 getSelectedRepos = do
   allRepos <- getRemoteRepos
   MkSelectedRemoteRepo selectedRepo <- getSelectedRemoteRepo
-  let repos = maybe allRepos return selectedRepo -- 'Maybe' a repo
+  let repos = maybe allRepos Set.singleton selectedRepo -- 'Maybe' a repo
   return repos
 
 -- | Return the path to the sub directory in the cache that contains files of

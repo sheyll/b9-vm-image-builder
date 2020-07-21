@@ -13,7 +13,6 @@ module B9.B9Config
     getLogVerbosity,
     getProjectRoot,
     getRemoteRepos,
-    isInteractive,
     B9ConfigWriter,
     verbosity,
     logFile,
@@ -22,7 +21,6 @@ module B9.B9Config
     uniqueBuildDirs,
     repositoryCache,
     repository,
-    interactive,
     defaultTimeout,
     libVirtLXCConfigs,
     dockerConfigs,
@@ -100,6 +98,8 @@ import Data.List (inits)
 import Data.Maybe (fromMaybe)
 import Data.Monoid
 import Data.Semigroup as Semigroup hiding (Last (..))
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Version
 import GHC.Stack
 import qualified Paths_b9 as My
@@ -120,7 +120,7 @@ newtype Timeout = TimeoutMicros Int
 instance Arbitrary Timeout where
   arbitrary = do 
     QuickCheck.Positive t <- arbitrary 
-    pure (TimeoutMicros t)
+    pure (TimeoutMicros (t * 1_000_000))
 
 data LogLevel
   = LogTrace
@@ -142,13 +142,12 @@ data B9Config
         _uniqueBuildDirs :: Bool,
         _repositoryCache :: Maybe SystemPath,
         _repository :: Maybe String,
-        _interactive :: Bool,
         _maxLocalSharedImageRevisions :: Maybe Int,
         _systemdNspawnConfigs :: Maybe SystemdNspawnConfig,
         _podmanConfigs :: Maybe PodmanConfig,
         _dockerConfigs :: Maybe DockerConfig,
         _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
-        _remoteRepos :: [RemoteRepo],
+        _remoteRepos :: Set RemoteRepo,
         _defaultTimeout :: Maybe Timeout,
         _timeoutFactor :: Maybe Int
       }
@@ -164,15 +163,14 @@ instance Arbitrary B9Config where
       <*> smaller arbitrary 
       <*> (QuickCheck.elements [Nothing, Just (InTempDir "xxx")])
       <*> smaller arbitrary 
-      <*> smaller arbitrary 
-      <*> smaller arbitrary 
+      <*> smaller (fmap QuickCheck.getPositive <$> arbitrary)
       <*> smaller arbitrary 
       <*> pure Nothing
       <*> pure Nothing
       <*> smaller arbitrary 
       <*> smaller arbitrary 
       <*> smaller arbitrary 
-      <*> smaller arbitrary 
+      <*> (fmap QuickCheck.getPositive <$> smaller arbitrary)
 
 instance Semigroup B9Config where
   c <> c' =
@@ -184,7 +182,6 @@ instance Semigroup B9Config where
         _uniqueBuildDirs = getAll ((mappend `on` (All . _uniqueBuildDirs)) c c'),
         _repositoryCache = getLast $ on mappend (Last . _repositoryCache) c c',
         _repository = getLast ((mappend `on` (Last . _repository)) c c'),
-        _interactive = getAny ((mappend `on` (Any . _interactive)) c c'),
         _maxLocalSharedImageRevisions = getLast ((mappend `on` (Last . _maxLocalSharedImageRevisions)) c c'),
         _systemdNspawnConfigs = getLast ((mappend `on` (Last . _systemdNspawnConfigs)) c c'),
         _podmanConfigs = getLast ((mappend `on` (Last . _podmanConfigs)) c c'),
@@ -197,7 +194,7 @@ instance Semigroup B9Config where
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing False Nothing Nothing Nothing Nothing Nothing [] (Just (TimeoutMicros (60 * 60 * 1_000_000))) Nothing
+  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing Nothing Nothing Nothing Nothing Nothing mempty (Just (TimeoutMicros (60 * 60 * 1_000_000))) Nothing
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -232,17 +229,10 @@ localB9Config = local
 getConfig :: Member B9ConfigReader e => Eff e B9Config
 getConfig = getB9Config
 
--- | Ask whether @stdin@ of the @B9@ process should be redirected to the
--- external commands executed during the build.
---
--- @since 0.5.65
-isInteractive :: Member B9ConfigReader e => Eff e Bool
-isInteractive = _interactive <$> getB9Config
-
 -- | Ask for the 'RemoteRepo's.
 --
 -- @since 0.5.65
-getRemoteRepos :: Member B9ConfigReader e => Eff e [RemoteRepo]
+getRemoteRepos :: Member B9ConfigReader e => Eff e (Set RemoteRepo)
 getRemoteRepos = _remoteRepos <$> getB9Config
 
 -- | Ask for the 'LogLevel'.
@@ -444,13 +434,12 @@ defaultB9Config =
       _uniqueBuildDirs = True,
       _repository = Nothing,
       _repositoryCache = Just defaultRepositoryCache,
-      _interactive = False,
       _maxLocalSharedImageRevisions = Just 2,
       _systemdNspawnConfigs = Just defaultSystemdNspawnConfig,
       _podmanConfigs = Just defaultPodmanConfig,
       _libVirtLXCConfigs = Just defaultLibVirtLXCConfig,
       _dockerConfigs = Just defaultDockerConfig,
-      _remoteRepos = [],
+      _remoteRepos = mempty,
       _defaultTimeout = Just (TimeoutMicros (3_600_000_000)),
       _timeoutFactor = Nothing
     }
@@ -516,10 +505,15 @@ b9ConfigToCPDocument c = do
   cpB <- foldr (>=>) return (podmanConfigToCPDocument <$> _podmanConfigs c) cpA
   cpC <- foldr (>=>) return (dockerConfigToCPDocument <$> _dockerConfigs c) cpB
   cpD <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpC
-  cpE <- foldr (>=>) return (remoteRepoToCPDocument <$> _remoteRepos c) cpD
-  cpF <- setShowCP cpE cfgFileSection repositoryK (_repository c)
-  cpFinal <- setShowCP cpF cfgFileSection defaultTimeoutK (_defaultTimeout c)
-  setShowCP cpFinal cfgFileSection timeoutFactorK (_timeoutFactor c)
+  cpE <- foldr (>=>) return ( remoteRepoToCPDocument <$> Set.toList (_remoteRepos c)) cpD
+  cpF <- setShowCP cpE cfgFileSection repositoryK (_repository c)  
+  cpFinal <- maybe (pure cpF) (setShowCP cpF cfgFileSection defaultTimeoutK) 
+              ( case _defaultTimeout c of 
+                    Just (TimeoutMicros t) ->
+                      Just (t `div` 1_000_000)
+                    Nothing -> Nothing
+              )
+  maybe (pure cpFinal) (setShowCP cpFinal cfgFileSection timeoutFactorK) (_timeoutFactor c)
 
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
 readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
@@ -528,17 +522,20 @@ parseB9Config :: HasCallStack => CPDocument -> Either CPError B9Config
 parseB9Config cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
       getr = readCP cp cfgFileSection
-   in B9Config <$> getr verbosityK <*> getr logFileK <*> getr projectRootK <*> getr keepTempDirsK
+   in B9Config 
+        <$> getr verbosityK 
+        <*> getr logFileK 
+        <*> getr projectRootK 
+        <*> getr keepTempDirsK
         <*> getr uniqueBuildDirsK
         <*> getr repositoryCacheK
         <*> getr repositoryK
-        <*> pure False
         <*> pure (either (const Nothing) id (getr maxLocalSharedImageRevisionsK))
         <*> pure (either (const Nothing) Just (parseSystemdNspawnConfig cp))
         <*> pure (either (const Nothing) Just (parsePodmanConfig cp))
         <*> pure (either (const Nothing) Just (parseDockerConfig cp))
         <*> pure (either (const Nothing) Just (parseLibVirtLXCConfig cp))
-        <*> parseRemoteRepos cp
+        <*> (Set.fromList <$> parseRemoteRepos cp)
         <*> pure (either (const Nothing) Just (parseDefaultTimeoutConfig cp))
         <*> pure (either (const Nothing) Just (getr timeoutFactorK))
 

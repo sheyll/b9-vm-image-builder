@@ -10,6 +10,7 @@ module B9.BuildInfo
     getBuildDir,
     withBuildInfo,
     BuildInfoReader,
+    isInteractive,
   )
 where
 
@@ -45,7 +46,8 @@ data BuildInfo
       { bsBuildId :: String,
         bsBuildDate :: String,
         bsBuildDir :: FilePath,
-        bsStartTime :: UTCTime
+        bsStartTime :: UTCTime,
+        bsIsInteractive :: Bool
       }
   deriving (Eq, Show)
 
@@ -74,9 +76,10 @@ withBuildInfo ::
     Member LoggerReader e,
     HasCallStack
   ) =>
+  Bool ->
   Eff (BuildInfoReader ': e) a ->
   Eff e a
-withBuildInfo action = withRootDir $ do
+withBuildInfo interactive action = withRootDir $ do
   now <- lift getCurrentTime
   let buildDate = formatTime undefined "%F-%T" now -- TODO make configurable how the build date is formatted
   buildId <- generateBuildId 
@@ -117,7 +120,7 @@ withBuildInfo action = withRootDir $ do
           when (_uniqueBuildDirs cfg && not (_keepTempDirs cfg)) $
             removeDirectoryRecursive buildDir
     runImpl buildId buildDate startTime buildDir =
-      let ctx = BuildInfo buildId buildDate buildDir startTime
+      let ctx = BuildInfo buildId buildDate buildDir startTime interactive
        in runReader ctx wrappedAction
       where
         wrappedAction = do
@@ -140,3 +143,10 @@ getBuildDate = bsBuildDate <$> ask
 
 getBuildDir :: Member BuildInfoReader e => Eff e FilePath
 getBuildDir = bsBuildDir <$> ask
+
+-- | Ask whether @stdin@ of the @B9@ process should be redirected to the
+-- external commands executed during the build.
+--
+-- @since 2.0.0
+isInteractive :: Member BuildInfoReader e => Eff e Bool
+isInteractive = bsIsInteractive <$> ask

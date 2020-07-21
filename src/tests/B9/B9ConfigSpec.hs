@@ -19,18 +19,8 @@ import Test.Hspec(Spec, it, HasCallStack)
 import Test.QuickCheck (property, (===))
 import Text.Printf
 import Data.ConfigFile.B9Extras
-  ( CPDocument,
-    CPError,
-    CPGet,
-    CPOptionSpec,
-    CPReadException (..),
-    addSectionCP,
-    emptyCP,
-    mergeCP,
-    readCP,
-    readCPDocument,
-    setShowCP,
-    toStringCP,
+  ( 
+    CPError
   )
 
 spec :: HasCallStack => Spec

@@ -148,10 +148,11 @@ localRepoDir ::
 localRepoDir (RepoCache cacheDir) = cacheDir </> "local-repo"
 
 -- | Select the first 'RemoteRepo' with a given @repoId@.
-lookupRemoteRepo :: [RemoteRepo] -> String -> Maybe RemoteRepo
-lookupRemoteRepo repos repoId = lookup repoId repoIdRepoPairs
+lookupRemoteRepo :: Set RemoteRepo -> String -> Maybe RemoteRepo
+lookupRemoteRepo repos repoId = Map.lookup repoId repoIdRepoPairs
   where
-    repoIdRepoPairs = map (\r@(RemoteRepo rid _ _ _ _) -> (rid, r)) repos
+    repoIdRepoPairs = 
+      Map.fromList (map (\r@(RemoteRepo rid _ _ _ _) -> (rid, r)) (toList repos))
 
 -- | A 'Map' that maps 'Repository's to the 'SharedImage's they hold.
 --

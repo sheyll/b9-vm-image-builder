@@ -78,9 +78,9 @@ successMarkerCmd scriptDirGuest =
 successMarkerFile :: [Char]
 successMarkerFile = "SUCCESS"
 
-execute :: (Member ExcB9 e, CommandIO e, Member B9ConfigReader e) => Context -> Eff e Bool
+execute :: (Member ExcB9 e, CommandIO e, Member BuildInfoReader e, Member B9ConfigReader e) => Context -> Eff e Bool
 execute (Context scriptDirHost _uuid domainFile cfg) = do
-  cmd $ printf "%s create '%s' --console --autodestroy" virshCommand domainFile
+  cmdInteractive $ printf "%s create '%s' --console --autodestroy" virshCommand domainFile
   -- cmd $ printf "%s console %U" virsh uuid
   liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
   where

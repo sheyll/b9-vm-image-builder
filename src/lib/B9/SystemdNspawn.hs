@@ -163,7 +163,7 @@ data BootScript
   deriving (Show)
 
 execBuild ::
-  (Member ExcB9 e, CommandIO e) =>
+  (Member ExcB9 e, Member BuildInfoReader e, CommandIO e) =>
   SudoPrepender ->
   ContainerMounts ->
   [SharedDirectory] ->
@@ -214,10 +214,18 @@ execBuild sudo containerMounts sharedDirs bootScript dCfg = do
       execOptions = ["/bin/sh", bootScriptContainerCommand bootScript]
       timeout = (TimeoutMicros . (* 1000000)) <$> _systemdNspawnMaxLifetimeSeconds dCfg
   traceL ("executing systemd-nspawn container build")
-  case _systemdNspawnConsole dCfg of
-    SystemdNspawnInteractive ->
+  interactiveAction <- isInteractive
+  let 
+    runInteractively =
+      case _systemdNspawnConsole dCfg of
+        SystemdNspawnInteractive ->
+          True
+        _ ->
+          interactiveAction
+  if runInteractively 
+    then
       hostCmdStdIn HostCommandInheritStdin (sudo systemdCmd) Nothing
-    _ ->
+    else  
       hostCmd (sudo systemdCmd) timeout
 
 umountLoopbackImages ::
