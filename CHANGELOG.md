@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+* Specify upper version bounds for all project dependencies
 * Move the `interactive` flag from the `B9Config` to the `BuildInfo`
   * `isInteractive` now requires the `BuildInfoReader` effect 
   * Add the `runB9Interactive` function, that can by used to 
@@ -17,7 +18,6 @@
 * Fix bug in the parsing of `console` key in the `systemd-nspawn` 
   configuration section: When a user specifies `console: pipe` 
   this effects will be the same as if `console: read-only` was specified.
-
 * Fix bug where the timeout factor configuration option given in a 
   configuration file is ignored.
 
