@@ -1,8 +1,9 @@
 # Changelog for B9
 
-## 1.2.0
+## 1.1.2
 
-* Allow specifying the `systemd-nspawn` executable path by environment variable.
+* Fix bug where the timeout factor configuration option given in a 
+  configuration file is ignored.
 
 ## 1.1.1
 

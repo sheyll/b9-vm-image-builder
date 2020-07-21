@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                b9
-version:             1.2.0
+version:             1.1.2
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -201,6 +201,7 @@ test-suite spec
   main-is:           Spec.hs
   autogen-modules:   Paths_b9
   other-modules:     B9.ArtifactGeneratorImplSpec
+                   , B9.B9ConfigSpec
                    , B9.B9ExecSpec
                    , B9.Content.ErlTermsSpec
                    , B9.Content.ErlangPropListSpec

@@ -2,6 +2,10 @@
 
 ## +0.1.0
 
+* Allow specifying the `systemd-nspawn` executable path by environment variable.
+
+## +0.1.0
+
 * Allow lookup of every external executable via environment variable:
   `B9_PATH_xxxxx` where `xxxxx` the name of the tool reduced to alpha-numeric 
   characters, e.g. for `systemd-nspawn` this will be `B9_PATH_systemdnspawn`

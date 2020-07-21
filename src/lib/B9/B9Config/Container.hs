@@ -6,6 +6,8 @@ module B9.B9Config.Container
 where
 
 import Data.ConfigFile.B9Extras
+import Test.QuickCheck (Arbitrary(arbitrary))
+import qualified Test.QuickCheck as QuickCheck
 
 -- | Available capabilities for Linux containers. This maps directly to the
 -- capabilities defined in 'man 7 capabilities'.
@@ -48,7 +50,12 @@ data ContainerCapability
   | CAP_SYS_TTY_CONFIG
   | CAP_SYSLOG
   | CAP_WAKE_ALARM
-  deriving (Read, Show, Eq)
+  deriving (Read, Show, Eq, Enum, Bounded)
+
+instance Arbitrary ContainerCapability where 
+  arbitrary = 
+    QuickCheck.elements 
+      (enumFromTo minBound maxBound :: [ContainerCapability])
 
 containerCapabilitiesK :: String
 containerCapabilitiesK = "guest_capabilities"

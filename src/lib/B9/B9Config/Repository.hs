@@ -13,6 +13,8 @@ where
 import Data.ConfigFile.B9Extras
 import Data.Data
 import Data.List (isSuffixOf)
+import Test.QuickCheck (Positive(..), Arbitrary(arbitrary), listOf1)
+import B9.QCUtil (smaller, arbitraryFilePath, arbitraryLetter)
 
 newtype RepoCache = RepoCache FilePath
   deriving (Read, Show, Typeable, Data)
@@ -26,17 +28,38 @@ data RemoteRepo
       SshRemoteUser
   deriving (Read, Show, Typeable, Data, Eq)
 
+instance Arbitrary RemoteRepo where 
+  arbitrary = RemoteRepo <$>
+    smaller (listOf1 arbitraryLetter) <*>
+    smaller arbitraryFilePath <*> 
+    smaller arbitrary <*>
+    smaller arbitrary <*>
+    smaller arbitrary 
+
+
 remoteRepoRepoId :: RemoteRepo -> String
 remoteRepoRepoId (RemoteRepo repoId _ _ _ _) = repoId
 
 newtype SshPrivKey = SshPrivKey FilePath
   deriving (Read, Show, Typeable, Data, Eq)
 
+instance Arbitrary SshPrivKey where 
+  arbitrary = SshPrivKey <$> arbitraryFilePath
+
 newtype SshRemoteHost = SshRemoteHost (String, Int)
   deriving (Read, Show, Typeable, Data, Eq)
 
+instance Arbitrary SshRemoteHost where 
+  arbitrary = do 
+    h <- smaller (listOf1 arbitraryLetter)
+    Positive p <- arbitrary
+    pure (SshRemoteHost (h,p))
+
 newtype SshRemoteUser = SshRemoteUser String
   deriving (Read, Show, Typeable, Data, Eq)
+
+instance Arbitrary SshRemoteUser where 
+  arbitrary = SshRemoteUser <$> smaller (listOf1 arbitraryLetter)
 
 -- | Persist a repo to a configuration file.
 remoteRepoToCPDocument :: RemoteRepo -> CPDocument -> Either CPError CPDocument

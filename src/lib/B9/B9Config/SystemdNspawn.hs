@@ -19,6 +19,9 @@ import Data.ConfigFile.B9Extras
 import qualified Text.ParserCombinators.ReadP as ReadP
 import qualified Text.ParserCombinators.ReadPrec as ReadPrec
 import Text.Read
+import Test.QuickCheck (Arbitrary(arbitrary))
+import qualified Test.QuickCheck as QuickCheck
+import B9.QCUtil (smaller, arbitraryFilePath)
 
 -- TODO document b9 config file
 data SystemdNspawnConfig
@@ -32,6 +35,16 @@ data SystemdNspawnConfig
       }
   deriving (Read, Show, Eq)
 
+instance Arbitrary SystemdNspawnConfig where 
+  arbitrary = 
+    SystemdNspawnConfig 
+    <$> smaller arbitrary 
+    <*> smaller arbitrary 
+    <*> smaller arbitrary
+    <*> smaller arbitrary
+    <*> smaller (QuickCheck.oneof [pure Nothing, Just <$> arbitraryFilePath])
+    <*> smaller arbitrary
+
 data SystemdNspawnConsole
   = SystemdNspawnInteractive
   | SystemdNspawnReadOnly
@@ -39,6 +52,15 @@ data SystemdNspawnConsole
   | SystemdNspawnPipe
   deriving (Eq)
 
+instance Arbitrary SystemdNspawnConsole where
+  arbitrary = 
+    QuickCheck.elements 
+      [ SystemdNspawnInteractive
+      , SystemdNspawnReadOnly
+      , SystemdNspawnPassive
+      , SystemdNspawnPipe
+      ]
+          
 instance Show SystemdNspawnConsole where
   show x = case x of
     SystemdNspawnInteractive -> "interactive"

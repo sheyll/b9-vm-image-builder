@@ -73,6 +73,7 @@ import B9.B9Config.Podman as X
 import B9.B9Config.Repository as X
 import B9.B9Config.SystemdNspawn as X
 import B9.Environment
+import B9.QCUtil (smaller)
 import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Eff.Writer.Lazy
@@ -106,6 +107,8 @@ import System.Directory
 import System.FilePath ((<.>))
 import System.IO.B9Extras (SystemPath (..), ensureDir, resolve)
 import Text.Printf (printf)
+import Test.QuickCheck (Arbitrary(arbitrary))
+import qualified Test.QuickCheck as QuickCheck
 
 -- | A way to specify a time intervall for example for the timeouts
 -- of system commands.
@@ -114,6 +117,11 @@ import Text.Printf (printf)
 newtype Timeout = TimeoutMicros Int
   deriving (Show, Eq, Ord, Read)
 
+instance Arbitrary Timeout where
+  arbitrary = do 
+    QuickCheck.Positive t <- arbitrary 
+    pure (TimeoutMicros t)
+
 data LogLevel
   = LogTrace
   | LogDebug
@@ -121,6 +129,9 @@ data LogLevel
   | LogError
   | LogNothing
   deriving (Eq, Show, Ord, Read)
+
+instance Arbitrary LogLevel where 
+  arbitrary = QuickCheck.elements [LogTrace, LogDebug, LogInfo, LogError, LogNothing]
 
 data B9Config
   = B9Config
@@ -142,6 +153,26 @@ data B9Config
         _timeoutFactor :: Maybe Int
       }
   deriving (Show, Eq)
+
+instance Arbitrary B9Config where 
+  arbitrary = 
+    B9Config 
+      <$> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> (QuickCheck.elements [Nothing, Just (InTempDir "xxx")])
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> pure Nothing
+      <*> pure Nothing
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
+      <*> smaller arbitrary 
 
 instance Semigroup B9Config where
   c <> c' =

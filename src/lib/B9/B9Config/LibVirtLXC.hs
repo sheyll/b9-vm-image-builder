@@ -16,6 +16,8 @@ import Control.Monad.IO.Class
 import Data.ConfigFile.B9Extras
 import Data.Maybe (fromMaybe)
 import System.Environment.Blank as SysIO
+import Test.QuickCheck (Arbitrary(arbitrary),oneof,listOf1)
+import B9.QCUtil (smaller, arbitraryFilePath, arbitraryLetter)
 
 data LibVirtLXCConfig
   = LibVirtLXCConfig
@@ -27,6 +29,16 @@ data LibVirtLXCConfig
         guestRamSize :: RamSize
       }
   deriving (Read, Show, Eq)
+
+instance Arbitrary LibVirtLXCConfig where
+  arbitrary = 
+    LibVirtLXCConfig <$>
+    smaller arbitrary <*>
+    smaller (oneof [pure Nothing, Just <$> arbitraryFilePath]) <*>
+    smaller arbitraryFilePath <*>
+    smaller (oneof [pure Nothing, Just <$> listOf1 arbitraryLetter]) <*>
+    smaller arbitrary <*>
+    pure (RamSize 4 GB)
 
 makeLenses ''LibVirtLXCConfig
 
