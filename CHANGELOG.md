@@ -1,16 +1,12 @@
 # Changelog for B9
 
+
 ## 1.1.1
 
-* When `unique_build_dirs` 
-  * __is enabled:__ use a truely random build-id, such that no matter how much
+* When `unique_build_dirs` __is enabled:__ 
+    use a truely random build-id, such that no matter how much
     or how little time passes between two consequitive builds, the `BUILD_ID`s 
     will always differ with the same probability.
-  * __is disabled:__ form the build-id from:
-     * the command line parameters
-     * the project directory
-     * the `Environment`
-     * the `B9Configuration`
 
 ## 1.1.0
 

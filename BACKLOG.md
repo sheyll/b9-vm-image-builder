@@ -17,6 +17,15 @@
   * `hostname`: An optional hostname to use as the kernel hostname 
     inside the container.
 
+## 1.1.3
+
+* When `unique_build_dirs` __is disabled:__ 
+  Form the build-id by hashing a product of:
+   * the command line parameters
+   * the project directory
+   * the `Environment`
+   * the `B9Configuration`
+
 ## 1.1.2
 
 * Allow specifying the `systemd-nspawn` executable path by environment variable.
