@@ -50,6 +50,7 @@ module B9.B9Config
     overrideTimeoutFactor,
     overrideVerbosity,
     overrideKeepBuildDirs,
+    overrideExt4Attributes,
     defaultB9ConfigFile,
     defaultRepositoryCache,
     defaultB9Config,
@@ -316,6 +317,11 @@ overrideVerbosity = overrideB9Config . Lens.set verbosity . Just
 -- | Overwrite the 'keepTempDirs' flag in the configuration with those given.
 overrideKeepBuildDirs :: Bool -> B9ConfigOverride -> B9ConfigOverride
 overrideKeepBuildDirs = overrideB9Config . Lens.set keepTempDirs
+
+-- | Overwrite the 'ext4Attributes'
+overrideExt4Attributes :: [String] -> B9ConfigOverride -> B9ConfigOverride
+overrideExt4Attributes = overrideB9Config . Lens.set ext4Attributes
+
 
 -- | A monad that gives access to the (transient) 'B9Config' to be used at
 -- _runtime_ with 'getB9Config' or 'localB9Config', and that allows

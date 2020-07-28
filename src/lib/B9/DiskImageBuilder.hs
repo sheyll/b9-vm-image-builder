@@ -31,7 +31,7 @@ import qualified B9.PartitionTable as P
 import B9.RepositoryIO
 import Control.Eff
 import qualified Control.Exception as IO
-import Control.Lens ((^.))
+import Control.Lens (view, (^.))
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Generics.Aliases
@@ -300,9 +300,11 @@ createEmptyImage fsLabel fsType imgType imgSize dest@(Image _ imgType' fsType')
         dbgL (printf "Creating file system %s" (show imgFs))
         cmd (printf "%s -F -L '%s' -O 64bit -q '%s'" fsCmd fsLabel imgFile)
       (Raw, Ext4) -> do
+        ext4Options <- view ext4Attributes <$> getB9Config
+        let fsOptions = "-O " <> intercalate "," ext4Options
         let fsCmd = "mkfs.ext4"
         dbgL (printf "Creating file system %s" (show imgFs))
-        cmd (printf "%s -F -L '%s' -O ^64bit -q '%s'" fsCmd fsLabel imgFile)
+        cmd (printf "%s -F -L '%s' %s -q '%s'" fsCmd fsLabel fsOptions imgFile)
       (imageType, fs) ->
         error
           ( printf

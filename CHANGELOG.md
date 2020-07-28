@@ -2,7 +2,9 @@
 
 ## 2.1.0
 
-* Add a new config parameter for the default Ext4 file system attributes.
+* Add a new config parameter for the default Ext4 file system attributes. 
+* `Ext4_64` is deprecated from now on, please use `Ext4` and configure the
+  `ext4_attributes: ["64bit"]`.
 
 ## 2.0.0
 
