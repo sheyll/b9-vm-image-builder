@@ -535,6 +535,9 @@ b9ConfigToCPDocument c = do
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
 readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
 
+defaultExt4Attributes :: [String]
+defaultExt4Attributes = ["^64bit"]
+
 parseB9Config :: HasCallStack => CPDocument -> Either CPError B9Config
 parseB9Config cp =
   let getr :: (CPGet a) => CPOptionSpec -> Either CPError a
@@ -555,7 +558,7 @@ parseB9Config cp =
         <*> (Set.fromList <$> parseRemoteRepos cp)
         <*> pure (either (const Nothing) Just (parseDefaultTimeoutConfig cp))
         <*> pure (either (const Nothing) Just (getr timeoutFactorK))
-        <*> pure (either (const []) id (getr ext4AttributesK)) -- TODO: Differentiate (NoOption _, _) from others
+        <*> pure (either (const defaultExt4Attributes) id (getr ext4AttributesK)) -- TODO: Differentiate (NoOption _, _) from others
 
 parseDefaultTimeoutConfig :: CPDocument -> Either CPError Timeout
 parseDefaultTimeoutConfig cp = do

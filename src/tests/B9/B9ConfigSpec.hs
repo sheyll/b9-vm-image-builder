@@ -81,7 +81,7 @@ spec = do
           default_timeout_seconds: 10
         |] 
       cfg <- withConfig exampleConfigNoExt4 getB9Config
-      _ext4Attributes cfg `shouldBe` []
+      _ext4Attributes cfg `shouldBe` ["^64bit"]
       
 
 renderThenParseB9Config :: B9Config -> Either CPError B9Config
