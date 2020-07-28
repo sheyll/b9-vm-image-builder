@@ -48,6 +48,7 @@ spec = do
           verbosity: Just LogNothing
           timeout_factor: 3
           default_timeout_seconds: 10
+          ext4_attributes: ["attr1", "attr2"]
         |] 
     it "correctly parses verbosity" $ do
       cfg <- withConfig exampleConfig getB9Config
@@ -60,6 +61,28 @@ spec = do
     it "correctly parses default_timeout" $ do
       cfg <- withConfig exampleConfig getB9Config
       _defaultTimeout cfg `shouldBe` Just (TimeoutMicros 10_000_000)
+
+    it "correctly parses ext4_attributes" $ do 
+      cfg <- withConfig exampleConfig getB9Config
+      _ext4Attributes cfg `shouldBe` ["attr1", "attr2"]
+      
+    it "correctly parses missing ext4_attributes" $ do 
+      let exampleConfigNoExt4 = Text.unpack [Neat.text|
+          [global]
+          build_dir_root: Nothing
+          keep_temp_dirs: False
+          log_file: Nothing
+          max_cached_shared_images: Just 2
+          repository: Nothing
+          repository_cache: Just (InB9UserDir "repo-cache")
+          unique_build_dirs: True
+          verbosity: Just LogNothing
+          timeout_factor: 3
+          default_timeout_seconds: 10
+        |] 
+      cfg <- withConfig exampleConfigNoExt4 getB9Config
+      _ext4Attributes cfg `shouldBe` []
+      
 
 renderThenParseB9Config :: B9Config -> Either CPError B9Config
 renderThenParseB9Config = b9ConfigToCPDocument >=> parseB9Config

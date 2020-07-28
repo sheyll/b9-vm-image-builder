@@ -592,4 +592,8 @@ _TODO document this option._
 
 _TODO document this option._
 
+#### `ext4_attributes`
 
+* Default: `[]`
+
+List of options for `mkfs.ext4 -O`.

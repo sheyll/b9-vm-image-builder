@@ -1,5 +1,9 @@
 # Changelog for B9
 
+## 2.1.0
+
+* Add a new config parameter for the default Ext4 file system attributes.
+
 ## 2.0.0
 
 ### Breaking Changes

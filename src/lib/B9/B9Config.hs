@@ -16,6 +16,7 @@ module B9.B9Config
     B9ConfigWriter,
     verbosity,
     logFile,
+    ext4Attributes,
     projectRoot,
     keepTempDirs,
     uniqueBuildDirs,
@@ -149,7 +150,8 @@ data B9Config
         _libVirtLXCConfigs :: Maybe LibVirtLXCConfig,
         _remoteRepos :: Set RemoteRepo,
         _defaultTimeout :: Maybe Timeout,
-        _timeoutFactor :: Maybe Int
+        _timeoutFactor :: Maybe Int,
+        _ext4Attributes :: [String]
       }
   deriving (Show, Eq)
 
@@ -171,6 +173,7 @@ instance Arbitrary B9Config where
       <*> smaller arbitrary 
       <*> smaller arbitrary 
       <*> (fmap QuickCheck.getPositive <$> smaller arbitrary)
+      <*> smaller (QuickCheck.sublistOf ["opt1","opt2","opt3"])
 
 instance Semigroup B9Config where
   c <> c' =
@@ -189,12 +192,13 @@ instance Semigroup B9Config where
         _libVirtLXCConfigs = getLast ((mappend `on` (Last . _libVirtLXCConfigs)) c c'),
         _remoteRepos = (mappend `on` _remoteRepos) c c',
         _defaultTimeout = getLast $ on mappend (Last . _defaultTimeout) c c',
-        _timeoutFactor = getLast $ on mappend (Last . _timeoutFactor) c c'
+        _timeoutFactor = getLast $ on mappend (Last . _timeoutFactor) c c',
+        _ext4Attributes = on mappend _ext4Attributes c c'
       }
 
 instance Monoid B9Config where
   mappend = (<>)
-  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing Nothing Nothing Nothing Nothing Nothing mempty (Just (TimeoutMicros (60 * 60 * 1_000_000))) Nothing
+  mempty = B9Config Nothing Nothing Nothing False True Nothing Nothing Nothing Nothing Nothing Nothing Nothing mempty (Just (TimeoutMicros (60 * 60 * 1_000_000))) Nothing []
 
 -- | Reader for 'B9Config'. See 'getB9Config' and 'localB9Config'.
 --
@@ -441,7 +445,8 @@ defaultB9Config =
       _dockerConfigs = Just defaultDockerConfig,
       _remoteRepos = mempty,
       _defaultTimeout = Just (TimeoutMicros (3_600_000_000)),
-      _timeoutFactor = Nothing
+      _timeoutFactor = Nothing,
+      _ext4Attributes = []
     }
 
 defaultRepositoryCache :: SystemPath
@@ -483,6 +488,10 @@ timeoutFactorK = "timeout_factor"
 cfgFileSection :: String
 cfgFileSection = "global"
 
+ext4AttributesK :: String
+ext4AttributesK = "ext4_attributes"
+
+
 -- | Parse a 'B9Config', modify it, and merge it back to the given 'CPDocument'.
 modifyCPDocument :: CPDocument -> Endo B9Config -> Either CPError CPDocument
 modifyCPDocument cp f = do
@@ -507,13 +516,15 @@ b9ConfigToCPDocument c = do
   cpD <- foldr (>=>) return (libVirtLXCConfigToCPDocument <$> _libVirtLXCConfigs c) cpC
   cpE <- foldr (>=>) return ( remoteRepoToCPDocument <$> Set.toList (_remoteRepos c)) cpD
   cpF <- setShowCP cpE cfgFileSection repositoryK (_repository c)  
-  cpFinal <- maybe (pure cpF) (setShowCP cpF cfgFileSection defaultTimeoutK) 
+  cpG <- maybe (pure cpF) (setShowCP cpF cfgFileSection defaultTimeoutK) 
               ( case _defaultTimeout c of 
                     Just (TimeoutMicros t) ->
                       Just (t `div` 1_000_000)
                     Nothing -> Nothing
               )
-  maybe (pure cpFinal) (setShowCP cpFinal cfgFileSection timeoutFactorK) (_timeoutFactor c)
+  cpH <- maybe (pure cpG) (setShowCP cpG cfgFileSection timeoutFactorK) (_timeoutFactor c)
+  cpFinal <- setShowCP cpH cfgFileSection ext4AttributesK (_ext4Attributes c)
+  return cpFinal
 
 readB9Config :: (HasCallStack, MonadIO m) => Maybe SystemPath -> m CPDocument
 readB9Config cfgFile = readCPDocument (fromMaybe defaultB9ConfigFile cfgFile)
@@ -538,6 +549,7 @@ parseB9Config cp =
         <*> (Set.fromList <$> parseRemoteRepos cp)
         <*> pure (either (const Nothing) Just (parseDefaultTimeoutConfig cp))
         <*> pure (either (const Nothing) Just (getr timeoutFactorK))
+        <*> pure (either (const []) id (getr ext4AttributesK)) -- TODO: Differentiate (NoOption _, _) from others
 
 parseDefaultTimeoutConfig :: CPDocument -> Either CPError Timeout
 parseDefaultTimeoutConfig cp = do
