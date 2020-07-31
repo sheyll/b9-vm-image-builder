@@ -250,10 +250,10 @@ ptyCmdInteractive ::
   [String] ->
   Eff e ()
 ptyCmdInteractive timeoutArg progName progArgs  = do 
-   isInATerm <- liftIO (queryTerminal (Fd 0))
-   let cmdStr = progName ++ unwords progArgs
-   if isInATerm then cmdInteractive cmdStr
-   else do            
+--   isInATerm <- liftIO (queryTerminal (Fd 0))
+    let cmdStr = unwords (progName: progArgs)
+--   if isInATerm then cmdInteractive cmdStr
+--   else do            
     let tag = "[" ++ printHash cmdStr ++ "]"
     traceL $ "PTY-COMMAND " ++ tag ++ ": " ++ cmdStr
     tf <- fromMaybe 1 . view timeoutFactor <$> getB9Config
