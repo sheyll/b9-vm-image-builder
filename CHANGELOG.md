@@ -1,10 +1,14 @@
 # Changelog for B9
 
-## 2.1.1
+## 3.0.0
 
 * Run the libvirt_lxc builder in an artificial pseudo-terminal if b9c is run
   outside a terminal.
 * Relax version constraints for `hashable` dependency
+
+### Breaking Changes
+
+* Change B9 configuration API: Change the field to a list
 
 ## 2.1.0
 

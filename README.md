@@ -4,18 +4,20 @@
 
 **NOTE: The feature list is not completely implemented yet!**
 
-**When version 2 is released of b9, all features listed here can be expected to work.**
+**NOTE: Sometimes the [CHANGELOG.md](./CHANGELOG.md) contains additional documentation!**
 
 ## Quick-Start
 
 ### Mission Statement
 
-**B9** is an executable and a Haskell library, that consumes a Haskell term describing 
-the generation of VM-Images. 
+**B9** is an executable and a Haskell library, that consumes a Haskell 
+term describing the generation of VM-Images. 
 
-A few core `data` types form an EDSL, and  `B9` contains functions to `read` and `show` then. 
+A few core `data` types form an EDSL, and describe virtual machine images.
+`B9` contains a library as well as an executable to interpret the EDSL.
 
-Such a term can then be stored into a **text file** and is interpreted by a **command line invokation**. 
+Such a term can then be stored into a **text file** and is interpreted
+by a **command line invokation**. 
 
 ### Installation 
 
@@ -23,12 +25,8 @@ Such a term can then be stored into a **text file** and is interpreted by a **co
 
 * As **command line utility** in current directory:
 
-      $ nix-build -E 'import (fetchTarball https://github.com/sheyll/b9-vm-image-builder/archive/1.0.0.tar.gz) {}'
+      $ nix-env -f https://github.com/sheyll/b9-vm-image-builder/archive/3.0.0.tar.gz -iA b9c
     
-  Now the executable `b9c` is in `./result/bin/`:
-
-      $ result/bin/b9c      
-
 ### Runtime dependencies
 
 To be able to use B9 install:
