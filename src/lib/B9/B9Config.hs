@@ -78,7 +78,7 @@ import Control.Eff
 import Control.Eff.Reader.Lazy
 import Control.Eff.Writer.Lazy
 import Control.Exception
-import Control.Lens as Lens ((<>~), (?~), (^.), makeLenses, set)
+import Control.Lens as Lens ((<>~), (?~), (.~), (^.), makeLenses, set)
 import Control.Monad ((>=>), filterM)
 import Control.Monad.IO.Class
 import Data.ConfigFile.B9Extras
@@ -97,7 +97,7 @@ import Data.ConfigFile.B9Extras
   )
 import Data.Function (on)
 import Data.List (inits)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (listToMaybe, fromMaybe)
 import Data.Monoid
 import Data.Semigroup as Semigroup hiding (Last (..))
 import Data.Set (Set)
@@ -256,7 +256,7 @@ getProjectRoot = fromMaybe "." . _projectRoot <$> ask
 -- This is useful, i.e. when dealing with command line parameters.
 data B9ConfigOverride
   = B9ConfigOverride
-      { _customB9ConfigPath :: Maybe SystemPath,
+      { _customB9ConfigPath :: [SystemPath],
         _customB9Config :: Endo B9Config,
         _customEnvironment :: Environment,
         _customDefaulB9ConfigPath :: Maybe SystemPath
@@ -274,7 +274,7 @@ instance Show B9ConfigOverride where
 -- | An empty default 'B9ConfigOverride' value, that will neither apply any
 -- additional 'B9Config' nor change the path of the configuration file.
 noB9ConfigOverride :: B9ConfigOverride
-noB9ConfigOverride = B9ConfigOverride Nothing mempty mempty Nothing
+noB9ConfigOverride = B9ConfigOverride [] mempty mempty Nothing
 
 makeLenses ''B9Config
 
@@ -282,7 +282,7 @@ makeLenses ''B9ConfigOverride
 
 -- | Convenience utility to override the B9 configuration file path.
 overrideB9ConfigPath :: SystemPath -> B9ConfigOverride -> B9ConfigOverride
-overrideB9ConfigPath p = customB9ConfigPath ?~ p
+overrideB9ConfigPath p = customB9ConfigPath .~ [p]
 
 -- | Modify the runtime configuration.
 overrideB9Config :: (B9Config -> B9Config) -> B9ConfigOverride -> B9ConfigOverride
@@ -365,10 +365,12 @@ runB9ConfigActionWithOverrides act cfg = do
         (\v' -> name <.> showVersion (makeVersion v')) <$> reverse (inits myVer)
       (pathsToTry, pathsToCreate) =
         case configuredCfgPaths of
-          Just configuredCfgPath ->
-            (appendVersionVariations configuredCfgPath, Nothing)
-          Nothing ->
+          [] ->
             (appendVersionVariations defCfgPath, Just defCfgPath)
+          [configuredCfgPath] ->
+            (appendVersionVariations configuredCfgPath, Nothing)
+          (_:_:_) ->
+            (configuredCfgPaths, Nothing)
   existingCfgPaths <- filterM doesFileExist pathsToTry
   cfgPath <-
     case existingCfgPaths of
@@ -399,7 +401,7 @@ runB9ConfigActionWithOverrides act cfg = do
           (return Nothing)
           (either (error . printf "Internal configuration update error! Please report this: %s\n" . show) (return . Just))
           cpExtErr
-      mapM_ (writeB9CPDocument (cfg ^. customB9ConfigPath)) cpExt
+      mapM_ (writeB9CPDocument (listToMaybe (cfg ^. customB9ConfigPath))) cpExt
       return res
 
 -- | Run a 'B9ConfigAction' using 'noB9ConfigOverride'.

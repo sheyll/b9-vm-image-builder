@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                b9
-version:             2.1.0
+version:             2.1.1
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -162,6 +162,7 @@ library
   other-modules:   Paths_b9
   autogen-modules: Paths_b9
   build-depends:     ConfigFile >= 1.1.4 && < 1.2
+
                    , async == 2.*
                    , base64-bytestring == 1.*
                    , bifunctors == 5.*
@@ -170,11 +171,12 @@ library
                    , conduit-extra == 1.*
                    , exceptions == 0.10.*
                    , free >= 4.12 && < 6
-                   , hashable == 1.2.*
+                   , hashable >= 1.2 && < 2
                    , monad-control == 1.*
                    , mtl == 2.*
                    , parallel >= 3.2 && < 4
                    , parsec >= 3.1 && < 4
+                   , posix-pty >= 0.2 && < 1
                    , pretty >= 1.1 && < 2
                    , pretty-show >= 1.6 && < 2
                    , random >= 1.1 && < 2
@@ -183,7 +185,7 @@ library
                    , template >= 0.2 && < 1
                    , time >= 1.6 && < 2
                    , transformers >= 0.5 && < 1
-
+                   , unix >= 2.7 && < 3
 executable b9c
   import:           b9Extensions, b9Deps
   main-is:           Main.hs

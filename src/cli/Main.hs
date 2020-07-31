@@ -46,7 +46,7 @@ parseCommandLine =
 globals :: Parser B9ConfigOverride
 globals =
   toGlobalOpts
-    <$> optional
+    <$> many
       ( strOption
           ( help "Path to user's b9-configuration (default: ~/.b9/b9.conf)" <> short 'c' <> long "configuration-file"
               <> metavar "FILENAME"
@@ -87,7 +87,7 @@ globals =
       )
   where
     toGlobalOpts ::
-      Maybe FilePath ->
+      [FilePath] ->
       Bool ->
       Bool ->
       Maybe FilePath ->

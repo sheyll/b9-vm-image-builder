@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 2.1.1
+
+* Run the libvirt_lxc builder in an artificial pseudo-terminal if b9c is run
+  outside a terminal.
+* Relax version constraints for `hashable` dependency
+
 ## 2.1.0
 
 * Add a new config parameter for the default Ext4 file system attributes. 

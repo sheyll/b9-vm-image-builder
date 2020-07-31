@@ -8,6 +8,7 @@ module B9.B9Exec
     hostCmd,
     hostCmdStdIn,
     Timeout (..),
+    ptyCmdInteractive,
     HostCommandStdin (..),
   )
 where
@@ -17,20 +18,13 @@ import B9.B9Error
 import B9.B9Logging
 import B9.BuildInfo (BuildInfoReader, isInteractive)
 import qualified Conduit as CL
-import Control.Concurrent
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Concurrently (..), race)
 import Control.Eff
 import qualified Control.Exception as ExcIO
 import Control.Lens (view)
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Control (control, embed_, restoreM)
 import qualified Data.ByteString as Strict
-import Data.Conduit
-  ( (.|),
-    ConduitT,
-    Void,
-    runConduit,
-  )
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List as CL
 import Data.Conduit.Process
@@ -39,6 +33,16 @@ import Data.Maybe
 import qualified Data.Text as Text
 import GHC.Stack
 import System.Exit
+import System.Posix.Terminal 
+import System.Posix.Types 
+import System.Posix.Pty
+import           Control.Applicative      ((*>))
+import           Control.Exception (try, IOException())
+import           Data.Conduit             (ConduitT, yield, (.|), runConduit, Void)
+import           Data.Conduit.Process     (ClosedStream (..), streamingProcess,
+                                           waitForStreamingProcess)
+import           Control.Monad.IO.Class   (liftIO)
+
 
 -- | Execute the given shell command.
 --
@@ -235,6 +239,62 @@ hostCmdEither inputSource cmdStr timeoutArg = do
         Right (ExitFailure ec) ->
           errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
       return e
+
+-- | Execute the given shell command in a newly created pseudo terminal, if necessary.
+--
+-- @since 2.1.1
+ptyCmdInteractive ::
+  (HasCallStack, Member ExcB9 e, Member BuildInfoReader e, CommandIO e) =>
+  Maybe Timeout ->
+  String ->
+  [String] ->
+  Eff e ()
+ptyCmdInteractive timeoutArg progName progArgs  = do 
+   isInATerm <- liftIO (queryTerminal (Fd 0))
+   let cmdStr = progName ++ unwords progArgs
+   if isInATerm then cmdInteractive cmdStr
+   else do            
+    let tag = "[" ++ printHash cmdStr ++ "]"
+    traceL $ "PTY-COMMAND " ++ tag ++ ": " ++ cmdStr
+    tf <- fromMaybe 1 . view timeoutFactor <$> getB9Config
+    timeout <-
+      fmap (TimeoutMicros . \(TimeoutMicros t) -> tf * t)
+        <$> maybe
+          (view defaultTimeout <$> getB9Config)
+          (return . Just)
+          timeoutArg
+    traceLC <- traceMsgProcessLogger tag
+    let timer t@(TimeoutMicros micros) = do
+          threadDelay micros
+          return t
+
+        runCmd = liftIO $ do 
+          (pty, procH) <- spawnWithPty Nothing True progName progArgs (80, 25)
+          let close = liftIO (do 
+                cleanupProcess (Nothing, Nothing, Nothing, procH)
+                closePty pty)
+              output = runConduit $ fromProcess .| runProcessLogger traceLC
+              fromProcess = do
+                res <- liftIO (try (readPty pty)) 
+                case res of
+                  Left (_ :: IOException) -> do 
+                    close
+                  Right d -> do
+                    yield d
+                    fromProcess
+
+          runConcurrently $
+              Concurrently output *>
+              Concurrently (waitForProcess procH)
+
+    e <- liftIO (maybe (fmap Right) (race . timer) timeout runCmd)
+    case e of
+      Left _ ->
+        errorL $ "PTY-COMMAND TIMED OUT " ++ tag
+      Right ExitSuccess ->
+        traceL $ "PTY-COMMAND FINISHED " ++ tag
+      Right (ExitFailure ec) ->
+        errorL $ "PTY-COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
 
 newtype ProcessLogger
   = MkProcessLogger

@@ -80,15 +80,17 @@ successMarkerFile = "SUCCESS"
 
 execute :: (Member ExcB9 e, CommandIO e, Member BuildInfoReader e, Member B9ConfigReader e) => Context -> Eff e Bool
 execute (Context scriptDirHost _uuid domainFile cfg) = do
-  cmdInteractive $ printf "%s create '%s' --console --autodestroy" virshCommand domainFile
+  let (prog, args) = virshCommand 
+  ptyCmdInteractive Nothing prog (args ++ ["create", domainFile, "--console", "--autodestroy"])
   -- cmd $ printf "%s console %U" virsh uuid
   liftIO (doesFileExist $ scriptDirHost </> successMarkerFile)
   where
-    virshCommand :: String
-    virshCommand = printf "%svirsh -c %s" useSudo' virshURI'
-      where
-        useSudo' = if useSudo cfg then "sudo " else ""
-        virshURI' = virshURI cfg
+    virshCommand :: (String, [String])
+    virshCommand = 
+      if useSudo cfg then 
+        ("sudo", ["virsh", "-c", virshURI cfg])
+      else 
+        ("virsh", ["-c", virshURI cfg])
 
 data Context
   = Context
