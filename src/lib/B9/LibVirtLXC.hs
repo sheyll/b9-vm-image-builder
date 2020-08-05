@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 -- | Implementation of an execution environment that uses "libvirt-lxc".
 module B9.LibVirtLXC
   ( LibVirtLXC (..),
@@ -47,14 +48,20 @@ instance Backend LibVirtLXC where
   getBackendConfig _ =
     fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
   supportedImageTypes _ = [Raw]
+  runInEnvironment ::
+    forall e.
+    (Member BuildInfoReader e, CommandIO e, Member ExcB9 e) =>
+    LibVirtLXC ->
+    ExecEnv ->
+    Script ->
+    Eff e Bool
   runInEnvironment (LibVirtLXC cfgIn) env scriptIn = do
     control $ \runInIO -> do
       -- needs to span execute so the link shortener isn't removed to early.
-      Temp.withTempDirectory makeItConfigurable ".t" $ \tmpDir -> do
-        resultWithState <- if emptyScript scriptIn
-          then runInIO (return True)
-          else runInIO (setUp tmpDir >>= execute)
-        restoreM resultWithState
+      Temp.withTempDirectory makeItConfigurable ".t" $ \tmpDir ->
+        runInIO (if emptyScript scriptIn
+          then return True
+          else setUp tmpDir >>= execute)
     where
       setUp tmpDir = do
         buildId <- getBuildId
