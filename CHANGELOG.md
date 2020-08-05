@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 3.1.0
+
+* Introduced `getVirtualSizeForRawImage`, `cmdStdout`, `hostCmdStdoutEither`, `HostCommandStdout`.
+* More stable parsing of qemu-img info output in `getVirtualSizeForRawImage`.
+* Fixes a bug were size files contain garbage if newer versions of qemu-img are used.
+
 ## 3.0.0
 
 * Run the libvirt_lxc builder in an artificial pseudo-terminal if b9c is run
