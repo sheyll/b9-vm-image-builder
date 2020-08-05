@@ -26,6 +26,7 @@ import Control.Monad.IO.Class
   ( MonadIO,
     liftIO,
   )
+import Control.Monad.Trans.Control
 import Data.Char (toLower)
 import System.Directory
 import System.FilePath
@@ -33,28 +34,37 @@ import System.IO.B9Extras
   ( UUID (),
     randomUUID,
   )
+import qualified System.IO.Temp as Temp
+import qualified System.Posix.Files as Files
 import Text.Printf (printf)
 
 newtype LibVirtLXC = LibVirtLXC LibVirtLXCConfig
+
+makeItConfigurable :: FilePath
+makeItConfigurable = "/home/wolferic"
 
 instance Backend LibVirtLXC where
   getBackendConfig _ =
     fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
   supportedImageTypes _ = [Raw]
-  runInEnvironment (LibVirtLXC cfgIn) env scriptIn =
-    if emptyScript scriptIn
-      then return True
-      else setUp >>= execute
+  runInEnvironment (LibVirtLXC cfgIn) env scriptIn = do
+    control $ \runInIO -> do
+      -- needs to span execute so the link shortener isn't removed to early.
+      Temp.withTempDirectory makeItConfigurable ".t" $ \tmpDir -> do
+        resultWithState <- if emptyScript scriptIn
+          then runInIO (return True)
+          else runInIO (setUp tmpDir >>= execute)
+        restoreM resultWithState
     where
-      setUp = do
+      setUp tmpDir = do
         buildId <- getBuildId
         buildBaseDir <- getBuildDir
         uuid <- randomUUID
         let scriptDirHost = buildDir </> "init-script"
             scriptDirGuest = "/" ++ buildId
             domainFile = buildBaseDir </> uuid' <.> domainConfig
-            mkDomain =
-              createDomain cfgIn env buildId uuid' scriptDirHost scriptDirGuest
+            mkDomain envToUse =
+              createDomain cfgIn envToUse buildId uuid' scriptDirHost scriptDirGuest
             uuid' = printf "%U" uuid
             setupEnv =
               Begin
@@ -67,9 +77,23 @@ instance Backend LibVirtLXC where
         liftIO $ do
           createDirectoryIfMissing True scriptDirHost
           writeSh (scriptDirHost </> initScript) script
-          domain <- mkDomain
+          envToUse <- shortenImageFileNames tmpDir env
+          domain <- mkDomain envToUse
           writeFile domainFile domain
         return $ Context scriptDirHost uuid domainFile cfgIn
+
+shortenImageFileNames :: FilePath -> ExecEnv -> IO ExecEnv
+shortenImageFileNames tmpDir origEnv = do
+  let images = envImageMounts origEnv
+  newImages <- mapM shortenImageFileName (zip [0..] images)
+  return origEnv { envImageMounts = newImages }
+  where
+    shortenImageFileName :: (Integer, Mounted Image) -> IO (Mounted Image)
+    shortenImageFileName (num, (Image fp it fs, mp)) = do
+      let newFp = tmpDir </> (show num) <.> takeExtension fp
+      Files.createLink fp newFp
+      return (Image newFp it fs, mp)
+      
 
 successMarkerCmd :: FilePath -> Script
 successMarkerCmd scriptDirGuest =
