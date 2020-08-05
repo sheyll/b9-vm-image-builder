@@ -15,6 +15,7 @@ module B9.DiskImageBuilder
     convertImage,
     shareImage,
     ensureAbsoluteImageDirExists,
+    getVirtualSizeForRawImage
   )
 where
 
@@ -34,6 +35,8 @@ import qualified Control.Exception as IO
 import Control.Lens (view, (^.))
 import Control.Monad
 import Control.Monad.IO.Class
+import qualified Data.ByteString.Char8 as Strict
+import Data.Char (isDigit)
 import Data.Generics.Aliases
 import Data.Generics.Schemes
 import Data.List
@@ -242,16 +245,30 @@ createDestinationImage buildImg dest =
           versFile =
             repo </> "machines" </> name </> "disks" </> "raw" </> "VERSION"
       exportAndRemoveImage buildImg destImg
-      cmd
-        ( printf
-            "echo $(qemu-img info -f raw '%s' | gawk -e '/virtual size/ {print $4}' | tr -d '(') > '%s'"
-            destFile
-            sizeFile
-        )
+      eitherSize <- getVirtualSizeForRawImage destFile
+      case eitherSize of
+        Left err -> error err
+        Right value -> liftIO (writeFile sizeFile (show value))
       buildDate <- getBuildDate
       buildId <- getBuildId
       liftIO (writeFile versFile (buildId ++ "-" ++ buildDate))
     Transient -> return ()
+
+-- | Determine the virtual size of a raw image
+getVirtualSizeForRawImage :: (IsB9 e) => FilePath -> Eff e (Either String Integer)
+getVirtualSizeForRawImage file = do
+      outPut <- cmdStdout (printf "qemu-img info -f raw '%s'" file)
+      return (getVirtualSizeFromQemuImgInfoOutput outPut)
+
+getVirtualSizeFromQemuImgInfoOutput :: Strict.ByteString -> Either String Integer
+getVirtualSizeFromQemuImgInfoOutput qemuOutput = case filter (Strict.isPrefixOf (Strict.pack "virtual size"))  (Strict.lines qemuOutput) of
+  [] -> Left ("no line starting with 'virtual size' in output while parsing " <> Strict.unpack qemuOutput)
+  (_ : _ : _) -> Left ("multiple lines starting with 'virtual size' in output" <> Strict.unpack qemuOutput)
+  [x] -> let (digits, rest) = (Strict.span isDigit . Strict.drop 1 . Strict.dropWhile (/= '(')) x
+         in
+          if Strict.isPrefixOf (Strict.pack " bytes)") rest
+          then Right (read (Strict.unpack digits))
+          else Left ("rest after digits didn't continue in ' bytes)'" <> Strict.unpack qemuOutput)
 
 createEmptyImage ::
   IsB9 e =>
