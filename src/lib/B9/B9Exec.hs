@@ -3,13 +3,16 @@
 -- @since 0.5.65
 module B9.B9Exec
   ( cmd,
+    cmdStdout,
     cmdInteractive,
     hostCmdEither,
+    hostCmdStdoutEither,
     hostCmd,
     hostCmdStdIn,
     Timeout (..),
     ptyCmdInteractive,
     HostCommandStdin (..),
+    HostCommandStdout (..),
   )
 where
 
@@ -18,13 +21,15 @@ import B9.B9Error
 import B9.B9Logging
 import B9.BuildInfo (BuildInfoReader, isInteractive)
 import qualified Conduit as CL
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (readMVar, newMVar, modifyMVar_, threadDelay, MVar)
 import Control.Concurrent.Async (Concurrently (..), race)
 import Control.Eff
 import qualified Control.Exception as ExcIO
 import Control.Lens (view)
 import Control.Monad.Trans.Control (control, embed_, restoreM)
 import qualified Data.ByteString as Strict
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.ByteString.Builder as Strict
 import qualified Data.Conduit.Binary as CB
 import qualified Data.Conduit.List as CL
 import Data.Conduit.Process
@@ -92,6 +97,30 @@ cmd str = do
   case ok of
     Right _ ->
       return ()
+    Left e ->
+      errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
+
+-- | Execute the given shell command and collect its standard output.
+--
+-- The command and the output is additionally either logged to the logfile with 'traceL' or 'errorL' or
+-- written to stdout.
+--
+-- If the command exists with non-zero exit code, the current process exists with the same
+-- exit code.
+--
+-- @since 3.1.0
+cmdStdout ::
+  (HasCallStack, Member ExcB9 e, CommandIO e) =>
+  String ->
+  Eff e Strict.ByteString
+cmdStdout str = do
+  t <- view defaultTimeout <$> getB9Config
+  ok <- hostCmdStdoutEither HostCommandNoStdin HostCommandStdoutLogAndCapture str t
+  case ok of
+    Right (out, ExitSuccess) ->
+      return out
+    Right (_, e@(ExitFailure _)) -> 
+      errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
     Left e ->
       errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
 
@@ -179,6 +208,51 @@ hostCmdEither ::
   Maybe Timeout ->
   Eff e (Either Timeout ExitCode)
 hostCmdEither inputSource cmdStr timeoutArg = do
+  hostCmdStdoutEither inputSource HostCommandStdoutLog cmdStr timeoutArg
+
+-- | Ways to process std-output.
+--
+-- @since 3.1.0
+data HostCommandStdout a where
+  -- | Write std-out to the log sink.
+  HostCommandStdoutLog :: HostCommandStdout ExitCode
+  -- | Write std-out to the log sink, additionally collect and return it. 
+  HostCommandStdoutLogAndCapture :: HostCommandStdout (Strict.ByteString, ExitCode)
+
+data HostCommandStdoutState a where
+  HostCommandStdoutStateLog :: HostCommandStdoutState ExitCode
+  HostCommandStdoutStateLogAndCapture :: MVar Strict.Builder -> HostCommandStdoutState (Strict.ByteString, ExitCode)
+
+emptyState :: (CommandIO e) => HostCommandStdout a -> Eff e (HostCommandStdoutState a)
+emptyState HostCommandStdoutLog = return HostCommandStdoutStateLog
+emptyState HostCommandStdoutLogAndCapture = liftIO (newMVar mempty) >>= return . HostCommandStdoutStateLogAndCapture
+
+-- | Run a shell command defined by a string and optionally interrupt the command
+-- after a given time has elapsed.
+-- This is only useful for non-interactive commands.
+--
+-- Also provide the possibility to receive the stdout of the command. It of course be collected
+-- in ram, so be sure the command doesn't have to much output.
+--
+-- @since 3.1.0
+hostCmdStdoutEither ::
+  forall e a.
+  (CommandIO e) =>
+  -- | A 'HostCommandStdin' to define standard input.
+  -- If the value is 'HostCommandInheritStdin' then
+  -- **also stdout and stderr** will be redirected to
+  -- the 'Inherited' file descriptors.
+  HostCommandStdin ->
+  -- | A 'HostCommandStdout' to define standard output.
+  -- No output will be returned in case of timeout or
+  -- 'HostComandStdin' being 'HostComandInheritStdin'.
+  HostCommandStdout a ->
+  -- | The shell command to execute.
+  String ->
+  -- | An optional 'Timeout'
+  Maybe Timeout ->
+  Eff e (Either Timeout a)
+hostCmdStdoutEither inputSource outputSinkType cmdStr timeoutArg = do
   let tag = "[" ++ printHash cmdStr ++ "]"
   traceL $ "COMMAND " ++ tag ++ ": " ++ cmdStr
   tf <- fromMaybe 1 . view timeoutFactor <$> getB9Config
@@ -194,23 +268,34 @@ hostCmdEither inputSource cmdStr timeoutArg = do
         (runInIO (go timeout tag))
         ( \(e :: ExcIO.SomeException) -> do
             runInIO (errorL ("COMMAND " ++ tag ++ " interrupted: " ++ show e))
-            runInIO (return (Right (ExitFailure 126) :: Either Timeout ExitCode))
+            runInIO (return (wrapEmptyOutputResult outputSinkType (ExitFailure 126)))
         )
       >>= restoreM
   where
-    go :: Maybe Timeout -> String -> Eff e (Either Timeout ExitCode)
+    wrapEmptyOutputResult :: HostCommandStdout a -> ExitCode -> Either Timeout a
+    wrapEmptyOutputResult HostCommandStdoutLog ec = Right ec
+    wrapEmptyOutputResult HostCommandStdoutLogAndCapture ec = Right (mempty, ec)
+
+    wrapOutputResult :: HostCommandStdoutState a -> ExitCode -> Eff e a
+    wrapOutputResult HostCommandStdoutStateLog ec = return ec
+    wrapOutputResult (HostCommandStdoutStateLogAndCapture mvar) ec = do
+      value <- liftIO (readMVar mvar)
+      return (Lazy.toStrict (Strict.toLazyByteString value), ec)
+
+    go :: Maybe Timeout -> String -> Eff e (Either Timeout a)
     go timeout tag = do
-      traceLC <- traceMsgProcessLogger tag
       errorLC <- errorMsgProcessLogger tag
       let timer t@(TimeoutMicros micros) = do
             threadDelay micros
             return t
+      stdoutState <- emptyState outputSinkType
       (cph, runCmd) <- case inputSource of
         HostCommandNoStdin -> do
+          outSink <- createStdoutSink stdoutState tag
           (ClosedStream, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
           let runCmd =
                 runConcurrently
-                  ( Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
+                  ( Concurrently (runConduit (cpOut .| runStdoutSink outSink))
                       *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
                       *> Concurrently (waitForStreamingProcess cph)
                   )
@@ -220,10 +305,11 @@ hostCmdEither inputSource cmdStr timeoutArg = do
           let runCmd = waitForStreamingProcess cph
           return (cph, runCmd)
         HostCommandStdInConduit inputC -> do
+          outSink <- createStdoutSink stdoutState tag
           (stdIn, cpOut, cpErr, cph) <- streamingProcess (shell cmdStr)
           let runCmd =
                 runConcurrently
-                  ( Concurrently (runConduit (cpOut .| runProcessLogger traceLC))
+                  ( Concurrently (runConduit (cpOut .| runStdoutSink outSink))
                       *> Concurrently (runConduit (cpErr .| runProcessLogger errorLC))
                       *> Concurrently (runConduit (inputC .| stdIn))
                       *> Concurrently (waitForStreamingProcess cph)
@@ -238,7 +324,7 @@ hostCmdEither inputSource cmdStr timeoutArg = do
           traceL $ "COMMAND FINISHED " ++ tag
         Right (ExitFailure ec) ->
           errorL $ "COMMAND FAILED EXIT CODE: " ++ show ec ++ " " ++ tag
-      return e
+      traverse (wrapOutputResult stdoutState) e
 
 -- | Execute the given shell command in a newly created pseudo terminal, if necessary.
 --
@@ -320,3 +406,28 @@ mkMsgProcessLogger logFun prefix = do
             .| CL.mapM_ (liftIO . logIO)
         )
     )
+
+newtype StdoutSink
+  = MkStdoutSink
+      {runStdoutSink :: ConduitT Strict.ByteString Void IO ()}
+
+createStdoutSink :: (CommandIO e) => HostCommandStdoutState a -> String -> Eff e StdoutSink
+createStdoutSink HostCommandStdoutStateLog tag = traceMsgProcessLogger tag >>= return . MkStdoutSink . runProcessLogger
+createStdoutSink (HostCommandStdoutStateLogAndCapture _stdoutCollector) _tag = do
+  logger <- runProcessLogger <$> traceMsgProcessLogger _tag
+  return
+    ( MkStdoutSink
+       ( CL.getZipSink
+           ( CL.ZipSink logger
+             *> CL.ZipSink (writeToMVar _stdoutCollector)
+           )
+       )
+    )
+  where
+    writeToMVar mvar = do
+      chunk <- CL.await
+      case chunk of
+        Nothing -> return ()
+        (Just val) -> liftIO $ modifyMVar_ mvar $ \old -> return (old <> Strict.byteString val)
+
+
