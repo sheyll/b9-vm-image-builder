@@ -26,7 +26,8 @@ data LibVirtLXCConfig
         virshURI :: FilePath,
         _networkId :: Maybe String,
         guestCapabilities :: [ContainerCapability],
-        guestRamSize :: RamSize
+        guestRamSize :: RamSize,
+        imageFileNameShortenerBasePath :: Maybe FilePath
       }
   deriving (Read, Show, Eq)
 
@@ -38,7 +39,8 @@ instance Arbitrary LibVirtLXCConfig where
     smaller arbitraryFilePath <*>
     smaller (oneof [pure Nothing, Just <$> listOf1 arbitraryLetter]) <*>
     smaller arbitrary <*>
-    pure (RamSize 4 GB)
+    pure (RamSize 4 GB) <*>
+    smaller (oneof [pure Nothing, Just <$> arbitraryFilePath])
 
 makeLenses ''LibVirtLXCConfig
 
@@ -60,6 +62,7 @@ defaultLibVirtLXCConfig =
       CAP_SYS_MODULE
     ]
     (RamSize 1 GB)
+    Nothing
 
 cfgFileSection :: String
 cfgFileSection = "libvirt-lxc"
@@ -84,6 +87,9 @@ networkIdK = "network"
 guestRamSizeK :: String
 guestRamSizeK = "guest_ram_size"
 
+imageFileNamesShortenerBasePathK :: String
+imageFileNamesShortenerBasePathK = "image_file_names_shortener_base_path"
+
 libVirtLXCConfigToCPDocument ::
   LibVirtLXCConfig -> CPDocument -> Either CPError CPDocument
 libVirtLXCConfigToCPDocument c cp = do
@@ -93,7 +99,9 @@ libVirtLXCConfigToCPDocument c cp = do
   cp4 <- setCP cp3 cfgFileSection virshURIK $ virshURI c
   cp5 <- setShowCP cp4 cfgFileSection networkIdK $ _networkId c
   cp6 <- containerCapsToCPDocument cp5 cfgFileSection $ guestCapabilities c
-  setShowCP cp6 cfgFileSection guestRamSizeK $ guestRamSize c
+  cp7 <- setShowCP cp6 cfgFileSection guestRamSizeK $ guestRamSize c
+  cpFinal <- setShowCP cp7 cfgFileSection imageFileNamesShortenerBasePathK $ imageFileNameShortenerBasePath c
+  return cpFinal
 
 parseLibVirtLXCConfig :: CPDocument -> Either CPError LibVirtLXCConfig
 parseLibVirtLXCConfig cp =
@@ -106,6 +114,7 @@ parseLibVirtLXCConfig cp =
         <*> getr networkIdK
         <*> parseContainerCapabilities cp cfgFileSection
         <*> getr guestRamSizeK
+        <*> getr imageFileNamesShortenerBasePathK
 
 -- | Return the path to @/usr/lib/libvirt/libexec/libvirt_lxc@
 --  the 'emulatorK' field from the config file, or set the path

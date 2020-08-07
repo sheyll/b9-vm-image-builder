@@ -7,10 +7,11 @@ module B9.LibVirtLXC
 where
 
 import B9.B9Config
-  ( B9ConfigReader,
+  (getConfig,  B9ConfigReader,
     ContainerCapability,
     getB9Config,
     libVirtLXCConfigs,
+    keepTempDirs
   )
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Error
@@ -22,7 +23,7 @@ import B9.DiskImages
 import B9.ExecEnv
 import B9.ShellScript
 import Control.Eff
-import Control.Lens (view)
+import Control.Lens ((^.), view)
 import Control.Monad.IO.Class
   ( MonadIO,
     liftIO,
@@ -41,9 +42,6 @@ import Text.Printf (printf)
 
 newtype LibVirtLXC = LibVirtLXC LibVirtLXCConfig
 
-makeItConfigurable :: FilePath
-makeItConfigurable = "/home/wolferic"
-
 instance Backend LibVirtLXC where
   getBackendConfig _ =
     fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
@@ -56,14 +54,14 @@ instance Backend LibVirtLXC where
     Script ->
     Eff e Bool
   runInEnvironment (LibVirtLXC cfgIn) env scriptIn = do
+    imageFileNamesShortenerMechanism <- getImageFileNamesShortenerMechanism (imageFileNameShortenerBasePath cfgIn)
     control $ \runInIO -> do
-      -- needs to span execute so the link shortener isn't removed to early.
-      Temp.withTempDirectory makeItConfigurable ".t" $ \tmpDir ->
+      imageFileNamesShortenerMechanism $ \shortenImageFileNamesInEnvAction ->
         runInIO (if emptyScript scriptIn
           then return True
-          else setUp tmpDir >>= execute)
+          else setUp shortenImageFileNamesInEnvAction >>= execute)
     where
-      setUp tmpDir = do
+      setUp shortenImageFileNamesInEnvAction = do
         buildId <- getBuildId
         buildBaseDir <- getBuildDir
         uuid <- randomUUID
@@ -84,13 +82,16 @@ instance Backend LibVirtLXC where
         liftIO $ do
           createDirectoryIfMissing True scriptDirHost
           writeSh (scriptDirHost </> initScript) script
-          envToUse <- shortenImageFileNames tmpDir env
+          envToUse <- shortenImageFileNamesInEnvAction env
           domain <- mkDomain envToUse
           writeFile domainFile domain
         return $ Context scriptDirHost uuid domainFile cfgIn
 
-shortenImageFileNames :: FilePath -> ExecEnv -> IO ExecEnv
-shortenImageFileNames tmpDir origEnv = do
+imageFileNamesShortenerTemplate :: String
+imageFileNamesShortenerTemplate = ".t"
+
+shortenImageFileNamesInEnv :: FilePath -> ExecEnv -> IO ExecEnv
+shortenImageFileNamesInEnv tmpDir origEnv = do
   let images = envImageMounts origEnv
   newImages <- mapM shortenImageFileName (zip [0..] images)
   return origEnv { envImageMounts = newImages }
@@ -100,7 +101,16 @@ shortenImageFileNames tmpDir origEnv = do
       let newFp = tmpDir </> (show num) <.> takeExtension fp
       Files.createLink fp newFp
       return (Image newFp it fs, mp)
-      
+
+getImageFileNamesShortenerMechanism :: Member B9ConfigReader e => Maybe FilePath -> Eff e (((ExecEnv -> IO ExecEnv) -> IO a) -> IO a)
+getImageFileNamesShortenerMechanism maybeShortImageLinkDir = case maybeShortImageLinkDir of
+  Nothing -> return (\action -> action return)
+  Just parent -> do
+      b9config <- getConfig
+      let tempDirCreator = if b9config ^. keepTempDirs
+                                     then \t -> (Temp.createTempDirectory parent t >>=)
+                                     else Temp.withTempDirectory parent
+      return (\action -> tempDirCreator imageFileNamesShortenerTemplate $ \fp -> action (shortenImageFileNamesInEnv fp))
 
 successMarkerCmd :: FilePath -> Script
 successMarkerCmd scriptDirGuest =
