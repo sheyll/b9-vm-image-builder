@@ -10,7 +10,17 @@ import System.Process
 import Control.Arrow ((>>>))
 
 spec :: Spec
-spec = 
+spec = do
+    it "can extract the virtual size from qemu-img info output" $ do
+      e <- b9Wrapper [] $ do
+        d <- getBuildDir
+        let outFile = d </> "test.raw"
+        materializeImageSource
+          (EmptyImage "test" Ext4 Raw (ImageSize 10 MB))
+          (Image outFile Raw Ext4)
+        getVirtualSizeForRawImage outFile
+      e `shouldBe` Right (10 * 1024 * 1024)
+
     it "passes the mkfs.ext4 options defined in the B9Config" $ do
       let expectedOptions = ["^metadata_csum", "64bit"]
       actual <- b9Wrapper expectedOptions $ do
