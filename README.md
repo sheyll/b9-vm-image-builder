@@ -25,7 +25,7 @@ by a **command line invokation**.
 
 * As **command line utility** in current directory:
 
-      $ nix-env -f https://github.com/sheyll/b9-vm-image-builder/archive/3.1.0.tar.gz -iA b9c
+      $ nix-env -f https://github.com/sheyll/b9-vm-image-builder/archive/3.2.0.tar.gz -iA b9c
     
 ### Runtime dependencies
 
@@ -595,3 +595,15 @@ _TODO document this option._
 * Default: `[]`
 
 List of options for `mkfs.ext4 -O`.
+
+#### `image_file_names_shortener_base_path`
+
+* Default: `Nothing`
+
+If `(Just "/path")` is specified, images passed to libvirt are hard linked to 
+a random subdirectory in `/path/`, such that the name will be short enough
+to match libvirtds file name length restriction.
+NOTE: The hard links have to be on the same file system as their targets.
+
+Together with `keep_temp_dirs` the paths can be inspected, but also have to 
+be manually removed.
