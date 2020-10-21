@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 -- | Implementation of an execution environment that uses "libvirt-lxc".
 module B9.LibVirtLXC
   ( LibVirtLXC (..),
@@ -6,10 +7,11 @@ module B9.LibVirtLXC
 where
 
 import B9.B9Config
-  ( B9ConfigReader,
+  (getConfig,  B9ConfigReader,
     ContainerCapability,
     getB9Config,
     libVirtLXCConfigs,
+    keepTempDirs
   )
 import B9.B9Config.LibVirtLXC as X
 import B9.B9Error
@@ -21,11 +23,12 @@ import B9.DiskImages
 import B9.ExecEnv
 import B9.ShellScript
 import Control.Eff
-import Control.Lens (view)
+import Control.Lens ((^.), view)
 import Control.Monad.IO.Class
   ( MonadIO,
     liftIO,
   )
+import Control.Monad.Trans.Control
 import Data.Char (toLower)
 import System.Directory
 import System.FilePath
@@ -33,6 +36,8 @@ import System.IO.B9Extras
   ( UUID (),
     randomUUID,
   )
+import qualified System.IO.Temp as Temp
+import qualified System.Posix.Files as Files
 import Text.Printf (printf)
 
 newtype LibVirtLXC = LibVirtLXC LibVirtLXCConfig
@@ -41,20 +46,30 @@ instance Backend LibVirtLXC where
   getBackendConfig _ =
     fmap LibVirtLXC . view libVirtLXCConfigs <$> getB9Config
   supportedImageTypes _ = [Raw]
-  runInEnvironment (LibVirtLXC cfgIn) env scriptIn =
-    if emptyScript scriptIn
-      then return True
-      else setUp >>= execute
+  runInEnvironment ::
+    forall e.
+    (Member BuildInfoReader e, CommandIO e, Member ExcB9 e) =>
+    LibVirtLXC ->
+    ExecEnv ->
+    Script ->
+    Eff e Bool
+  runInEnvironment (LibVirtLXC cfgIn) env scriptIn = do
+    imageFileNamesShortenerMechanism <- getImageFileNamesShortenerMechanism (imageFileNameShortenerBasePath cfgIn)
+    control $ \runInIO -> do
+      imageFileNamesShortenerMechanism $ \shortenImageFileNamesInEnvAction ->
+        runInIO (if emptyScript scriptIn
+          then return True
+          else setUp shortenImageFileNamesInEnvAction >>= execute)
     where
-      setUp = do
+      setUp shortenImageFileNamesInEnvAction = do
         buildId <- getBuildId
         buildBaseDir <- getBuildDir
         uuid <- randomUUID
         let scriptDirHost = buildDir </> "init-script"
             scriptDirGuest = "/" ++ buildId
             domainFile = buildBaseDir </> uuid' <.> domainConfig
-            mkDomain =
-              createDomain cfgIn env buildId uuid' scriptDirHost scriptDirGuest
+            mkDomain envToUse =
+              createDomain cfgIn envToUse buildId uuid' scriptDirHost scriptDirGuest
             uuid' = printf "%U" uuid
             setupEnv =
               Begin
@@ -67,9 +82,35 @@ instance Backend LibVirtLXC where
         liftIO $ do
           createDirectoryIfMissing True scriptDirHost
           writeSh (scriptDirHost </> initScript) script
-          domain <- mkDomain
+          envToUse <- shortenImageFileNamesInEnvAction env
+          domain <- mkDomain envToUse
           writeFile domainFile domain
         return $ Context scriptDirHost uuid domainFile cfgIn
+
+imageFileNamesShortenerTemplate :: String
+imageFileNamesShortenerTemplate = ".t"
+
+shortenImageFileNamesInEnv :: FilePath -> ExecEnv -> IO ExecEnv
+shortenImageFileNamesInEnv tmpDir origEnv = do
+  let images = envImageMounts origEnv
+  newImages <- mapM shortenImageFileName (zip [0..] images)
+  return origEnv { envImageMounts = newImages }
+  where
+    shortenImageFileName :: (Integer, Mounted Image) -> IO (Mounted Image)
+    shortenImageFileName (num, (Image fp it fs, mp)) = do
+      let newFp = tmpDir </> (show num) <.> takeExtension fp
+      Files.createLink fp newFp
+      return (Image newFp it fs, mp)
+
+getImageFileNamesShortenerMechanism :: Member B9ConfigReader e => Maybe FilePath -> Eff e (((ExecEnv -> IO ExecEnv) -> IO a) -> IO a)
+getImageFileNamesShortenerMechanism maybeShortImageLinkDir = case maybeShortImageLinkDir of
+  Nothing -> return (\action -> action return)
+  Just parent -> do
+      b9config <- getConfig
+      let tempDirCreator = if b9config ^. keepTempDirs
+                                     then \t -> (Temp.createTempDirectory parent t >>=)
+                                     else Temp.withTempDirectory parent
+      return (\action -> tempDirCreator imageFileNamesShortenerTemplate $ \fp -> action (shortenImageFileNamesInEnv fp))
 
 successMarkerCmd :: FilePath -> Script
 successMarkerCmd scriptDirGuest =

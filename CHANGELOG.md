@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 3.2.0
+
+* Workarounds for libvirtd path length restrictions; 
+  Libvirt doesn't like paths longer than 63
+* Add config file option `image_file_names_shortener_base_path`
+
 ## 3.1.0
 
 * Introduced `getVirtualSizeForRawImage`, `cmdStdout`, `hostCmdStdoutEither`, `HostCommandStdout`.
