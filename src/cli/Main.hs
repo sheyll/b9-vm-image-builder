@@ -5,11 +5,15 @@ where
 
 import B9
 import Control.Lens ((&), (.~), _Just, set)
+import qualified GHC.IO.Encoding as GHC
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
 
 main :: IO ()
 main = do
+  GHC.getLocaleEncoding >>= putStrLn . ("Locale-encoding: " ++) . show
+  GHC.getFileSystemEncoding >>= putStrLn . ("FileSystem-encoding " ++) . show
+  GHC.getForeignEncoding >>= putStrLn . ("Foreign-encoding " ++) . show
   b9Opts <- parseCommandLine
   applyB9RunParameters b9Opts
 

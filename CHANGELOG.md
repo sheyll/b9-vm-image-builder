@@ -1,5 +1,11 @@
 # Changelog for B9
 
+## 3.2.1
+
+* Output the system encodings at start do aid debugging
+  `commit buffer: invalid character` kind of problems
+* Always set the encondings to `UTF-8`
+
 ## 3.2.0
 
 * Workarounds for libvirtd path length restrictions; 
