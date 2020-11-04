@@ -14,6 +14,10 @@ main = do
   GHC.getLocaleEncoding >>= putStrLn . ("Locale-encoding: " ++) . show
   GHC.getFileSystemEncoding >>= putStrLn . ("FileSystem-encoding " ++) . show
   GHC.getForeignEncoding >>= putStrLn . ("Foreign-encoding " ++) . show
+  putStrLn "Setting encodings to UTF-8"
+  GHC.setLocaleEncoding GHC.utf8
+  GHC.setFileSystemEncoding GHC.utf8
+  GHC.setForeignEncoding GHC.utf8
   b9Opts <- parseCommandLine
   applyB9RunParameters b9Opts
 
