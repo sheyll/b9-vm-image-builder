@@ -35,5 +35,13 @@
         "type": "tarball",
         "url": "https://github.com/tweag/ormolu/archive/d5a5bf66c0a0571bf1d965d3297bbaf57e5b5340.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "with-utf8": {
+        "name": "with-utf8",
+        "sha256": "1hpqc0ljk1c1vl4671zb290hbvdcjpg66bcxmf1cz8h0vb382xp7",
+        "type": "tarball",
+        "url": "https://hackage.haskell.org/package/with-utf8-1.0.2.1/with-utf8-1.0.2.1.tar.gz",
+        "url_template": "https://hackage.haskell.org/package/<name>-<version>/<name>-<version>.tar.gz",
+        "version": "1.0.2.1"
     }
 }

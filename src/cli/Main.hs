@@ -8,16 +8,10 @@ import Control.Lens ((&), (.~), _Just, set)
 import qualified GHC.IO.Encoding as GHC
 import Options.Applicative hiding (action)
 import Options.Applicative.Help.Pretty hiding ((</>))
+import Main.Utf8 (withUtf8)
 
 main :: IO ()
-main = do
-  GHC.getLocaleEncoding >>= putStrLn . ("Locale-encoding: " ++) . show
-  GHC.getFileSystemEncoding >>= putStrLn . ("FileSystem-encoding " ++) . show
-  GHC.getForeignEncoding >>= putStrLn . ("Foreign-encoding " ++) . show
-  putStrLn "Setting encodings to UTF-8"
-  GHC.setLocaleEncoding GHC.utf8
-  GHC.setFileSystemEncoding GHC.utf8
-  GHC.setForeignEncoding GHC.utf8
+main = withUtf8 $ do
   b9Opts <- parseCommandLine
   applyB9RunParameters b9Opts
 
