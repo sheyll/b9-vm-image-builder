@@ -1,5 +1,9 @@
 # Changelog for B9
 
+## 3.2.2
+
+* Relax version dependencies
+
 ## 3.2.1
 
 * Use with-utf8 package to get around `invalid argument (invalid character)` kind of
