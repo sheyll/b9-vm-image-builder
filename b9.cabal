@@ -192,7 +192,7 @@ executable b9c
   main-is:           Main.hs
   other-modules:     Paths_b9
   autogen-modules:   Paths_b9
-  build-depends:     b9
+  build-depends:     b9, with-utf8
   hs-source-dirs:    src/cli
   ghc-options:       -Wall
                      -fwarn-unused-binds -fno-warn-unused-do-bind -threaded

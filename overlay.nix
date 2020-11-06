@@ -4,6 +4,7 @@ self: super:
   haskellPackages = super.haskellPackages.override {
     overrides = hself: hsuper: 
     {
+      with-utf8 = hsuper.callCabal2nix "with-utf8" ((import ./nix/sources.nix).with-utf8) {};
       b9 = import ./b9.nix  # TODO try pkgs.callPackage
         { 
           inherit (super) nix-gitignore qemu haskell
@@ -13,7 +14,7 @@ self: super:
                           podman
                           e2fsprogs xorriso curl
                           dosfstools mtools;
-          haskellPackages = hsuper; 
+          haskellPackages = hself;
         };
     };
   };
