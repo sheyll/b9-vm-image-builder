@@ -1,5 +1,9 @@
 # Changelog for B9
 
+## 3.2.3
+
+* Provide nix flake
+
 ## 3.2.2
 
 * Relax version dependencies

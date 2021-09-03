@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                b9
-version:             3.2.2
+version:             3.2.3
 
 synopsis:            A tool and library for building virtual machine images.
 
