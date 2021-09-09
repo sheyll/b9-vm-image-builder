@@ -30,7 +30,7 @@
         ];
         pkgs = import nixpkgs { inherit system overlays; };
         flake = pkgs.b9-vm-image-builder.flake { };
-        nonHaskellBuildInputs = with pkgs;
+        b9cRuntimeDeps = { nixpkgs }: with nixpkgs;
           [
             cdrkit
             libvirt
@@ -50,12 +50,13 @@
           ];
       in
       flake // {
+        lib = { inherit b9cRuntimeDeps; };
         packages = flake.packages // rec {
           b9c-unwrapped = flake.packages."b9:exe:b9c";
           b9c = pkgs.stdenvNoCC.mkDerivation {
             name = "b9c";
             buildInputs = [ pkgs.makeWrapper ];
-            depsHostHost = nonHaskellBuildInputs;
+            depsHostHost = b9cRuntimeDeps { nixpkgs = pkgs; };
             phases = [ "buildPhase" "installPhase" ];
             buildPhase = ''
               mkdir -p $out/bin
@@ -64,7 +65,7 @@
             installPhase = ''
               wrapProgram \
                 $out/bin/b9c \
-                --prefix PATH : "${pkgs.lib.makeBinPath nonHaskellBuildInputs}:${pkgs.libvirt}/libexec" \
+                --prefix PATH : "${pkgs.lib.makeBinPath (b9cRuntimeDeps {nixpkgs=pkgs;})}:${pkgs.libvirt}/libexec" \
                 --set B9_LIBVIRT_LXC "${pkgs.libvirt}/libexec/libvirt_lxc"
             '';
             meta = {
