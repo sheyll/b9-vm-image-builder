@@ -6,6 +6,7 @@
   outputs = { self, nixpkgs, flake-utils, haskellNix }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
+        index-state = "2021-09-03T00:00:00Z";
         overlays = [
           haskellNix.overlay
           (final: prev: {
@@ -22,6 +23,9 @@
                   hlint = { };
                   haskell-language-server = { };
                 };
+                inherit index-state;
+                checkMaterialization = false;
+                materialized = ./nix/materialization/b9;
               };
           })
         ];
