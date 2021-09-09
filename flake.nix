@@ -13,10 +13,7 @@
             b9-vm-image-builder =
               final.haskell-nix.cabalProject' {
                 name = "b9-vm-image-builder";
-                src = final.haskell-nix.haskellLib.cleanGit {
-                  name = "b9-vm-image-builder";
-                  src = ./.;
-                };
+                src = ./.;
                 compiler-nix-name = "ghc8107";
                 # This is used by `nix develop .` to open a shell for use with
                 # `cabal`, `hlint` and `haskell-language-server`
