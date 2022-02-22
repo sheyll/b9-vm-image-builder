@@ -37,7 +37,7 @@ in
       makeWrapper \
         $out/bin/b9c.unwrapped \
         $out/bin/b9c \
-        --prefix PATH : "${stdenv.lib.makeBinPath nonHaskellBuildInputs}:${libvirt}/libexec" \
+        --prefix PATH : "${lib.makeBinPath nonHaskellBuildInputs}:${libvirt}/libexec" \
         --set B9_LIBVIRT_LXC "${libvirt}/libexec/libvirt_lxc"
       '';
     meta = {
