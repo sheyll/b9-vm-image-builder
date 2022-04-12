@@ -13,5 +13,4 @@ jobs:
             substituters = https://cache.nixos.org/ file://$HOME/nix.store https://hydra.iohk.io
             trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.nixos.org-1:CNHJZBh9K4tP3EKF6FkkgeVYsS3ohTl+oS0Qa8bezVs=
             require-sigs = false
-      - run: nix build
-
+      - run: nix-build
