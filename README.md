@@ -1,6 +1,6 @@
 # B9 - A Benign VM-Build Tool [![changelog](https://img.shields.io/badge/changelog-green.svg?style=flat)](CHANGELOG.md)
 
-[![Build Status](https://travis-ci.org/sheyll/b9-vm-image-builder.svg)](https://travis-ci.org/sheyll/b9-vm-image-builder) [![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
+[![Hackage](https://img.shields.io/badge/hackage-B9-green.svg?style=flat)](http://hackage.haskell.org/package/b9)
 
 **NOTE: The feature list is not completely implemented yet!**
 
@@ -10,23 +10,23 @@
 
 ### Mission Statement
 
-**B9** is an executable and a Haskell library, that consumes a Haskell 
-term describing the generation of VM-Images. 
+**B9** is an executable and a Haskell library, that consumes a Haskell
+term describing the generation of VM-Images.
 
 A few core `data` types form an EDSL, and describe virtual machine images.
 `B9` contains a library as well as an executable to interpret the EDSL.
 
 Such a term can then be stored into a **text file** and is interpreted
-by a **command line invokation**. 
+by a **command line invokation**.
 
-### Installation 
+### Installation
 
 ### Installation on NixOS
 
 * As **command line utility** in current directory:
 
       $ nix-env -f https://github.com/sheyll/b9-vm-image-builder/archive/3.2.0.tar.gz -iA b9c
-    
+
 ### Runtime dependencies
 
 To be able to use B9 install:
@@ -74,11 +74,11 @@ these commands:
 
 #### For `Podman` support (TODO)
 
-* podman 
+* podman
 
 #### For `Docker` support (TODO)
 
-* docker 
+* docker
 
 
 After installing B9 (either from a binary package or by building from source)
@@ -99,7 +99,7 @@ for a list of command line parameters and commands.
 To enable B9 to work correctly on your machine edit the config file and make
 necessary adaptions.
 
-## General Overview 
+## General Overview
 
 
 Use B9 to compile your software into a deployable set of Linux-VM- or
@@ -123,12 +123,12 @@ errors as early as possible without relying on the user to create a covering set
 of tests/error checks.
 
 Certain sacrifies were made; there might be a steep laerning curve, but you will
-eventually get there. The tool at hand works stable and reliable. 
+eventually get there. The tool at hand works stable and reliable.
 
 All builds happen in isolation, i.e. by default in random build directories, and
-are cleaned on failure. 
+are cleaned on failure.
 
-Also, B9 does not modify cached images. 
+Also, B9 does not modify cached images.
 Work on VM-Images is always done on a copy of an image, and to speed
 things up, it is possible to explicitly use copy-on-write images.
 
@@ -145,16 +145,16 @@ all peripheral artifacts, it creates:
 * Text files from template files with variable interpolation
 * Erlang OTP sys.config files
 
-### Make VM Disk Images 
+### Make VM Disk Images
 
 * Extract partitions from MRB Partitioned images
-* Create, resuse, resize EXT-4 on Qcow2, vmdk or raw Images 
-* Run commands on images to create new image, similar to what docker build does, 
-  * Using libvirt-lxc 
-  * Using docker 
+* Create, resuse, resize EXT-4 on Qcow2, vmdk or raw Images
+* Run commands on images to create new image, similar to what docker build does,
+  * Using libvirt-lxc
+  * Using docker
   * Using systemd-nspawn
 
-### Manage Disk Images 
+### Manage Disk Images
 
 * Cache images locally
 * Distribute cached images via SCP
@@ -162,31 +162,31 @@ all peripheral artifacts, it creates:
 ### Assemble Cloud-init Configuration
 
 * Merge YAML Expressions
-* Merge Erlang Terms 
-* Load local files 
+* Merge Erlang Terms
+* Load local files
 * Load files from HTTP servers
-* Support `${identifier}` variable interpolation 
-* Create cloud-init 
-  * ISO images 
-  * Floppy images 
+* Support `${identifier}` variable interpolation
+* Create cloud-init
+  * ISO images
+  * Floppy images
   * yaml files
 
-### Input files 
+### Input files
 
 The input files can be in:
 
 * Dhall format **TODO**
 * Haskell values interpreted by the `Read` instances.
 
-### Usage as Library 
+### Usage as Library
 
 * Use as a Haskell library
 
-### Configuration 
+### Configuration
 
 B9 uses a *`.ini` - style* configuration file.
 
-### Incremental Builds 
+### Incremental Builds
 
 B9 uses `shake` so some degree of incremental build is available.
 
@@ -367,7 +367,7 @@ and in environment variables.
 
 A path to an alternative config file can given on the command lines.
 
-When the default config file does not exist, `b9c` will create it from 
+When the default config file does not exist, `b9c` will create it from
 default values.
 
 
@@ -407,61 +407,61 @@ This example is the current default configuration:
 
     [docker]
     guest_capabilities: [CAP_MKNOD,CAP_SYS_ADMIN,CAP_SYS_CHROOT,CAP_SETGID,CAP_SETUID,CAP_NET_BIND_SERVICE,CAP_SETPCAP,CAP_SYS_PTRACE,CAP_SYS_MODULE]
-    network: default 
+    network: default
 
 
 ### The `[global]` Section
 
 
-#### `build_dir_root`: 
+#### `build_dir_root`:
 
 * Default: `Nothing`
 
 _TODO document this option._
 
-#### `keep_temp_dirs`: 
+#### `keep_temp_dirs`:
 
 * Default: `False`
 
 _TODO document this option._
 
-#### `log_file`: 
+#### `log_file`:
 
 * Default: `Nothing`
 
 _TODO document this option._
 
-#### `max_cached_shared_images`: 
+#### `max_cached_shared_images`:
 
 * Default: `Just 2`
 
 _TODO document this option._
 
-#### `repository`: 
+#### `repository`:
 
 * Default: `Nothing`
 
 _TODO document this option._
 
-#### `repository_cache`: 
+#### `repository_cache`:
 
 * Default: `Just (InB9UserDir "repo-cache")`
 
 _TODO document this option._
 
-#### `unique_build_dirs`: 
+#### `unique_build_dirs`:
 
 * Default: `True`
 
 _TODO document this option._
 
-#### `verbosity`: 
+#### `verbosity`:
 
 * Default: `Just LogInfo`
 
 _TODO document this option._
 
-#### `default_timeout_seconds` 
+#### `default_timeout_seconds`
 
 * optional default timeout, applied to all external calls:
 
@@ -525,7 +525,7 @@ _TODO document this option._
 
 _TODO document this option._
 
-### The `[systemdNspawn]` Section 
+### The `[systemdNspawn]` Section
 
 **Since: 1.0.0**
 
@@ -540,8 +540,8 @@ _TODO document this option._
 
 This corresponds to the `--console=<...>` parameter to `systemd-nspawn`.
 
-If the value is set to `interactive` the execution of 
-any `VmScript`s through `systemd-nspawn` will be _interactive_ 
+If the value is set to `interactive` the execution of
+any `VmScript`s through `systemd-nspawn` will be _interactive_
 by using `stdin`, `stdout` and `stderr` of the `b9c` process.
 
 #### `executable`
@@ -600,10 +600,10 @@ List of options for `mkfs.ext4 -O`.
 
 * Default: `Nothing`
 
-If `(Just "/path")` is specified, images passed to libvirt are hard linked to 
+If `(Just "/path")` is specified, images passed to libvirt are hard linked to
 a random subdirectory in `/path/`, such that the name will be short enough
 to match libvirtds file name length restriction.
 NOTE: The hard links have to be on the same file system as their targets.
 
-Together with `keep_temp_dirs` the paths can be inspected, but also have to 
+Together with `keep_temp_dirs` the paths can be inspected, but also have to
 be manually removed.
