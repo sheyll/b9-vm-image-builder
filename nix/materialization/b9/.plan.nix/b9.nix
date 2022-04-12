@@ -11,7 +11,7 @@
     flags = {};
     package = {
       specVersion = "2.4";
-      identifier = { name = "b9"; version = "3.2.3"; };
+      identifier = { name = "b9"; version = "3.2.4"; };
       license = "MIT";
       copyright = "2015, 2016, 2017, 2018, 2019, 2020 Sven Heyll <svh@posteo.de>";
       maintainer = "svh@posteo.de";

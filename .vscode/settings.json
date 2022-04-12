@@ -2,5 +2,6 @@
   "editor.trimAutoWhitespace": true,
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
-  "files.trimFinalNewlines": true
+  "files.trimFinalNewlines": true,
+  "nixEnvSelector.nixShellConfig": "${workspaceRoot}/shell.nix"
 }

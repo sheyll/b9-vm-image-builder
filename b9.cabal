@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                b9
-version:             3.2.3
+version:             3.2.4
 
 synopsis:            A tool and library for building virtual machine images.
 
@@ -134,7 +134,7 @@ library
                    , B9.B9Error
                    , B9.B9Exec
                    , B9.B9Logging
-                   , B9.B9Monad                  
+                   , B9.B9Monad
                    , B9.BuildInfo
                    , B9.Container
                    , B9.DiskImageBuilder

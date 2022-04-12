@@ -1,25 +1,13 @@
-{ pkgs ? (import ./nix/pkgs.nix {}) }:
-let 
-  pkgsWithB9 = pkgs.extend (import ./overlay.nix);
-
-  shell = pkgsWithB9.haskellPackages.shellFor {
-    packages = p: [
-      p.b9
-    ];
-    buildInputs = with pkgsWithB9.haskellPackages; [
-      cabal-install
-      hlint
-      ghcid
-      pkgsWithB9.docker
-      niv
-      ormolu
-      ghcide 
-    ];
-    withHoogle = true;
-  };
-
-in
+(import
+  (
+    let
+      lock = builtins.fromJSON (builtins.readFile ./flake.lock);
+    in
+    fetchTarball {
+      url = "https://github.com/edolstra/flake-compat/archive/${lock.nodes.flake-compat.locked.rev}.tar.gz";
+      sha256 = lock.nodes.flake-compat.locked.narHash;
+    }
+  )
   {
-    inherit shell;
-    inherit (pkgsWithB9) b9c;
-  }
+    src = ./.;
+  }).defaultNix

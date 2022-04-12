@@ -1,5 +1,24 @@
 # Changelog for B9
 
+## 3.2.4
+
+* Improve the `b9c` wrapper to prefer the OS provided `$PATH` entries for:
+  * `libvirt`
+  * `systemd`
+  * `rsync`
+  * `docker`
+  * `podman`
+* Expose the deps used by the wrapper in the overlay:
+  * `b9cOsRuntimeDeps`
+  * `b9cRuntimeDeps`
+* `b9cRuntimeDeps` is no longer a function, but merely a list
+* Remove obsolet nix files
+* Remove stack support
+* Use `flake-compat` for `shell.nix`
+* Expose the `haskell.nix` derivation in `overlay.nix`
+* Do not depend on `niv` anymore
+* Add a `materializationUpdater` to the flake
+
 ## 3.2.3
 
 * Provide nix flake
@@ -15,7 +34,7 @@
 
 ## 3.2.0
 
-* Workarounds for libvirtd path length restrictions; 
+* Workarounds for libvirtd path length restrictions;
   Libvirt doesn't like paths longer than 63
 * Add config file option `image_file_names_shortener_base_path`
 
@@ -37,7 +56,7 @@
 
 ## 2.1.0
 
-* Add a new config parameter for the default Ext4 file system attributes. 
+* Add a new config parameter for the default Ext4 file system attributes.
 * `Ext4_64` is deprecated from now on, please use `Ext4` and configure the
   `ext4_attributes: ["64bit"]`.
 
@@ -47,39 +66,39 @@
 
 * Specify upper version bounds for all project dependencies
 * Move the `interactive` flag from the `B9Config` to the `BuildInfo`
-  * `isInteractive` now requires the `BuildInfoReader` effect 
-  * Add the `runB9Interactive` function, that can by used to 
+  * `isInteractive` now requires the `BuildInfoReader` effect
+  * Add the `runB9Interactive` function, that can by used to
     make the `bsIsInteractive` field in `BuildInfo` `True`
-  * Add the `cmdInteractive` function, that executes a command 
+  * Add the `cmdInteractive` function, that executes a command
     with inherited stdin/stdout if `runB9Interactive` was called.
-  * Remove the interactivity functionality from the `cmd` function   
+  * Remove the interactivity functionality from the `cmd` function
 
 ### Minor Changes
 
-* Fix bug in the parsing of `console` key in the `systemd-nspawn` 
-  configuration section: When a user specifies `console: pipe` 
+* Fix bug in the parsing of `console` key in the `systemd-nspawn`
+  configuration section: When a user specifies `console: pipe`
   this effects will be the same as if `console: read-only` was specified.
-* Fix bug where the timeout factor configuration option given in a 
+* Fix bug where the timeout factor configuration option given in a
   configuration file is ignored.
 
 ## 1.1.1
 
-* When `unique_build_dirs` __is enabled:__ 
+* When `unique_build_dirs` __is enabled:__
     use a truely random build-id, such that no matter how much
-    or how little time passes between two consequitive builds, the `BUILD_ID`s 
+    or how little time passes between two consequitive builds, the `BUILD_ID`s
     will always differ with the same probability.
 
 ## 1.1.0
 
 * Fix unintended deletion of images that are wrongly classified as obsolete.
-* Add a configuration parameter for guarding operations, for which 
-  no timeout values was specified: `default_timeout_seconds`.  
+* Add a configuration parameter for guarding operations, for which
+  no timeout values was specified: `default_timeout_seconds`.
 * Introduce a configuration parameter to specify an optional **timeout factor**.
-  Since the introduction of __SystemdNspawn__ support, most invokation of 
+  Since the introduction of __SystemdNspawn__ support, most invokation of
   external system commands, e.g. `mount`, are guarded by short timeouts.
-  During testing I discovered that some systems are just slower and might 
+  During testing I discovered that some systems are just slower and might
   run into a timeout.
-  To mitigate that, a user can now configure a **timeout factor** that is 
+  To mitigate that, a user can now configure a **timeout factor** that is
   applied to the internal, hard-coded time values.
 * Change NIX expressions to use `haskellPackages`
   instead of `myHaskellPackages`.
