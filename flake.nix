@@ -13,7 +13,7 @@
         b9flake = pkgs.b9-haskell-project.flake { };
       in
       b9flake // {
-        lib = pkgs.lib // {
+        lib = {
           inherit (pkgs) b9cOsRuntimeDeps b9cRuntimeDeps;
         };
         inherit overlays;
