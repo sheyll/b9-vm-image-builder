@@ -1,5 +1,14 @@
 # Changelog for B9
 
+## 3.2.4.1
+
+Fix the previous release: Actually expose:
+
+* `b9cOsRuntimeDeps`
+* `b9cRuntimeDeps`
+
+in `lib.${system}`
+
 ## 3.2.4
 
 * Improve the `b9c` wrapper to prefer the OS provided `$PATH` entries for:
