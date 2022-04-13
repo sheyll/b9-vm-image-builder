@@ -13,6 +13,9 @@
         b9flake = pkgs.b9-haskell-project.flake { };
       in
       b9flake // {
+        lib = pkgs.lib // {
+          inherit (pkgs) b9cOsRuntimeDeps b9cRuntimeDeps;
+        };
         inherit overlays;
         packages = b9flake.packages // rec {
           inherit (pkgs) b9c b9c-unwrapped;
