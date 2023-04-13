@@ -2,6 +2,7 @@
 --    an execution environment like e.g. libvirt-lxc.
 module B9.VmBuilder
   ( buildWithVm,
+    buildWithVmPostFix
   )
 where
 
@@ -32,21 +33,31 @@ import Text.Show.Pretty (ppShow)
 
 buildWithVm ::
   IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Eff e Bool
-buildWithVm iid imageTargets instanceDir vmScript = do
-  res <- withBackend (buildWithBackend iid imageTargets instanceDir vmScript)
+buildWithVm iid imageTargets instanceDir vmScript = buildWithVmImpl iid imageTargets instanceDir vmScript NoVmScript
+
+buildWithVmPostFix ::
+  IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> VmScript -> Eff e Bool
+buildWithVmPostFix = buildWithVmImpl
+
+buildWithVmImpl ::
+  IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> VmScript -> Eff e Bool
+buildWithVmImpl iid imageTargets instanceDir vmScript postFix = do
+  res <- withBackend (buildWithBackend iid imageTargets instanceDir vmScript postFix)
   case res of
     Nothing ->
       errorExitL "No container configured."
     Just success ->
       return success
 
-buildWithBackend :: forall backendCfg e. (Backend backendCfg, IsB9 e) => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> backendCfg -> Eff e Bool
-buildWithBackend iid imageTargets instanceDir vmScript backendCfg = do
+buildWithBackend :: forall backendCfg e. (Backend backendCfg, IsB9 e) => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> VmScript -> backendCfg -> Eff e Bool
+buildWithBackend iid imageTargets instanceDir vmScript postFix backendCfg = do
   let vmBuildSupportedImageTypes = supportedImageTypes (Proxy :: Proxy backendCfg)
   buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
-  success <- runVmScript backendCfg iid imageTargets buildImages instanceDir vmScript
-  when success (createDestinationImages buildImages imageTargets)
-  return success
+  success1 <- runVmScript backendCfg iid imageTargets buildImages instanceDir vmScript
+  when success1 (resizeDestinationImages buildImages imageTargets)
+  success2 <- runVmScript backendCfg iid imageTargets buildImages instanceDir postFix
+  when success2 (exportDestinationImages buildImages imageTargets)
+  return (success1 && success2)
 
 createBuildImages :: IsB9 e => [ImageTarget] -> [ImageType] -> Eff e [Image]
 createBuildImages imageTargets vmBuildSupportedImageTypes = do
@@ -126,13 +137,22 @@ createSharedDirs instanceDir = mapM createSharedDir
       createDirectoryIfMissing True d
       canonicalizePath d
 
-createDestinationImages :: IsB9 e => [Image] -> [ImageTarget] -> Eff e ()
-createDestinationImages buildImages imageTargets = do
+resizeDestinationImages :: IsB9 e => [Image] -> [ImageTarget] -> Eff e ()
+resizeDestinationImages buildImages imageTargets = do
+  dbgL "resizing build images to the output images sizes"
+  let pairsToConvert =
+        buildImages `zip` (itImageDestination `map` imageTargets)
+  traceL (ppShow pairsToConvert)
+  mapM_ (uncurry resizeDestinationImage) pairsToConvert
+  infoL "RESIZED BUILD- TO OUTPUT IMAGES"
+
+exportDestinationImages :: IsB9 e => [Image] -> [ImageTarget] -> Eff e ()
+exportDestinationImages buildImages imageTargets = do
   dbgL "converting build- to output images"
   let pairsToConvert =
         buildImages `zip` (itImageDestination `map` imageTargets)
   traceL (ppShow pairsToConvert)
-  mapM_ (uncurry createDestinationImage) pairsToConvert
+  mapM_ (uncurry exportDestinationImage) pairsToConvert
   infoL "CONVERTED BUILD- TO OUTPUT IMAGES"
 
 withBackend :: IsB9 e => (forall x. Backend x => x -> Eff e a) -> Eff e (Maybe a)

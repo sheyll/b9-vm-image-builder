@@ -31,11 +31,21 @@ let
       compiler-nix-name = "ghc8107";
       # This is used by `nix develop .` to open a shell for use with
       # `cabal`, `hlint` and `haskell-language-server`
-      shell.tools = {
-        cabal = { };
-        hlint = { };
-        haskell-language-server = { };
+      shell = {
+        tools = {
+          cabal = { };
+          hlint = { };
+          haskell-language-server = { };
+        };
+        exactDeps = true;
       };
+      modules = [
+        {
+          packages.b9.components.tests.spec.build-tools = [
+            b9-haskell-project.hsPkgs.hspec-discover
+          ];
+        }
+      ];
       index-state = "2021-09-03T00:00:00Z";
       checkMaterialization = false;
       materialized = ./nix/materialization/b9;

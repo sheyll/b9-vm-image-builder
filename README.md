@@ -25,7 +25,7 @@ by a **command line invokation**.
 
 * As **command line utility** in current directory:
 
-      $ nix-env -f https://github.com/sheyll/b9-vm-image-builder/archive/3.2.0.tar.gz -iA b9c
+      $ nix-env -f https://github.com/sheyll/b9-vm-image-builder/archive/3.3.0.tar.gz -iA b9c
 
 ### Runtime dependencies
 

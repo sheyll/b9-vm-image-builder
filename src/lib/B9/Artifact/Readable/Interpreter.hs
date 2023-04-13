@@ -438,6 +438,13 @@ runArtifactAssembly iid instanceDir (VmImages imageTargets vmScript) = do
       (IID iidStr) = iid
   unless success (errorL err_msg >> error err_msg)
   return [VmImagesTarget]
+runArtifactAssembly iid instanceDir (VmImagesWithFixup imageTargets vmScript postFix) = do
+  dbgL (printf "Creating VM-Images in '%s'" instanceDir)
+  success <- buildWithVmPostFix iid imageTargets instanceDir vmScript postFix
+  let err_msg = printf "Error creating 'VmImages' for instance '%s'" iidStr
+      (IID iidStr) = iid
+  unless success (errorL err_msg >> error err_msg)
+  return [VmImagesTarget]
 runArtifactAssembly _ instanceDir (CloudInit types outPath) =
   mapM
     create_

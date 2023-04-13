@@ -8,6 +8,8 @@ module B9.DiskImageBuilder
     preferredSourceImageTypes,
     resolveImageSource,
     createDestinationImage,
+    exportDestinationImage,
+    resizeDestinationImage,
     resizeImage,
     importImage,
     exportImage,
@@ -221,21 +223,39 @@ createImageFromImage src part size out = do
             (imageFileExtension fmt)
         )
 
+
 -- | Convert some 'Image', e.g. a temporary image used during the build phase
 -- to the final destination.
 createDestinationImage :: IsB9 e => Image -> ImageDestination -> Eff e ()
-createDestinationImage buildImg dest =
+createDestinationImage image imageDestination = do
+  resizeDestinationImage image imageDestination
+  exportDestinationImage image imageDestination
+
+-- | Convert some 'Image', e.g. a temporary image used during the build phase
+-- to the final destination.
+resizeDestinationImage :: IsB9 e => Image -> ImageDestination -> Eff e ()
+resizeDestinationImage buildImg dest =
   case dest of
-    (Share name imgType imgResize) -> do
+    (Share _name _imgType imgResize) -> do
       resizeImage imgResize buildImg
+    (LocalFile _destImg imgResize) -> do
+      resizeImage imgResize buildImg
+    (LiveInstallerImage _name _repo imgResize) -> do
+      resizeImage imgResize buildImg
+    Transient -> return ()
+
+-- | Convert some 'Image', e.g. a temporary image used during the build phase
+-- to the final destination.
+exportDestinationImage :: IsB9 e => Image -> ImageDestination -> Eff e ()
+exportDestinationImage buildImg dest =
+  case dest of
+    (Share name imgType _) -> do
       let shareableImg = changeImageFormat imgType buildImg
       exportAndRemoveImage buildImg shareableImg
       void (shareImage shareableImg (SharedImageName name))
-    (LocalFile destImg imgResize) -> do
-      resizeImage imgResize buildImg
+    (LocalFile destImg _) -> do
       exportAndRemoveImage buildImg destImg
-    (LiveInstallerImage name repo imgResize) -> do
-      resizeImage imgResize buildImg
+    (LiveInstallerImage name repo _) -> do
       let destImg = Image destFile Raw buildImgFs
           (Image _ _ buildImgFs) = buildImg
           destFile =

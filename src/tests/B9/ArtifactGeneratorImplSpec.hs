@@ -101,6 +101,16 @@ spec = describe "assemble" $ do
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
 
+  it "replaces '$...' variables in VmImages postFix script instructions" $
+    let src =
+          Let
+            [("variable", "value")]
+            [vmImagesArtifactWithFixup "" [] NoVmScript (buildScript "${variable}")]
+        expected = buildScript "value"
+        (Right [IG _ _ (VmImagesWithFixup [] NoVmScript actual)]) =
+          runArtifactGenerator mempty "" "" src
+     in actual `shouldBe` expected
+
 transientCOW :: FilePath -> FilePath -> ImageTarget
 transientCOW fileName mountPoint =
   ImageTarget
@@ -135,6 +145,9 @@ localCOWImage destName mountPoint =
 
 vmImagesArtifact :: String -> [ImageTarget] -> VmScript -> ArtifactGenerator
 vmImagesArtifact iid imgs script = Artifact (IID iid) (VmImages imgs script)
+
+vmImagesArtifactWithFixup :: String -> [ImageTarget] -> VmScript -> VmScript -> ArtifactGenerator
+vmImagesArtifactWithFixup iid imgs script postFix = Artifact (IID iid) (VmImagesWithFixup imgs script postFix)
 
 emptyScriptWithSharedDirRO :: String -> VmScript
 emptyScriptWithSharedDirRO arg =

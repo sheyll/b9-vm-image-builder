@@ -1,5 +1,14 @@
 # Changelog for B9
 
+## 3.3.0
+
+* Add new ArtifactAssembly `VmImagesPostFix` that executes a given script **after**
+  the actual build has finished and the build images were resized to the size of the
+  destination images.
+  The motivation is to allow reinstalling a VBR boot loader, i.e. EXTLINUX, after
+  the root image was resized and therefore the _geometry_ of the root image was
+  altered, leading to spurious `boot error`s.
+
 ## 3.2.4.1
 
 Fix the previous release: Actually expose:

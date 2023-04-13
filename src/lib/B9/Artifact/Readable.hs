@@ -184,6 +184,12 @@ data ArtifactAssembly
     VmImages
       [ImageTarget]
       VmScript
+  | -- | a set of VM-images that were created by executing a
+    -- build script on them.
+    VmImagesWithFixup
+      [ImageTarget]
+      VmScript
+      VmScript
   deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 instance Hashable ArtifactAssembly
@@ -243,6 +249,8 @@ data AssemblyOutput
 -- | Return the files that the artifact assembly consist of.
 getAssemblyOutput :: ArtifactAssembly -> [AssemblyOutput]
 getAssemblyOutput (VmImages ts _) =
+  AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
+getAssemblyOutput (VmImagesWithFixup ts _ _) =
   AssemblyGeneratesOutputFiles . getImageDestinationOutputFiles <$> ts
 getAssemblyOutput (CloudInit ts o) = getCloudInitOutputFiles o <$> ts
   where
