@@ -21,9 +21,8 @@ let
       dosfstools
       mtools
     ];
-  b9c-unwrapped =
-    let flake = final.b9-haskell-project.flake { };
-    in flake.packages."b9:exe:b9c";
+  b9-flake = final.b9-haskell-project.flake { };
+  b9c-unwrapped = b9-flake.packages."b9:exe:b9c";
   b9-haskell-project =
     final.haskell-nix.cabalProject' {
       name = "b9-haskell-project";
@@ -38,6 +37,22 @@ let
           haskell-language-server = { };
         };
         exactDeps = true;
+        NIX_SHELL_TAG = "b9";
+        shellHook = ''
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export LANGUAGE=en_US.UTF-8
+          echo
+          echo "___________________________________________________"
+          echo "                                                   "
+          echo "     B9 Development Environment                    "
+          echo "___________________________________________________"
+          echo "                                                   "
+          echo "      * use 'cabal' to build this software         "
+          echo "                                                   "
+          echo "==================================================="
+          echo
+        '';
       };
       modules = [
         {

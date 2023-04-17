@@ -1,5 +1,17 @@
 # Changelog for B9
 
+## 4.0.0
+
+* Rewrite the ArtifactAssembly `VmImagesPostFix` to have a `Script` argument as
+  _postfix_ argument and change the behavior such that the script is executed
+  on the host machine instead of in a container.
+  This allows the script to be used to fix for example a boot loader installed
+  in a vm-image (in the VBR) after a resize operation.
+  The script is called with the paths to all raw vm image files in the isolated
+  build directory after the main build script was executed and the images were
+  resized to their output size.
+
+
 ## 3.3.0
 
 * Add new ArtifactAssembly `VmImagesPostFix` that executes a given script **after**

@@ -135,7 +135,7 @@ instance NFData Ctx
 -- executable.
 writeSh :: FilePath -> Script -> IO ()
 writeSh file script = do
-  writeFile file (toBash $ toCmds script)
+  writeFile file (renderScript script)
   getPermissions file >>= setPermissions file . setOwnerExecutable True
 
 -- | Check if a script has the same effect as 'NoOP'
@@ -169,7 +169,7 @@ toBash :: [Cmd] -> String
 toBash cmds = intercalate "\n\n" $ bashHeader ++ (cmdToBash <$> cmds)
 
 bashHeader :: [String]
-bashHeader = ["#!/bin/bash", "set -e"]
+bashHeader = ["#!/usr/bin/env bash", "set -e"]
 
 cmdToBash :: Cmd -> String
 cmdToBash (Cmd cmd args user cwd ignoreErrors verbosity) =

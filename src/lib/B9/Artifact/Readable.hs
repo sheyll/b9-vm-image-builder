@@ -34,6 +34,7 @@ import Data.Semigroup as Sem
 import GHC.Generics (Generic)
 import System.FilePath ((<.>))
 import Test.QuickCheck
+import B9.ShellScript (Script)
 
 -- | Artifacts represent the things B9 can build. A generator specifies howto
 -- generate parameterized, multiple artifacts. The general structure is:
@@ -189,7 +190,7 @@ data ArtifactAssembly
     VmImagesWithFixup
       [ImageTarget]
       VmScript
-      VmScript
+      Script
   deriving (Read, Show, Typeable, Data, Eq, Generic)
 
 instance Hashable ArtifactAssembly

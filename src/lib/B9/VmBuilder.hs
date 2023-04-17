@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 -- | Effectful functions to execute and build virtual machine images using
 --    an execution environment like e.g. libvirt-lxc.
 module B9.VmBuilder
@@ -28,19 +29,24 @@ import System.Directory
   ( canonicalizePath,
     createDirectoryIfMissing,
   )
+import System.FilePath ((</>))
 import Text.Printf (printf)
 import Text.Show.Pretty (ppShow)
+import qualified B9.B9Exec as B9.Exec
+import B9.B9Exec (HostCommandStdin(HostCommandNoStdin))
+import qualified System.Exit
+import B9.ShellScript ( writeSh, renderScript, Script (NoOP) )
 
 buildWithVm ::
   IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Eff e Bool
-buildWithVm iid imageTargets instanceDir vmScript = buildWithVmImpl iid imageTargets instanceDir vmScript NoVmScript
+buildWithVm iid imageTargets instanceDir vmScript = buildWithVmImpl iid imageTargets instanceDir vmScript NoOP
 
 buildWithVmPostFix ::
-  IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> VmScript -> Eff e Bool
+  IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Script -> Eff e Bool
 buildWithVmPostFix = buildWithVmImpl
 
 buildWithVmImpl ::
-  IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> VmScript -> Eff e Bool
+  IsB9 e => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> Script -> Eff e Bool
 buildWithVmImpl iid imageTargets instanceDir vmScript postFix = do
   res <- withBackend (buildWithBackend iid imageTargets instanceDir vmScript postFix)
   case res of
@@ -49,13 +55,33 @@ buildWithVmImpl iid imageTargets instanceDir vmScript postFix = do
     Just success ->
       return success
 
-buildWithBackend :: forall backendCfg e. (Backend backendCfg, IsB9 e) => InstanceId -> [ImageTarget] -> FilePath -> VmScript -> VmScript -> backendCfg -> Eff e Bool
+buildWithBackend
+  :: forall backendCfg e. (Backend backendCfg, IsB9 e)
+  => InstanceId
+  -> [ImageTarget]
+  -> FilePath
+  -> VmScript
+  -> Script
+  -> backendCfg
+  -> Eff e Bool
 buildWithBackend iid imageTargets instanceDir vmScript postFix backendCfg = do
   let vmBuildSupportedImageTypes = supportedImageTypes (Proxy :: Proxy backendCfg)
   buildImages <- createBuildImages imageTargets vmBuildSupportedImageTypes
   success1 <- runVmScript backendCfg iid imageTargets buildImages instanceDir vmScript
   when success1 (resizeDestinationImages buildImages imageTargets)
-  success2 <- runVmScript backendCfg iid imageTargets buildImages instanceDir postFix
+  buildBaseDir <- getBuildDir
+  success2 <- case postFix of
+    NoOP -> return True
+    _ -> do
+      let postFixArgs = [fp | (Image fp _ _) <- buildImages]
+          postFixScriptFile = buildBaseDir </> "post-fix.sh"
+      infoL ("WRITING POSTFIX: \n" ++ renderScript postFix)
+      liftIO $ do
+        writeSh postFixScriptFile postFix
+      res <- B9.Exec.hostCmdEither HostCommandNoStdin (printf "%s %s" postFixScriptFile (unwords postFixArgs)) Nothing
+      case res of
+        Left _ -> return False
+        Right e -> return (e == System.Exit.ExitSuccess)
   when success2 (exportDestinationImages buildImages imageTargets)
   return (success1 && success2)
 
@@ -112,6 +138,7 @@ runVmScript backendCfg (IID iid) imageTargets buildImages instanceDir vmScript =
       return True
     handleErrors (Left err) =
       errorExitL ("Failed to complete the containerized build: " ++ show err)
+
     setUpExecEnv :: IsB9 e => Eff e ExecEnv
     setUpExecEnv = do
       let (VmScript cpu shares _) = vmScript
