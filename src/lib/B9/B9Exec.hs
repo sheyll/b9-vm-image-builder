@@ -38,8 +38,8 @@ import Data.Maybe
 import qualified Data.Text as Text
 import GHC.Stack
 import System.Exit
-import System.Posix.Terminal 
-import System.Posix.Types 
+import System.Posix.Terminal
+import System.Posix.Types
 import System.Posix.Pty
 import           Control.Applicative      ((*>))
 import           Control.Exception (try, IOException())
@@ -119,7 +119,7 @@ cmdStdout str = do
   case ok of
     Right (out, ExitSuccess) ->
       return out
-    Right (_, e@(ExitFailure _)) -> 
+    Right (_, e@(ExitFailure _)) ->
       errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
     Left e ->
       errorExitL ("SYSTEM COMMAND FAILED: " ++ show e)
@@ -216,7 +216,7 @@ hostCmdEither inputSource cmdStr timeoutArg = do
 data HostCommandStdout a where
   -- | Write std-out to the log sink.
   HostCommandStdoutLog :: HostCommandStdout ExitCode
-  -- | Write std-out to the log sink, additionally collect and return it. 
+  -- | Write std-out to the log sink, additionally collect and return it.
   HostCommandStdoutLogAndCapture :: HostCommandStdout (Strict.ByteString, ExitCode)
 
 data HostCommandStdoutState a where
@@ -335,11 +335,11 @@ ptyCmdInteractive ::
   String ->
   [String] ->
   Eff e ()
-ptyCmdInteractive timeoutArg progName progArgs  = do 
+ptyCmdInteractive timeoutArg progName progArgs  = do
 --   isInATerm <- liftIO (queryTerminal (Fd 0))
     let cmdStr = unwords (progName: progArgs)
 --   if isInATerm then cmdInteractive cmdStr
---   else do            
+--   else do
     let tag = "[" ++ printHash cmdStr ++ "]"
     traceL $ "PTY-COMMAND " ++ tag ++ ": " ++ cmdStr
     tf <- fromMaybe 1 . view timeoutFactor <$> getB9Config
@@ -354,16 +354,16 @@ ptyCmdInteractive timeoutArg progName progArgs  = do
           threadDelay micros
           return t
 
-        runCmd = liftIO $ do 
+        runCmd = liftIO $ do
           (pty, procH) <- spawnWithPty Nothing True progName progArgs (80, 25)
-          let close = liftIO (do 
+          let close = liftIO (do
                 cleanupProcess (Nothing, Nothing, Nothing, procH)
                 closePty pty)
               output = runConduit $ fromProcess .| runProcessLogger traceLC
               fromProcess = do
-                res <- liftIO (try (readPty pty)) 
+                res <- liftIO (try (readPty pty))
                 case res of
-                  Left (_ :: IOException) -> do 
+                  Left (_ :: IOException) -> do
                     close
                   Right d -> do
                     yield d
@@ -429,5 +429,3 @@ createStdoutSink (HostCommandStdoutStateLogAndCapture _stdoutCollector) _tag = d
       case chunk of
         Nothing -> return ()
         (Just val) -> liftIO $ modifyMVar_ mvar $ \old -> return (old <> Strict.byteString val)
-
-

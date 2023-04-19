@@ -14,7 +14,7 @@ import Test.Hspec
 
 spec :: Spec
 spec = describe "assemble" $ do
-  it "replaces '$...' variables in SourceImage Image file paths" $
+  it "replaces '${variable}' in SourceImage Image file paths" $
     let src =
           Let
             [("variable", "value")]
@@ -23,7 +23,7 @@ spec = describe "assemble" $ do
         (Right [IG _ _ (VmImages [actual] _)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
-  it "replaces '$...' variables in SourceImage 'From' names" $
+  it "replaces '${variable}' in SourceImage 'From' names" $
     let src =
           Let
             [("variable", "value")]
@@ -32,7 +32,7 @@ spec = describe "assemble" $ do
         (Right [IG _ _ (VmImages [actual] _)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
-  it "replaces '$...' variables in the name of a shared image" $
+  it "replaces '${variable}' in the name of a shared image" $
     let src =
           Let
             [("variable", "value")]
@@ -41,7 +41,7 @@ spec = describe "assemble" $ do
         (Right [IG _ _ (VmImages [actual] _)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
-  it "replaces '$...' variables in the name and path of a live installer image" $
+  it "replaces '${variable}' in the name and path of a live installer image" $
     let src =
           Let
             [("variable", "value")]
@@ -55,7 +55,7 @@ spec = describe "assemble" $ do
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
   it
-    "replaces '$...' variables in the file name of an image exported as LocalFile"
+    "replaces '${variable}' in the file name of an image exported as LocalFile"
     $ let src =
             Let
               [("variable", "value")]
@@ -64,7 +64,7 @@ spec = describe "assemble" $ do
           (Right [IG _ _ (VmImages [actual] _)]) =
             runArtifactGenerator mempty "" "" src
        in actual `shouldBe` expected
-  it "replaces '$...' variables in mount point of an image" $
+  it "replaces '${variable}' in mount point of an image" $
     let src =
           Let
             [("variable", "value")]
@@ -73,7 +73,7 @@ spec = describe "assemble" $ do
         (Right [IG _ _ (VmImages [actual] _)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
-  it "replaces '$...' variables in shared directory source and mount point (RO)" $
+  it "replaces '${variable}' in shared directory source and mount point (RO)" $
     let src =
           Let
             [("variable", "value")]
@@ -82,7 +82,7 @@ spec = describe "assemble" $ do
         (Right [IG _ _ (VmImages [] actual)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
-  it "replaces '$...' variables in shared directory source and mount point (RW)" $
+  it "replaces '${variable}' in shared directory source and mount point (RW)" $
     let src =
           Let
             [("variable", "value")]
@@ -91,22 +91,22 @@ spec = describe "assemble" $ do
         (Right [IG _ _ (VmImages [] actual)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
-  it "replaces '$...' variables in VmImages build script instructions" $
+  it "replaces '${variable}' in VmImages build script instructions" $
     let src =
           Let
             [("variable", "value")]
-            [vmImagesArtifact "" [] (buildScript "${variable}")]
-        expected = buildScript "value"
+            [vmImagesArtifact "" [] (buildVmScript "${variable}")]
+        expected = buildVmScript "value"
         (Right [IG _ _ (VmImages [] actual)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
 
-  it "replaces '$...' variables in VmImages postFix script instructions" $
+  it "keeps '$variable'  VmImages postFix script instructions" $
     let src =
           Let
             [("variable", "value")]
-            [vmImagesArtifactWithFixup "" [] NoVmScript (buildScript "${variable}")]
-        expected = buildScript "value"
+            [vmImagesArtifactWithFixup "" [] NoVmScript (buildScript "$variable")]
+        expected = buildScript "$variable"
         (Right [IG _ _ (VmImagesWithFixup [] NoVmScript actual)]) =
           runArtifactGenerator mempty "" "" src
      in actual `shouldBe` expected
@@ -146,7 +146,7 @@ localCOWImage destName mountPoint =
 vmImagesArtifact :: String -> [ImageTarget] -> VmScript -> ArtifactGenerator
 vmImagesArtifact iid imgs script = Artifact (IID iid) (VmImages imgs script)
 
-vmImagesArtifactWithFixup :: String -> [ImageTarget] -> VmScript -> VmScript -> ArtifactGenerator
+vmImagesArtifactWithFixup :: String -> [ImageTarget] -> VmScript -> Script -> ArtifactGenerator
 vmImagesArtifactWithFixup iid imgs script postFix = Artifact (IID iid) (VmImagesWithFixup imgs script postFix)
 
 emptyScriptWithSharedDirRO :: String -> VmScript
@@ -157,9 +157,12 @@ emptyScriptWithSharedDirRW :: String -> VmScript
 emptyScriptWithSharedDirRW arg =
   VmScript X86_64 [SharedDirectory arg (MountPoint arg)] (Run "" [])
 
-buildScript :: String -> VmScript
-buildScript arg =
+buildVmScript :: String -> VmScript
+buildVmScript arg =
   VmScript
     X86_64
     [SharedDirectory arg (MountPoint arg), SharedDirectoryRO arg NotMounted]
-    (As arg [In arg [Run arg [arg]]])
+    (buildScript arg)
+
+buildScript :: String -> Script
+buildScript arg = As arg [In arg [Run arg [arg]]]

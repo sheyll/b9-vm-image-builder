@@ -2,6 +2,8 @@
 
 ## 4.0.0
 
+### 4.0.0-rc.1 Breaking Changes
+
 * Rewrite the ArtifactAssembly `VmImagesPostFix` to have a `Script` argument as
   _postfix_ argument and change the behavior such that the script is executed
   on the host machine instead of in a container.
@@ -11,6 +13,9 @@
   build directory after the main build script was executed and the images were
   resized to their output size.
 
+* Contrary to previous versions **no variable substitution** is done in the
+  postfix script. That makes it easier to write shell scripts that access environment
+  variables.
 
 ## 3.3.0
 
@@ -80,7 +85,7 @@ in `lib.${system}`
   outside a terminal.
 * Relax version constraints for `hashable` dependency
 
-### Breaking Changes
+### 3.0.0 Breaking Changes
 
 * Change B9 configuration API: Change the field to a list
 
@@ -92,7 +97,7 @@ in `lib.${system}`
 
 ## 2.0.0
 
-### Breaking Changes
+### 2.0.0 Breaking Changes
 
 * Specify upper version bounds for all project dependencies
 * Move the `interactive` flag from the `B9Config` to the `BuildInfo`
@@ -103,7 +108,7 @@ in `lib.${system}`
     with inherited stdin/stdout if `runB9Interactive` was called.
   * Remove the interactivity functionality from the `cmd` function
 
-### Minor Changes
+### 2.0.0 Minor Changes
 
 * Fix bug in the parsing of `console` key in the `systemd-nspawn`
   configuration section: When a user specifies `console: pipe`
@@ -113,7 +118,7 @@ in `lib.${system}`
 
 ## 1.1.1
 
-* When `unique_build_dirs` __is enabled:__
+* When `unique_build_dirs` **is enabled:**
     use a truely random build-id, such that no matter how much
     or how little time passes between two consequitive builds, the `BUILD_ID`s
     will always differ with the same probability.
@@ -124,7 +129,7 @@ in `lib.${system}`
 * Add a configuration parameter for guarding operations, for which
   no timeout values was specified: `default_timeout_seconds`.
 * Introduce a configuration parameter to specify an optional **timeout factor**.
-  Since the introduction of __SystemdNspawn__ support, most invokation of
+  Since the introduction of **SystemdNspawn** support, most invokation of
   external system commands, e.g. `mount`, are guarded by short timeouts.
   During testing I discovered that some systems are just slower and might
   run into a timeout.
